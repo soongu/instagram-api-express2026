@@ -510,6 +510,18 @@ describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => 
     expect(quoted[0]).toBe(real('lab/p2-23/homework1.js'));
   });
 
+  it('답안의 `homework2.js` 발췌 둘이 코드베이스 안에 그대로 있다', () => {
+    // 🚨 발췌는 파일 전체가 아니라 «떼어 온 조각» 이라 byte 동일 대신 «포함» 으로 본다.
+    //    조각 안의 줄이 하나라도 다르면 학생이 붙여넣은 것이 안 돈다.
+    const real = readFileSync(new URL('../lab/p2-23/homework2.js', import.meta.url), 'utf-8');
+    const quoted = blocksOf(ANS, '// ~/instagram-api/lab/homework2.js');
+    expect(quoted).toHaveLength(3);
+    for (const block of quoted) {
+      const body = block.split('\n').slice(1).join('\n').trim();
+      expect(real).toContain(body);
+    }
+  });
+
   it('교안이 인용한 Step 1 시점 `app.get` 이 `code/p2-22` 판과 같다', () => {
     const quoted = blocksOf(LEC, '// ~/instagram-api/app.js')[0];
     const theirs = execFileSync('git', ['show', 'code/p2-22:app.js'], { encoding: 'utf-8' });
