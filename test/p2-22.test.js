@@ -1,6 +1,7 @@
 // 내부 검증 전용 — 교안에 한 줄도 인용하지 않는다.
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { boot } from './helpers/boot.js';
 
 let server = null;
@@ -106,4 +107,155 @@ describe('Step 6 — httpYac 으로 보내는 요청', () => {
     expect(out.match(/=> 200/g)).toHaveLength(2);
     expect(out.match(/=> 404/g)).toHaveLength(1);
   }, 30000);
+});
+
+describe('Step 5 시점 — 우리가 404를 붙이기 «전»', () => {
+  // 🚨 이 축이 Step 6 의 서술을 통째로 떠받친다. 초고는 «없는 게시물이면
+  //    res.json(undefined) 라서 Express 가 404 를 붙인다» 고 적었는데
+  //    **거짓이었다** — 재보니 200 에 빈 본문이다. 안 재고 썼으면 학생 화면과
+  //    교안이 정면으로 어긋났다.
+  it('없는 게시물은 404가 아니라 «200에 빈 본문»', async () => {
+    server = await boot('snapshots/p2-22.step5.app.js');
+    const res = await fetch(`${server.base}/api/posts/999`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('');
+  });
+
+  it('없는 주소는 Express 가 404 를 주는데 «본문이 HTML»', async () => {
+    server = await boot('snapshots/p2-22.step5.app.js');
+    const res = await fetch(`${server.base}/api/comments`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+    expect(await res.text()).toContain('<!DOCTYPE html>');
+  });
+
+  it('있는 것 둘은 멀쩡하다 — 대조군', async () => {
+    server = await boot('snapshots/p2-22.step5.app.js');
+    const codes = [];
+    for (const p of ['/api/posts', '/api/posts/2']) {
+      codes.push((await fetch(`${server.base}${p}`)).status);
+    }
+    expect(codes).toEqual([200, 200]);
+  });
+});
+
+describe('실습·과제 — 학생이 만드는 것', () => {
+  const at = (path) => fetch(`${server.base}${path}`);
+
+  it('실습1 — /me 가 글자를 돌려준다', async () => {
+    server = await boot('lab/p2-22/practice1.js', { port: 4000 });
+    const res = await at('/me');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('홍순구입니다');
+  });
+
+  it('실습2 — username 은 글자라 Number 로 감쌀 이유가 없다', async () => {
+    server = await boot('lab/p2-22/practice2.js', { port: 4000 });
+    expect(await (await at('/api/profiles')).json()).toHaveLength(3);
+    expect((await (await at('/api/profiles/minji')).json()).name).toBe('이민지');
+  });
+
+  it('실습2 — 줄 순서를 뒤집어도 둘 다 걸린다 (마디 수가 다르므로)', async () => {
+    // 교안 토글이 주장하는 것을 실제로 잰다.
+    server = await boot('lab/p2-22/practice2.js', { port: 4000 });
+    const list = await (await at('/api/profiles')).json();
+    const one = await (await at('/api/profiles/jaehoon')).json();
+    expect(Array.isArray(list)).toBe(true);
+    expect(Array.isArray(one)).toBe(false);
+  });
+
+  it('실습3 — 없는 책과 없는 주소가 서로 다른 문구로 404', async () => {
+    server = await boot('lab/p2-22/practice3.js', { port: 4000 });
+    const codes = [];
+    for (const p of ['/api/books', '/api/books/2', '/api/books/99', '/api/authors']) {
+      codes.push((await at(p)).status);
+    }
+    expect(codes).toEqual([200, 200, 404, 404]);
+    expect(await (await at('/api/books/99')).json()).toEqual({ message: '그런 책은 없어요' });
+    expect(await (await at('/api/authors')).json()).toEqual({ message: '그런 주소는 없어요' });
+  });
+
+  it('과제1 — 스토리 넷 · 200 200 404 404', async () => {
+    server = await boot('lab/p2-22/homework1.js', { port: 4000 });
+    expect(await (await at('/api/stories')).json()).toHaveLength(4);
+    const codes = [];
+    for (const p of ['/api/stories', '/api/stories/2', '/api/stories/99', '/api/authors']) {
+      codes.push((await at(p)).status);
+    }
+    expect(codes).toEqual([200, 200, 404, 404]);
+  });
+
+  it('과제2 — 순서를 «바꾸기 전» 에는 latest 가 :id 에 먹힌다', async () => {
+    // 🚨 교안이 4번 단계에서 학생에게 보라고 시키는 그 화면이다.
+    //    안 재고 쓰면 「무엇이 돌아왔는지」를 저자가 짐작으로 적게 된다.
+    server = await boot('snapshots/p2-22.hw2.wrong-order.js', { port: 4000 });
+    const res = await at('/api/books/latest');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ message: '그런 책은 없어요' });
+  });
+
+  it('과제2 — 순서를 바꾸면 latest 가 마지막 책을 준다', async () => {
+    server = await boot('lab/p2-22/homework2.js', { port: 4000 });
+    expect(await (await at('/api/books/latest')).json()).toEqual({ id: 3, title: '모모' });
+    expect(await (await at('/api/books/2')).json()).toEqual({ id: 2, title: '데미안' });
+  });
+
+  it('실습3 요청 파일이 실제로 돈다', async () => {
+    server = await boot('lab/p2-22/practice3.js', { port: 4000 });
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/books.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('4 requests processed (4 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(2);
+    expect(out.match(/=> 404/g)).toHaveLength(2);
+  }, 30000);
+});
+
+describe('토글이 주장하는 «순서를 바꾸면» 판', () => {
+  it('app.use 를 맨 위로 올리면 네 요청이 전부 그런 주소는 없어요', async () => {
+    // 🚨 `onscreen-check` 가 「재야 할 문장」으로 나열한 자리다. 산문으로만 적혀
+    //    있던 주장이라 어느 게이트도 안 봤다.
+    server = await boot('snapshots/p2-22.practice3.use-on-top.js', { port: 4000 });
+    const seen = [];
+    for (const p of ['/api/books', '/api/books/2', '/api/books/99', '/api/authors']) {
+      const res = await fetch(`${server.base}${p}`);
+      seen.push([res.status, (await res.json()).message]);
+    }
+    expect(seen).toEqual([
+      [404, '그런 주소는 없어요'],
+      [404, '그런 주소는 없어요'],
+      [404, '그런 주소는 없어요'],
+      [404, '그런 주소는 없어요'],
+    ]);
+  });
+});
+
+describe('교안 인용이 코드베이스와 byte 동일한가', () => {
+  // 🚨 `p2-23` 이 이 파일에서 이어 시작한다. 교안 완성본이 코드베이스와 한 글자라도
+  //    다르면 다음 회차가 «재현 불가» 가 되는데, 그건 게이트가 원리적으로 안 본다
+  //    (replay 는 «돌아가는가» 만 보지 «같은가» 를 안 본다).
+  // 🚨 `new URL(rel, import.meta.url)` 은 «이 파일» 기준이라 `../` 하나가
+  //    `instagram-api/` 다. 한 단 얕게 적었더니 ENOENT 로 죽었는데, 그건
+  //    통과가 아니라 «검사를 안 한 것» 이다.
+  const LEC = '../../../part2/4-node-backend/p2-22-express-start-lecture.md';
+
+  const blocksOf = (path, head) => {
+    const md = readFileSync(new URL(path, import.meta.url), 'utf-8');
+    const re = new RegExp('```javascript\\n(' + head.replace(/[/.]/g, '\\$&') + '\\n[\\s\\S]*?)```', 'g');
+    return [...md.matchAll(re)].map((m) => m[1]);
+  };
+
+  it('완성본 app.js 가 코드베이스와 같다', () => {
+    const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
+    const real = readFileSync(new URL('../app.js', import.meta.url), 'utf-8');
+    expect(quoted.at(-1)).toBe(real);
+  });
+
+  it('data/posts.js 인용이 코드베이스와 같다', () => {
+    const quoted = blocksOf(LEC, '// ~/instagram-api/data/posts.js');
+    const real = readFileSync(new URL('../data/posts.js', import.meta.url), 'utf-8');
+    expect(quoted).toHaveLength(1);
+    expect(quoted[0]).toBe(real);
+  });
 });
