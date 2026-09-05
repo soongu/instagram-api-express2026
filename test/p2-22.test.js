@@ -211,7 +211,9 @@ describe('실습·과제 — 학생이 만드는 것', () => {
     server = await boot('lab/p2-22/practice3.js', { port: 4000 });
     const out = execFileSync(
       'node_modules/.bin/httpyac',
-      ['send', 'requests/books.http', '--all', '--output', 'short'],
+      // 🚨 `requests/books.http` 도 회차마다 자라는 파일이다 — `p2-23` 실습 3 이
+      //    요청 넷을 더 붙인다. 그 회차 시점 스냅숏으로 얼려 떼어낸다.
+      ['send', 'snapshots/p2-22.books.http', '--all', '--output', 'short'],
       { encoding: 'utf-8' });
     expect(out).toContain('4 requests processed (4 succeeded)');
     expect(out.match(/=> 200/g)).toHaveLength(2);

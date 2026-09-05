@@ -391,3 +391,97 @@ describe('실습 2 — 프로필 소개글 고치기', () => {
     expect(out.match(/=> 404/g)).toHaveLength(1);
   }, 40000);
 });
+
+describe('실습 3 — 책을 올리고 지우는 서점', () => {
+  it('201·400·200·200 이 나오고 목록이 셋 → 넷 → 셋이 된다', async () => {
+    server = await boot('lab/p2-23/practice3.js', { port: 4000 });
+
+    const made = await fetch(`${server.base}/api/books`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ title: '죽은 시인의 사회', author: 'N.H. 클라인바움', stock: 999 }),
+    });
+    expect(made.status).toBe(201);
+    const body = await made.json();
+    expect(body.id).toBe(4);
+    expect(body.stock).toBe(0);          // 🚨 보낸 999 를 서버가 덮어쓴다
+
+    const bad = await fetch(`${server.base}/api/books`, {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ author: '이름만' }),
+    });
+    expect(bad.status).toBe(400);
+
+    const patched = await fetch(`${server.base}/api/books/2`, {
+      method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ stock: 9 }),
+    });
+    expect((await patched.json()).stock).toBe(9);
+
+    const gone = await fetch(`${server.base}/api/books/3`, { method: 'DELETE' });
+    expect(gone.status).toBe(200);
+
+    const list = await (await fetch(`${server.base}/api/books`)).json();
+    expect(list.map((one) => one.id)).toEqual([1, 2, 4]);   // 해설이 주장하는 그대로
+  });
+
+  it('`books.http` 여덟 요청이 실제로 돈다', async () => {
+    server = await boot('lab/p2-23/practice3.js', { port: 4000 });
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/books.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('8 requests processed (8 succeeded)');
+    expect(out.match(/=> 201/g)).toHaveLength(1);
+    expect(out.match(/=> 400/g)).toHaveLength(1);
+  }, 40000);
+});
+
+describe('과제 1 — 스토리를 올리고 지우는 주소', () => {
+  it('🚨 `isViewed` 를 실어 보내도 서버가 `false` 로 덮어쓴다', async () => {
+    server = await boot('lab/p2-23/homework1.js', { port: 4000 });
+    const res = await fetch(`${server.base}/api/stories`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ username: 'yuna', isViewed: true }),
+    });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ username: 'yuna', id: 4, isViewed: false });
+  });
+
+  it('`stories.http` 다섯이 200·201·400·200·200 을 낸다', async () => {
+    server = await boot('lab/p2-23/homework1.js', { port: 4000 });
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/stories.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('5 requests processed (5 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(3);
+    expect(out.match(/=> 201/g)).toHaveLength(1);
+    expect(out.match(/=> 400/g)).toHaveLength(1);
+  }, 40000);
+});
+
+describe('과제 2 — 좋아요를 누가 세야 하나', () => {
+  it('🔴 PATCH 로 1241 을 «두 번» 보내면 결과가 1241 이다 — 한 번이 사라진다', async () => {
+    server = await boot('lab/p2-23/homework2.js', { port: 4000 });
+    for (let i = 0; i < 2; i += 1) {
+      await fetch(`${server.base}/api/posts/1`, {
+        method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 1241 }),
+      });
+    }
+    const list = await (await fetch(`${server.base}/api/posts`)).json();
+    expect(list[0].likeCount).toBe(1241);
+  });
+
+  it('✅ `POST /likes` 로 두 번 보내면 1242 다 — 서버가 세니까', async () => {
+    server = await boot('lab/p2-23/homework2.js', { port: 4000 });
+    for (let i = 0; i < 2; i += 1) {
+      await fetch(`${server.base}/api/posts/1/likes`, { method: 'POST' });
+    }
+    const list = await (await fetch(`${server.base}/api/posts`)).json();
+    expect(list[0].likeCount).toBe(1242);
+  });
+
+  it('없는 게시물에 하트를 누르면 404 다', async () => {
+    server = await boot('lab/p2-23/homework2.js', { port: 4000 });
+    const res = await fetch(`${server.base}/api/posts/999/likes`, { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+});

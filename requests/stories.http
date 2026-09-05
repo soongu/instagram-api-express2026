@@ -1,0 +1,24 @@
+### 스토리 목록
+GET http://localhost:4000/api/stories
+
+### 스토리 올리기
+POST http://localhost:4000/api/stories
+Content-Type: application/json
+
+{
+  "username": "yuna"
+}
+
+### username 없이 올리기
+POST http://localhost:4000/api/stories
+Content-Type: application/json
+
+{
+  "isViewed": true
+}
+
+### 스토리 지우기
+DELETE http://localhost:4000/api/stories/2
+
+### 지운 뒤 목록
+GET http://localhost:4000/api/stories
