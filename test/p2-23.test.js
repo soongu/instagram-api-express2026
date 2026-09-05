@@ -300,3 +300,50 @@ describe('Step 7 — `.http` 파일 여덟 요청이 실제로 돈다', () => {
     expect(out.match(/=> 400/g)).toHaveLength(1);
   }, 40000);
 });
+
+describe('실습 1 — 댓글을 올리는 주소', () => {
+  it('목록은 셋이고, 올리면 201 에 `id` 4 가 붙어 넷이 된다', async () => {
+    server = await boot('lab/p2-23/practice1.js', { port: 4000 });
+    expect(server.log.trim()).toBe('실습 서버가 4000번 포트에서 기다리고 있어요.');
+
+    const before = await (await fetch(`${server.base}/api/comments`)).json();
+    expect(before).toHaveLength(3);
+
+    const res = await fetch(`${server.base}/api/comments`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 1, username: 'yuna', text: '저도 가보고 싶어요' }),
+    });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({
+      postId: 1, username: 'yuna', text: '저도 가보고 싶어요', id: 4,
+    });
+
+    const after = await (await fetch(`${server.base}/api/comments`)).json();
+    expect(after).toHaveLength(4);
+    expect(after[3].id).toBe(4);
+  });
+
+  it('`comments.http` 요청 셋이 실제로 돈다', async () => {
+    server = await boot('lab/p2-23/practice1.js', { port: 4000 });
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/comments.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('3 requests processed (3 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(2);
+    expect(out.match(/=> 201/g)).toHaveLength(1);
+  }, 40000);
+
+  it('🚨 서버를 다시 띄우면 올린 댓글이 사라진다 — 해설이 주장하는 그대로', async () => {
+    server = await boot('lab/p2-23/practice1.js', { port: 4000 });
+    await fetch(`${server.base}/api/comments`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 1, username: 'yuna', text: '사라질 댓글' }),
+    });
+    expect(await (await fetch(`${server.base}/api/comments`)).json()).toHaveLength(4);
+    await server.stop();
+
+    server = await boot('lab/p2-23/practice1.js', { port: 4000 });
+    expect(await (await fetch(`${server.base}/api/comments`)).json()).toHaveLength(3);
+  });
+});
