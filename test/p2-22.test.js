@@ -1,7 +1,7 @@
 // 내부 검증 전용 — 교안에 한 줄도 인용하지 않는다.
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 import express from 'express';
 import { boot } from './helpers/boot.js';
 
@@ -100,10 +100,22 @@ describe('Step 6 — httpYac 으로 보내는 요청', () => {
     //    학생 화면의 «응답 창 생김새» 가 아니다. CLI 출력과 VS Code 확장의
     //    응답 창은 형식이 다르므로, **CLI 출력을 교안에 옮겨 적지 않는다.**
     server = await boot('app.js');
-    const out = execFileSync(
-      'node_modules/.bin/httpyac',
-      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+    // 🚨 `requests/posts.http` 도 회차마다 자라는 파일이라 워킹 트리를 안 읽는다.
+    //    `code/p2-22` 시점 판을 꺼내 임시 파일로 돌린다 (`p2-23` 이 POST·PATCH·
+    //    DELETE 요청을 이 파일에 더한다).
+    const frozen = execFileSync('git', ['show', 'code/p2-22:requests/posts.http'],
       { encoding: 'utf-8' });
+    const tmp = new URL('../requests/.p2-22-frozen.http', import.meta.url);
+    writeFileSync(tmp, frozen);
+    let out;
+    try {
+      out = execFileSync(
+        'node_modules/.bin/httpyac',
+        ['send', 'requests/.p2-22-frozen.http', '--all', '--output', 'short'],
+        { encoding: 'utf-8' });
+    } finally {
+      rmSync(tmp, { force: true });
+    }
     expect(out).toContain('3 requests processed (3 succeeded)');
     expect(out.match(/=> 200/g)).toHaveLength(2);
     expect(out.match(/=> 404/g)).toHaveLength(1);
@@ -247,9 +259,13 @@ describe('교안 인용이 코드베이스와 byte 동일한가', () => {
     return [...md.matchAll(re)].map((m) => m[1]);
   };
 
-  it('완성본 app.js 가 코드베이스와 같다', () => {
+  // 🚨 **워킹 트리의 `app.js` 를 안 읽는다** (2026-09-05 `p2-23` 착수 시 고침).
+  //    이 파일은 회차마다 자라는 척추라, live 로 대조하면 `p2-23` 이 줄을 더한
+  //    순간 이 축이 «회귀» 로 뜬다 — 그러면 사람이 멀쩡한 `p2-22` 교안을 고친다.
+  //    대조 기준은 그 회차의 브랜치가 가리키는 «그 시점 판» 이다.
+  it('완성본 app.js 가 코드베이스와 같다 (`code/p2-22` 시점)', () => {
     const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
-    const real = readFileSync(new URL('../app.js', import.meta.url), 'utf-8');
+    const real = execFileSync('git', ['show', 'code/p2-22:app.js'], { encoding: 'utf-8' });
     expect(quoted.at(-1)).toBe(real);
   });
 
