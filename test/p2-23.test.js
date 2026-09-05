@@ -485,3 +485,34 @@ describe('과제 2 — 좋아요를 누가 세야 하나', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => {
+  // 🚨 `p2-24` 가 이 파일에서 이어 시작한다. 완성본이 한 글자라도 다르면 다음
+  //    회차가 «재현 불가» 가 되는데, 그건 게이트가 원리적으로 안 본다
+  //    (replay 는 «돌아가는가» 만 보지 «같은가» 를 안 본다).
+  const LEC = '../../../part2/4-node-backend/p2-23-crud-api-lecture.md';
+  const ANS = '../../../part2/4-node-backend/p2-23-crud-api-answers.md';
+
+  const blocksOf = (path, head) => {
+    const md = readFileSync(new URL(path, import.meta.url), 'utf-8');
+    const re = new RegExp('```javascript\\n(' + head.replace(/[/.]/g, '\\$&') + '\\n[\\s\\S]*?)```', 'g');
+    return [...md.matchAll(re)].map((m) => m[1]);
+  };
+  const real = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
+
+  it('완성본 app.js 가 코드베이스와 같다', () => {
+    const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
+    expect(quoted.at(-1)).toBe(real('app.js'));
+  });
+
+  it('답안의 `homework1.js` 완성본이 코드베이스와 같다', () => {
+    const quoted = blocksOf(ANS, '// ~/instagram-api/lab/homework1.js');
+    expect(quoted[0]).toBe(real('lab/p2-23/homework1.js'));
+  });
+
+  it('교안이 인용한 Step 1 시점 `app.get` 이 `code/p2-22` 판과 같다', () => {
+    const quoted = blocksOf(LEC, '// ~/instagram-api/app.js')[0];
+    const theirs = execFileSync('git', ['show', 'code/p2-22:app.js'], { encoding: 'utf-8' });
+    expect(theirs).toContain(quoted.split('\n').slice(1).join('\n').trim());
+  });
+});
