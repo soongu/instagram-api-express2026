@@ -1,7 +1,7 @@
 // 내부 검증 전용 — 교안에 한 줄도 인용하지 않는다.
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import express from 'express';
 import { boot } from './helpers/boot.js';
 
@@ -100,25 +100,19 @@ describe('Step 6 — httpYac 으로 보내는 요청', () => {
     //    학생 화면의 «응답 창 생김새» 가 아니다. CLI 출력과 VS Code 확장의
     //    응답 창은 형식이 다르므로, **CLI 출력을 교안에 옮겨 적지 않는다.**
     server = await boot('app.js');
-    // 🚨 `requests/posts.http` 도 회차마다 자라는 파일이라 워킹 트리를 안 읽는다.
-    //    `code/p2-22` 시점 판을 꺼내 임시 파일로 돌린다 (`p2-23` 이 POST·PATCH·
-    //    DELETE 요청을 이 파일에 더한다).
-    const frozen = execFileSync('git', ['show', 'code/p2-22:requests/posts.http'],
+    // 🚨 `requests/posts.http` 는 회차마다 자라는 파일이라 워킹 트리를 안 읽는다.
+    //    그리고 **`code/p2-22` 판도 못 쓴다** — 그 판에는 요청이 셋뿐인데
+    //    교안 Step 6 은 「맨 아래에 하나 더 붙이고 넷을 다 보내볼게요」로
+    //    «넷» 을 만들게 한다(2026-09-05 `p2-23` 착수 시 발견). 코드베이스가 학생
+    //    파일보다 한 요청 뒤처져 있었고, 이 축은 그 셋을 「맞다」고 잠그고 있었다.
+    //    대조 기준은 «교안이 시키는 결과물» 이므로 스냅숏으로 박는다.
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'snapshots/p2-22.posts.http', '--all', '--output', 'short'],
       { encoding: 'utf-8' });
-    const tmp = new URL('../requests/.p2-22-frozen.http', import.meta.url);
-    writeFileSync(tmp, frozen);
-    let out;
-    try {
-      out = execFileSync(
-        'node_modules/.bin/httpyac',
-        ['send', 'requests/.p2-22-frozen.http', '--all', '--output', 'short'],
-        { encoding: 'utf-8' });
-    } finally {
-      rmSync(tmp, { force: true });
-    }
-    expect(out).toContain('3 requests processed (3 succeeded)');
+    expect(out).toContain('4 requests processed (4 succeeded)');
     expect(out.match(/=> 200/g)).toHaveLength(2);
-    expect(out.match(/=> 404/g)).toHaveLength(1);
+    expect(out.match(/=> 404/g)).toHaveLength(2);
   }, 30000);
 });
 
