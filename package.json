@@ -14,6 +14,7 @@
     "express": "^5.2.1"
   },
   "devDependencies": {
+    "httpyac": "^6.16.7",
     "supertest": "^7.2.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"
