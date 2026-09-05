@@ -30,7 +30,15 @@ export async function boot(file, { port = 3000, timeoutMs = 8000 } = {}) {
       `포트 ${port} 가 이미 물려 있습니다. 교안이 틀린 게 아니라 환경입니다 — ` +
       `그 포트를 쓰는 프로세스를 끄고 다시 도세요.`);
   }
-  const child = spawn(process.execPath, [file], { cwd: ROOT });
+  // 🚨 **학생 환경과 같게 띄운다.** vitest 는 `NODE_ENV=test` 를 물려주는데,
+  //    Express 는 그때 에러 로그를 «일부러 숨긴다»
+  //    (`express/lib/application.js`: `if (this.get('env') !== 'test') console.error(...)`).
+  //    그대로 두면 「터미널에 이런 에러가 찍혀요」를 검증할 때 게이트만 조용해서
+  //    거짓 반증이 난다 — 학생은 `node app.js` 를 그냥 치므로 development 다.
+  const env = { ...process.env };
+  delete env.NODE_ENV;
+  delete env.VITEST;
+  const child = spawn(process.execPath, [file], { cwd: ROOT, env });
   let log = '';
   const first = await new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -46,8 +54,13 @@ export async function boot(file, { port = 3000, timeoutMs = 8000 } = {}) {
       reject(new Error(`${file} 가 뜨자마자 끝났습니다 (exit ${code}).\n${log}`));
     });
   });
+  // 🚨 뜬 «뒤» 의 출력도 계속 모은다. Express 는 라우트 안에서 난 예외를 자기
+  //    에러 처리로 삼켜서 uncaughtException 에 안 올려주고 **터미널에만** 찍는다.
+  //    학생이 보는 곳이 거기라, 거기서 재야 「터진다」를 판정할 수 있다.
+  child.stdout.on('data', (buf) => { log += buf.toString(); });
   return {
     log: first,
+    tail: () => log,
     base: `http://localhost:${port}`,
     stop: () => new Promise((resolve) => {
       child.on('exit', resolve);

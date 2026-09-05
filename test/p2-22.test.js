@@ -2,6 +2,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import express from 'express';
 import { boot } from './helpers/boot.js';
 
 let server = null;
@@ -257,5 +258,59 @@ describe('교안 인용이 코드베이스와 byte 동일한가', () => {
     const real = readFileSync(new URL('../data/posts.js', import.meta.url), 'utf-8');
     expect(quoted).toHaveLength(1);
     expect(quoted[0]).toBe(real);
+  });
+});
+
+describe('`return` 을 빠뜨리면 정말 «터지는가»', () => {
+  // 🚨 초고는 「한 요청에 응답을 두 번 보내려다 터져요」라고 적었는데 거짓이었다.
+  //    조용히 지나간다. 터지는 것은 «아래 줄이 진짜 값을 담을 때» 뿐이다.
+  //    이 축이 없으면 산문이 다시 뒤집혀도 아무도 못 본다.
+  const bootInline = (after) => new Promise((done) => {
+    const rows = [];
+    const app = express();
+    app.get('/x/:id', (req, res) => {
+      const post = [{ id: 1 }].find((o) => o.id === Number(req.params.id));
+      if (!post) { res.status(404).json({ message: '없어요' }); }
+      after(res, post);
+    });
+    const s = app.listen(0, async () => {
+      let caught = null;
+      const onErr = (e) => { caught = e.code; };
+      process.once('uncaughtException', onErr);
+      const r = await fetch(`http://localhost:${s.address().port}/x/999`).catch(() => null);
+      await new Promise((d) => setTimeout(d, 200));
+      process.off('uncaughtException', onErr);
+      rows.push(r ? r.status : 0, caught);
+      s.close(() => done(rows));
+    });
+  });
+
+  it('`res.json(post)` 는 post 가 undefined 라 조용히 넘어간다', async () => {
+    const [status, caught] = await bootInline((res, post) => res.json(post));
+    expect(status).toBe(404);
+    expect(caught).toBe(null);
+  });
+
+  it('아래 줄이 «진짜 값» 을 담으면 터미널에 ERR_HTTP_HEADERS_SENT 가 찍힌다', async () => {
+    server = await boot('snapshots/p2-22.no-return.js');
+    const first = await fetch(`${server.base}/api/posts/999`);
+    // stderr 가 파이프로 건너오는 데 시간이 든다. 부하가 있으면 800ms 로는 모자란다.
+    await new Promise((d) => setTimeout(d, 1500));
+    expect(first.status).toBe(404);                       // 클라이언트는 멀쩡한 답을 받고
+    expect(server.tail()).toContain('ERR_HTTP_HEADERS_SENT');  // 터미널에만 찍힌다
+    // 그리고 서버는 «안 죽는다» — 교안이 「터진다」라고 쓰면 이 줄이 반증한다.
+    const after = await fetch(`${server.base}/api/posts/1`);
+    expect(after.status).toBe(200);
+  }, 15000);
+});
+
+describe('답안이 주장하는 NaN 의 성질', () => {
+  it('NaN 은 자기 자신과도 같지 않아 find 가 못 찾는다', () => {
+    // 🚨 초고는 「NaN 과 같은 id 가 어디에도 없으니」라고 적었는데, 그건
+    //    「우리 배열에 마침 없어서」로 읽힌다. 진짜 이유는 NaN === NaN 이 거짓인 것이다.
+    expect(Number('latest')).toBeNaN();
+    expect(NaN === NaN).toBe(false);
+    const books = [{ id: NaN, title: '일부러 NaN' }, { id: 1, title: '어린 왕자' }];
+    expect(books.find((o) => o.id === Number('latest'))).toBeUndefined();
   });
 });
