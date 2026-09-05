@@ -1,0 +1,24 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+node_modules
+
+# 환경변수 — 값은 저장소에 안 올린다
+.env
+.env.*
+!.env.example
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.sw?
+
+# oh-my-claudecode local session state (not project content)
+.omc/
+
+# 게이트가 서버 블록을 돌릴 때 쓰는 임시 폴더 (replay.py)
+__replay__/
