@@ -347,3 +347,47 @@ describe('실습 1 — 댓글을 올리는 주소', () => {
     expect(await (await fetch(`${server.base}/api/comments`)).json()).toHaveLength(3);
   });
 });
+
+describe('실습 2 — 프로필 소개글 고치기', () => {
+  it('보낸 칸만 바뀌고 나머지 셋은 그대로다', async () => {
+    server = await boot('lab/p2-23/practice2.js', { port: 4000 });
+    const res = await fetch(`${server.base}/api/profiles/minji`, {
+      method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ bio: '오늘도 카페' }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      username: 'minji', name: '이민지', bio: '오늘도 카페', followerCount: 8500,
+    });
+  });
+
+  it('🚨 `username` 은 못 바꾼다 — 스프레드 맨 뒤에 다시 얹어서', async () => {
+    server = await boot('lab/p2-23/practice2.js', { port: 4000 });
+    const res = await fetch(`${server.base}/api/profiles/minji`, {
+      method: 'PATCH', headers: JSON_HEADERS,
+      body: JSON.stringify({ username: 'haecker', bio: '바뀌었을까요' }),
+    });
+    const body = await res.json();
+    expect(body.username).toBe('minji');
+    expect(body.bio).toBe('바뀌었을까요');
+  });
+
+  it('없는 사람은 404 다', async () => {
+    server = await boot('lab/p2-23/practice2.js', { port: 4000 });
+    const res = await fetch(`${server.base}/api/profiles/haecker`, {
+      method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ bio: '안녕' }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ message: '그런 프로필은 없어요' });
+  });
+
+  it('`profiles.http` 요청 셋이 200·404·200 을 낸다', async () => {
+    server = await boot('lab/p2-23/practice2.js', { port: 4000 });
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/profiles.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('3 requests processed (3 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(2);
+    expect(out.match(/=> 404/g)).toHaveLength(1);
+  }, 40000);
+});
