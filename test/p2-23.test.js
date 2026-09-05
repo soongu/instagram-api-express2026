@@ -283,3 +283,20 @@ describe('Step 6 — `DELETE` 는 지운 것을 돌려준다', () => {
     expect(list.map((one) => one.id)).toEqual([1, 3]);
   });
 });
+
+describe('Step 7 — `.http` 파일 여덟 요청이 실제로 돈다', () => {
+  // 🚨 이 축이 보는 것은 «파일이 파싱되고 여덟 요청이 나가는가» 이지 학생 화면의
+  //    응답 창 생김새가 아니다. CLI 출력을 교안에 옮겨 적지 않는다.
+  it('교안이 시키는 대로 이어 붙인 posts.http 가 200·404·201·400 을 낸다', async () => {
+    server = await boot('app.js');
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('8 requests processed (8 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(4);
+    expect(out.match(/=> 404/g)).toHaveLength(2);
+    expect(out.match(/=> 201/g)).toHaveLength(1);
+    expect(out.match(/=> 400/g)).toHaveLength(1);
+  }, 40000);
+});
