@@ -528,6 +528,19 @@ describe('과제 1 — 댓글을 데이터베이스로', () => {
     expect(out.match(/=> 201/g)).toHaveLength(1);
     expect(out.match(/=> 400/g)).toHaveLength(1);
   }, 60000);
+
+  it('🚨 그 파일의 올리기 요청이 `likeCount: 500` 을 실어 보낸다 — 요구사항 5를 확인하는 자리다', async () => {
+    // 🚨 처음엔 아무것도 안 실어 보내서, 결과가 0 이어도 「기본값이 일한 것」인지
+    //    「우리가 덮어쓴 것」인지 못 갈랐다. 재정독자가 잡았다.
+    const http = readFileSync(new URL('../requests/comments.http', import.meta.url), 'utf-8');
+    expect(http).toContain('"likeCount": 500');
+
+    await bootComments();
+    execFileSync('node_modules/.bin/httpyac',
+      ['send', 'requests/comments.http', '--all', '--output', 'short'], { encoding: 'utf-8' });
+    const list = await (await fetch(`${server.base}/api/comments`)).json();
+    expect(list.every((one) => one.likeCount !== 500)).toBe(true);
+  }, 60000);
 });
 
 describe('과제 2 — 시드를 안전하게', () => {

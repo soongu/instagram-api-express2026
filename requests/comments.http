@@ -10,7 +10,8 @@ Content-Type: application/json
 {
   "postId": 1,
   "username": "yuna",
-  "content": "저도 가보고 싶어요"
+  "content": "저도 가보고 싶어요",
+  "likeCount": 500
 }
 
 ### content 없이 올리기
