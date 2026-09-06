@@ -569,6 +569,14 @@ describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => 
   };
   const real = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
 
+  it('🔴 교안의 `app.js` 완성본이 코드베이스와 byte 동일하다', () => {
+    // 🚨 이 검사는 뒤늦게 생겼다 — 초고에 «완성본 전체» 블록이 아예 없었고
+    //    (`p2-22`·`p2-23` 은 둘 다 뒀다), 독립 정독자가 「내가 제대로 한 게
+    //    맞나 맞춰볼 데가 없다」로 잡았다. `p2-25` 가 여기서 이어 시작한다.
+    const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
+    expect(quoted.at(-1)).toBe(real('app.js'));
+  });
+
   it('교안의 `seed.js` 완성본이 코드베이스와 같다', () => {
     expect(blocksOf(LEC, '// ~/instagram-api/seed.js').at(-1)).toBe(real('seed.js'));
   });
