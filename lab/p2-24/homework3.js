@@ -13,7 +13,7 @@ const already = await Post.countDocuments();
 
 if (already > 0 && !force) {
   console.log(`이미 게시물 ${already}개가 들어 있어서 아무것도 안 했어요.`);
-  console.log('그래도 비우고 다시 넣으려면 뒤에 --force 를 붙이세요.');
+  console.log('그래도 비우고 다시 넣으려면 뒤에 --force를 붙이세요.');
 } else {
   await Post.deleteMany({});
   await Post.insertMany(posts);
