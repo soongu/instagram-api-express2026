@@ -329,7 +329,9 @@ describe('실습 1 — 댓글을 올리는 주소', () => {
     server = await boot('lab/p2-23/practice1.js', { port: 4000 });
     const out = execFileSync(
       'node_modules/.bin/httpyac',
-      ['send', 'requests/comments.http', '--all', '--output', 'short'],
+      // 🚨 `requests/comments.http` 도 자라는 파일이다 — `p2-24` 가 번호를 `_id` 로
+      //    갈아 끼우면서 이 회차의 요청이 통째로 달라진다.
+      ['send', 'snapshots/p2-23.comments.http', '--all', '--output', 'short'],
       { encoding: 'utf-8' });
     expect(out).toContain('3 requests processed (3 succeeded)');
     expect(out.match(/=> 200/g)).toHaveLength(2);
@@ -428,7 +430,9 @@ describe('실습 3 — 책을 올리고 지우는 서점', () => {
     server = await boot('lab/p2-23/practice3.js', { port: 4000 });
     const out = execFileSync(
       'node_modules/.bin/httpyac',
-      ['send', 'requests/books.http', '--all', '--output', 'short'],
+      // 🚨 `requests/books.http` 도 자라는 파일이다 — `p2-24` 가 번호를 `_id` 로
+      //    갈아 끼우면서 이 회차의 요청이 통째로 달라진다.
+      ['send', 'snapshots/p2-23.books.http', '--all', '--output', 'short'],
       { encoding: 'utf-8' });
     expect(out).toContain('8 requests processed (8 succeeded)');
     expect(out.match(/=> 201/g)).toHaveLength(1);

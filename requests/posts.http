@@ -1,16 +1,18 @@
 ### 게시물 목록
+# @name list
 GET http://localhost:3000/api/posts
 
-### 2번 게시물 하나
-GET http://localhost:3000/api/posts/2
+### 목록의 첫 게시물 하나
+GET http://localhost:3000/api/posts/{{list[0]._id}}
 
 ### 없는 게시물
-GET http://localhost:3000/api/posts/999
+GET http://localhost:3000/api/posts/507f1f77bcf86cd799439011
 
 ### 없는 주소
 GET http://localhost:3000/api/comments
 
 ### 게시물 올리기
+# @name created
 POST http://localhost:3000/api/posts
 Content-Type: application/json
 
@@ -18,8 +20,8 @@ Content-Type: application/json
   "username": "yuna",
   "profileImage": "https://picsum.photos/seed/yuna/40/40",
   "postImage": "https://picsum.photos/seed/post4/600/600",
-  "postAlt": "창밖으로 본 저녁 하늘 사진",
-  "content": "오늘의 한 장 📷"
+  "postAlt": "제주도 바다 사진",
+  "content": "제주 왔어요 🌊"
 }
 
 ### 사진 없이 올리기
@@ -27,16 +29,16 @@ POST http://localhost:3000/api/posts
 Content-Type: application/json
 
 {
-  "content": "사진 없이 올려볼게요"
+  "username": "yuna"
 }
 
-### 하트 수 고치기
-PATCH http://localhost:3000/api/posts/2
+### 방금 올린 게시물의 하트 수 고치기
+PATCH http://localhost:3000/api/posts/{{created._id}}
 Content-Type: application/json
 
 {
-  "likeCount": 88
+  "likeCount": 7
 }
 
-### 게시물 지우기
-DELETE http://localhost:3000/api/posts/3
+### 방금 올린 게시물 지우기
+DELETE http://localhost:3000/api/posts/{{created._id}}

@@ -1,22 +1,15 @@
 ### 책 목록
 GET http://localhost:4000/api/books
 
-### 2번 책 하나
-GET http://localhost:4000/api/books/2
-
-### 없는 책
-GET http://localhost:4000/api/books/99
-
-### 없는 주소
-GET http://localhost:4000/api/authors
-
 ### 책 올리기
+# @name created
 POST http://localhost:4000/api/books
 Content-Type: application/json
 
 {
-  "title": "죽은 시인의 사회",
-  "author": "N.H. 클라인바움"
+  "title": "코드 그 자체",
+  "author": "박서준",
+  "stock": 999
 }
 
 ### 제목 없이 올리기
@@ -24,16 +17,16 @@ POST http://localhost:4000/api/books
 Content-Type: application/json
 
 {
-  "author": "이름만 있는 사람"
+  "author": "박서준"
 }
 
-### 재고 고치기
-PATCH http://localhost:4000/api/books/2
+### 방금 올린 책의 재고를 9로
+PATCH http://localhost:4000/api/books/{{created._id}}
 Content-Type: application/json
 
 {
   "stock": 9
 }
 
-### 책 지우기
-DELETE http://localhost:4000/api/books/3
+### 방금 올린 책 지우기
+DELETE http://localhost:4000/api/books/{{created._id}}

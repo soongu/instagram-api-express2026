@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import mongoose from 'mongoose';
 import {
-  boot, withLocalMongo, dropLocal, onlyMongoLineDiffers, LOCAL_MONGO_URL,
+  boot, withLocalMongo, dropLocal, onlyMongoLineDiffers, labPathRewrites, LOCAL_MONGO_URL,
 } from './helpers/boot.js';
 
 const READY = '서버가 3000번 포트에서';
@@ -57,6 +57,18 @@ describe('게이트가 스스로를 검산한다 — 사본은 «MONGO_URL 한 �
     const diff = onlyMongoLineDiffers('seed.js');
     expect(diff).toHaveLength(1);
     expect(diff[0][1]).toContain('const MONGO_URL = ');
+  });
+
+  it('lab 파일은 «불러오는 줄» 만 한 단 더 깊어진다 — 그 밖엔 안 달라진다', () => {
+    // 학생 쪽은 `~/instagram-api/lab/` 하나인데 코드베이스는 `lab/p2-24/` 로 한 겹 깊다.
+    // 교안 인용의 정전은 학생 표기이므로 파일을 그대로 두고 띄울 때만 고친다.
+    expect(labPathRewrites('lab/p2-24/practice2.js')).toHaveLength(0);   // 같은 폴더만 부른다
+    const hw3 = labPathRewrites('lab/p2-24/homework3.js');
+    expect(hw3).toHaveLength(2);
+    for (const [, before, after] of hw3) {
+      expect(before).toMatch(/from '\.\.\/(models|data)\//);
+      expect(after).toBe(before.replace("from '../", "from '../../"));
+    }
   });
 
   it('교안이 학생에게 주는 주소는 `mongodb+srv://` 형식이다', () => {
@@ -331,5 +343,298 @@ describe('Step 7 — 쓰기 셋을 DB 로', () => {
     const list = await (await fetch(`${server.base}/api/posts`)).json();
     expect(list).toHaveLength(4);
     expect(list.map((one) => one.username)).toContain('yuna');
+  });
+});
+
+describe('Step 8 — `.http` 여덟이 새 번호로 돈다', () => {
+  it('요청 여덟이 200·200·404·404·201·400·200·200 을 낸다', async () => {
+    await bootApp();
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('8 requests processed (8 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(4);
+    expect(out.match(/=> 404/g)).toHaveLength(2);
+    expect(out.match(/=> 201/g)).toHaveLength(1);
+    expect(out.match(/=> 400/g)).toHaveLength(1);
+  }, 60000);
+
+  it('🔴 두 번 돌려도 게시물이 셋으로 돌아온다 — 만든 것을 자기가 치운다', async () => {
+    await bootApp();
+    const send = () => execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    send();
+    send();
+    const list = await (await fetch(`${server.base}/api/posts`)).json();
+    expect(list).toHaveLength(3);
+  }, 90000);
+
+  it('🚨 `p2-23` 의 옛 요청 파일을 그대로 보내면 넷이 500 이다', async () => {
+    await bootApp();
+    // 스냅숏은 `p2-23` 시점 그대로 — `/api/posts/2` 처럼 번호를 박아둔 넷이 들어 있다
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'snapshots/p2-23.posts.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out.match(/=> 500/g)).toHaveLength(4);
+  }, 60000);
+});
+
+describe('실습 1 — 실패하는 주소를 일부러 만들어보기', () => {
+  const runWith = (url) => {
+    const local = withLocalMongo('lab/p2-24/practice1.js', url);
+    try {
+      return execFileSync(process.execPath, [local], { encoding: 'utf-8' });
+    } finally { dropLocal(local); }
+  };
+
+  it('제대로 된 주소면 연결되고 걸린 시간을 찍는다', () => {
+    expect(runWith(LOCAL_MONGO_URL)).toMatch(/연결됐어요\. \d+ms 걸렸어요\./);
+  });
+
+  it('🔴 주소 글자가 틀린 셋은 «거의 0ms» 에 이름이 뜬다', () => {
+    for (const [url, name] of [
+      ['mongo://127.0.0.1:27017/instagram', 'MongoParseError'],
+      ['mongodb://user:p@ss@127.0.0.1:27017/instagram', 'MongoParseError'],
+    ]) {
+      const out = runWith(url);
+      expect(out).toContain(`이름: ${name}`);
+      const ms = Number(out.match(/(\d+)ms 만에 실패했어요/)[1]);
+      expect(ms).toBeLessThan(500);
+    }
+  });
+
+  it('🔴 실제로 다녀와야 아는 것만 3초를 꽉 채운다 — 해설이 주장하는 그대로', () => {
+    const out = runWith('mongodb://127.0.0.1:27099/instagram');
+    expect(out).toContain('이름: MongooseServerSelectionError');
+    const ms = Number(out.match(/(\d+)ms 만에 실패했어요/)[1]);
+    expect(ms).toBeGreaterThan(2900);
+    expect(ms).toBeLessThan(5000);
+  }, 20000);
+});
+
+describe('실습 2 — 스토리를 데이터베이스로', () => {
+  it('컬렉션 이름이 `stories` 다 — `storys` 가 아니다', async () => {
+    if (mongoose.connection.readyState === 0) await mongoose.connect(LOCAL_MONGO_URL);
+    const { default: Story } = await import('../lab/p2-24/Story.js');
+    expect(Story.collection.name).toBe('stories');
+    await mongoose.disconnect();
+  });
+
+  it('🔴 `isViewed` 를 한 번도 안 적었는데 `false` 로 들어간다 — 기본값이 일한다', async () => {
+    const local = withLocalMongo('lab/p2-24/practice2.js');
+    const out = execFileSync(process.execPath, [local], { encoding: 'utf-8' });
+    dropLocal(local);
+    expect(out).toContain('스토리 3개를 넣었어요.');
+
+    await mongoose.connect(LOCAL_MONGO_URL);
+    const { default: Story } = await import('../lab/p2-24/Story.js');
+    const all = await Story.find();
+    expect(all).toHaveLength(3);
+    expect(all.every((one) => one.isViewed === false)).toBe(true);
+    await mongoose.disconnect();
+  });
+});
+
+describe('실습 3 — 서점을 데이터베이스로', () => {
+  let books = null;
+  const bootBooks = async () => {
+    const seed = withLocalMongo('lab/p2-24/practice4.js');
+    execFileSync(process.execPath, [seed], { encoding: 'utf-8' });
+    dropLocal(seed);
+    books = withLocalMongo('lab/p2-24/practice3.js');
+    server = await boot(books, { port: 4000, ready: '서버가 4000번 포트에서' });
+  };
+  afterEach(() => { if (books) { dropLocal(books); books = null; } });
+
+  it('🚨 `stock` 을 999 로 실어 보내도 0 으로 시작한다', async () => {
+    await bootBooks();
+    const res = await fetch(`${server.base}/api/books`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ title: '코드 그 자체', author: '박서준', stock: 999 }),
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()).stock).toBe(0);
+  });
+
+  it('스키마에 없는 칸은 보내도 사라진다', async () => {
+    await bootBooks();
+    const res = await fetch(`${server.base}/api/books`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ title: 'a', author: 'b', id: 5, 몰래: '넣기' }),
+    });
+    const body = await res.json();
+    expect(body.id).toBeUndefined();
+    expect(body['몰래']).toBeUndefined();
+  });
+
+  it('`books.http` 다섯이 200·201·400·200·200 을 낸다', async () => {
+    // 🚨 처음엔 `GET /api/books/:id` 를 부르는 요청을 넣었다가 잡혔다 — 실습
+    //    요구사항이 「줄 넷」(목록·올리기·고치기·지우기)이라 그 라우트가 없다.
+    //    catch-all 도 없어서 Express 기본 404 가 왔고, httpYac 은 «응답이 왔으니»
+    //    succeeded 로 세어서 개수만 보면 통과처럼 보였다.
+    await bootBooks();
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/books.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('5 requests processed (5 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(3);
+    expect(out.match(/=> 201/g)).toHaveLength(1);
+    expect(out.match(/=> 400/g)).toHaveLength(1);
+    expect(out.match(/=> 404/g)).toBeNull();
+  }, 60000);
+});
+
+describe('과제 1 — 댓글을 데이터베이스로', () => {
+  let hw = null;
+  const bootComments = async () => {
+    const seed = withLocalMongo('lab/p2-24/homework2.js');
+    execFileSync(process.execPath, [seed], { encoding: 'utf-8' });
+    dropLocal(seed);
+    hw = withLocalMongo('lab/p2-24/homework1.js');
+    server = await boot(hw, { port: 4000, ready: '서버가 4000번 포트에서' });
+  };
+  afterEach(() => { if (hw) { dropLocal(hw); hw = null; } });
+
+  it('컬렉션 이름이 `comments` 다', async () => {
+    if (mongoose.connection.readyState === 0) await mongoose.connect(LOCAL_MONGO_URL);
+    const { default: Comment } = await import('../lab/p2-24/Comment.js');
+    expect(Comment.collection.name).toBe('comments');
+    await mongoose.disconnect();
+  });
+
+  it('`likeCount` 를 500 으로 보내도 0 이다', async () => {
+    await bootComments();
+    const res = await fetch(`${server.base}/api/comments`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 1, username: 'yuna', content: '좋아요', likeCount: 500 }),
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()).likeCount).toBe(0);
+  });
+
+  it('`comments.http` 다섯이 200·201·400·200·200 을 낸다', async () => {
+    await bootComments();
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/comments.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('5 requests processed (5 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(3);
+    expect(out.match(/=> 201/g)).toHaveLength(1);
+    expect(out.match(/=> 400/g)).toHaveLength(1);
+  }, 60000);
+});
+
+describe('과제 2 — 시드를 안전하게', () => {
+  const run = (args = []) => {
+    const local = withLocalMongo('lab/p2-24/homework3.js');
+    try {
+      return execFileSync(process.execPath, [local, ...args], { encoding: 'utf-8' });
+    } finally { dropLocal(local); }
+  };
+
+  it('비어 있으면 넣고, 이미 있으면 아무것도 안 한다', async () => {
+    await mongoose.connect(LOCAL_MONGO_URL);
+    const { default: Post } = await import('../models/Post.js');
+    await Post.deleteMany({});
+    await mongoose.disconnect();
+
+    expect(run()).toContain('게시물 3개를 넣었어요.');
+    const second = run();
+    expect(second).toContain('이미 게시물 3개가 들어 있어서 아무것도 안 했어요.');
+    expect(second).toContain('--force');
+  });
+
+  it('🔴 `--force` 를 붙이면 그때는 비우고 다시 넣는다', () => {
+    expect(run(['--force'])).toContain('게시물 3개를 넣었어요.');
+  });
+});
+
+describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => {
+  // 🚨 `p2-25` 가 이 파일들에서 이어 시작한다. 한 글자라도 다르면 다음 회차가
+  //    «재현 불가» 가 되는데, 그건 다른 게이트가 원리적으로 안 본다.
+  const LEC = '../../../part2/4-node-backend/p2-24-mongodb-mongoose-lecture.md';
+  const ANS = '../../../part2/4-node-backend/p2-24-mongodb-mongoose-answers.md';
+
+  const blocksOf = (path, head, fence = 'javascript') => {
+    const md = readFileSync(new URL(path, import.meta.url), 'utf-8');
+    const re = new RegExp('```' + fence + '\\n(' + head.replace(/[/.]/g, '\\$&') +
+                          '\\n[\\s\\S]*?)```', 'g');
+    return [...md.matchAll(re)].map((m) => m[1]);
+  };
+  const real = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
+
+  it('교안의 `seed.js` 완성본이 코드베이스와 같다', () => {
+    expect(blocksOf(LEC, '// ~/instagram-api/seed.js').at(-1)).toBe(real('seed.js'));
+  });
+
+  it('교안이 인용한 `models/Post.js` 두 조각이 코드베이스 안에 그대로 있다', () => {
+    // 🚨 조각 발췌라 byte 동일 대신 «포함» 으로 본다 — 붙여넣은 것이 안 돌면 안 되니까.
+    const quoted = blocksOf(LEC, '// ~/instagram-api/models/Post.js');
+    expect(quoted).toHaveLength(2);
+    for (const block of quoted) {
+      const body = block.split('\n').slice(1).join('\n').trim();
+      expect(real('models/Post.js')).toContain(body);
+    }
+  });
+
+  it('교안이 인용한 `app.js` 조각은 «셋 중 하나» 에 그대로 있다', () => {
+    // 🚨 통짜로 «현재 app.js» 에 대면 안 된다. 교안이 인용하는 것은 셋이다 —
+    //    ① 지난 시간 판(대조용) ② Step 3 «시점» 판(모델이 아직 없다) ③ 완성본.
+    //    처음 판은 ①·②를 「불일치」로 잡았는데, 그건 교안이 아니라 검사가 틀린 것이다.
+    const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
+    expect(quoted.length).toBeGreaterThanOrEqual(5);
+    const sources = {
+      완성본: real('app.js'),
+      // 스냅숏은 `snapshots/` 아래 있어 «불러오는 줄 하나만» 학생 표기와 다르다
+      'Step 3 시점': real('snapshots/p2-24.step3.app.js')
+        .replace("'../data/posts.js'", "'./data/posts.js'"),
+      '지난 시간 판': execFileSync('git', ['show', 'code/p2-23:app.js'], { encoding: 'utf-8' }),
+    };
+    const missing = [];
+    for (const block of quoted) {
+      const body = block.split('\n').slice(1).join('\n').trim();
+      if (!Object.values(sources).some((src) => src.includes(body))) {
+        missing.push(body.split('\n')[0]);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('🔴 Step 3 «시점» 판이 실제로 뜬다 — 교안이 「두 줄이 찍혀요」라고 말하니까', async () => {
+    const local = withLocalMongo('snapshots/p2-24.step3.app.js');
+    server = await boot(local, { ready: READY });
+    expect(server.log).toContain('데이터베이스에 연결됐어요.');
+    expect(server.log).toContain('서버가 3000번 포트에서 기다리고 있어요.');
+    // 이 시점엔 아직 배열을 쓴다 — 갈아 끼우는 것은 Step 6 부터다
+    const list = await (await fetch(`${server.base}/api/posts`)).json();
+    expect(list).toHaveLength(3);
+    expect(list[0].id).toBe(1);
+    await server.stop(); server = null;
+    dropLocal(local);
+  });
+
+  it('답안의 완성본 넷이 코드베이스와 같다', () => {
+    const pairs = [
+      ['// ~/instagram-api/lab/Comment.js', 'lab/p2-24/Comment.js'],
+      ['// ~/instagram-api/lab/homework1.js', 'lab/p2-24/homework1.js'],
+      ['// ~/instagram-api/lab/homework2.js', 'lab/p2-24/homework2.js'],
+      ['// ~/instagram-api/lab/homework3.js', 'lab/p2-24/homework3.js'],
+    ];
+    for (const [head, path] of pairs) {
+      expect(blocksOf(ANS, head).at(-1), head).toBe(real(path));
+    }
+  });
+
+  it('교안의 `posts.http` 전문과 답안의 `comments.http` 가 실물과 같다', () => {
+    const lecHttp = blocksOf(LEC, '### 게시물 목록', '');
+    expect(lecHttp.at(-1)).toBe(real('requests/posts.http'));
+    const ansHttp = blocksOf(ANS, '### 댓글 목록', '');
+    expect(ansHttp.at(-1)).toBe(real('requests/comments.http'));
   });
 });

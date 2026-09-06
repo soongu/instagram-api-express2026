@@ -86,14 +86,33 @@ export const LOCAL_MONGO_URL = 'mongodb://127.0.0.1:27017/instagram_gate';
 
 const srcOf = (file) => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf-8');
 
-/** 원본에서 `MONGO_URL = '...'` 한 줄만 바꾼 «문자열» 을 돌려준다 (파일을 안 건드린다). */
+/**
+ * 원본에서 `MONGO_URL = '...'` 한 줄만 바꾼 «문자열» 을 돌려준다 (파일을 안 건드린다).
+ *
+ * 🚨 `lab/p2-NN/` 아래 파일은 «한 단 더 깊다». 학생 쪽은 `~/instagram-api/lab/` 하나라
+ *    `../models/Post.js` 가 맞는데, 코드베이스는 회차별 디렉토리로 한 겹을 더 두므로
+ *    거기서는 `../../models/Post.js` 여야 한다. 교안 인용은 «학생 쪽» 표기가 정전이니
+ *    파일은 그대로 두고 띄울 때만 고친다 — `p2-23` 이 스냅숏에서 쓴 것과 같은 수법이고,
+ *    무엇이 달라졌는지는 `labPathRewrites()` 로 꺼내 테스트가 잠근다.
+ */
 export function localSource(file, url = LOCAL_MONGO_URL) {
   const src = srcOf(file);
-  const out = src.replace(/^(const MONGO_URL = ').*(';)$/m, `$1${url}$2`);
+  let out = src.replace(/^(const MONGO_URL = ').*(';)$/m, `$1${url}$2`);
   if (out === src) {
     throw new Error(`${file} 안에서 \`const MONGO_URL = '...'\` 줄을 못 찾았습니다.`);
   }
+  if (/^lab\/p2-\d+\//.test(file)) {
+    out = out.replace(/from '\.\.\/(models|data)\//g, "from '../../$1/");
+  }
   return out;
+}
+
+/** lab 파일에서 «경로만» 고쳐진 줄들 — 테스트가 이것 말고는 안 달라졌음을 잠근다. */
+export function labPathRewrites(file) {
+  const src = srcOf(file).split('\n');
+  const out = localSource(file).split('\n');
+  return src.map((line, i) => [i, line, out[i]])
+    .filter(([, a, b]) => a !== b && !a.startsWith('const MONGO_URL = '));
 }
 
 /** 그 사본을 저장소 루트에 써 두고 경로를 돌려준다. */

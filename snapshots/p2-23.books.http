@@ -1,0 +1,39 @@
+### 책 목록
+GET http://localhost:4000/api/books
+
+### 2번 책 하나
+GET http://localhost:4000/api/books/2
+
+### 없는 책
+GET http://localhost:4000/api/books/99
+
+### 없는 주소
+GET http://localhost:4000/api/authors
+
+### 책 올리기
+POST http://localhost:4000/api/books
+Content-Type: application/json
+
+{
+  "title": "죽은 시인의 사회",
+  "author": "N.H. 클라인바움"
+}
+
+### 제목 없이 올리기
+POST http://localhost:4000/api/books
+Content-Type: application/json
+
+{
+  "author": "이름만 있는 사람"
+}
+
+### 재고 고치기
+PATCH http://localhost:4000/api/books/2
+Content-Type: application/json
+
+{
+  "stock": 9
+}
+
+### 책 지우기
+DELETE http://localhost:4000/api/books/3
