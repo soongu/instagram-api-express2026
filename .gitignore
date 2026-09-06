@@ -22,3 +22,6 @@ node_modules
 
 # 게이트가 서버 블록을 돌릴 때 쓰는 임시 폴더 (replay.py)
 __replay__/
+
+# 게이트가 연결 문자열 한 줄만 바꿔 띄우는 사본 (p2-24~)
+*.local.js

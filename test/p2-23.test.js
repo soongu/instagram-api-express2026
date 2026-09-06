@@ -77,7 +77,7 @@ describe('Step 1 — `app.post` 를 놓으면 걸리는데, 몸통은 `undefined
 
 describe('Step 2 — `express.json()` 과 `Content-Type` 은 한 짝', () => {
   it('헤더를 붙여 보내면 몸통이 객체로 들어온다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS,
       body: JSON.stringify({ username: 'yuna', postImage: 'https://picsum.photos/seed/post4/600/600' }),
@@ -86,7 +86,7 @@ describe('Step 2 — `express.json()` 과 `Content-Type` 은 한 짝', () => {
   });
 
   it('🚨 헤더를 빼면 `express.json()` 이 있어도 `req.body` 가 `undefined` 라 구조 분해가 터진다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST',
       body: JSON.stringify({ username: 'yuna', postImage: 'x' }),
@@ -98,7 +98,7 @@ describe('Step 2 — `express.json()` 과 `Content-Type` 은 한 짝', () => {
   });
 
   it('헤더는 맞는데 몸통이 비면 `{}` 다 — `undefined` 와 갈린다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts`, { method: 'POST', headers: JSON_HEADERS });
     expect(res.status).toBe(400);
   });
@@ -106,7 +106,7 @@ describe('Step 2 — `express.json()` 과 `Content-Type` 은 한 짝', () => {
 
 describe('Step 3 — `POST` 는 201 이고, 넷은 서버가 정한다', () => {
   it('보낸 다섯 칸에 서버가 넷을 얹어 201 로 돌려준다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const sent = {
       username: 'yuna',
       profileImage: 'https://picsum.photos/seed/yuna/40/40',
@@ -124,7 +124,7 @@ describe('Step 3 — `POST` 는 201 이고, 넷은 서버가 정한다', () => {
   });
 
   it('🚨 클라이언트가 `id`·`likeCount` 를 보내도 서버 값이 이긴다 (스프레드는 뒤엣것이 이긴다)', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS,
       body: JSON.stringify({
@@ -140,7 +140,7 @@ describe('Step 3 — `POST` 는 201 이고, 넷은 서버가 정한다', () => {
   });
 
   it('올린 것이 목록에 들어가고 `id` 는 하나씩 는다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const body = { username: 'yuna', postImage: 'https://picsum.photos/seed/post4/600/600' };
     const first = await (await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) })).json();
@@ -159,7 +159,7 @@ describe('Step 3 — `POST` 는 201 이고, 넷은 서버가 정한다', () => {
 
 describe('Step 4 — 400 은 「보낸 쪽이 잘못했다」', () => {
   it('`username` 이 없으면 400 이고 목록도 안 는다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS,
       body: JSON.stringify({ postImage: 'https://picsum.photos/seed/post4/600/600' }),
@@ -172,7 +172,7 @@ describe('Step 4 — 400 은 「보낸 쪽이 잘못했다」', () => {
   });
 
   it('`postImage` 가 없어도 400 이다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ username: 'yuna' }),
     });
@@ -180,7 +180,7 @@ describe('Step 4 — 400 은 「보낸 쪽이 잘못했다」', () => {
   });
 
   it('빈 글자도 「없는 것」으로 본다 — `!""` 가 참이라서', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS,
       body: JSON.stringify({ username: '', postImage: 'x' }),
@@ -189,7 +189,7 @@ describe('Step 4 — 400 은 「보낸 쪽이 잘못했다」', () => {
   });
 
   it('🚨 깨진 JSON 은 우리가 안 붙여도 Express 가 400 을 낸다 — 본문은 HTML 이다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS, body: '{"username":',
     });
@@ -209,7 +209,7 @@ describe('Step 4 — 400 은 「보낸 쪽이 잘못했다」', () => {
 
 describe('Step 5 — `PATCH` 는 한 칸만 받고 전체를 돌려준다', () => {
   it('보낸 것은 한 칸인데 돌아온 것은 아홉 칸이다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts/2`, {
       method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 88 }),
     });
@@ -222,7 +222,7 @@ describe('Step 5 — `PATCH` 는 한 칸만 받고 전체를 돌려준다', () =
   });
 
   it('고친 것이 목록에도 남는다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     await fetch(`${server.base}/api/posts/2`, {
       method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 88 }),
     });
@@ -231,7 +231,7 @@ describe('Step 5 — `PATCH` 는 한 칸만 받고 전체를 돌려준다', () =
   });
 
   it('🚨 `id` 는 못 바꾼다 — 맨 뒤에 다시 얹어서', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts/2`, {
       method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ id: 999, likeCount: 1 }),
     });
@@ -239,7 +239,7 @@ describe('Step 5 — `PATCH` 는 한 칸만 받고 전체를 돌려준다', () =
   });
 
   it('없는 게시물을 고치라고 하면 404 다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts/999`, {
       method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 1 }),
     });
@@ -250,14 +250,14 @@ describe('Step 5 — `PATCH` 는 한 칸만 받고 전체를 돌려준다', () =
 
 describe('Step 6 — `DELETE` 는 지운 것을 돌려준다', () => {
   it('지우면 200 에 지운 게시물이 실려 온다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const res = await fetch(`${server.base}/api/posts/3`, { method: 'DELETE' });
     expect(res.status).toBe(200);
     expect((await res.json()).username).toBe('seungwoo');
   });
 
   it('목록에서 빠지고 하나만 골라도 404 다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     await fetch(`${server.base}/api/posts/3`, { method: 'DELETE' });
     const list = await (await fetch(`${server.base}/api/posts`)).json();
     expect(list).toHaveLength(2);
@@ -268,7 +268,7 @@ describe('Step 6 — `DELETE` 는 지운 것을 돌려준다', () => {
   });
 
   it('🚨 두 번째로 지우라고 하면 404 다 — 남은 목록은 첫 번째와 같다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     await fetch(`${server.base}/api/posts/3`, { method: 'DELETE' });
     const again = await fetch(`${server.base}/api/posts/3`, { method: 'DELETE' });
     expect(again.status).toBe(404);
@@ -277,7 +277,7 @@ describe('Step 6 — `DELETE` 는 지운 것을 돌려준다', () => {
   });
 
   it('가운데 것을 지워도 앞뒤가 안 흐트러진다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     await fetch(`${server.base}/api/posts/2`, { method: 'DELETE' });
     const list = await (await fetch(`${server.base}/api/posts`)).json();
     expect(list.map((one) => one.id)).toEqual([1, 3]);
@@ -288,10 +288,12 @@ describe('Step 7 — `.http` 파일 여덟 요청이 실제로 돈다', () => {
   // 🚨 이 축이 보는 것은 «파일이 파싱되고 여덟 요청이 나가는가» 이지 학생 화면의
   //    응답 창 생김새가 아니다. CLI 출력을 교안에 옮겨 적지 않는다.
   it('교안이 시키는 대로 이어 붙인 posts.http 가 200·404·201·400 을 낸다', async () => {
-    server = await boot('app.js');
+    server = await boot('snapshots/p2-23.final.app.js');
     const out = execFileSync(
       'node_modules/.bin/httpyac',
-      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      // 🚨 `requests/posts.http` 도 회차마다 자라는 파일이다 — `p2-24` 가 번호를
+      //    `_id` 로 갈아 끼우면서 이 회차의 요청 여덟이 통째로 달라진다.
+      ['send', 'snapshots/p2-23.posts.http', '--all', '--output', 'short'],
       { encoding: 'utf-8' });
     expect(out).toContain('8 requests processed (8 succeeded)');
     expect(out.match(/=> 200/g)).toHaveLength(4);
@@ -501,8 +503,12 @@ describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => 
   const real = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
 
   it('완성본 app.js 가 코드베이스와 같다', () => {
+    // 🚨 `app.js` 는 회차를 넘나들며 «자라는» 파일이라 live 로 보면 안 된다
+    //    (2026-09-06 `p2-24` 가 Mongoose 로 갈아 끼우자 이 검사가 통째로 죽었다).
+    //    이 회차의 완성본은 «`code/p2-23` 브랜치의 그것» 이다.
     const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
-    expect(quoted.at(-1)).toBe(real('app.js'));
+    const theirs = execFileSync('git', ['show', 'code/p2-23:app.js'], { encoding: 'utf-8' });
+    expect(quoted.at(-1)).toBe(theirs);
   });
 
   it('답안의 `homework1.js` 완성본이 코드베이스와 같다', () => {

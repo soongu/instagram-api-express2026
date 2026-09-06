@@ -1,24 +1,28 @@
 // ~/instagram-api/app.js
 import express from 'express';
-import { posts } from './data/posts.js';
+import mongoose from 'mongoose';
+import Post from './models/Post.js';
+
+const MONGO_URL = 'mongodb+srv://<사용자이름>:<비밀번호>@cluster0.xxxxx.mongodb.net/instagram';
 
 const app = express();
 
 app.use(express.json());
 
-let nextId = 4;
+await mongoose.connect(MONGO_URL);
+console.log('데이터베이스에 연결됐어요.');
 
 app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
 });
 
-app.get('/api/posts', (req, res) => {
+app.get('/api/posts', async (req, res) => {
+  const posts = await Post.find();
   res.json(posts);
 });
 
-app.get('/api/posts/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const post = posts.find((one) => one.id === id);
+app.get('/api/posts/:id', async (req, res) => {
+  const post = await Post.findById(req.params.id);
 
   if (!post) {
     res.status(404).json({ message: '그런 게시물은 없어요' });
@@ -28,7 +32,7 @@ app.get('/api/posts/:id', (req, res) => {
   res.json(post);
 });
 
-app.post('/api/posts', (req, res) => {
+app.post('/api/posts', async (req, res) => {
   const { username, postImage } = req.body;
 
   if (!username || !postImage) {
@@ -36,45 +40,36 @@ app.post('/api/posts', (req, res) => {
     return;
   }
 
-  const newPost = {
+  const newPost = await Post.create({
     ...req.body,
-    id: nextId,
     likeCount: 0,
     commentCount: 0,
     minutesAgo: 0,
-  };
-
-  nextId = nextId + 1;
-  posts.push(newPost);
+  });
 
   res.status(201).json(newPost);
 });
 
-app.patch('/api/posts/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const index = posts.findIndex((one) => one.id === id);
+app.patch('/api/posts/:id', async (req, res) => {
+  const post = await Post.findByIdAndUpdate(req.params.id, req.body, {
+    returnDocument: 'after',
+  });
 
-  if (index === -1) {
+  if (!post) {
     res.status(404).json({ message: '그런 게시물은 없어요' });
     return;
   }
 
-  posts[index] = { ...posts[index], ...req.body, id };
-
-  res.json(posts[index]);
+  res.json(post);
 });
 
-app.delete('/api/posts/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const index = posts.findIndex((one) => one.id === id);
+app.delete('/api/posts/:id', async (req, res) => {
+  const deleted = await Post.findByIdAndDelete(req.params.id);
 
-  if (index === -1) {
+  if (!deleted) {
     res.status(404).json({ message: '그런 게시물은 없어요' });
     return;
   }
-
-  const deleted = posts[index];
-  posts.splice(index, 1);
 
   res.json(deleted);
 });

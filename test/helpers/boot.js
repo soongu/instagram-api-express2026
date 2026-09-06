@@ -7,6 +7,7 @@
 //    그래서 **학생이 치는 그 명령(`node app.js`)을 그대로 띄우고** 실제 포트로
 //    왕복한다. 「테스트가 쓰는 도구가 학생이 쓰는 도구와 같은가」를 지키는 쪽이다.
 import { spawn } from 'node:child_process';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +25,10 @@ export function portIsFree(port) {
 }
 
 /** `node <file>` 를 띄우고 첫 로그 줄이 나올 때까지 기다린다. */
-export async function boot(file, { port = 3000, timeoutMs = 8000 } = {}) {
+// 🚨 `ready` 를 받는 이유 (2026-09-06 `p2-24`) — DB 가 붙으면서 첫 줄이 «연결됐어요»
+//    로 바뀌었다. 첫 줄에서 풀어주면 `app.listen` 이 아직 안 열렸는데 요청이 나가
+//    ECONNREFUSED 로 죽는다. 그 죽음은 코드 결함이 아니라 경주라 판정이 거짓이 된다.
+export async function boot(file, { port = 3000, timeoutMs = 8000, ready = '\n' } = {}) {
   if (!(await portIsFree(port))) {
     throw new Error(
       `포트 ${port} 가 이미 물려 있습니다. 교안이 틀린 게 아니라 환경입니다 — ` +
@@ -46,7 +50,7 @@ export async function boot(file, { port = 3000, timeoutMs = 8000 } = {}) {
       timeoutMs);
     child.stdout.on('data', (buf) => {
       log += buf.toString();
-      if (log.includes('\n')) { clearTimeout(timer); resolve(log); }
+      if (log.includes(ready)) { clearTimeout(timer); resolve(log); }
     });
     child.stderr.on('data', (buf) => { log += buf.toString(); });
     child.on('exit', (code) => {
@@ -67,4 +71,49 @@ export async function boot(file, { port = 3000, timeoutMs = 8000 } = {}) {
       child.kill();
     }),
   };
+}
+
+// ── `p2-24`~ : 연결 문자열 한 줄만 바꿔 띄운다 ──────────────────────────────
+//
+// 🚨 학생의 `MONGO_URL` 은 «자기 Atlas 클러스터» 라서 저장소가 그 값을 가질 수 없다.
+//    그렇다고 코드베이스를 다른 모양으로 두면 교안 인용의 byte 동일이 깨진다.
+//    그래서 `p2-23` 이 스냅숏에서 쓴 수법을 그대로 쓴다 — **그 한 줄만** 바꾼 사본을
+//    만들어 띄우고, «그 한 줄 말고는 한 글자도 안 다르다» 를 테스트가 함께 잠근다.
+//    사본을 저장소 루트에 두는 것은 `./models/Post.js` 같은 상대 경로가 그대로
+//    풀려야 하기 때문이다(`snapshots/` 에 두면 불러오는 줄을 또 고쳐야 한다).
+
+export const LOCAL_MONGO_URL = 'mongodb://127.0.0.1:27017/instagram_gate';
+
+const srcOf = (file) => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf-8');
+
+/** 원본에서 `MONGO_URL = '...'` 한 줄만 바꾼 «문자열» 을 돌려준다 (파일을 안 건드린다). */
+export function localSource(file, url = LOCAL_MONGO_URL) {
+  const src = srcOf(file);
+  const out = src.replace(/^(const MONGO_URL = ').*(';)$/m, `$1${url}$2`);
+  if (out === src) {
+    throw new Error(`${file} 안에서 \`const MONGO_URL = '...'\` 줄을 못 찾았습니다.`);
+  }
+  return out;
+}
+
+/** 그 사본을 저장소 루트에 써 두고 경로를 돌려준다. */
+export function withLocalMongo(file, url = LOCAL_MONGO_URL) {
+  const local = file.replace(/\.js$/, '.local.js');
+  writeFileSync(new URL(`../../${local}`, import.meta.url), localSource(file, url));
+  return local;
+}
+
+export function dropLocal(local) {
+  try { unlinkSync(new URL(`../../${local}`, import.meta.url)); } catch { /* 이미 없음 */ }
+}
+
+/**
+ * 사본이 원본과 «MONGO_URL 한 줄만» 다른지 — 게이트가 스스로를 검산한다.
+ * 🚨 파일을 만들지도 지우지도 않는다. 처음 판은 여기서 사본을 만들었다 지웠는데,
+ *    그 지우기가 `beforeAll` 이 띄우려고 만들어둔 사본을 함께 날려 15건이 죽었다.
+ */
+export function onlyMongoLineDiffers(file, url = LOCAL_MONGO_URL) {
+  const src = srcOf(file).split('\n');
+  const out = localSource(file, url).split('\n');
+  return src.map((line, i) => [i, line, out[i]]).filter(([, a, b]) => a !== b);
 }
