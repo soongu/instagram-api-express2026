@@ -513,6 +513,32 @@ describe('답안의 주장을 실행으로 잠근다', () => {
   });
 });
 
+// ── 학생이 실제로 치는 그 명령 ──────────────────────────────────────────────
+describe('`.http` 열이 새 답으로 돈다', () => {
+  it('4×200 · 1×201 · 2×400 · 3×404 — 오늘 늘어난 둘이 400·404 다', async () => {
+    await bootApp('app.js');
+    const out = execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    expect(out).toContain('10 requests processed (10 succeeded)');
+    expect(out.match(/=> 200/g)).toHaveLength(4);
+    expect(out.match(/=> 201/g)).toHaveLength(1);
+    expect(out.match(/=> 400/g)).toHaveLength(2);   // 칸 빠뜨림 + 깨진 몸통(오늘 신규)
+    expect(out.match(/=> 404/g)).toHaveLength(3);   // 없는 게시물 + 없는 주소 + 아무 글자나(오늘 신규)
+  }, 60000);
+
+  it('두 번 돌려도 게시물이 셋으로 돌아온다 — 만든 것을 자기가 치운다', async () => {
+    await bootApp('app.js');
+    const send = () => execFileSync(
+      'node_modules/.bin/httpyac',
+      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      { encoding: 'utf-8' });
+    send(); send();
+    expect(await (await fetch(`${server.base}/api/posts`)).json()).toHaveLength(3);
+  }, 90000);
+});
+
 // ── 교안·답안 인용이 코드베이스와 같은가 ────────────────────────────────────
 describe('인용이 코드베이스와 byte 동일한가', () => {
   // 🚨 `p2-26` 이 여기서 이어 시작한다. 한 글자라도 다르면 다음 회차가 «재현 불가» 가
