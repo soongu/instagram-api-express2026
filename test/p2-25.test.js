@@ -98,6 +98,20 @@ describe('오프닝 — 잘못된 번호 하나가 무엇을 내보내나', () =
     expect(err).toBeGreaterThan(one * 4);
   });
 
+  it('🔴 깨진 몸통은 «이미» 400 이다 — 코드는 맞고 형식만 틀렸다', async () => {
+    // 🚨 초고는 이것을 *"지난 시간에는 400 으로 왔어요"* 로 적었는데 **거짓이었다** —
+    //    `p2-23` 은 400 을 «우리가 쓴 검사» 로만 가르쳤고, 깨진 몸통을 학생이 보낸 적이
+    //    없다. 그래서 Step 1 이 «지금 직접» 재게 하는 것으로 바꿨고, 그 전제를 여기서 잠근다.
+    await bootApp(APP24);
+
+    const res = await fetch(`${server.base}/api/posts`, {
+      method: 'POST', headers: JSON_HEADERS, body: '{\n  "username": "yuna"',
+    });
+    expect(res.status).toBe(400);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+    expect(await res.text()).toContain('SyntaxError');
+  });
+
   it('그런데 서버는 안 죽었다 — 다음 요청은 멀쩡히 답한다', async () => {
     await bootApp(APP24);
 
@@ -456,5 +470,127 @@ describe('과제 — 댓글 API 와 «못 잡는 에러»', () => {
     expect(server.tail()).not.toContain('[핸들러가 받았어요] 타이머 안에서 던졌어요');
 
     server = null;   // 이미 죽었다 — afterEach 가 또 죽이지 않게
+  });
+});
+
+// ── 답안이 «산문으로만» 주장하는 것들 ────────────────────────────────────────
+describe('답안의 주장을 실행으로 잠근다', () => {
+  it('`express.json()` 이 내는 코드는 400 만이 아니다 — 413·415 도 있다', async () => {
+    // 답안 「흔한 실수」가 *"400 만 콕 집어두면 그 둘이 500 으로 나간다"* 고 말한다.
+    // 🚨 첫 판은 415 의 방아쇠를 「형식이 다를 때」로 적었다가 실측에 반증됐다 —
+    //    Content-Type 이 JSON 이 아니면 `express.json()` 은 «그냥 건너뛰고» 200 이다.
+    //    415 는 «글자 인코딩» 이 못 읽는 것일 때만 난다.
+    server = await boot('snapshots/p2-25.probe.limits.js', { port: 3410, ready: 'probe' });
+
+    const big = `{"a":"${'x'.repeat(300)}"}`;
+    expect((await fetch(`${server.base}/x`, {
+      method: 'POST', headers: JSON_HEADERS, body: big,
+    })).status).toBe(413);
+
+    expect((await fetch(`${server.base}/x`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json; charset=shift_jis' },
+      body: '{"a":1}',
+    })).status).toBe(415);
+
+    // 반례 — Content-Type 이 아예 다르면 «에러가 아니라» 그냥 지나간다
+    expect((await fetch(`${server.base}/x`, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'hello',
+    })).status).toBe(200);
+  });
+
+  it('🔴 `cors()` 를 `express.json()` «아래» 두면 에러 응답에 CORS 표시가 안 붙는다', async () => {
+    // 답안이 *"몸통을 읽다가 실패하는 요청에도 CORS 표시는 붙는다"* 로 순서를 권한다.
+    server = await boot('snapshots/p2-25.probe.corsorder.js', { port: 3411, ready: 'probe' });
+
+    const withOrigin = (path) => fetch(`${server.base}${path}`, {
+      method: 'POST',
+      headers: { ...JSON_HEADERS, Origin: 'http://localhost:5173' },
+      body: '{"a"',
+    });
+
+    expect((await withOrigin('/above')).headers.get('access-control-allow-origin')).toBe('*');
+    expect((await withOrigin('/below')).headers.get('access-control-allow-origin')).toBeNull();
+  });
+});
+
+// ── 교안·답안 인용이 코드베이스와 같은가 ────────────────────────────────────
+describe('인용이 코드베이스와 byte 동일한가', () => {
+  // 🚨 `p2-26` 이 여기서 이어 시작한다. 한 글자라도 다르면 다음 회차가 «재현 불가» 가
+  //    되는데, 그건 다른 게이트가 원리적으로 안 본다.
+  const LEC = '../../../part2/4-node-backend/p2-25-deploy-lecture.md';
+  const ANS = '../../../part2/4-node-backend/p2-25-deploy-answers.md';
+
+  const blocksOf = (path, head, fence = 'javascript') => {
+    const md = readFileSync(new URL(path, import.meta.url), 'utf-8');
+    const re = new RegExp('```' + fence + '\\n(' + head.replace(/[/.]/g, '\\$&') +
+                          '\\n[\\s\\S]*?)```', 'g');
+    return [...md.matchAll(re)].map((m) => m[1]);
+  };
+  const real = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
+
+  it('🔴 교안의 `app.js` 완성본이 코드베이스와 byte 동일하다', () => {
+    const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
+    expect(quoted.at(-1)).toBe(real('app.js'));
+  });
+
+  it('교안이 인용한 `app.js` 조각들이 코드베이스 안에 그대로 있다', () => {
+    // 조각 발췌라 byte 동일 대신 «포함» 으로 본다 — 붙여넣은 것이 안 돌면 안 되니까.
+    // 🚨 Step 2 가 인용하는 「통째로 500」 판은 «중간 상태» 라 완성본에 없다.
+    //    그 조각은 그 시점 스냅숏에 있어야 맞다 — 둘 중 어디든 있으면 통과다.
+    const wholes = [real('app.js'), real('snapshots/p2-25.step2.app.js')];
+    const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
+    expect(quoted.length).toBeGreaterThan(1);
+    // 🚨 발췌는 «떨어진 자리 둘» 을 빈 줄로 이어 보여주기도 한다 (Step 8 의 `cors` —
+    //    불러오는 줄은 맨 위, 놓는 줄은 한참 아래다). 그래서 블록 통째가 아니라
+    //    **빈 줄로 끊은 덩어리마다** 있는지 본다. 덩어리 «안» 의 줄 순서는 그대로 잠긴다.
+    for (const q of quoted.slice(0, -1)) {
+      const body = q.split('\n').slice(1).join('\n').trim();
+      for (const chunk of body.split(/\n\s*\n/).map((c) => c.trim()).filter(Boolean)) {
+        expect(wholes.some((w) => w.includes(chunk)), chunk.slice(0, 60)).toBe(true);
+      }
+    }
+  });
+
+  it('교안이 인용한 `seed.js` 조각도 코드베이스 안에 있다', () => {
+    for (const q of blocksOf(LEC, '// ~/instagram-api/seed.js')) {
+      expect(real('seed.js')).toContain(q.split('\n').slice(1).join('\n').trim());
+    }
+  });
+
+  it('답안의 lab 파일 인용이 전부 코드베이스 안에 있다', () => {
+    const map = {
+      '// ~/instagram-api/lab/homework1.js': 'lab/p2-25/homework1.js',
+      '// ~/instagram-api/lab/homework2.js': 'lab/p2-25/homework2.js',
+    };
+    for (const [head, path] of Object.entries(map)) {
+      const quoted = blocksOf(ANS, head);
+      expect(quoted.length, head).toBeGreaterThan(0);
+      for (const q of quoted) {
+        expect(real(path), `${head} :: ${q.slice(0, 60)}`)
+          .toContain(q.split('\n').slice(1).join('\n').trim());
+      }
+    }
+  });
+
+  it('교안이 인용한 `package.json` 스크립트가 코드베이스와 같다', () => {
+    const md = readFileSync(new URL(LEC, import.meta.url), 'utf-8');
+    const block = /```json\n([\s\S]*?)```/.exec(md)[1].trim();
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
+    const quoted = JSON.parse(`{${block.replace(/,\s*$/, '')}}`);
+    expect(quoted.scripts).toEqual(pkg.scripts);
+  });
+
+  it('교안이 인용한 `.http` 두 조각이 요청 파일 안에 그대로 있다', () => {
+    const http = real('requests/posts.http');
+    for (const q of blocksOf(LEC, '### (번호 자리에 아무 글자나|깨진 몸통 보내기)', 'http')) {
+      expect(http).toContain(q.trim());
+    }
+  });
+
+  it('`.env.example` 인용이 코드베이스와 같다', () => {
+    const md = readFileSync(new URL(LEC, import.meta.url), 'utf-8');
+    const m = /```\n(# ~\/instagram-api\/\.env\.example\n[\s\S]*?)```/.exec(md);
+    expect(m).not.toBeNull();
+    expect(real('.env.example')).toBe(m[1]);
   });
 });
