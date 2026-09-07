@@ -1,15 +1,15 @@
 // ~/instagram-api/app.js
 import express from 'express';
 import mongoose from 'mongoose';
+import cors from 'cors';
 import Post from './models/Post.js';
-
-const MONGO_URL = 'mongodb+srv://<사용자이름>:<비밀번호>@cluster0.xxxxx.mongodb.net/instagram';
 
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 
-await mongoose.connect(MONGO_URL);
+await mongoose.connect(process.env.MONGO_URL);
 console.log('데이터베이스에 연결됐어요.');
 
 app.get('/', (req, res) => {
@@ -78,6 +78,23 @@ app.use((req, res) => {
   res.status(404).json({ message: '그런 주소는 없어요' });
 });
 
-app.listen(3000, () => {
-  console.log('서버가 3000번 포트에서 기다리고 있어요.');
+app.use((err, req, res, next) => {
+  if (err.name === 'CastError') {
+    res.status(404).json({ message: '그런 게시물은 없어요' });
+    return;
+  }
+
+  if (err.status) {
+    res.status(err.status).json({ message: '보낸 내용을 읽을 수 없어요' });
+    return;
+  }
+
+  console.error(err);
+  res.status(500).json({ message: '서버에서 문제가 생겼어요' });
+});
+
+const PORT = process.env.PORT ?? 3000;
+
+app.listen(PORT, () => {
+  console.log(`서버가 ${PORT}번 포트에서 기다리고 있어요.`);
 });

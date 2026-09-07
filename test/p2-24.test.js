@@ -75,7 +75,10 @@ describe('게이트가 스스로를 검산한다 — 사본은 «MONGO_URL 한 �
   });
 
   it('교안이 학생에게 주는 주소는 `mongodb+srv://` 형식이다', () => {
-    const src = readFileSync(new URL('../app.js', import.meta.url), 'utf-8');
+    // 🚨 워킹 트리가 아니라 얼린 판을 본다 — `p2-25` 가 이 줄을 통째로 `.env` 로
+    //    빼내므로, 워킹 트리를 보면 «이 회차 교안이 틀렸다» 고 말하게 된다.
+    const src = readFileSync(
+      new URL('../snapshots/p2-24.final.app.js', import.meta.url), 'utf-8');
     expect(src).toContain("const MONGO_URL = 'mongodb+srv://");
   });
 });

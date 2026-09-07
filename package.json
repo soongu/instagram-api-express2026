@@ -5,7 +5,8 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "dev": "node --watch app.js",
+    "dev": "node --watch --env-file=.env app.js",
+    "seed": "node --env-file=.env seed.js",
     "test": "vitest run"
   },
   "type": "module",

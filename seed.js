@@ -3,9 +3,7 @@ import mongoose from 'mongoose';
 import Post from './models/Post.js';
 import { posts } from './data/posts.js';
 
-const MONGO_URL = 'mongodb+srv://<사용자이름>:<비밀번호>@cluster0.xxxxx.mongodb.net/instagram';
-
-await mongoose.connect(MONGO_URL);
+await mongoose.connect(process.env.MONGO_URL);
 
 await Post.deleteMany({});
 await Post.insertMany(posts);
