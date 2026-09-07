@@ -349,3 +349,112 @@ describe('Step 8 — 브라우저가 응답을 버리지 않게', () => {
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
 });
+
+// ── 실습·과제 ───────────────────────────────────────────────────────────────
+describe('실습 — 서점에도 같은 자리를 만든다', () => {
+  const src = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf-8');
+
+  it('`Book.js`·`Comment.js` 는 지난 시간 것 그대로다 — 학생 `lab/` 엔 한 벌뿐이다', () => {
+    // 코드베이스만 회차별로 나눠 두므로, 갈라진 두 벌이 어긋나면 여기서 잡는다.
+    expect(src('lab/p2-25/Book.js')).toBe(src('lab/p2-24/Book.js'));
+    expect(src('lab/p2-25/Comment.js')).toBe(src('lab/p2-24/Comment.js'));
+  });
+
+  it('실습 1 — 서점도 잘못된 번호에 404, 깨진 몸통에 400 을 낸다', async () => {
+    const local = withLocalMongo('lab/p2-25/practice1.js');
+    try {
+      server = await boot(local, { port: 4000, ready: readyAt(4000) });
+
+      expect((await fetch(`${server.base}/api/books/2`)).status).toBe(404);
+      expect(await (await fetch(`${server.base}/api/books/2`)).json())
+        .toEqual({ message: '그런 책은 없어요' });
+
+      const broken = await fetch(`${server.base}/api/books`, {
+        method: 'POST', headers: JSON_HEADERS, body: '{"title"',
+      });
+      expect(broken.status).toBe(400);
+      expect((await fetch(`${server.base}/api/nope`)).status).toBe(404);
+    } finally { dropLocal(local); }
+  });
+
+  it('실습 2 — 서점의 주소도 포트도 환경이 정한다', async () => {
+    expect(src('lab/p2-25/practice2.js')).not.toContain('mongodb+srv://');
+    server = await boot('lab/p2-25/practice2.js', {
+      port: 4100, ready: readyAt(4100),
+      env: { ...ENV, BOOKS_PORT: '4100' },
+    });
+    expect(server.log).toContain('서버가 4100번 포트에서');
+    expect((await fetch(`${server.base}/api/books`)).status).toBe(200);
+  });
+
+  it('실습 2 — `BOOKS_PORT` 를 안 주면 4000 그대로다', async () => {
+    server = await boot('lab/p2-25/practice2.js', { port: 4000, ready: readyAt(4000), env: ENV });
+    expect(server.log).toContain('서버가 4000번 포트에서');
+  });
+
+  it('실습 3 — 그 서점이 브라우저에게 «읽어도 된다» 고 말한다', async () => {
+    server = await boot('lab/p2-25/practice3.js', { port: 4000, ready: readyAt(4000), env: ENV });
+
+    const res = await fetch(`${server.base}/api/books`, {
+      headers: { Origin: 'http://localhost:5173' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  it('실습 3 은 실습 2 에 «두 줄» 을 더한 것이다 (파일 이름 주석 빼고)', () => {
+    const before = src('lab/p2-25/practice2.js').replace('lab/practice2.js', 'lab/practice3.js');
+    const after = src('lab/p2-25/practice3.js');
+    const stripped = after
+      .replace("import cors from 'cors';\n", '')
+      .replace('app.use(cors());\n', '');
+    expect(stripped).toBe(before);
+  });
+});
+
+describe('과제 — 댓글 API 와 «못 잡는 에러»', () => {
+  it('[기초] 댓글도 오늘 배운 셋을 다 갖췄다', async () => {
+    server = await boot('lab/p2-25/homework1.js', {
+      port: 4000, ready: readyAt(4000), env: { ...ENV, COMMENTS_PORT: '4000' },
+    });
+
+    expect((await fetch(`${server.base}/api/comments/2`)).status).toBe(404);
+
+    const made = await fetch(`${server.base}/api/comments`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 1, username: 'yuna', content: '좋아요', likeCount: 500 }),
+    });
+    expect(made.status).toBe(201);
+    const { _id, likeCount } = await made.json();
+    expect(likeCount).toBe(0);          // 보내는 쪽이 못 정한다
+
+    const broken = await fetch(`${server.base}/api/comments`, {
+      method: 'POST', headers: JSON_HEADERS, body: '{"postId"',
+    });
+    expect(broken.status).toBe(400);
+
+    const res = await fetch(`${server.base}/api/comments`, {
+      headers: { Origin: 'http://localhost:5173' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+
+    expect((await fetch(`${server.base}/api/comments/${_id}`, { method: 'DELETE' })).status)
+      .toBe(200);
+  });
+
+  it('[응용] 🔴 셋 중 둘은 핸들러가 받고, 타이머 안의 하나는 «서버를 죽인다»', async () => {
+    server = await boot('lab/p2-25/homework2.js', { port: 4000, ready: readyAt(4000) });
+
+    expect((await fetch(`${server.base}/boom/sync`)).status).toBe(500);
+    expect((await fetch(`${server.base}/boom/async`)).status).toBe(500);
+    expect(server.tail()).toContain('[핸들러가 받았어요] 그 자리에서 바로 던졌어요');
+    expect(server.tail()).toContain('[핸들러가 받았어요] 기다린 뒤에 던졌어요');
+
+    // 타이머 안에서 던진 것은 응답도 못 받고 프로세스가 끝난다
+    await fetch(`${server.base}/boom/later`).catch(() => null);
+    await new Promise((r) => setTimeout(r, 800));
+    await expect(fetch(`${server.base}/api/anything`)).rejects.toThrow();
+    expect(server.tail()).not.toContain('[핸들러가 받았어요] 타이머 안에서 던졌어요');
+
+    server = null;   // 이미 죽었다 — afterEach 가 또 죽이지 않게
+  });
+});

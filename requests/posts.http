@@ -8,6 +8,9 @@ GET http://localhost:3000/api/posts/{{list[0]._id}}
 ### 없는 게시물
 GET http://localhost:3000/api/posts/507f1f77bcf86cd799439011
 
+### 번호 자리에 아무 글자나
+GET http://localhost:3000/api/posts/2
+
 ### 없는 주소
 GET http://localhost:3000/api/comments
 
@@ -42,3 +45,10 @@ Content-Type: application/json
 
 ### 방금 올린 게시물 지우기
 DELETE http://localhost:3000/api/posts/{{created._id}}
+
+### 깨진 몸통 보내기
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "username": "yuna"

@@ -109,8 +109,8 @@ describe('앞 회차를 얼려 떼어냈다 — 그 판이 정말 그 회차 것
         .replace("'./data/posts.js'", "'../data/posts.js'"));
   });
 
-  it('`p2-23` 의 `posts.http` 얼린 판은 그 브랜치와 byte 동일하다', () => {
-    expect(snap('p2-23.posts.http')).toBe(fromBranch('code/p2-23', 'requests/posts.http'));
+  it.each(['p2-23', 'p2-24'])('%s 의 `posts.http` 얼린 판은 그 브랜치와 byte 동일하다', (round) => {
+    expect(snap(`${round}.posts.http`)).toBe(fromBranch(`code/${round}`, 'requests/posts.http'));
   });
 });
 
@@ -368,7 +368,7 @@ describe('Step 8 — `.http` 여덟이 새 번호로 돈다', () => {
     await bootApp();
     const out = execFileSync(
       'node_modules/.bin/httpyac',
-      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      ['send', 'snapshots/p2-24.posts.http', '--all', '--output', 'short'],
       { encoding: 'utf-8' });
     expect(out).toContain('8 requests processed (8 succeeded)');
     expect(out.match(/=> 200/g)).toHaveLength(4);
@@ -381,7 +381,7 @@ describe('Step 8 — `.http` 여덟이 새 번호로 돈다', () => {
     await bootApp();
     const send = () => execFileSync(
       'node_modules/.bin/httpyac',
-      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      ['send', 'snapshots/p2-24.posts.http', '--all', '--output', 'short'],
       { encoding: 'utf-8' });
     send();
     send();
