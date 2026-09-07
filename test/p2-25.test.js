@@ -300,6 +300,25 @@ describe('Step 4 — 비밀번호가 코드에 없다', () => {
   });
 });
 
+// ── Step 7 — 붙을 데가 없으면 «떠 있지도 않다» ──────────────────────────────
+describe('Step 7 — Atlas 를 열어도 다시 띄워야 하는 이유', () => {
+  it('🔴 연결에 실패하면 `app.listen` 까지 못 가고 프로세스가 끝난다', () => {
+    // 교안이 *"지금 Render 에는 떠 있는 서버가 아예 없어요"* 라고 말한다.
+    // 최상위 await 이라 연결 실패가 곧 기동 실패다 — 그래서 Atlas 를 고친 «뒤»
+    // 다시 띄워야 하고, 그 한 줄이 없으면 학생이 계속 에러 페이지를 본다.
+    let out = '', code = 0;
+    try {
+      out = execFileSync(process.execPath, ['app.js'], {
+        encoding: 'utf-8', stdio: 'pipe',
+        env: { ...process.env, MONGO_URL: 'mongodb://127.0.0.1:27099/nope', PORT: '3351' },
+      });
+    } catch (e) { code = e.status; out = `${e.stdout}${e.stderr}`; }
+    expect(code).toBe(1);
+    expect(out).not.toContain('기다리고 있어요');
+    expect(out).toContain('ServerSelectionError');
+  }, 60000);
+});
+
 // ── Step 5 — 포트도 환경이 정한다 ───────────────────────────────────────────
 describe('Step 5 — 올릴 수 있는 모양', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
@@ -611,7 +630,11 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     const block = /```json\n([\s\S]*?)```/.exec(md)[1].trim();
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
     const quoted = JSON.parse(`{${block.replace(/,\s*$/, '')}}`);
-    expect(quoted.scripts).toEqual(pkg.scripts);
+    // 🚨 교안은 «학생이 오늘 넣는 세 줄» 만 보여준다. `test` 는 학생 쪽에서
+    //    `npm init` 이 넣어준 기본값이고 코드베이스 쪽은 vitest 라 서로 다르다 —
+    //    그 줄까지 인용하면 학생 파일에 내부 검증 도구가 새어 든다(초고가 그랬다).
+    expect(Object.keys(quoted.scripts)).toEqual(['start', 'dev', 'seed']);
+    for (const [k, v] of Object.entries(quoted.scripts)) expect(pkg.scripts[k]).toBe(v);
   });
 
   it('교안이 인용한 `.http` 두 조각이 요청 파일 안에 그대로 있다', () => {
