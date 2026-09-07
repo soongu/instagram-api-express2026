@@ -7,7 +7,7 @@
 //    「교안 인용과 byte 동일」이 오히려 더 튼튼해졌다 — 사본이 아예 없다.
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from 'node:fs';
 import mongoose from 'mongoose';
 import { boot, withLocalMongo, dropLocal, LOCAL_MONGO_URL } from './helpers/boot.js';
 
@@ -287,6 +287,20 @@ describe('Step 4 — 비밀번호가 코드에 없다', () => {
     expect(ex).not.toMatch(/MONGO_URL=mongodb\+srv:\/\/[a-z]/i);
   });
 
+  it('🔴 `#` 이 든 값은 따옴표로 감싸야 한다 — 안 그러면 «조용히» 잘린다', () => {
+    // 🚨 초고는 *"따옴표는 안 붙이는 게 보통"* 이라고 안내했는데, Atlas 비밀번호에
+    //    `#` 이 든 학생은 그 조언대로 하면 값이 잘려 인증 실패로 헤맨다.
+    //    `got "undefined"` 도 안 뜨는 자리라 원인을 짚기가 특히 어렵다.
+    const f = '/tmp/p2-25-hash-probe.env';
+    writeFileSync(f, `BARE=p@ss#w0rd\nDQ="p@ss#w0rd"\nSQ='p@ss#w0rd'\n`);
+    const read = (k) => execFileSync(process.execPath,
+      [`--env-file=${f}`, '-p', `process.env.${k}`], { encoding: 'utf-8' }).trim();
+    expect(read('BARE')).toBe('p@ss');        // # 뒤가 주석으로 잘린다
+    expect(read('DQ')).toBe('p@ss#w0rd');     // 따옴표가 지켜준다
+    expect(read('SQ')).toBe('p@ss#w0rd');
+    unlinkSync(f);
+  });
+
   it('🚨 값이 아예 없으면 «뜨지도 못한다» — 로컬에서 `npm start` 를 친 경우', async () => {
     // 학생이 가장 자주 밟는 자리다. 그런데 Mongoose 가 내는 말에는 `MONGO_URL`
     // 이라는 이름이 «안 나온다» — 교안이 이 화면을 그대로 보여줘야 하는 이유다.
@@ -391,6 +405,20 @@ describe('실습 — 서점에도 같은 자리를 만든다', () => {
     // 코드베이스만 회차별로 나눠 두므로, 갈라진 두 벌이 어긋나면 여기서 잡는다.
     expect(src('lab/p2-25/Book.js')).toBe(src('lab/p2-24/Book.js'));
     expect(src('lab/p2-25/Comment.js')).toBe(src('lab/p2-24/Comment.js'));
+  });
+
+  it('🔴 실습 파일이 지난 시간 서점 코드의 라우트를 안 떨어뜨렸다', () => {
+    // 🚨 교안이 「`practice3.js` 를 복사해서 시작」이라 시키므로 학생 파일에는
+    //    PATCH·DELETE 가 있다. 초고의 저장소 판이 그 둘을 빠뜨려서, 교안이 말하는
+    //    *"`PATCH /api/books/2` 로 확인해도 똑같이 404"* 장면이 저장소에서는
+    //    «다른 이유로»(에러가 아니라 404 미들웨어) 404 가 되고 있었다.
+    const before = src('lab/p2-24/practice3.js')
+      .match(/^app\.(get|post|patch|delete)\('([^']+)'/gm) ?? [];
+    for (const name of ['practice1.js', 'practice2.js', 'practice3.js']) {
+      const after = src(`lab/p2-25/${name}`)
+        .match(/^app\.(get|post|patch|delete)\('([^']+)'/gm) ?? [];
+      for (const route of before) expect(after, `${name} :: ${route}`).toContain(route);
+    }
   });
 
   it('실습 1 — 서점도 잘못된 번호에 404, 깨진 몸통에 400 을 낸다', async () => {

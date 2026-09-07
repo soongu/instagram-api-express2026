@@ -39,6 +39,30 @@ app.post('/api/books', async (req, res) => {
   res.status(201).json(newBook);
 });
 
+app.patch('/api/books/:id', async (req, res) => {
+  const book = await Book.findByIdAndUpdate(req.params.id, req.body, {
+    returnDocument: 'after',
+  });
+
+  if (!book) {
+    res.status(404).json({ message: '그런 책은 없어요' });
+    return;
+  }
+
+  res.json(book);
+});
+
+app.delete('/api/books/:id', async (req, res) => {
+  const deleted = await Book.findByIdAndDelete(req.params.id);
+
+  if (!deleted) {
+    res.status(404).json({ message: '그런 책은 없어요' });
+    return;
+  }
+
+  res.json(deleted);
+});
+
 app.use((req, res) => {
   res.status(404).json({ message: '그런 주소는 없어요' });
 });
