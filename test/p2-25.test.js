@@ -572,6 +572,14 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     }
   });
 
+  it('🔴 교안이 말하는 「라우트 여섯」이 실제 수와 같다', () => {
+    // 🚨 초고는 「라우트 다섯」이라고 적었다 — `/` 를 빼고 센 것인데 그 줄도
+    //    라우트다. `p2-23` 이 같은 자리에서 같은 실수를 했었다(다섯↔여섯).
+    const routes = real('app.js').match(/^app\.(?:get|post|patch|delete)\(/gm) ?? [];
+    expect(routes).toHaveLength(6);
+    expect(readFileSync(new URL(LEC, import.meta.url), 'utf-8')).toContain('라우트 여섯');
+  });
+
   it('교안이 인용한 `package.json` 스크립트가 코드베이스와 같다', () => {
     const md = readFileSync(new URL(LEC, import.meta.url), 'utf-8');
     const block = /```json\n([\s\S]*?)```/.exec(md)[1].trim();
