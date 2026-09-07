@@ -661,8 +661,12 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     // 🚨 교안은 «학생이 오늘 넣는 세 줄» 만 보여준다. `test` 는 학생 쪽에서
     //    `npm init` 이 넣어준 기본값이고 코드베이스 쪽은 vitest 라 서로 다르다 —
     //    그 줄까지 인용하면 학생 파일에 내부 검증 도구가 새어 든다(초고가 그랬다).
-    expect(Object.keys(quoted.scripts)).toEqual(['start', 'dev', 'seed']);
-    for (const [k, v] of Object.entries(quoted.scripts)) expect(pkg.scripts[k]).toBe(v);
+    // 🚨 교안 블록은 «객체째» 보여주므로 `test` 줄이 빠지면 학생이 그대로 복사할 때
+    //    그 줄을 지우게 된다(재정독이 잡은 자리). 학생 쪽 `test` 는 `npm init` 기본값이라
+    //    코드베이스(vitest)와 다르고, 그래서 그 줄만 «값이 아니라 존재» 로 잠근다.
+    expect(Object.keys(quoted.scripts)).toEqual(['start', 'dev', 'seed', 'test']);
+    expect(quoted.scripts.test).toBe('echo "Error: no test specified" && exit 1');
+    for (const k of ['start', 'dev', 'seed']) expect(pkg.scripts[k]).toBe(quoted.scripts[k]);
   });
 
   it('교안이 인용한 `.http` 두 조각이 요청 파일 안에 그대로 있다', () => {
