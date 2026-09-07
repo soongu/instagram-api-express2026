@@ -20,8 +20,11 @@ let APP = null;
 let SEED = null;
 
 beforeAll(() => {
-  APP = withLocalMongo('app.js');
-  SEED = withLocalMongo('seed.js');
+  // 🚨 `p2-25` 가 `app.js`·`seed.js` 를 다시 고친다 — 특히 `MONGO_URL` 을 파일 밖으로
+  //    빼서 «바꿔 칠 줄 자체가 사라진다». 그래서 이 회차 축을 그 시점 스냅숏으로 얼렸다.
+  //    `p2-22`·`p2-23` 이 이미 같은 이유로 얼려 있고, 이 회차만 워킹 트리를 보고 있었다.
+  APP = withLocalMongo('snapshots/p2-24.final.app.js');
+  SEED = withLocalMongo('snapshots/p2-24.final.seed.js');
 });
 
 afterAll(async () => {
@@ -47,14 +50,14 @@ async function bootApp() {
 
 describe('게이트가 스스로를 검산한다 — 사본은 «MONGO_URL 한 줄» 만 다르다', () => {
   it('`app.js` 는 그 한 줄 말고 한 글자도 안 다르다', () => {
-    const diff = onlyMongoLineDiffers('app.js');
+    const diff = onlyMongoLineDiffers('snapshots/p2-24.final.app.js');
     expect(diff).toHaveLength(1);
     expect(diff[0][1]).toContain('const MONGO_URL = ');
     expect(diff[0][2]).toBe(`const MONGO_URL = '${LOCAL_MONGO_URL}';`);
   });
 
   it('`seed.js` 도 마찬가지다', () => {
-    const diff = onlyMongoLineDiffers('seed.js');
+    const diff = onlyMongoLineDiffers('snapshots/p2-24.final.seed.js');
     expect(diff).toHaveLength(1);
     expect(diff[0][1]).toContain('const MONGO_URL = ');
   });
@@ -90,6 +93,17 @@ describe('앞 회차를 얼려 떼어냈다 — 그 판이 정말 그 회차 것
     const theirs = fromBranch(`code/${round}`, 'app.js');
     expect(snap(`${round}.final.app.js`))
       .toBe(theirs.replace("'./data/posts.js'", "'../data/posts.js'"));
+  });
+
+  // 🚨 이 회차 «자신» 도 얼렸다 (2026-09-07 `p2-25` 착수). `app.js` 는 계속 자라는
+  //    파일이라 다음 회차가 고치는 순간 이 파일 전체가 거짓 회귀로 뒤집힌다.
+  it('`p2-24` 완성본은 그 브랜치와 «불러오는 줄» 말고 안 다르다', () => {
+    expect(snap('p2-24.final.app.js'))
+      .toBe(fromBranch('code/p2-24', 'app.js').replace("'./models/Post.js'", "'../models/Post.js'"));
+    expect(snap('p2-24.final.seed.js')).toBe(
+      fromBranch('code/p2-24', 'seed.js')
+        .replace("'./models/Post.js'", "'../models/Post.js'")
+        .replace("'./data/posts.js'", "'../data/posts.js'"));
   });
 
   it('`p2-23` 의 `posts.http` 얼린 판은 그 브랜치와 byte 동일하다', () => {
@@ -580,7 +594,10 @@ describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => 
                           '\\n[\\s\\S]*?)```', 'g');
     return [...md.matchAll(re)].map((m) => m[1]);
   };
-  const real = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
+  // 🚨 워킹 트리가 아니라 «그 회차 브랜치» 를 본다. `p2-25` 가 `app.js` 를 고치면
+  //    워킹 트리 대조는 이 회차 교안이 틀렸다고 말하게 되는데, 그건 거짓이다.
+  const real = (rel) =>
+    execFileSync('git', ['show', `code/p2-24:${rel}`], { encoding: 'utf-8' });
 
   it('🔴 교안의 `app.js` 완성본이 코드베이스와 byte 동일하다', () => {
     // 🚨 이 검사는 뒤늦게 생겼다 — 초고에 «완성본 전체» 블록이 아예 없었고
