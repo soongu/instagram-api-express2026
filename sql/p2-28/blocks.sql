@@ -100,7 +100,7 @@ SELECT * FROM posts JOIN comments ON comments.post_id = posts.id;
 -- @@
 SELECT posts.post_alt, comments.username, comments.content
 FROM posts JOIN comments ON comments.post_id = posts.id
-ORDER BY posts.id;
+ORDER BY posts.id, comments.minutes_ago;
 -- @@
 SELECT p.post_alt, c.username, c.content
 FROM posts p JOIN comments c ON c.post_id = p.id
