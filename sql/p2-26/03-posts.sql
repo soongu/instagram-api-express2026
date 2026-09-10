@@ -1,4 +1,4 @@
--- Step 8 — posts 표 최종형 (칸마다 규칙을 건 판)
+-- Step 8 — 게시물 표 완성판 (실제로 쓰는 칸을 전부)
 CREATE TABLE posts (
   id            SERIAL      PRIMARY KEY,
   username      VARCHAR(50) NOT NULL,

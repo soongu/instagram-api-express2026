@@ -23,8 +23,8 @@ beforeAll(async () => {
   db = new pg.Client(PG);
   await db.connect();
   await db.query('DROP TABLE IF EXISTS posts');
-  await db.query(sql('02-posts.sql'));
-  await db.query(sql('03-insert.sql'));
+  await db.query(sql('03-posts.sql'));
+  await db.query(sql('04-insert.sql'));
 }, 30000);
 afterAll(async () => { await db?.end(); });
 
@@ -34,7 +34,93 @@ async function refused(text, params = []) {
   catch (e) { return { code: e.code, message: e.message }; }
 }
 
-describe('Step 5·8 — 교안이 인용하는 DDL 이 postgres:18 에서 그대로 돈다', () => {
+// 🚨 replay.py 는 SQL 을 모른다 — 이 회차의 실행 대조는 0/0 쌍이었다(「볼 게 없어서 통과」).
+//    그래서 교안이 인용한 DDL 이 코드베이스 파일과 «글자 단위로» 같은지를 여기서 잠근다.
+//    사본이 두 벌 있으면 언젠가 갈리고, 갈리면 학생이 치는 쪽이 틀린다.
+describe('교안 ↔ 코드베이스 — 인용한 SQL 이 파일과 글자 단위로 같다', () => {
+  const md = readFileSync(new URL('../../../part2/5-db-prisma/p2-26-relational-table-lecture.md',
+                                  import.meta.url), 'utf8');
+  const blocks = [...md.matchAll(/```sql\n([\s\S]*?)```/g)].map(m => m[1].trim());
+  // .sql 파일의 맨 위 `-- Step N —` 머리 주석은 저장소용이라 떼고 비교한다
+  const body = (f) => sql(f).split('\n').filter(l => !l.startsWith('--')).join('\n').trim();
+
+  it('교안 sql 블록을 실제로 세었다 (0건이면 이 축이 침묵한 것이다)', () => {
+    expect(blocks.length).toBe(14);
+  });
+
+  it('Step 5 첫 표가 01-first-table.sql 과 같다', () => {
+    expect(blocks).toContain(body('01-first-table.sql'));
+  });
+
+  it('Step 6 규칙판이 02-with-rules.sql 과 같다', () => {
+    expect(blocks).toContain(body('02-with-rules.sql'));
+  });
+
+  it('Step 8 완성판이 03-posts.sql 과 같다', () => {
+    expect(blocks).toContain(body('03-posts.sql'));
+  });
+
+  it('Step 8 INSERT 가 04-insert.sql 과 같다', () => {
+    expect(blocks).toContain(body('04-insert.sql'));
+  });
+
+  // 🚨 교안 «전부» 를 위에서 아래로 실제로 돌린다. 판정은 「몇 개가 막히나」다 —
+  //    Step 7 이 일부러 막는 셋 말고 다른 것이 막히면 교안이 안 돌아가는 것이다.
+  it('14블록을 교안 순서대로 돌리면 «정확히 셋» 만 막힌다', async () => {
+    const c = new pg.Client(PG);
+    await c.connect();
+    try {
+      await c.query('DROP TABLE IF EXISTS posts');
+      await c.query('DROP TABLE IF EXISTS books');
+      const failed = [];
+      for (const [n, b] of blocks.entries()) {
+        try { await c.query(b); }
+        catch (e) { failed.push({ n: n + 1, code: e.code, head: b.split('\n')[0].slice(0, 40) }); }
+      }
+      // Step 7 의 넷 중 셋 — 모르는 칸 · 빈 칸 · 못 읽는 값
+      expect(failed.map(f => f.n)).toEqual([5, 6, 7]);
+      expect(failed.map(f => f.code)).toEqual(['42703', '23502', '22P02']);
+      // 마지막 SELECT 가 게시물 셋을 돌려준다 — 교안 끝까지 살아 있다는 뜻
+      const { rows } = await c.query('SELECT count(*)::int AS n FROM posts');
+      expect(rows[0].n).toBe(3);
+      await c.query('DROP TABLE IF EXISTS books');
+    } finally { await c.end(); }
+  }, 60000);
+});
+
+describe('조립 — Step 5→6→8 을 «교안 순서 그대로» 이어 돌린다', () => {
+  it('학생이 위에서 아래로 따라가면 표가 세 번 다시 그려진다', async () => {
+    const one = new pg.Client(PG);
+    await one.connect();
+    try {
+      await one.query('DROP TABLE IF EXISTS posts');
+      await one.query(sql('01-first-table.sql'));          // Step 5
+      await one.query('DROP TABLE posts');                 // Step 6 이 지우라고 말한다
+      await one.query(sql('02-with-rules.sql'));           // Step 6
+      await one.query('DROP TABLE posts');                 // Step 8 이 지우라고 말한다
+      await one.query(sql('03-posts.sql'));                // Step 8
+      await one.query(sql('04-insert.sql'));
+      const { rows } = await one.query('SELECT count(*)::int AS n FROM posts');
+      expect(rows[0].n).toBe(3);
+    } finally { await one.end(); }
+  }, 30000);
+
+  it('Step 6 판에도 Step 7 의 에러 셋이 그대로 난다', async () => {
+    const two = new pg.Client(PG);
+    await two.connect();
+    try {
+      await two.query('DROP TABLE IF EXISTS rulecheck');
+      await two.query(sql('02-with-rules.sql').replace(/posts/g, 'rulecheck'));
+      const grab = async (q) => { try { await two.query(q); return null; } catch (e) { return e.code; } };
+      expect(await grab(`INSERT INTO rulecheck (username, post_image, mood) VALUES ('m','/i.jpg','happy')`)).toBe('42703');
+      expect(await grab(`INSERT INTO rulecheck (username, post_image) VALUES ('m', NULL)`)).toBe('23502');
+      expect(await grab(`INSERT INTO rulecheck (username, post_image, like_count) VALUES ('m','/i.jpg','많아요')`)).toBe('22P02');
+      await two.query('DROP TABLE rulecheck');
+    } finally { await two.end(); }
+  }, 30000);
+});
+
+describe('Step 8 — 교안이 인용하는 DDL 이 postgres:18 에서 그대로 돈다', () => {
   it('학생이 붙는 포트가 곧 게이트가 붙는 포트다', async () => {
     const { rows } = await db.query('SELECT current_database() AS db, current_user AS usr');
     expect(rows[0]).toEqual({ db: 'instagram', usr: 'postgres' });
@@ -145,6 +231,63 @@ describe('🚨 그런데 관계형도 다 막지는 않는다 — 교안이 단�
     // 줄이 이미 만들어졌다는 증거가 에러에 그대로 찍힌다
     expect(e.message).toContain('violates not-null constraint');
   });
+});
+
+describe('Step 7 — 교안이 «네 줄을 차례로» 넣었을 때의 번호를 잠근다', () => {
+  it('살아남은 줄의 id 는 1 이 아니라 2 이고, 실패한 줄이 1 을 가져갔다', async () => {
+    const c = new pg.Client(PG);
+    await c.connect();
+    try {
+      await c.query('DROP TABLE IF EXISTS step7');
+      await c.query(sql('02-with-rules.sql').replace(/posts/g, 'step7'));
+      const errs = [];
+      const put = async (q) => { try { await c.query(q); } catch (e) { errs.push(e); } };
+      // 교안이 적은 «그 순서 그대로»
+      await put(`INSERT INTO step7 (username, post_image, mood) VALUES ('minji','/images/p.jpg','happy')`);
+      await put(`INSERT INTO step7 (username, post_image) VALUES ('minji', NULL)`);
+      await put(`INSERT INTO step7 (username, post_image, like_count) VALUES ('minji','/images/p.jpg','많아요')`);
+      await put(`INSERT INTO step7 (username, post_image) VALUES (123, '/images/p.jpg')`);
+
+      expect(errs).toHaveLength(3);
+      // 교안이 인용하는 DETAIL 한 줄 — 번호가 1 이다
+      expect(errs[1].detail).toBe('Failing row contains (1, minji, null, null, 0).');
+
+      const { rows } = await c.query('SELECT id, username FROM step7');
+      expect(rows).toEqual([{ id: 2, username: '123' }]);
+      await c.query('DROP TABLE step7');
+    } finally { await c.end(); }
+  }, 30000);
+});
+
+describe('답안 [응용] — 「규칙은 데이터가 들어오기 전에 걸어야 쉽다」를 실행으로', () => {
+  it('규칙 없이 쌓은 표에는 PRIMARY KEY 를 나중에 못 건다', async () => {
+    const c = new pg.Client(PG);
+    await c.connect();
+    try {
+      await c.query('DROP TABLE IF EXISTS loose_books');
+      await c.query('CREATE TABLE loose_books (id INTEGER, title VARCHAR(200), price INTEGER)');
+      // 답안이 적은 다섯 줄 그대로
+      await c.query(`INSERT INTO loose_books (id, title, price) VALUES (3,'클린 코드',33000)`);
+      await c.query(`INSERT INTO loose_books (title, price) VALUES ('리팩터링',40000)`);
+      await c.query(`INSERT INTO loose_books (id, title, price) VALUES (3,'또 3번',1000)`);
+      await c.query(`INSERT INTO loose_books (id, price) VALUES (4,5000)`);
+      await c.query(`INSERT INTO loose_books (price) VALUES (9000)`);
+
+      const all = await c.query('SELECT count(*)::int AS n FROM loose_books');
+      expect(all.rows[0].n).toBe(5);                       // 다섯 «전부» 들어간다
+      const three = await c.query('SELECT count(*)::int AS n FROM loose_books WHERE id = 3');
+      expect(three.rows[0].n).toBe(2);                     // 「3번 책」이 둘이다
+      const empty = await c.query('SELECT count(*)::int AS n FROM loose_books WHERE id IS NULL');
+      expect(empty.rows[0].n).toBe(2);                     // 가리킬 수 없는 줄이 둘
+
+      let err = null;
+      try { await c.query('ALTER TABLE loose_books ADD PRIMARY KEY (id)'); }
+      catch (e) { err = e; }
+      expect(err).not.toBeNull();
+      expect(err.detail).toBe('Key (id)=(3) is duplicated.');
+      await c.query('DROP TABLE loose_books');
+    } finally { await c.end(); }
+  }, 30000);
 });
 
 describe('오프닝 — 앱을 «안 거치면» 몽고에는 그대로 들어간다', () => {
