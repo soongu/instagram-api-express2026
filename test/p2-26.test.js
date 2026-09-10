@@ -5,8 +5,10 @@
 //    똑같이 왕복하고, 교안에는 psql 메타명령(\d 등)을 한 줄도 인용하지 않는다.
 //    (p2-22 가 supertest 대신 실제 포트를 쓴 것과 같은 이유다.)
 //
-// 전제: docker run -d --name instagram-db -p 5432:5432 \
-//         -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=instagram postgres:18
+// 전제: 저장소 루트에서 `docker compose up -d` (compose.yaml)
+//    🚨 postgres:18 은 데이터 위치를 옮겼다 — PGDATA=/var/lib/postgresql/18/docker 이고
+//       선언된 볼륨은 /var/lib/postgresql 이다. 인터넷 예제가 전부 쓰는
+//       /var/lib/postgresql/data 에 마운트하면 «컨테이너가 아예 안 뜬다».
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
