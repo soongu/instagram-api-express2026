@@ -12,9 +12,12 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "mongoose": "^9.9.5"
+    "mongoose": "^9.9.5",
+    "prisma": "^7.10.0"
   },
   "devDependencies": {
     "httpyac": "^6.16.7",
