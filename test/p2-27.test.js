@@ -14,64 +14,94 @@ import { readFileSync } from 'node:fs';
 import pg from 'pg';
 
 const PG = { host: 'localhost', port: 5432, database: 'instagram', user: 'postgres', password: 'postgres' };
+// 🚨 실습은 서점(5433) 에서 한다 — 위험한 명령을 게시물 셋에 대고 시키지 않는다.
+//    이 연결이 없으면 실습 블록 13개가 게이트 밖으로 샌다.
+const BOOKSTORE = { ...PG, port: 5433, database: 'bookstore' };
 const p26 = (n) => readFileSync(new URL(`../sql/p2-26/${n}`, import.meta.url), 'utf8');
 const LECTURE = new URL('../../../part2/5-db-prisma/p2-27-sql-crud-lecture.md', import.meta.url);
 const ANSWERS = new URL('../../../part2/5-db-prisma/p2-27-sql-crud-answers.md', import.meta.url);
 
-// 코퍼스를 `-- @@` 로 가른다. `-- @@reset` 은 교안 블록이 아니라 «상태 되돌리기» 지점이다.
+// 코퍼스를 `-- @@` 로 가른다. `reset` 은 상태 되돌리기, `bookstore`/`instagram` 은 대상 DB 다.
+// 셋 다 교안 블록이 아니다 — 교안이 인용하는 것은 `sql` 을 가진 항목뿐이다.
 function corpus() {
   const raw = readFileSync(new URL('../sql/p2-27/blocks.sql', import.meta.url), 'utf8');
-  const parts = raw.split(/^-- @@(reset)?$/m);
+  const parts = raw.split(/^-- @@(reset|bookstore|instagram)?$/m);
   const out = [];
   for (let i = 1; i < parts.length; i += 2) {
-    if (parts[i] === 'reset') out.push({ reset: true });
+    if (parts[i]) out.push({ mark: parts[i] });
     const body = (parts[i + 1] || '').split('\n').filter((l) => !l.startsWith('--')).join('\n').trim();
     if (body) out.push({ sql: body });
   }
   return out;
 }
+const quoted = () => corpus().filter((c) => c.sql).map((c) => c.sql);
+const seedBlock = () => quoted().find((s) => s.startsWith('INSERT INTO posts (username, profile_image'));
 
-let db;
+let db, bk;
 const BASE = () => p26('03-posts.sql') + '\n' + p26('04-insert.sql');
 async function reset() {
   await db.query('DROP TABLE IF EXISTS posts');
   await db.query(BASE());
 }
+// 서점 DB 를 «p2-26 종료 상태» 로 되돌린다 — 그 회차 실습이 books 한 권을 남겼다.
+async function resetBookstore() {
+  await bk.query('DROP TABLE IF EXISTS stock_check');
+  await bk.query('DROP TABLE IF EXISTS books');
+  await bk.query(`CREATE TABLE books (id SERIAL PRIMARY KEY, title VARCHAR(200) NOT NULL,
+    author VARCHAR(100) NOT NULL, price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0)`);
+  await bk.query("INSERT INTO books (title, author, price) VALUES ('객체지향의 사실과 오해','조영호',15000)");
+}
 beforeAll(async () => {
   db = new pg.Client(PG);
+  bk = new pg.Client(BOOKSTORE);
   await db.connect();
+  await bk.connect();
   await reset();
+  await resetBookstore();
 }, 30000);
-afterAll(async () => { await db?.end(); });
+afterAll(async () => { await db?.end(); await bk?.end(); });
 
 describe('교안 ↔ 코퍼스 — 인용한 SQL 이 «전량·순서까지» 같다', () => {
   const md = readFileSync(LECTURE, 'utf8');
   const blocks = [...md.matchAll(/```sql\n([\s\S]*?)```/g)].map((m) => m[1].trim());
 
   it('교안 sql 블록을 실제로 세었다 (0건이면 이 축이 침묵한 것이다)', () => {
-    expect(blocks.length).toBe(34);
+    expect(blocks.length).toBe(51);
   });
 
   it('블록 목록이 코퍼스와 순서까지 같다', () => {
-    expect(blocks).toEqual(corpus().filter((c) => c.sql).map((c) => c.sql));
+    expect(blocks).toEqual(quoted());
   });
 });
 
 describe('조립 — 교안을 위에서 아래로 «그대로» 따라간다', () => {
-  it('34블록이 순서대로 전부 돈다 — 하나도 안 막힌다', async () => {
+  it('51블록이 순서대로 전부 돈다 — 하나도 안 막힌다', async () => {
     await reset();
+    await resetBookstore();
     const failed = [];
-    let i = 0;
+    let cur = db, i = 0;
     for (const step of corpus()) {
-      if (step.reset) { await reset(); continue; }
+      if (step.mark === 'reset') { await reset(); continue; }
+      if (step.mark === 'bookstore') { cur = bk; continue; }
+      if (step.mark === 'instagram') { cur = db; continue; }
       i += 1;
-      try { await db.query(step.sql); }
+      try { await cur.query(step.sql); }
       catch (e) { failed.push({ n: i, code: e.code, head: step.sql.split('\n')[0].slice(0, 50) }); }
     }
-    // 오늘은 «막히는 것을 보여주는» 회차가 아니다 — 조건을 배우는 회차라 전부 성공해야 한다
+    // 오늘은 «막히는 것을 보여주는» 회차가 아니다 — 조건을 배우는 회차라 전부 성공해야 한다.
+    // 🚨 `DROP TABLE books;` 도 성공해야 한다 — p2-26 실습을 한 학생 기준이다.
+    //    안 한 학생은 여기서 42P01 을 보는데, 교안이 그 자리에 ⚠️ 로 적어뒀다.
     expect(failed).toEqual([]);
-    expect(i).toBe(34);
-  }, 30000);
+    expect(i).toBe(51);
+  }, 60000);
+
+  it('실습 블록이 «서점» 것이라고 표시돼 있다 — 게시물 셋을 건드리지 않는다', () => {
+    const marks = corpus().filter((c) => c.mark && c.mark !== 'reset').map((c) => c.mark);
+    expect(marks).toEqual(['bookstore', 'instagram', 'bookstore', 'instagram', 'bookstore']);
+    const risky = quoted().filter((s2) => /^(DELETE|DROP|TRUNCATE)/.test(s2));
+    // 표를 지우는 블록은 전부 서점 것이거나, posts 를 조건과 «함께» 지우는 것뿐이다
+    expect(risky.filter((s2) => /^DROP TABLE posts/.test(s2))).toEqual([]);
+  });
 });
 
 // 아래는 교안이 «그림으로 그려 보이는» 결과들이다. 산문으로만 적으면 어느 게이트도 안 본다.
@@ -106,7 +136,7 @@ describe('Step 1 — 조건을 빠뜨리면', () => {
 describe('Step 2~4 — 조건으로 골라낸다', () => {
   beforeAll(async () => {
     await reset();
-    await db.query(corpus().filter((c) => c.sql)[2].sql); // 교안 Step 2 의 INSERT 블록 그대로
+    await db.query(seedBlock()); // 교안 Step 2 의 INSERT 블록 그대로
   });
 
   const ids = (r) => r.rows.map((x) => x.id);
@@ -145,7 +175,7 @@ describe('Step 2~4 — 조건으로 골라낸다', () => {
 describe('Step 5 — 빈 칸은 조건에 «안 걸린다»', () => {
   beforeAll(async () => {
     await reset();
-    await db.query(corpus().filter((c) => c.sql)[2].sql);
+    await db.query(seedBlock());
   });
   const ids = (r) => r.rows.map((x) => x.id);
 
@@ -170,7 +200,7 @@ describe('Step 5 — 빈 칸은 조건에 «안 걸린다»', () => {
 describe('Step 6 — 줄 세워서 위에서 몇 개만', () => {
   beforeAll(async () => {
     await reset();
-    await db.query(corpus().filter((c) => c.sql)[2].sql);
+    await db.query(seedBlock());
   });
   const ids = (r) => r.rows.map((x) => x.id);
 
@@ -206,7 +236,7 @@ describe('Step 6 — 줄 세워서 위에서 몇 개만', () => {
 describe('Step 7~8 — 고치기와 지우기', () => {
   beforeAll(async () => {
     await reset();
-    await db.query(corpus().filter((c) => c.sql)[2].sql);
+    await db.query(seedBlock());
   });
 
   it('현재 값을 기준으로 더할 수 있다', async () => {
