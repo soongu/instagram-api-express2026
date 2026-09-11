@@ -226,6 +226,25 @@ describe('Step 3 — 응답에 imageUrls 가 배열로 실린다', () => {
     expect(post.username).toBe('dahye');
   });
 
+  it('🚨 `.http` 의 「없는 사람 번호」 요청이 뜻을 잃지 않는다 — imageUrls 를 빼면 다른 400 이 온다', async () => {
+    // 🚨 교안이 고치라고 한 두 곳 중 하나를 빠뜨리면 이 요청이 조용히 죽는다.
+    //    Zod 가 먼저 걸어서 「그런 사용자는 없어요」 대신 「규칙에 안 맞아요」가 온다.
+    const http = read(P('requests/posts.http'));
+    expect(http, '학생이 고칠 대상이 코드베이스에도 반영돼야 한다').not.toContain('postImage');
+
+    const body = { authorId: 999, imageUrls: ['/images/post-8.jpg'] };
+    const good = await fetch('http://127.0.0.1:3441/api/posts',
+      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
+    expect(good.status).toBe(400);
+    expect((await good.json()).message).toBe('그런 사용자는 없어요');
+
+    // 사진을 빼면 «다른» 400 이 온다 — 그것이 교안이 경고한 그 장면이다.
+    const bad = await fetch('http://127.0.0.1:3441/api/posts',
+      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ authorId: 999 }) });
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).message).toBe('보낸 내용이 규칙에 안 맞아요');
+  });
+
   it('사진을 한 장도 안 보내면 400 이다 — 사진 없는 게시물은 없다', async () => {
     const res = await fetch('http://127.0.0.1:3441/api/posts', {
       method: 'POST',

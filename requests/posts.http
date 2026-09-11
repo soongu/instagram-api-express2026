@@ -27,7 +27,7 @@ Content-Type: application/json
 
 {
   "authorId": 3,
-  "postImage": "/images/post-8.jpg",
+  "imageUrls": ["/images/post-8.jpg", "/images/post-9.jpg"],
   "postAlt": "제주도 바다 사진",
   "content": "제주 왔어요 🌊"
 }
@@ -46,7 +46,7 @@ Content-Type: application/json
 
 {
   "authorId": 999,
-  "postImage": "/images/post-8.jpg"
+  "imageUrls": ["/images/post-8.jpg"]
 }
 
 ### 방금 올린 게시물의 하트 수 고치기
@@ -66,3 +66,14 @@ Content-Type: application/json
 
 {
   "authorId": 3
+
+### 좋아요 켜고 끄기
+POST http://localhost:3000/api/posts/3/likes
+Content-Type: application/json
+
+{
+  "userId": 2
+}
+
+### 좋아요 누른 사람들
+GET http://localhost:3000/api/posts/3/likes
