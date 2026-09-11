@@ -315,3 +315,80 @@ describe('lab — 서점(직접 해보기)과 댓글(과제)', () => {
     } finally { copies.forEach(dropCopy); }
   });
 });
+
+// ── 인용 — 교안·답안이 코드베이스와 byte 동일한가 ───────────────────────────
+describe('인용이 코드베이스와 byte 동일한가', () => {
+  const SKETCHES = [
+    // Step 4 🙋 실험 — 서비스를 «일부러» 예전 판으로 되돌린 가정. 실제 파일에 없다.
+    "router.get('/:id', parseId, async (req, res) => {\n  const post = await postService.getPost(req.postId);   // 아직 null 을 돌려주는 예전 서비스\n  res.json(post);\n});",
+    // Step 1 — console.error 출력을 손으로 그린 설명용 스케치(실제 stack 은 절대경로).
+    "console.error(e)             # class 로 만든 것\nHttpError: 그런 게시물은 없어요\n    at file:///.../errors.js:5:12\n    ...\n    { status: 404 }\n\nconsole.error({ status: 404, message: '그런 게시물은 없어요' })   # 그냥 객체\n{ status: 404, message: '그런 게시물은 없어요' }",
+    // Step 3 — app.js 나머지는 안 바뀐다는 생략 표시.
+    '// ...',
+    // Step 4 — parseId·서비스가 throw 로 바뀐 «직후, Zod 이전» 중간 상태(patch 만 validateBody
+    // 가 없다). 실제로 돌려서 검증했다(404·200 둘 다 확인) 但 파일로 얼려두지 않아 SOURCES
+    // 풀에는 없다. 앞뒤 GET·DELETE 조각은 최종판과 동일해 SKETCHES 없이도 통과한다.
+    "router.patch('/:id', parseId, async (req, res) => {\n  const post = await postService.updatePost(req.postId, req.body);",
+    // Step 5 — postCreateSchema 의 «첫 판»(postFields 로 리팩터링되기 전). 같은 Step 안에서
+    // 스스로 대체된다 — 최종 파일에는 postFields 를 쓰는 두 번째 판만 남는다.
+    "export const postCreateSchema = z.object({\n  username: z.string().min(1).max(50),\n  profileImage: z.string().optional(),\n  postImage: z.string().min(1),\n  postAlt: z.string().optional(),\n  content: z.string().optional(),\n});",
+    // Step 5 — 손으로 짠 예전 방식의 예시(어느 파일에도 없던 걸 보여주려는 대조용).
+    "if (!username || !postImage) {\n  res.status(400).json({ message: 'username과 postImage는 꼭 있어야 해요' });\n  return;\n}",
+  ];
+  const unannotate = (t) => t.split('\n')
+    .map((l) => l.replace(/\s+\/\/ [①②③④].*$/, '').replace(/\s+$/, ''))
+    .join('\n');
+
+  const SOURCES = [
+    'errors.js', 'app.js', 'db.js', 'routes/posts.js', 'services/postService.js',
+    'schemas/postSchema.js', 'middlewares/validate.js',
+    'snapshots/p2-31-final/app.js', 'snapshots/p2-31-final/routes/posts.js',
+    'snapshots/p2-31-final/services/postService.js',
+    'lab/p2-32/practice1.js', 'lab/p2-32/bookRoutes.js', 'lab/p2-32/bookService.js',
+    'lab/p2-32/commentRoutes.js', 'lab/p2-32/commentService.js', 'lab/p2-32/commentSchema.js',
+    'lab/p2-32/homework1.js', 'lab/p2-32/homework2.js',
+  ];
+  const pool = () => SOURCES.map((f) => read(P(f))).join('\n\n@@@\n\n');
+
+  it('🔴 교안이 인용한 자바스크립트가 전부 코드베이스 «어딘가에» 실재한다', () => {
+    const src = pool();
+    const missing = [];
+    for (const block of blocksOf(LECTURE, 'javascript')) {
+      const body = block.startsWith('//') ? block.split('\n').slice(1).join('\n') : block;
+      for (const chunk of body.split(/\n\s*\n/).map((c) => unannotate(c).trim()).filter(Boolean)) {
+        if (SKETCHES.includes(chunk)) continue;
+        if (!src.includes(chunk)) missing.push(chunk.split('\n')[0]);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('🔴 답안이 인용한 자바스크립트도 전부 실재한다', () => {
+    const src = pool();
+    const missing = [];
+    for (const block of blocksOf(ANSWERS, 'javascript')) {
+      const body = block.startsWith('//') ? block.split('\n').slice(1).join('\n') : block;
+      for (const chunk of body.split(/\n\s*\n/).map((c) => unannotate(c).trim()).filter(Boolean)) {
+        if (SKETCHES.includes(chunk)) continue;
+        if (chunk.includes('shared.js') || chunk.includes('notFound(what)') || chunk.includes('usernameSchema')) continue;
+        if (!src.includes(chunk)) missing.push(chunk.split('\n')[0]);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('🔴 완성본으로 인용한 파일 둘이 byte 동일하다', () => {
+    const pairs = [
+      [LECTURE, '// ~/instagram-api/routes/posts.js', ['routes/posts.js']],
+      [LECTURE, '// ~/instagram-api/services/postService.js', ['services/postService.js']],
+    ];
+    for (const [doc, head, files] of pairs) {
+      // Step 7 전에도 부분 발췌가 같은 헤더로 시작하므로, «가장 긴»(완성본) 블록만 본다.
+      const quoted = blocksOf(doc, 'javascript').filter((b) => b.startsWith(head));
+      expect(quoted.length, head).toBeGreaterThanOrEqual(1);
+      const fullest = quoted.reduce((a, b) => (b.length > a.length ? b : a));
+      const wanted = files.map((f) => read(P(f)).trimEnd());
+      expect(wanted, `${head}\n${fullest.slice(0, 80)}`).toContain(fullest);
+    }
+  });
+});
