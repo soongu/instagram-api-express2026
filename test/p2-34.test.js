@@ -442,7 +442,8 @@ describe('인용이 코드베이스와 맞는가', () => {
    *  붙여 쓴 공백은 정렬용이라 하나로 눌러서 견준다. */
   const meaningful = (block) =>
     block.split('\n').map((l) => l.trim())
-      .filter((l) => l && !l.startsWith('//') && !l.startsWith('--') && !/^[}\])]+,?;?$/.test(l))
+      // `...` 은 캐논의 «생략» 표기라 인용 대조 대상이 아니다.
+      .filter((l) => l && l !== '...' && !l.startsWith('//') && !l.startsWith('--') && !/^[}\])]+,?;?$/.test(l))
       .map((l) => l.replace(/\s+/g, ' '));
 
   it('🔴 교안의 ```prisma 줄이 전부 코드베이스 스키마에 실재한다', () => {
