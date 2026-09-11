@@ -21,7 +21,6 @@ model Post {
   id           Int       @id @default(autoincrement())
   authorId     Int       @map("author_id")
   author       User      @relation(fields: [authorId], references: [id])
-  postImage    String    @map("post_image")
   postAlt      String?   @map("post_alt")
   content      String?
   minutesAgo   Int       @default(0) @map("minutes_ago")
@@ -29,8 +28,19 @@ model Post {
   commentCount Int       @default(0) @map("comment_count")
   createdAt    DateTime  @default(now()) @map("created_at")
   comments     Comment[]
+  images       PostImage[]
 
   @@map("posts")
+}
+
+model PostImage {
+  id       Int    @id @default(autoincrement())
+  postId   Int    @map("post_id")
+  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  imageUrl String @map("image_url")
+  imgOrder Int    @map("img_order")
+
+  @@map("post_images")
 }
 
 model Comment {
