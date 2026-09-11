@@ -63,7 +63,12 @@ app.patch('/api/posts/:id', async (req, res) => {
     return;
   }
 
-  const post = await prisma.post.update({ where: { id }, data: req.body });
+  const { username, profileImage, postImage, postAlt, content, likeCount } = req.body;
+
+  const post = await prisma.post.update({
+    where: { id },
+    data: { username, profileImage, postImage, postAlt, content, likeCount },
+  });
 
   res.json(post);
 });

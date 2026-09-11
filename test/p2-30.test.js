@@ -186,7 +186,9 @@ describe('Step 3 — `...req.body` 가 여는 구멍 둘', () => {
       body: JSON.stringify({ username: 'yuna', postImage: '/y.jpg' }),
     });
     expect((await next.json()).id).toBeLessThan(777);
-    expect(read(LECTURE)).toContain('778이 아니라');
+    // 🚨 문구가 아니라 «주장» 을 잠근다 — 교안이 778 을 반례로 들고 있는지만 본다.
+    //    문구를 그대로 박으면 문장을 다듬을 때마다 거짓 FAIL 이 난다(실제로 두 번 났다).
+    expect(read(LECTURE)).toMatch(/778이 아니/);
   });
 
   it('고친 판은 모르는 이름도 `id` 도 그냥 무시한다', async () => {
@@ -223,6 +225,27 @@ describe('Step 4 — `null` 이 아니라 «던진다»', () => {
       expect(res.status, method).toBe(404);
       expect(await res.json()).toEqual({ message: '그런 게시물은 없어요' });
     }
+  });
+
+  it('🔴 고치기도 받을 이름을 고른다 — 모르는 이름·`id` 에 500 이 안 난다', async () => {
+    // 🚨 Step 3 이 만들기의 구멍 둘을 막았는데 고치기는 안 막으면, 같은 몸통을 PATCH 로
+    //    보낼 때 그대로 500 이 난다(초고가 그랬고 독립 정독자가 잡았다).
+    await bootApp('app.js', 3415);
+    for (const body of [{ nickname: 'x' }, { id: 999 }]) {
+      const res = await fetch(`${server.base}/api/posts/1`, {
+        method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body),
+      });
+      expect(res.status, JSON.stringify(body)).toBe(200);
+      expect((await res.json()).id, JSON.stringify(body)).toBe(1);
+    }
+    // 안 보낸 칸은 그대로 남는다 — data 의 undefined 는 「안 바꿈」이다
+    const before = await (await fetch(`${server.base}/api/posts/1`)).json();
+    const after = await (await fetch(`${server.base}/api/posts/1`, {
+      method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 7 }),
+    })).json();
+    expect(after.likeCount).toBe(7);
+    expect(after.content).toBe(before.content);
+    expect(after.username).toBe(before.username);
   });
 
   it('🔴 `p2-23` 이 가르친 「깨진 몸통 400」이 안 덮였다', async () => {
