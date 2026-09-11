@@ -8,7 +8,7 @@ GET http://localhost:3000/api/posts/{{list[0].id}}
 ### 없는 게시물
 GET http://localhost:3000/api/posts/999
 
-### 번호 자리에 아무 글자나
+### 번호가 들어갈 곳에 아무 글자나
 GET http://localhost:3000/api/posts/abc
 
 ### 없는 주소
