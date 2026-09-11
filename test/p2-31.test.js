@@ -427,14 +427,20 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
   });
 
   it('🔴 교안이 인용한 터미널 출력이 실제 출력 안에 있다', () => {
-    const quoted = blocksOf(LECTURE, 'bash').find((b) => b.includes('PrismaClientKnownRequestError'));
+    const bash = blocksOf(LECTURE, 'bash');
+    const quoted = bash.find((b) => b.includes('PrismaClientKnownRequestError'));
+    const codeLine = bash.find((b) => b.includes("code: 'P2025'"));
     expect(quoted).toBeTruthy();
+    // 🚨 이 Step 의 주제가 「`P2025` 라는 이름이 어디서 오나」라, 그 이름이 실제로 찍히는
+    //    줄까지 대조한다. 발췌를 나눠 인용하므로 블록 «둘» 을 다 봐야 한다.
+    expect(codeLine, "`code: 'P2025',` 발췌가 없습니다").toBeTruthy();
     // 실제로 그 에러를 내는 판을 띄워서 대조한다 — 산문 주장으로 두지 않는다
     return (async () => {
       await bootApp('snapshots/p2-31/step5-broken/app.js', 3508);
       expect((await fetch(`${server.base}/api/posts/999`, { method: 'DELETE' })).status).toBe(500);
       await new Promise((r) => setTimeout(r, 300));
-      for (const line of quoted.split('\n').map((l) => l.trimEnd()).filter(Boolean)) {
+      for (const line of [...quoted.split('\n'), ...codeLine.split('\n')]
+        .map((l) => l.trimEnd()).filter(Boolean)) {
         expect(server.tail(), line).toContain(line);
       }
       await server.stop(); server = null;
