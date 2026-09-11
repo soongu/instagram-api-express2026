@@ -12,13 +12,15 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
-import { setupP234 } from '../sql/p2-34/setup.mjs';
+import { setupP234, setupP234Bookstore, P234_LAB_MIGRATIONS } from '../sql/p2-34/setup.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
 const GATE_URL = 'postgresql://postgres:postgres@localhost:5432/p234_gate';
 const SHADOW_URL = 'postgresql://postgres:postgres@localhost:5432/p234_shadow';
+const BOOK_ADMIN = { ...ADMIN, port: 5433 };
+const BOOK_GATE_URL = 'postgresql://postgres:postgres@localhost:5433/p234_book_gate';
 const ENV = { DATABASE_URL: GATE_URL };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -351,5 +353,79 @@ model Post {
 
     expect(r.rows[0].like_count).toBe(130);
     expect(r.rows[0].rows, '줄은 0개인데 칸에는 130 이 적혀 있다').toBe(0);
+  });
+});
+
+// ── 직접 해보기 — 서점에서 세 관계를 한 번씩 ────────────────────────────────
+
+describe('직접 해보기 1~3 — 서점에도 같은 셋이 있다', () => {
+  let book = null;
+
+  beforeAll(async () => {
+    const admin = new pg.Client(BOOK_ADMIN);
+    await admin.connect();
+    await admin.query(
+      "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p234_book_gate' and pid <> pg_backend_pid()");
+    await admin.query('DROP DATABASE IF EXISTS p234_book_gate');
+    await admin.query('CREATE DATABASE p234_book_gate');
+    await admin.end();
+
+    book = new pg.Client({ ...BOOK_ADMIN, database: 'p234_book_gate' });
+    await book.connect();
+    await setupP234Bookstore(book);
+    for (const dir of P234_LAB_MIGRATIONS) {
+      await book.query(read(P(`lab/p2-34/migrations/${dir}/migration.sql`)));
+    }
+
+    // 🚨 학생 파일은 `../generated/index.js`(자기 클라이언트)를 부른다.
+    //    게이트는 회차 클라이언트로 바꿔 끼워 돌린다 — 공유 클라이언트를 안 덮으려고.
+    prismaCli(['generate', '--config', 'lab/p2-34/prisma.config.js'], { BOOKSTORE_URL: BOOK_GATE_URL });
+    mkdirSync(P('__replay__'), { recursive: true });
+    writeFileSync(P('__replay__/p234-bookstore.js'),
+      read(P('lab/p2-34/bookstore.js')).replace("'../generated/index.js'", "'../lab/generated-p2-34/index.js'"));
+    for (const n of [1, 2, 3]) {
+      writeFileSync(P(`__replay__/p234-practice${n}.js`),
+        read(P(`lab/p2-34/practice${n}.js`)).replace("'./bookstore.js'", "'./p234-bookstore.js'"));
+    }
+  }, 180000);
+
+  afterAll(async () => {
+    if (book) await book.end();
+    const admin = new pg.Client(BOOK_ADMIN);
+    await admin.connect();
+    await admin.query(
+      "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p234_book_gate' and pid <> pg_backend_pid()");
+    await admin.query('DROP DATABASE IF EXISTS p234_book_gate');
+    await admin.end();
+  }, 60000);
+
+  const runPractice = (n) =>
+    execFileSync(process.execPath, [P(`__replay__/p234-practice${n}.js`)],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, BOOKSTORE_URL: BOOK_GATE_URL } });
+
+  it('🔴 1 — 책에 사진 여러 장이 차례대로 딸린다', () => {
+    const out = runPractice(1);
+
+    expect(out).toContain('1번 클린 코드 — 사진 2장: /covers/clean-code-front.jpg, /covers/clean-code-back.jpg');
+    expect(out).toContain('2번 리팩터링 — 사진 1장: /covers/refactoring-front.jpg');
+    expect(out).toContain('4번 테스트 주도 개발 — 사진 0장');
+  });
+
+  it('🔴 2 — 리뷰에 답글이 달리고 원글만 걸러 읽힌다', () => {
+    const out = runPractice(2);
+
+    expect(out).toContain('리뷰 표의 줄은 모두 7개고, 원글은 6개예요.');
+    expect(out).toContain('1번 jaehoon — 답글 1개');
+    expect(out).toContain('2번 minji — 답글 0개');
+  });
+
+  it('🔴 3 — 책과 태그가 가운데 표로 이어지고, 같은 쌍은 P2002 로 막힌다', () => {
+    const out = runPractice(3);
+
+    expect(out).toContain('1번 클린 코드 — 실무, 고전');
+    expect(out).toContain('8번 클린 아키텍처 — 설계');
+    expect(out).toContain('4번 테스트 주도 개발 — 태그 없음');
+    expect(out).toContain('막혔어요: P2002');
+    expect(out, '두 번 들어가면 안 된다').not.toContain('두 번 들어갔어요');
   });
 });

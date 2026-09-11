@@ -24,3 +24,19 @@ export async function setupP234(client) {
     await client.query(readFileSync(new URL(`${dir}/migration.sql`, MIG), 'utf8'));
   }
 }
+
+/** 서점을 p2-33 종료 상태로 — 그 회차 직접 해보기 2 가 글자 칸을 뗀 뒤다. */
+export async function setupP234Bookstore(client) {
+  const { setupP233Bookstore } = await import('../p2-33/setup.mjs');
+  await setupP233Bookstore(client);
+  await client.query(
+    readFileSync(new URL('../../lab/p2-33/migrations/20260911130547_drop_book_author/migration.sql',
+      import.meta.url), 'utf8'));
+}
+
+/** 이 회차가 서점에 얹는 마이그레이션 — 직접 해보기 셋이 하나씩 만든다. */
+export const P234_LAB_MIGRATIONS = [
+  '20260911150328_add_book_images',
+  '20260911150338_add_review_replies',
+  '20260911150339_add_book_tags',
+];
