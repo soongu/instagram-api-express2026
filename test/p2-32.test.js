@@ -41,7 +41,9 @@ function labCopy(rel) {
   const local = rel.replace(/\.js$/, '.local.js');
   writeFileSync(P(local), read(P(rel))
     .replace(/from '\.\.\/(db|services|routes|errors|schemas|middlewares)\//g, "from '../../snapshots/p2-32-final/$1/")
-    .replace(/from '\.\.\/(db|errors)\.js'/g, "from '../../snapshots/p2-32-final/$1.js'"));
+    .replace(/from '\.\.\/(db|errors)\.js'/g, "from '../../snapshots/p2-32-final/$1.js'")
+    // 🚨 회차마다 게이트 포트를 가른다 — vitest 가 파일을 병렬로 돌려 4001 을 공유하면 부딪힌다.
+    .replaceAll('4001', '4032'));
   return local;
 }
 const dropCopy = (local) => { try { unlinkSync(P(local)); } catch { /* 이미 없음 */ } };
@@ -293,7 +295,7 @@ describe('lab — 서점(직접 해보기)과 댓글(과제)', () => {
     writeFileSync(P(copies[1]), read(P(copies[1])).replace("'./commentService.js'", "'./commentService.local.js'"));
     writeFileSync(P(copies[2]), read(P(copies[2])).replace("'./commentRoutes.js'", "'./commentRoutes.local.js'"));
     try {
-      await bootApp(copies[2], 4001);
+      await bootApp(copies[2], 4032);
       expect((await (await fetch(`${server.base}/api/comments`)).json())).toHaveLength(9);
       expect((await (await fetch(`${server.base}/api/comments?postId=1`)).json())).toHaveLength(3);
       expect((await fetch(`${server.base}/api/comments/1`)).status).toBe(200);

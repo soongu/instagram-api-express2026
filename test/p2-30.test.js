@@ -43,7 +43,9 @@ function labCopy(rel) {
   const local = rel.replace(/\.js$/, '.local.js');
   writeFileSync(P(local), read(P(rel))
     .replace(/from '\.\.\/db\.js'/g, "from '../../snapshots/p2-32-final/db.js'")
-    .replace(/from '\.\.\/data\//g, "from '../../snapshots/p2-33-final/data/"));
+    .replace(/from '\.\.\/data\//g, "from '../../snapshots/p2-33-final/data/")
+    // 🚨 회차마다 게이트 포트를 가른다 — vitest 가 파일을 병렬로 돌려 4001 을 공유하면 부딪힌다.
+    .replaceAll('4001', '4030'));
   return local;
 }
 const dropCopy = (local) => { try { unlinkSync(P(local)); } catch { /* 이미 없음 */ } };
@@ -377,17 +379,17 @@ describe('과제 1 — 댓글 주소', () => {
     seed();
     const local = labCopy('lab/p2-30/homework1.js');
     try {
-      server = await boot(local, { port: 4001, env: ENV, ready: '4001번 포트에서' });
-      expect(await (await fetch('http://localhost:4001/api/comments')).json()).toHaveLength(9);
-      const two = await (await fetch('http://localhost:4001/api/comments?postId=2')).json();
+      server = await boot(local, { port: 4030, env: ENV, ready: '4030번 포트에서' });
+      expect(await (await fetch('http://localhost:4030/api/comments')).json()).toHaveLength(9);
+      const two = await (await fetch('http://localhost:4030/api/comments?postId=2')).json();
       expect(two.map((c) => c.postId)).toEqual([2, 2, 2, 2]);
       // 🔴 글자가 와도 500 이 아니라 «조건 없음» 으로 받는다
-      expect(await (await fetch('http://localhost:4001/api/comments?postId=abc')).json()).toHaveLength(9);
-      expect((await fetch('http://localhost:4001/api/comments/1')).status).toBe(200);
-      expect((await fetch('http://localhost:4001/api/comments/999')).status).toBe(404);
-      expect((await fetch('http://localhost:4001/api/comments/abc')).status).toBe(404);
-      expect((await fetch('http://localhost:4001/api/comments/9', { method: 'DELETE' })).status).toBe(200);
-      expect((await fetch('http://localhost:4001/api/comments/999', { method: 'DELETE' })).status).toBe(404);
+      expect(await (await fetch('http://localhost:4030/api/comments?postId=abc')).json()).toHaveLength(9);
+      expect((await fetch('http://localhost:4030/api/comments/1')).status).toBe(200);
+      expect((await fetch('http://localhost:4030/api/comments/999')).status).toBe(404);
+      expect((await fetch('http://localhost:4030/api/comments/abc')).status).toBe(404);
+      expect((await fetch('http://localhost:4030/api/comments/9', { method: 'DELETE' })).status).toBe(200);
+      expect((await fetch('http://localhost:4030/api/comments/999', { method: 'DELETE' })).status).toBe(404);
     } finally { await server?.stop(); server = null; dropCopy(local); }
   }, 30000);
 
@@ -488,7 +490,7 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     const missing = [];
     for (const q of blocksOf(LECTURE, 'http')) {
       if (!q.startsWith('###')) continue;         // 본문이 «보여주기만» 하는 요청 (파일에 안 넣는다)
-      if (q.includes(':4001')) continue;          // 과제용 (답안 몫)
+      if (q.includes(':4030')) continue;          // 과제용 (답안 몫)
       if (!sources.some((src) => src.includes(q.trim()))) missing.push(q.split('\n')[0]);
     }
     expect(missing).toEqual([]);

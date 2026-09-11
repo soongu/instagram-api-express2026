@@ -460,6 +460,11 @@ describe('인용이 코드베이스와 맞는가', () => {
     'snapshots/p2-34/seed.step3.js',
     'lab/p2-34/practice1.js', 'lab/p2-34/practice2.js', 'lab/p2-34/practice3.js',
     'lab/p2-34/bookstore.js',
+    // 답안의 과제 코드가 여기 있다.
+    'lab/p2-34/commentSchema.js', 'lab/p2-34/commentService.js',
+    'lab/p2-34/commentRoutes.js', 'lab/p2-34/homework1.js', 'lab/p2-34/homework2.js',
+    // 답안의 「이렇게 하면 더 좋아요」 — 완성본에 없는 «제안» 이라 따로 얼려 실행으로 잠근다.
+    'snapshots/p2-34/commentService.depth-limit.js',
   ].map((f) => read(P(f)));
 
   const sqlSources = () =>
@@ -481,10 +486,10 @@ describe('인용이 코드베이스와 맞는가', () => {
       .filter((l) => l && l !== '...' && !l.startsWith('//') && !l.startsWith('--') && !/^[}\])]+,?;?$/.test(l))
       .map((l) => l.replace(/\s+/g, ' '));
 
-  it('🔴 교안의 ```prisma 줄이 전부 코드베이스 스키마에 실재한다', () => {
+  it('🔴 교안·답안의 ```prisma 줄이 전부 코드베이스 스키마에 실재한다', () => {
     const srcs = prismaSources().map(squash);
     const missing = [];
-    for (const b of blocksOf(LECTURE, 'prisma')) {
+    for (const b of [...blocksOf(LECTURE, 'prisma'), ...blocksOf(ANSWERS, 'prisma')]) {
       for (const line of meaningful(b)) {
         if (!srcs.some((s) => s.includes(line))) missing.push(line);
       }
@@ -503,10 +508,11 @@ describe('인용이 코드베이스와 맞는가', () => {
     expect(missing).toEqual([]);
   });
 
-  it('🔴 교안의 ```javascript 줄이 전부 코드베이스에 실재한다', () => {
+  it('🔴 교안·답안의 ```javascript 줄이 전부 코드베이스에 실재한다', () => {
+    // 🚨 답안도 본다 — 과제 코드가 여기 실리는데 교안만 보면 그 몫이 통째로 무검사다.
     const srcs = jsSources().map(squash);
     const missing = [];
-    for (const b of blocksOf(LECTURE, 'javascript')) {
+    for (const b of [...blocksOf(LECTURE, 'javascript'), ...blocksOf(ANSWERS, 'javascript')]) {
       for (const line of meaningful(b)) {
         if (!srcs.some((s) => s.includes(line))) missing.push(line);
       }
@@ -538,21 +544,24 @@ describe('과제 [기초]·[응용] — 답안이 실제로 돈다', () => {
     mkdirSync(P('__replay__'), { recursive: true });
     for (const f of ['commentService.js', 'commentSchema.js', 'commentRoutes.js',
                      'homework1.js', 'homework2.js']) {
+      // 🚨 학생 파일은 4001 로 박혀 있는데 p2-30·p2-31·p2-32 게이트도 그 포트를 쓴다.
+      //    vitest 가 파일을 «병렬로» 돌리므로 사본만 다른 포트로 옮긴다.
       writeFileSync(P(`__replay__/p234-${f}`), read(P(`lab/p2-34/${f}`))
         .replace("'./commentRoutes.js'", "'./p234-commentRoutes.js'")
         .replace("'./commentService.js'", "'./p234-commentService.js'")
-        .replace("'./commentSchema.js'", "'./p234-commentSchema.js'"));
+        .replace("'./commentSchema.js'", "'./p234-commentSchema.js'")
+        .replaceAll('4001', '4010'));
     }
   };
 
   beforeAll(async () => {
     labCopy();
     seedLive();
-    await bootApp('__replay__/p234-homework1.js', 4001);
+    await bootApp('__replay__/p234-homework1.js', 4010);
   }, 60000);
 
   it('🔴 [기초] 목록에 원댓글만 나오고 답글은 그 안에 담긴다', async () => {
-    const res = await fetch('http://127.0.0.1:4001/api/comments?postId=1');
+    const res = await fetch('http://127.0.0.1:4010/api/comments?postId=1');
     const comments = await res.json();
 
     expect(comments).toHaveLength(3);
@@ -563,7 +572,7 @@ describe('과제 [기초]·[응용] — 답안이 실제로 돈다', () => {
   });
 
   it('🔴 [기초] 답글의 postId 는 원댓글에서 물려받는다 — 요청에서 안 받는다', async () => {
-    const res = await fetch('http://127.0.0.1:4001/api/comments', {
+    const res = await fetch('http://127.0.0.1:4010/api/comments', {
       method: 'POST',
       headers: JSON_HEADERS,
       // 🚨 일부러 «틀린» postId 를 보낸다. 원댓글 4번은 2번 게시물 것이다.
@@ -577,7 +586,7 @@ describe('과제 [기초]·[응용] — 답안이 실제로 돈다', () => {
   });
 
   it('🔴 [기초] 없는 댓글에 답글을 달면 400 이다', async () => {
-    const res = await fetch('http://127.0.0.1:4001/api/comments', {
+    const res = await fetch('http://127.0.0.1:4010/api/comments', {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({ postId: 1, authorId: 5, content: 'x', parentId: 999 }),
@@ -587,7 +596,36 @@ describe('과제 [기초]·[응용] — 답안이 실제로 돈다', () => {
     expect((await res.json()).message).toBe('그런 댓글은 없어요');
   });
 
-  it('🔴 [응용] 적어둔 숫자를 실제 줄 수로 맞춘다', () => {
+  it('🚨 답안의 「더 좋아요」 한 줄이 실제로 답글의 답글을 막는다', async () => {
+    // 제안도 돌려본다 — 안 돌려보면 답안이 「이렇게 하면 된다」고 거짓을 말할 수 있다.
+    writeFileSync(P('__replay__/p234-depth-commentService.js'),
+      read(P('snapshots/p2-34/commentService.depth-limit.js')));
+    writeFileSync(P('__replay__/p234-depth-commentRoutes.js'),
+      read(P('lab/p2-34/commentRoutes.js'))
+        .replace("'./commentService.js'", "'./p234-depth-commentService.js'")
+        .replace("'./commentSchema.js'", "'./p234-commentSchema.js'"));
+    writeFileSync(P('__replay__/p234-depth-homework1.js'),
+      read(P('lab/p2-34/homework1.js'))
+        .replace("'./commentRoutes.js'", "'./p234-depth-commentRoutes.js'")
+        // 🚨 학생 파일은 포트를 4001 로 박아 둔다 — 앞 서버와 안 부딪히게 사본만 옮긴다.
+        .replaceAll('4001', '4011'));
+
+    seedLive();
+    await bootApp('__replay__/p234-depth-homework1.js', 4011);
+
+    // 10번은 1번 댓글에 달린 «답글» 이다 — 거기에 또 달면 막혀야 한다.
+    const res = await fetch('http://127.0.0.1:4011/api/comments', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 1, authorId: 5, content: '답글의 답글', parentId: 10 }),
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).message).toBe('답글에는 답글을 달 수 없어요');
+  }, 60000);
+
+  it('🔴 [응용] 적어둔 숫자를 실제 줄 수로 맞춘다', async () => {
+    await bootApp('__replay__/p234-homework1.js', 4010);
     seedLive();
     const out = execFileSync(process.execPath, [P('__replay__/p234-homework2.js')],
       { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
