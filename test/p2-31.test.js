@@ -330,7 +330,114 @@ describe('lab — 서점과 댓글도 같은 모양으로 선다', () => {
   });
 });
 
-// ── 교안·답안 (집필되면 켜진다) ─────────────────────────────────────────────
-describe.skipIf(!exists(LECTURE))('인용이 코드베이스와 byte 동일한가', () => {
-  it('자리표시자', () => { expect(true).toBe(true); });
+// ── 인용 ────────────────────────────────────────────────────────────────────
+describe('인용이 코드베이스와 byte 동일한가', () => {
+  // 🚨 교안은 «주석을 단 발췌» 와 «생략 스케치» 를 함께 쓴다. 앞은 주석만 떼면 진짜
+  //    코드여야 하므로 떼고 대조하고, 뒤는 실행되는 코드가 아니라 설명용 그림이라
+  //    출처가 없다 — 그래서 «명시적으로 적어둔 것만» 통과시킨다. 목록에 없는 스케치가
+  //    새로 생기면 FAIL 이 나고, 그게 이 목록이 해야 할 일이다.
+  const SKETCHES = [
+    "router.get('/', (req, res) => { ... });",
+    "router.get('/:id', parseId, async (req, res) => { ... });\n//                 ^^^^^^^  먼저 이걸 거친다",
+    "import * as postService from '../services/postService.js';",
+    "import { prisma } from '../db.js';\nimport * as postService from '../services/postService.js';",
+    "import postsRouter from './routes/posts.js';\n\napp.use('/api/posts', postsRouter);",
+    "function parseId(field, message) {\n  return (req, res, next) => { ... };\n}",
+    "try {\n  // 게시물을 만들고 읽고 지우는 일\n} finally {\n  await prisma.$disconnect();\n}",
+    "app.use((err, req, res, next) => {\n  if (err.code === 'P2025') {\n    res.status(404).json({ message: '그런 게시물은 없어요' });\n    return;\n  }\n  ...\n});",
+    "import express from 'express';\n\nconst router = express.Router();\n\nrouter.get('/', (req, res) => { ... });",
+  ];
+  /** 발췌에 붙인 설명 주석(`// ① 주소`)을 떼어낸다 — 그 «아래» 코드는 진짜여야 한다. */
+  const unannotate = (t) => t.split('\n')
+    .map((l) => l.replace(/\s+\/\/ [①②③④].*$/, '').replace(/\s+$/, ''))
+    .join('\n');
+
+  const SOURCES = [
+    'app.js', 'db.js', 'routes/posts.js', 'services/postService.js',
+    'snapshots/p2-30.final.app.js',
+    'snapshots/p2-31/step2/app.js', 'snapshots/p2-31/step2/routes/posts.js',
+    'snapshots/p2-31/step3/routes/posts.js',
+    'snapshots/p2-31/step4/routes/posts.js', 'snapshots/p2-31/step4/services/postService.js',
+    'snapshots/p2-31/step5/routes/posts.js', 'snapshots/p2-31/step5/services/postService.js',
+    'lab/p2-31/practice1.js', 'lab/p2-31/bookRoutes.js', 'lab/p2-31/bookService.js',
+    'lab/p2-31/bookstore.js', 'lab/p2-31/homework1.js', 'lab/p2-31/homework2.js',
+    'lab/p2-31/commentRoutes.js', 'lab/p2-31/commentService.js',
+    'snapshots/p2-31/lab1/practice1.js', 'snapshots/p2-31/lab1/bookRoutes.js',
+    'snapshots/p2-31/lab2/practice1.js', 'snapshots/p2-31/lab2/bookRoutes.js',
+    'snapshots/p2-31/lab3/bookService.js', 'snapshots/p2-31/lab3/bookRoutes.js',
+  ];
+  /** 코드베이스 표기 → 학생 표기. 교안은 «학생 쪽» 이 정전이다. */
+  const asStudent = (t) => t
+    .replace(/from '\.\.\/\.\.\/\.\.\/lab\/generated\/index\.js'/g, "from './generated/index.js'")
+    .replace(/from '\.\.\/generated\/index\.js'/g, "from './generated/index.js'");
+
+  const pool = () => SOURCES.map((f) => asStudent(read(P(f)))).join('\n\n@@@\n\n');
+
+  it('🔴 교안이 인용한 자바스크립트가 전부 코드베이스 «어딘가에» 실재한다', () => {
+    const src = pool();
+    const missing = [];
+    for (const block of blocksOf(LECTURE, 'javascript')) {
+      const body = block.startsWith('//') ? block.split('\n').slice(1).join('\n') : block;
+      for (const chunk of body.split(/\n\s*\n/).map((c) => unannotate(c).trim()).filter(Boolean)) {
+        if (SKETCHES.includes(chunk)) continue;
+        if (!src.includes(chunk)) missing.push(chunk.split('\n')[0]);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('🔴 답안이 인용한 자바스크립트도 전부 실재한다', () => {
+    const src = pool();
+    const missing = [];
+    for (const block of blocksOf(ANSWERS, 'javascript')) {
+      const body = block.startsWith('//') ? block.split('\n').slice(1).join('\n') : block;
+      for (const chunk of body.split(/\n\s*\n/).map((c) => unannotate(c).trim()).filter(Boolean)) {
+        if (SKETCHES.includes(chunk)) continue;
+        if (!src.includes(chunk)) missing.push(chunk.split('\n')[0]);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('🔴 완성본으로 인용한 파일 넷이 byte 동일하다', () => {
+    const pairs = [
+      [LECTURE, '// ~/instagram-api/app.js', ['snapshots/p2-31/step2/app.js', 'app.js']],
+      [LECTURE, '// ~/instagram-api/routes/posts.js', ['snapshots/p2-31/step2/routes/posts.js']],
+      [LECTURE, '// ~/instagram-api/services/postService.js', ['snapshots/p2-31/step4/services/postService.js']],
+      [LECTURE, '// ~/instagram-api/lab/bookRoutes.js', ['snapshots/p2-31/lab2/bookRoutes.js']],
+      [LECTURE, '// ~/instagram-api/lab/practice1.js', ['snapshots/p2-31/lab1/practice1.js']],
+      [LECTURE, '// ~/instagram-api/lab/bookService.js', ['snapshots/p2-31/lab3/bookService.js']],
+      [ANSWERS, '// ~/instagram-api/lab/commentService.js', ['lab/p2-31/commentService.js']],
+      [ANSWERS, '// ~/instagram-api/lab/commentRoutes.js', ['lab/p2-31/commentRoutes.js']],
+      [ANSWERS, '// ~/instagram-api/lab/homework1.js', ['lab/p2-31/homework1.js']],
+      [ANSWERS, '// ~/instagram-api/lab/homework2.js', ['lab/p2-31/homework2.js']],
+    ];
+    for (const [doc, head, files] of pairs) {
+      const quoted = blocksOf(doc, 'javascript').filter((b) => b.startsWith(head));
+      expect(quoted.length, head).toBeGreaterThanOrEqual(1);
+      const wanted = files.map((f) => asStudent(read(P(f))).trimEnd());
+      for (const q of quoted) expect(wanted, `${head}\n${q.slice(0, 80)}`).toContain(q);
+    }
+  });
+
+  it('🔴 답안이 인용한 `.http` 가 코드베이스와 같다', () => {
+    const quoted = [...read(ANSWERS).matchAll(/```\n(### 댓글 목록[\s\S]*?)```/g)].map((m) => m[1].trimEnd());
+    expect(quoted).toHaveLength(1);
+    expect(read(P('lab/p2-31/comments.http')).trimEnd()).toBe(quoted[0]);
+  });
+
+  it('🔴 교안이 인용한 터미널 출력이 실제 출력 안에 있다', () => {
+    const quoted = blocksOf(LECTURE, 'bash').find((b) => b.includes('PrismaClientKnownRequestError'));
+    expect(quoted).toBeTruthy();
+    // 실제로 그 에러를 내는 판을 띄워서 대조한다 — 산문 주장으로 두지 않는다
+    return (async () => {
+      await bootApp('snapshots/p2-31/step5-broken/app.js', 3508);
+      expect((await fetch(`${server.base}/api/posts/999`, { method: 'DELETE' })).status).toBe(500);
+      await new Promise((r) => setTimeout(r, 300));
+      for (const line of quoted.split('\n').map((l) => l.trimEnd()).filter(Boolean)) {
+        expect(server.tail(), line).toContain(line);
+      }
+      await server.stop(); server = null;
+    })();
+  });
 });
