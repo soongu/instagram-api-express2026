@@ -2,6 +2,7 @@
 import express from 'express';
 import cors from 'cors';
 import postsRouter from './routes/posts.js';
+import { HttpError } from './errors.js';
 
 const app = express();
 
@@ -19,6 +20,13 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  if (err instanceof HttpError) {
+    const body = { message: err.message };
+    if (err.details) body.details = err.details;
+    res.status(err.status).json(body);
+    return;
+  }
+
   if (err.status) {
     res.status(err.status).json({ message: '보낸 내용을 읽을 수 없어요' });
     return;

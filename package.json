@@ -17,7 +17,8 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "mongoose": "^9.9.5",
-    "prisma": "^7.10.0"
+    "prisma": "^7.10.0",
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "httpyac": "^6.16.7",

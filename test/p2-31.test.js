@@ -185,32 +185,36 @@ describe('중간 상태 — 얼려둔 판이 교안이 말하는 대로 «실제
 });
 
 // ── 최종판 ──────────────────────────────────────────────────────────────────
+// 🚨 이 회차가 «본» 파일 셋(app.js·routes/posts.js·services/postService.js)은
+//    `p2-32` 가 live 로 계속 고친다(HttpError·Zod). 그래서 「p2-31 최종판」은
+//    p2-30 이 그랬던 것과 같은 이유로 `snapshots/p2-31.final.*.js` 로 얼려서 본다 —
+//    안 얼리면 이 축 넷이 거짓 FAIL 이 된다.
 describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안 달라졌다', () => {
   it('🔴 계약 열 가지가 시작 판과 «글자 그대로» 같다', async () => {
-    await bootApp('app.js', 3506);
+    await bootApp('snapshots/p2-31-final/app.js', 3506);
     expect(await contractHolds(server.base)).toEqual(CONTRACT);
   });
 
   it('🔴 `app.js` 에 Prisma 도 `P2025` 도 한 번도 안 나온다', () => {
-    const app = read(P('app.js'));
+    const app = read(P('snapshots/p2-31-final/app.js'));
     expect(app.match(/prisma/gi)).toBeNull();
     expect(app.match(/P2025/g)).toBeNull();
     expect(app.trimEnd().split('\n')).toHaveLength(35);
   });
 
   it('🔴 서비스는 `req` 도 `res` 도 모른다', () => {
-    const service = read(P('services/postService.js'));
+    const service = read(P('snapshots/p2-31-final/services/postService.js'));
     expect(service.match(/\bres\b/g)).toBeNull();
     expect(service.match(/\breq\b/g)).toBeNull();
     expect(service.match(/\bstatus\b/g)).toBeNull();
   });
 
   it('🔴 라우터는 Prisma 를 모른다 — 그 이름이 한 번도 안 나온다', () => {
-    expect(read(P('routes/posts.js')).match(/prisma/gi)).toBeNull();
+    expect(read(P('snapshots/p2-31-final/routes/posts.js')).match(/prisma/gi)).toBeNull();
   });
 
   it('🔴 되풀이되던 검사가 «한 곳» 으로 모였다', () => {
-    const router = read(P('routes/posts.js'));
+    const router = read(P('snapshots/p2-31-final/routes/posts.js'));
     expect(router.match(/Number\(req\.params\.id\)/g)).toHaveLength(1);
     expect(router.match(/Number\.isInteger/g)).toHaveLength(1);
     expect(router.match(/parseId/g)).toHaveLength(4);   // 정의 1 + 쓰는 자리 3
@@ -218,7 +222,8 @@ describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안
 
   it('🔴 파일을 나눴더니 줄 수는 «늘었다» — 112 → 151', () => {
     const n = (f) => read(P(f)).trimEnd().split('\n').length;
-    expect(n('app.js') + n('routes/posts.js') + n('services/postService.js')).toBe(151);
+    expect(n('snapshots/p2-31-final/app.js') + n('snapshots/p2-31-final/routes/posts.js')
+      + n('snapshots/p2-31-final/services/postService.js')).toBe(151);
     expect(n('snapshots/p2-30.final.app.js')).toBe(112);
   });
 
@@ -232,7 +237,7 @@ describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안
   });
 
   it('🔴 댓글이 달린 게시물을 지우면 «아직» 500 이다 — p2-33 이월 부채 그대로', async () => {
-    await bootApp('app.js', 3507);
+    await bootApp('snapshots/p2-31-final/app.js', 3507);
     const res = await fetch(`${server.base}/api/posts/1`, { method: 'DELETE' });
     expect(res.status).toBe(500);
     await new Promise((r) => setTimeout(r, 200));
@@ -353,7 +358,9 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     .join('\n');
 
   const SOURCES = [
-    'app.js', 'db.js', 'routes/posts.js', 'services/postService.js',
+    'db.js',
+    'snapshots/p2-31-final/app.js', 'snapshots/p2-31-final/routes/posts.js',
+    'snapshots/p2-31-final/services/postService.js',
     'snapshots/p2-30.final.app.js',
     'snapshots/p2-31/step2/app.js', 'snapshots/p2-31/step2/routes/posts.js',
     'snapshots/p2-31/step3/routes/posts.js',
@@ -401,9 +408,11 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
 
   it('🔴 완성본으로 인용한 파일 넷이 byte 동일하다', () => {
     const pairs = [
-      [LECTURE, '// ~/instagram-api/app.js', ['snapshots/p2-31/step2/app.js', 'app.js']],
-      [LECTURE, '// ~/instagram-api/routes/posts.js', ['snapshots/p2-31/step2/routes/posts.js']],
-      [LECTURE, '// ~/instagram-api/services/postService.js', ['snapshots/p2-31/step4/services/postService.js']],
+      [LECTURE, '// ~/instagram-api/app.js', ['snapshots/p2-31/step2/app.js', 'snapshots/p2-31-final/app.js']],
+      [LECTURE, '// ~/instagram-api/routes/posts.js',
+        ['snapshots/p2-31/step2/routes/posts.js', 'snapshots/p2-31-final/routes/posts.js']],
+      [LECTURE, '// ~/instagram-api/services/postService.js',
+        ['snapshots/p2-31/step4/services/postService.js', 'snapshots/p2-31-final/services/postService.js']],
       [LECTURE, '// ~/instagram-api/lab/bookRoutes.js', ['snapshots/p2-31/lab2/bookRoutes.js']],
       [LECTURE, '// ~/instagram-api/lab/practice1.js', ['snapshots/p2-31/lab1/practice1.js']],
       [LECTURE, '// ~/instagram-api/lab/bookService.js', ['snapshots/p2-31/lab3/bookService.js']],
