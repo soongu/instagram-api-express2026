@@ -141,8 +141,43 @@ describe('Step 3 — 응답에 imageUrls 가 배열로 실린다', () => {
   beforeAll(async () => {
     // 🚨 여기부터는 «고친» 시드다 — post_images 를 비우는 목록에 넣고 사진을 여러 장 넣는다.
     //    안 고치면 TRUNCATE 가 「외래 키가 걸린 표는 못 비운다」로 막힌다.
+    // Step 3 시점 시드 사본을 만들어 둔다(학생과 같은 깊이에서 돌게).
+    mkdirSync(P('__replay__'), { recursive: true });
+    writeFileSync(P('__replay__/p234-seed-step3.mjs'),
+      read(P('snapshots/p2-34/seed.step3.js')).replace(/from '\.\//g, "from '../"));
+
     seedLive();
     await bootApp('app.js', 3441);
+  }, 60000);
+
+  it('🚨 Step 3 시점 시드가 실제로 돌고, 교안이 인용한 그 줄을 찍는다', async () => {
+    // 🚨 그때는 post_likes 도 답글도 «없다». 게이트 DB 에는 있으므로 그 시점 DB 를 따로 세운다
+    //    (있는 채로 돌리면 교안이 말한 그 TRUNCATE 실패가 나는 것이 맞다).
+    const admin = new pg.Client(ADMIN);
+    await admin.connect();
+    await admin.query('DROP DATABASE IF EXISTS p234_step3_gate');
+    await admin.query('CREATE DATABASE p234_step3_gate');
+    await admin.end();
+
+    const step3 = new pg.Client({ ...ADMIN, database: 'p234_step3_gate' });
+    await step3.connect();
+    await setupP234(step3);
+    for (const dir of P234_MIGRATIONS.slice(0, 2)) {
+      await step3.query(read(P(`prisma/migrations/${dir}/migration.sql`)));
+    }
+    await step3.end();
+
+    const out = execFileSync(process.execPath, [P('__replay__/p234-seed-step3.mjs')],
+      { cwd: P('.'), encoding: 'utf8',
+        env: { ...process.env, DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/p234_step3_gate' } });
+
+    expect(out.trim()).toBe('사람 5명, 게시물 5개, 사진 8장, 댓글 9개를 넣었어요.');
+    expect(read(LECTURE)).toContain('사람 5명, 게시물 5개, 사진 8장, 댓글 9개를 넣었어요.');
+
+    const admin2 = new pg.Client(ADMIN);
+    await admin2.connect();
+    await admin2.query('DROP DATABASE IF EXISTS p234_step3_gate');
+    await admin2.end();
   }, 60000);
 
   it('🔴 목록 응답이 postImage 대신 imageUrls 배열을 싣는다', async () => {
