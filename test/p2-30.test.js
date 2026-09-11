@@ -43,7 +43,7 @@ function labCopy(rel) {
   const local = rel.replace(/\.js$/, '.local.js');
   writeFileSync(P(local), read(P(rel))
     .replace(/from '\.\.\/db\.js'/g, "from '../../snapshots/p2-32-final/db.js'")
-    .replace(/from '\.\.\/data\//g, "from '../../data/"));
+    .replace(/from '\.\.\/data\//g, "from '../../snapshots/p2-33-final/data/"));
   return local;
 }
 const dropCopy = (local) => { try { unlinkSync(P(local)); } catch { /* 이미 없음 */ } };
@@ -302,7 +302,7 @@ await prisma.$disconnect();`);
     const probe = '__replay__/p230-num.mjs';
     writeFileSync(P(probe), `
 import { prisma } from '../snapshots/p2-32-final/db.js';
-import { posts } from '../data/posts.js';
+import { posts } from '../snapshots/p2-33-final/data/posts.js';
 await prisma.comment.deleteMany({});
 await prisma.post.deleteMany({});
 await prisma.post.createMany({ data: posts.map((p) => ({ ...p })) });
@@ -415,7 +415,8 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
   // 🚨 얼린 스냅숏은 게이트가 돌 수 있게 경로가 한 단 깊다 — 학생 표기로 되돌려 대조한다.
   const asStudent = (src) => src
     .replace("from '../db.js'", "from './db.js'")
-    .replaceAll("from '../../data/", "from './data/");   // 🚨 둘 있다 — replace 는 첫 건만 바꾼다
+    .replaceAll("from '../../data/", "from './data/")
+    .replaceAll("from '../p2-33-final/data/", "from './data/");   // 🚨 p2-34 가 데이터를 키워 얼렸다   // 🚨 둘 있다 — replace 는 첫 건만 바꾼다
 
   it('🔴 교안의 `app.js` 완성본이 코드베이스와 byte 동일하다', () => {
     // 🚨 p2-24 가 이 검사 없이 배포됐다가 독립 정독자에게 「맞춰볼 데가 없다」로 잡혔다.
@@ -427,8 +428,8 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
   it('교안이 인용한 `db.js`·`seed.js`·데이터 파일이 코드베이스와 같다', () => {
     for (const [head, file] of [['// ~/instagram-api/db.js', 'db.js'],
                                 ['// ~/instagram-api/seed.js', 'snapshots/p2-32-final/seed.js'],
-                                ['// ~/instagram-api/data/posts.js', 'data/posts.js'],
-                                ['// ~/instagram-api/data/comments.js', 'data/comments.js']]) {
+                                ['// ~/instagram-api/data/posts.js', 'snapshots/p2-33-final/data/posts.js'],
+                                ['// ~/instagram-api/data/comments.js', 'snapshots/p2-33-final/data/comments.js']]) {
       const quoted = blocksOf(LECTURE, 'javascript').filter((b) => b.startsWith(head));
       expect(quoted.length, head).toBe(1);
       expect(quoted[0], head).toBe(asStudent(read(P(file))).trimEnd());
@@ -438,7 +439,8 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
   it('교안이 인용한 자바스크립트가 전부 코드베이스 «어딘가에» 실재한다', () => {
     // 🚨 「app.js 조각」만 볼 게 아니다 — 교안은 db.js·seed.js·데이터·실습 파일도
     //    조각으로 인용한다. 출처를 좁게 잡으면 그 몫이 통째로 무검사가 된다.
-    const sources = ['snapshots/p2-30.final.app.js', 'db.js', 'snapshots/p2-32-final/seed.js', 'check.js', 'data/posts.js', 'data/comments.js',
+    const sources = ['snapshots/p2-30.final.app.js', 'db.js', 'snapshots/p2-32-final/seed.js', 'snapshots/p2-33-final/check.js',
+                     'snapshots/p2-33-final/data/posts.js', 'snapshots/p2-33-final/data/comments.js',
                      'lab/p2-30/bookstore.js', 'lab/p2-30/practice1.js', 'lab/p2-30/practice2.js',
                      'snapshots/p2-30.seed.naive.js', 'snapshots/p2-30.step7.app.js',
                      'snapshots/p2-30.step8.app.js', 'snapshots/p2-30.step8.broken.app.js',

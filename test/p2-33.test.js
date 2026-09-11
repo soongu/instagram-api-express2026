@@ -317,7 +317,8 @@ describe('Step 6·8 — 계약은 그대로, P2003 에는 이름이 붙는다', 
   });
 
   it('🔴 목록 응답이 «평평한» username·profileImage 를 싣는다 — author 객체가 아니다', async () => {
-    await bootApp('app.js', 3700);
+    // 🚨 얼린 앱이다 — live app.js 는 p2-34 가 사진을 표로 빼서 이 게이트 DB 에선 안 돈다.
+    await bootApp('snapshots/p2-33-final/app.js', 3700);
     const list = await (await fetch(`${server.base}/api/posts`)).json();
     expect(list).toHaveLength(5);
     for (const post of list) {
@@ -371,7 +372,11 @@ describe('Step 6·8 — 계약은 그대로, P2003 에는 이름이 붙는다', 
     //    학생 파일이 ReferenceError 로 죽는다(선언 전 사용). 그 중간 판을 띄워 잠근다.
     mkdirSync(P('__replay__'), { recursive: true });
     writeFileSync(P('__replay__/p233-step6-service.js'),
-      read(P('snapshots/p2-33/step6.postService.js')).replaceAll("from '../", "from '../"));
+      // 🚨 얼린 클라이언트로 돌린다 — live db.js 의 클라이언트는 p2-34 스키마를 알아서
+      //    이 회차의 postImage 를 「모르는 인자」로 거부한다.
+      read(P('snapshots/p2-33/step6.postService.js'))
+        .replaceAll("from '../db.js'", "from '../snapshots/p2-33-final/db.js'")
+        .replaceAll("from '../errors.js'", "from '../snapshots/p2-33-final/errors.js'"));
     const probe = P('__replay__/p233-step6.mjs');
     writeFileSync(probe, `
 import * as svc from './p233-step6-service.js';
@@ -379,7 +384,7 @@ try { await svc.createPost({ authorId: 999, postImage: '/x.jpg' }); console.log(
 catch (e) { console.log(e.status, e.message); }
 const list = await svc.getPosts({});
 console.log('list', list.length, 'username' in list[0]);
-const { prisma } = await import('../db.js');
+const { prisma } = await import('../snapshots/p2-33-final/db.js');
 await prisma.$disconnect();`);
     const out = execFileSync(process.execPath, [probe], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
     expect(out).toContain('400 그런 사용자는 없어요');

@@ -37,7 +37,11 @@ const prismaCli = (args, env = {}) =>
   });
 
 /** 이 회차가 만드는 마이그레이션 — 착수 상태 위에 이것만 얹는다. */
-const P234_MIGRATIONS = ['20260911142735_add_post_images', '20260911142828_move_images_to_table'];
+const P234_MIGRATIONS = [
+  '20260911142735_add_post_images',
+  '20260911142828_move_images_to_table',
+  '20260911143803_add_comment_replies',
+];
 
 async function applyRoundMigrations() {
   for (const dir of P234_MIGRATIONS) {
@@ -192,5 +196,58 @@ describe('Step 3 — 응답에 imageUrls 가 배열로 실린다', () => {
     });
 
     expect(res.status).toBe(400);
+  });
+});
+
+// ── 축 ② 자기 참조 — 같은 표가 자기를 가리킨다 ──────────────────────────────
+
+describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원댓글을 가리킨다', () => {
+  beforeAll(() => { seedLive(); }, 60000);
+
+  it('🔴 댓글 표에 답글까지 12줄이 들어가고, 원댓글은 9개다', async () => {
+    const r = await db.query(`
+      select count(*)::int total,
+             count(*) filter (where parent_id is null)::int roots,
+             count(*) filter (where parent_id is not null)::int replies
+      from comments`);
+
+    expect(r.rows[0]).toEqual({ total: 12, roots: 9, replies: 3 });
+  });
+
+  it('답글은 원댓글과 «같은 게시물» 에 달려 있다', async () => {
+    const r = await db.query(`
+      select count(*)::int n from comments child
+      join comments parent on parent.id = child.parent_id
+      where child.post_id <> parent.post_id`);
+
+    expect(r.rows[0].n, '게시물이 어긋난 답글이 있으면 안 된다').toBe(0);
+  });
+
+  it('🔴 원댓글만 걸러 읽으면 답글이 딸려 온다', async () => {
+    const out = execFileSync(process.execPath, [P('check.js')],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+
+    expect(out).toContain('comments 표의 줄은 모두 12개예요.');
+    expect(out).toContain('그중 원댓글은 9개고');
+    expect(out).toContain('1번 "저도 가봤어요" — 답글 2개');
+    expect(out).toContain('4번 "크루아상 색이 좋네요" — 답글 1개');
+  });
+
+  it('🔴 없는 댓글에 답글을 달면 막힌다 — 자기 표라고 봐주지 않는다', async () => {
+    await expect(db.query(
+      'insert into comments (post_id, author_id, content, parent_id) values (1, 1, $1, 999)',
+      ['없는 댓글에 다는 답글'],
+    )).rejects.toMatchObject({ code: '23503' });
+  });
+
+  it('🔴 원댓글을 지우면 그 답글도 함께 사라진다 (onDelete: Cascade)', async () => {
+    const before = await db.query('select count(*)::int c from comments');
+    expect(before.rows[0].c).toBe(12);
+
+    await db.query('delete from comments where id = 1');
+
+    const after = await db.query(`
+      select count(*)::int total, count(*) filter (where parent_id = 1)::int orphans from comments`);
+    expect(after.rows[0], '원댓글 1 + 답글 2 = 3줄이 사라진다').toEqual({ total: 9, orphans: 0 });
   });
 });
