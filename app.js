@@ -1,28 +1,36 @@
 // ~/instagram-api/app.js
 import express from 'express';
-import mongoose from 'mongoose';
 import cors from 'cors';
-import Post from './models/Post.js';
+import { prisma } from './db.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-await mongoose.connect(process.env.MONGO_URL);
-console.log('데이터베이스에 연결됐어요.');
-
 app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
 });
 
 app.get('/api/posts', async (req, res) => {
-  const posts = await Post.find();
+  const posts = await prisma.post.findMany({
+    where: { username: req.query.username },
+    orderBy: { createdAt: 'desc' },
+    take: Number(req.query.limit) || undefined,
+  });
+
   res.json(posts);
 });
 
 app.get('/api/posts/:id', async (req, res) => {
-  const post = await Post.findById(req.params.id);
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    res.status(404).json({ message: '그런 게시물은 없어요' });
+    return;
+  }
+
+  const post = await prisma.post.findUnique({ where: { id } });
 
   if (!post) {
     res.status(404).json({ message: '그런 게시물은 없어요' });
@@ -33,43 +41,42 @@ app.get('/api/posts/:id', async (req, res) => {
 });
 
 app.post('/api/posts', async (req, res) => {
-  const { username, postImage } = req.body;
+  const { username, profileImage, postImage, postAlt, content } = req.body;
 
   if (!username || !postImage) {
     res.status(400).json({ message: 'username과 postImage는 꼭 있어야 해요' });
     return;
   }
 
-  const newPost = await Post.create({
-    ...req.body,
-    likeCount: 0,
-    commentCount: 0,
-    minutesAgo: 0,
+  const newPost = await prisma.post.create({
+    data: { username, profileImage, postImage, postAlt, content },
   });
 
   res.status(201).json(newPost);
 });
 
 app.patch('/api/posts/:id', async (req, res) => {
-  const post = await Post.findByIdAndUpdate(req.params.id, req.body, {
-    returnDocument: 'after',
-  });
+  const id = Number(req.params.id);
 
-  if (!post) {
+  if (!Number.isInteger(id)) {
     res.status(404).json({ message: '그런 게시물은 없어요' });
     return;
   }
+
+  const post = await prisma.post.update({ where: { id }, data: req.body });
 
   res.json(post);
 });
 
 app.delete('/api/posts/:id', async (req, res) => {
-  const deleted = await Post.findByIdAndDelete(req.params.id);
+  const id = Number(req.params.id);
 
-  if (!deleted) {
+  if (!Number.isInteger(id)) {
     res.status(404).json({ message: '그런 게시물은 없어요' });
     return;
   }
+
+  const deleted = await prisma.post.delete({ where: { id } });
 
   res.json(deleted);
 });
@@ -79,7 +86,7 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  if (err.name === 'CastError') {
+  if (err.code === 'P2025') {
     res.status(404).json({ message: '그런 게시물은 없어요' });
     return;
   }

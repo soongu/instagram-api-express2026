@@ -1,6 +1,6 @@
 // ~/instagram-api/app.js
 import express from 'express';
-import { posts } from '../data/posts.js';
+import { posts } from './p2-22.data-posts.js';
 
 const app = express();
 

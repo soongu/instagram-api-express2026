@@ -1,7 +1,7 @@
 // 내부 검증 전용 — 교안 Step 5 «시점» 의 app.js 다 (404 가드가 아직 없다).
 // 학생 파일 경로 주석을 일부러 안 붙인다 — 이 파일은 학생 쪽에 없다.
 import express from 'express';
-import { posts } from '../data/posts.js';
+import { posts } from './p2-22.data-posts.js';
 
 const app = express();
 

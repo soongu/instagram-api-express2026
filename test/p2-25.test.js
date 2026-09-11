@@ -23,6 +23,15 @@ let APP24 = null;
 // Step 2 시점도 아직 «파일 안» 에 주소를 들고 있다 — 그 줄은 Step 4 가 뺀다.
 let STEP2 = null;
 
+// 🚨 **`app.js`·`seed.js` 를 이 회차 판으로 얼린다** (2026-09-11 `p2-30` 착수 시).
+//    이 회차까지는 `app.js` 가 워킹 트리에 «그대로» 서 있어서 live 로 봐도 맞았는데,
+//    `p2-30` 이 그 파일을 Prisma 로 통째로 다시 쓴다. 그러면 이 회차 축 13곳이
+//    한꺼번에 빨개지는데 **그건 이 회차 교안이 틀렸다는 뜻이 아니다** — `p2-24` 가
+//    같은 이유로 이미 `fromBranch('code/p2-24', …)` 를 쓰고 있다.
+//    스냅숏은 `snapshots/` 아래 있어 «불러오는 줄만» 학생 표기와 다르다(`../`).
+const FINAL = 'snapshots/p2-25.final.app.js';
+const FINAL_SEED = 'snapshots/p2-25.final.seed.js';
+
 beforeAll(() => {
   SEED24 = withLocalMongo('snapshots/p2-24.final.seed.js');
   APP24 = withLocalMongo('snapshots/p2-24.final.app.js');
@@ -177,7 +186,7 @@ describe('Step 2 — 인자 넷짜리 미들웨어가 그 에러를 받는다', 
 // ── Step 3 — 에러마다 다른 답 ───────────────────────────────────────────────
 describe('Step 3 — 갈라서 답한다', () => {
   it('형식이 틀린 번호는 404 다 — 잘못 보낸 쪽 문제니까', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
 
     const res = await fetch(`${server.base}/api/posts/2`);
     expect(res.status).toBe(404);
@@ -185,7 +194,7 @@ describe('Step 3 — 갈라서 답한다', () => {
   });
 
   it('형식은 맞는데 없는 번호도 404 로 «같은 답» 이다', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
 
     const res = await fetch(`${server.base}/api/posts/507f1f77bcf86cd799439011`);
     expect(res.status).toBe(404);
@@ -193,7 +202,7 @@ describe('Step 3 — 갈라서 답한다', () => {
   });
 
   it('고치기·지우기도 형식이 틀린 번호에 404 를 낸다', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
 
     const patch = await fetch(`${server.base}/api/posts/2`, {
       method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 1 }),
@@ -205,7 +214,7 @@ describe('Step 3 — 갈라서 답한다', () => {
   });
 
   it('🔴 깨진 JSON 은 400 으로 돌아왔다', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
 
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS, body: '{"username"',
@@ -215,7 +224,7 @@ describe('Step 3 — 갈라서 답한다', () => {
   });
 
   it('멀쩡한 요청 여덟은 지난 시간과 같은 코드를 낸다 — 겉이 안 변했다', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
 
     const list = await fetch(`${server.base}/api/posts`);
     expect(list.status).toBe(200);
@@ -244,7 +253,7 @@ describe('Step 3 — 갈라서 답한다', () => {
   });
 
   it('우리 핸들러가 붙은 뒤로는 배포본이든 개발 중이든 «같은 답» 이다', async () => {
-    await bootApp('app.js', { env: { ...ENV, NODE_ENV: 'production' } });
+    await bootApp(FINAL, { env: { ...ENV, NODE_ENV: 'production' } });
 
     const res = await fetch(`${server.base}/api/posts/2`);
     expect(res.status).toBe(404);
@@ -257,7 +266,7 @@ describe('Step 4 — 비밀번호가 코드에 없다', () => {
   const src = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf-8');
 
   it('`app.js`·`seed.js` 어디에도 연결 주소가 글자로 안 남아 있다', () => {
-    for (const f of ['app.js', 'seed.js']) {
+    for (const f of [FINAL, FINAL_SEED]) {
       expect(src(f)).not.toContain('mongodb+srv://');
       expect(src(f)).not.toContain('mongodb://');
       expect(src(f)).toContain('process.env.MONGO_URL');
@@ -265,7 +274,7 @@ describe('Step 4 — 비밀번호가 코드에 없다', () => {
   });
 
   it('두 곳에 있던 그 줄이 «한 곳» 으로 모였다', () => {
-    const both = src('app.js') + src('seed.js');
+    const both = src(FINAL) + src(FINAL_SEED);
     expect(both.match(/const MONGO_URL = /g)).toBeNull();
   });
 
@@ -281,7 +290,7 @@ describe('Step 4 — 비밀번호가 코드에 없다', () => {
   });
 
   it('`.env.example` 은 이름만 알려주고 값은 안 알려준다', () => {
-    const ex = src('.env.example');
+    const ex = src('snapshots/p2-25.env.example');
     expect(ex).toContain('MONGO_URL=');
     expect(ex).not.toContain('mongodb+srv://cluster');
     expect(ex).not.toMatch(/MONGO_URL=mongodb\+srv:\/\/[a-z]/i);
@@ -305,7 +314,7 @@ describe('Step 4 — 비밀번호가 코드에 없다', () => {
     // 학생이 가장 자주 밟는 자리다. 그런데 Mongoose 가 내는 말에는 `MONGO_URL`
     // 이라는 이름이 «안 나온다» — 교안이 이 화면을 그대로 보여줘야 하는 이유다.
     seed();
-    const err = await boot('app.js', { env: { MONGO_URL: undefined }, ready: readyAt(3000) })
+    const err = await boot(FINAL, { env: { MONGO_URL: undefined }, ready: readyAt(3000) })
       .then(() => null, (e) => e);
     expect(err).not.toBeNull();
     expect(err.message).toContain('MongooseError');
@@ -322,7 +331,7 @@ describe('Step 7 — Atlas 를 열어도 다시 띄워야 하는 이유', () => 
     // 다시 띄워야 하고, 그 한 줄이 없으면 학생이 계속 에러 페이지를 본다.
     let out = '', code = 0;
     try {
-      out = execFileSync(process.execPath, ['app.js'], {
+      out = execFileSync(process.execPath, [FINAL], {
         encoding: 'utf-8', stdio: 'pipe',
         env: { ...process.env, MONGO_URL: 'mongodb://127.0.0.1:27099/nope', PORT: '3351' },
       });
@@ -338,14 +347,14 @@ describe('Step 5 — 올릴 수 있는 모양', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
 
   it('환경이 포트를 주면 그 포트에서 답한다', async () => {
-    await bootApp('app.js', { port: 4321, env: { ...ENV, PORT: '4321' } });
+    await bootApp(FINAL, { port: 4321, env: { ...ENV, PORT: '4321' } });
 
     expect(server.log).toContain('서버가 4321번 포트에서');
     expect((await fetch(`${server.base}/api/posts`)).status).toBe(200);
   });
 
   it('안 주면 3000 그대로다 — 내 컴퓨터에서 하던 것이 안 바뀐다', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
     expect(server.log).toContain('서버가 3000번 포트에서');
   });
 
@@ -376,7 +385,7 @@ describe('Step 5 — 올릴 수 있는 모양', () => {
 // ── Step 8 — CORS ───────────────────────────────────────────────────────────
 describe('Step 8 — 브라우저가 응답을 버리지 않게', () => {
   it('다른 곳에서 온 요청에도 «읽어도 된다» 는 표시가 붙는다', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
 
     const res = await fetch(`${server.base}/api/posts`, {
       headers: { Origin: 'https://example.vercel.app' },
@@ -562,11 +571,17 @@ describe('답안의 주장을 실행으로 잠근다', () => {
 
 // ── 학생이 실제로 치는 그 명령 ──────────────────────────────────────────────
 describe('`.http` 열이 새 답으로 돈다', () => {
+  // 🚨 «그 시점 스냅숏» 을 보낸다 (2026-09-11 `p2-30` 착수 시). `requests/posts.http` 는
+  //    회차마다 자라는 파일이고, `p2-30` 이 번호를 `_id` 에서 `id` 로 되돌리며 요청 둘을
+  //    더한다(`?username=` · `?limit=`). live 파일을 보내면 「열 요청」이 열둘이 되어
+  //    이 회차 교안이 틀렸다고 말하게 되는데, 그건 거짓이다.
+  const HTTP = 'snapshots/p2-25.posts.http';
+
   it('4×200 · 1×201 · 2×400 · 3×404 — 오늘 늘어난 둘이 400·404 다', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
     const out = execFileSync(
       'node_modules/.bin/httpyac',
-      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      ['send', HTTP, '--all', '--output', 'short'],
       { encoding: 'utf-8' });
     expect(out).toContain('10 requests processed (10 succeeded)');
     expect(out.match(/=> 200/g)).toHaveLength(4);
@@ -576,10 +591,10 @@ describe('`.http` 열이 새 답으로 돈다', () => {
   }, 60000);
 
   it('두 번 돌려도 게시물이 셋으로 돌아온다 — 만든 것을 자기가 치운다', async () => {
-    await bootApp('app.js');
+    await bootApp(FINAL);
     const send = () => execFileSync(
       'node_modules/.bin/httpyac',
-      ['send', 'requests/posts.http', '--all', '--output', 'short'],
+      ['send', HTTP, '--all', '--output', 'short'],
       { encoding: 'utf-8' });
     send(); send();
     expect(await (await fetch(`${server.base}/api/posts`)).json()).toHaveLength(3);
@@ -599,7 +614,16 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
                           '\\n[\\s\\S]*?)```', 'g');
     return [...md.matchAll(re)].map((m) => m[1]);
   };
-  const real = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
+  // 🚨 **워킹 트리가 아니라 «그 회차 브랜치» 를 본다** (2026-09-11 `p2-30` 착수 시).
+  //    `p2-30` 이 `app.js`·`seed.js` 를 Prisma 로 다시 쓰면 워킹 트리 대조는 이 회차
+  //    교안이 틀렸다고 말하게 되는데, 그건 거짓이다. `p2-24` 가 쓰는 그 방법이다.
+  //    위쪽 «띄우는» 자리와 달리 여기는 학생 표기 그대로여야 해서(`./models/…`)
+  //    경로를 고친 스냅숏이 아니라 브랜치 원본을 읽는다.
+  const FROZEN = new Set(['app.js', 'seed.js']);
+  const real = (rel) =>
+    FROZEN.has(rel)
+      ? execFileSync('git', ['show', `code/p2-25:${rel}`], { encoding: 'utf-8' })
+      : readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
 
   it('🔴 교안의 `app.js` 완성본이 코드베이스와 byte 동일하다', () => {
     const quoted = blocksOf(LEC, '// ~/instagram-api/app.js');
@@ -670,7 +694,12 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
   });
 
   it('교안이 인용한 `.http` 두 조각이 요청 파일 안에 그대로 있다', () => {
-    const http = real('requests/posts.http');
+    // 🚨 «그 시점 스냅숏» 을 본다 (2026-09-11 `p2-30` 착수 시). `p2-30` 이 번호를
+    //    `_id` 에서 `id` 로 되돌리면서 이 파일을 고치는데, 그중 하나가 바로
+    //    「번호 자리에 아무 글자나」다 — 그 요청의 `2` 는 몽고한테는 아무 글자나였지만
+    //    PostgreSQL 에선 «진짜 번호» 라 이름과 내용이 어긋나게 된다. 이 회차 교안이
+    //    인용한 것은 그때의 그 줄이므로 live 파일로 재면 거짓으로 빨개진다.
+    const http = real('snapshots/p2-25.posts.http');
     for (const q of blocksOf(LEC, '### (번호 자리에 아무 글자나|깨진 몸통 보내기)', 'http')) {
       expect(http).toContain(q.trim());
     }

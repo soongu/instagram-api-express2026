@@ -1,7 +1,7 @@
 // 내부 검증 전용 — `return` 을 빠뜨린 판이다.
 // 아래 줄이 «진짜 값» 을 담아서, 교안 ⚠️ 박스가 말하는 그 에러를 실제로 낸다.
 import express from 'express';
-import { posts } from '../data/posts.js';
+import { posts } from './p2-22.data-posts.js';
 
 const app = express();
 

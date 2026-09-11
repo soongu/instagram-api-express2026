@@ -267,7 +267,7 @@ describe('교안 인용이 코드베이스와 byte 동일한가', () => {
 
   it('data/posts.js 인용이 코드베이스와 같다', () => {
     const quoted = blocksOf(LEC, '// ~/instagram-api/data/posts.js');
-    const real = readFileSync(new URL('../data/posts.js', import.meta.url), 'utf-8');
+    const real = readFileSync(new URL('../snapshots/p2-22.data-posts.js', import.meta.url), 'utf-8');
     expect(quoted).toHaveLength(1);
     expect(quoted[0]).toBe(real);
   });
