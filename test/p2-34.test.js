@@ -266,34 +266,7 @@ describe('Step 6·7 — 좋아요는 가운데 표가 받고, 같은 쌍은 한 
   it('🔴 암묵적 N:M 으로 적으면 칸 이름이 A·B 가 된다 — 그래서 안 쓴다', () => {
     // 🚨 이 회차가 «명시적 중간 모델» 을 고른 근거다. 학생은 p2-27·p2-28 에서
     //    원시 SQL 로 표를 열어보는 법을 배웠는데, A·B 로는 무엇이 무엇인지 모른다.
-    const schema = `
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-}
-
-model User {
-  id       Int    @id @default(autoincrement())
-  username String @unique
-  liked    Post[] @relation("Likes")
-
-  @@map("users")
-}
-
-model Post {
-  id      Int     @id @default(autoincrement())
-  content String?
-  likedBy User[]  @relation("Likes")
-
-  @@map("posts")
-}
-`;
-    mkdirSync(P('__replay__'), { recursive: true });
-    const file = P('__replay__/p234-implicit.prisma');
-    writeFileSync(file, schema);
+    const file = P('snapshots/p2-34/implicit-nm.prisma');
     const sql = prismaCli(['migrate', 'diff', '--from-empty', '--to-schema', file, '--script']);
 
     expect(sql).toContain('CREATE TABLE "_Likes"');
@@ -427,5 +400,166 @@ describe('직접 해보기 1~3 — 서점에도 같은 셋이 있다', () => {
     expect(out).toContain('4번 테스트 주도 개발 — 태그 없음');
     expect(out).toContain('막혔어요: P2002');
     expect(out, '두 번 들어가면 안 된다').not.toContain('두 번 들어갔어요');
+  });
+});
+
+// ── 교안 ↔ 코드베이스 — 인용한 것이 실재한다 ────────────────────────────────
+
+describe('인용이 코드베이스와 맞는가', () => {
+  const blocksOf = (path, lang) =>
+    [...read(path).matchAll(new RegExp('```' + lang + '\\n([\\s\\S]*?)```', 'g'))].map((m) => m[1].trimEnd());
+
+  const prismaSources = () => [
+    'prisma/schema.prisma', 'lab/p2-34/schema.prisma',
+    // 교안 Step 2 는 «지우라고» 한 줄을 싣는다 — 그 줄은 착수 시점 스키마에 있다.
+    'snapshots/p2-34/schema.before.prisma',
+    // 교안이 「이렇게 적으면」으로만 보여주는 둘 — 우리 앱에는 안 만들지만 실제로 서는 판이다.
+    'snapshots/p2-34/implicit-nm.prisma', 'snapshots/p2-34/one-to-one.prisma',
+  ].map((f) => read(P(f)));
+
+  const jsSources = () => [
+    'services/postService.js', 'services/likeService.js', 'schemas/postSchema.js',
+    'routes/posts.js', 'seed.js', 'db.js', 'errors.js', 'check.js',
+    'data/posts.js', 'data/comments.js',
+    // Step 3 시점 시드 — 그때는 post_likes 가 아직 없어 비우기 목록이 한 칸 짧다.
+    'snapshots/p2-34/seed.step3.js',
+    'lab/p2-34/practice1.js', 'lab/p2-34/practice2.js', 'lab/p2-34/practice3.js',
+    'lab/p2-34/bookstore.js',
+  ].map((f) => read(P(f)));
+
+  const sqlSources = () =>
+    [...P234_MIGRATIONS.map((d) => `prisma/migrations/${d}/migration.sql`),
+     ...P234_LAB_MIGRATIONS.map((d) => `lab/p2-34/migrations/${d}/migration.sql`)]
+      .map((f) => read(P(f)))
+      // 🚨 교안 Step 6 은 «우리가 안 쓰는» 암묵적 N:M 의 SQL 도 보여준다.
+      //    그것은 마이그레이션이 아니라 migrate diff 의 출력이라 여기서 직접 받아 온다.
+      .concat(prismaCli(['migrate', 'diff', '--from-empty',
+        '--to-schema', P('snapshots/p2-34/implicit-nm.prisma'), '--script']));
+
+  const squash = (t) => t.split('\n').map((l) => l.trim().replace(/\s+/g, ' ')).join('\n');
+
+  /** 주석·빈 줄·닫는 괄호를 걷어낸 «의미 있는 줄» — 교안은 발췌를 조각으로 싣는다.
+   *  붙여 쓴 공백은 정렬용이라 하나로 눌러서 견준다. */
+  const meaningful = (block) =>
+    block.split('\n').map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('//') && !l.startsWith('--') && !/^[}\])]+,?;?$/.test(l))
+      .map((l) => l.replace(/\s+/g, ' '));
+
+  it('🔴 교안의 ```prisma 줄이 전부 코드베이스 스키마에 실재한다', () => {
+    const srcs = prismaSources().map(squash);
+    const missing = [];
+    for (const b of blocksOf(LECTURE, 'prisma')) {
+      for (const line of meaningful(b)) {
+        if (!srcs.some((s) => s.includes(line))) missing.push(line);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('🔴 교안의 ```sql 줄이 전부 마이그레이션에 실재한다', () => {
+    const srcs = sqlSources().map(squash);
+    const missing = [];
+    for (const b of blocksOf(LECTURE, 'sql')) {
+      for (const line of meaningful(b)) {
+        if (!srcs.some((s) => s.includes(line))) missing.push(line);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('🔴 교안의 ```javascript 줄이 전부 코드베이스에 실재한다', () => {
+    const srcs = jsSources().map(squash);
+    const missing = [];
+    for (const b of blocksOf(LECTURE, 'javascript')) {
+      for (const line of meaningful(b)) {
+        if (!srcs.some((s) => s.includes(line))) missing.push(line);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('🚨 교안이 인용한 CLI 경고·오류가 실제 출력과 같다', () => {
+    const lec = read(LECTURE);
+    for (const phrase of [
+      'You are about to drop the column `post_image` on the `posts` table, which still contains 5 non-null values.',
+      '? Are you sure you want to create this migration? › (y/N)',
+      'You can now edit it and apply it by running prisma migrate dev.',
+      'cannot truncate a table referenced in a foreign key constraint',
+    ]) expect(lec, phrase.slice(0, 45)).toContain(phrase);
+  });
+
+  it('교안과 답안이 둘 다 있다', () => {
+    expect(exists(LECTURE), '교안').toBe(true);
+    expect(exists(ANSWERS), '답안').toBe(true);
+  });
+});
+
+// ── 과제 — 답안 코드가 실제로 돈다 ──────────────────────────────────────────
+
+describe('과제 [기초]·[응용] — 답안이 실제로 돈다', () => {
+  /** lab 파일을 __replay__ 로 옮겨 «학생과 같은 깊이» 에서 돌린다. */
+  const labCopy = () => {
+    mkdirSync(P('__replay__'), { recursive: true });
+    for (const f of ['commentService.js', 'commentSchema.js', 'commentRoutes.js',
+                     'homework1.js', 'homework2.js']) {
+      writeFileSync(P(`__replay__/p234-${f}`), read(P(`lab/p2-34/${f}`))
+        .replace("'./commentRoutes.js'", "'./p234-commentRoutes.js'")
+        .replace("'./commentService.js'", "'./p234-commentService.js'")
+        .replace("'./commentSchema.js'", "'./p234-commentSchema.js'"));
+    }
+  };
+
+  beforeAll(async () => {
+    labCopy();
+    seedLive();
+    await bootApp('__replay__/p234-homework1.js', 4001);
+  }, 60000);
+
+  it('🔴 [기초] 목록에 원댓글만 나오고 답글은 그 안에 담긴다', async () => {
+    const res = await fetch('http://127.0.0.1:4001/api/comments?postId=1');
+    const comments = await res.json();
+
+    expect(comments).toHaveLength(3);
+    expect(comments[0].username).toBe('minji');
+    expect(comments[0].replies.map((r) => r.content))
+      .toEqual(['다음엔 같이 가요', '저도 껴주세요']);
+    expect(comments[1].replies).toEqual([]);
+  });
+
+  it('🔴 [기초] 답글의 postId 는 원댓글에서 물려받는다 — 요청에서 안 받는다', async () => {
+    const res = await fetch('http://127.0.0.1:4001/api/comments', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      // 🚨 일부러 «틀린» postId 를 보낸다. 원댓글 4번은 2번 게시물 것이다.
+      body: JSON.stringify({ postId: 1, authorId: 5, content: '저도요', parentId: 4 }),
+    });
+    const created = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(created.postId, '보낸 1 이 아니라 원댓글의 2 를 따라간다').toBe(2);
+    expect(created.parentId).toBe(4);
+  });
+
+  it('🔴 [기초] 없는 댓글에 답글을 달면 400 이다', async () => {
+    const res = await fetch('http://127.0.0.1:4001/api/comments', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 1, authorId: 5, content: 'x', parentId: 999 }),
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).message).toBe('그런 댓글은 없어요');
+  });
+
+  it('🔴 [응용] 적어둔 숫자를 실제 줄 수로 맞춘다', () => {
+    seedLive();
+    const out = execFileSync(process.execPath, [P('__replay__/p234-homework2.js')],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+
+    expect(out).toContain('고치기 전');
+    expect(out).toContain('    1          130            0');
+    expect(out).toContain('고친 뒤');
+    expect(out).toContain('    1            2            2');
+    expect(out).toContain('    4            0            0');
   });
 });
