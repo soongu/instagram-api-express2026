@@ -26,8 +26,7 @@ POST http://localhost:3000/api/posts
 Content-Type: application/json
 
 {
-  "username": "yuna",
-  "profileImage": "/images/yuna.jpg",
+  "authorId": 3,
   "postImage": "/images/post-8.jpg",
   "postAlt": "제주도 바다 사진",
   "content": "제주 왔어요 🌊"
@@ -38,7 +37,16 @@ POST http://localhost:3000/api/posts
 Content-Type: application/json
 
 {
-  "username": "yuna"
+  "authorId": 3
+}
+
+### 없는 사람 번호로 올리기
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 999,
+  "postImage": "/images/post-8.jpg"
 }
 
 ### 방금 올린 게시물의 하트 수 고치기
@@ -57,4 +65,4 @@ POST http://localhost:3000/api/posts
 Content-Type: application/json
 
 {
-  "username": "yuna"
+  "authorId": 3

@@ -4,8 +4,8 @@
 import { defineConfig } from 'prisma/config';
 
 export default defineConfig({
-  schema: '../../prisma/schema.prisma',
-  migrations: { path: '../../prisma/migrations' },
+  schema: '../../snapshots/p2-29/schema-final.prisma',
+  migrations: { path: '../../snapshots/p2-29/migrations' },
   datasource: {
     url: process.env.DATABASE_URL,
     shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL,

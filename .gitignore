@@ -28,3 +28,8 @@ __replay__/
 
 # 서점 실습이 만드는 Prisma 클라이언트 (p2-30 · 생성물)
 lab/generated
+
+# 게이트가 만드는 것 — 커밋하지 않는다
+snapshots/*.frozen.js
+snapshots/p2-29/client/
+lab/generated-p2-33/

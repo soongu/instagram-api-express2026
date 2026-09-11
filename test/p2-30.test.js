@@ -4,6 +4,12 @@
 // 🚨 교안이 「이렇게 하면 이렇게 된다」고 주장하는 «중간 상태» 는 snapshots 로 얼려 실제로 띄운다.
 //    산문으로만 적힌 주장은 어느 게이트도 못 보기 때문이다(p2-24 에서 셋이 정반대였다).
 // 🚨 lab 파일은 학생 표기(`../db.js`)라 그대로는 안 돈다 — 사본에서 한 단 더 깊게 고쳐 띄운다.
+// 🚨 p2-33 이 정규화(posts.username → author_id)를 하면서 이 회차가 «자라는 파일»로 보던
+//    것들을 snapshots/p2-32-final/ 로 얼렸다. 안 얼리면 이 회차 축들이 거짓 FAIL 이 된다 —
+//    캐논 「앞 회차 테스트가 자라는 파일을 live 로 보면 다음 회차 부채를 가린다」.
+//    🔑 이번엔 «계약 자체»가 바뀌었다(POST 몸통이 username → authorId). 그래서 p2-31 처럼
+//       동작 검사를 live 로 남겨둘 수 없다 — 남기면 옛 계약을 영원히 요구하게 된다.
+//       새 계약이 안 깨졌다는 증거는 p2-33 자기 테스트가 «12요청 대조»로 따로 세운다.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -36,14 +42,14 @@ let server = null;
 function labCopy(rel) {
   const local = rel.replace(/\.js$/, '.local.js');
   writeFileSync(P(local), read(P(rel))
-    .replace(/from '\.\.\/db\.js'/g, "from '../../db.js'")
+    .replace(/from '\.\.\/db\.js'/g, "from '../../snapshots/p2-32-final/db.js'")
     .replace(/from '\.\.\/data\//g, "from '../../data/"));
   return local;
 }
 const dropCopy = (local) => { try { unlinkSync(P(local)); } catch { /* 이미 없음 */ } };
 
-const seed = (file = 'seed.js', args = []) =>
-  execFileSync(process.execPath, [P(file), ...args], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+const seed = (file = 'snapshots/p2-32-final/seed.js', args = []) =>
+  execFileSync(process.execPath, [P(frozenDb(file)), ...args], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
 beforeAll(async () => {
   const admin = new pg.Client(ADMIN);
@@ -71,7 +77,19 @@ afterAll(async () => {
   await admin.end();
 });
 
+/** 스냅숏이 부르는 `../db.js` 는 live 클라이언트다 — p2-33 이 정규화한 뒤로는 이 회차
+ *  게이트 DB(글자 판)를 모른다. 그 한 줄만 얼린 판으로 바꿔 돌린다.
+ *  🔑 커밋된 스냅숏 파일 자체는 «안 건드린다» — 교안 byte 대조와 「실재」 축이 그것을 본다. */
+function frozenDb(rel) {
+  const src = read(P(rel));
+  if (!src.includes("from '../db.js'")) return rel;
+  const local = rel.replace(/\.js$/, '.frozen.js');
+  writeFileSync(P(local), src.replace("from '../db.js'", "from './p2-32-final/db.js'"));
+  return local;
+}
+
 async function bootApp(file, port = 3400) {
+  file = frozenDb(file);
   // 🚨 앞 서버가 포트를 놓는 데 한 박자가 걸린다 — 안 기다리면 다음 it 이
   //    「포트가 이미 물려 있다」로 죽는다(교안이 아니라 환경 문제다).
   if (server) { await server.stop(); server = null; await new Promise((r) => setTimeout(r, 150)); }
@@ -153,7 +171,7 @@ describe('Step 2 — 글자를 그대로 넘기면 Prisma 가 «막는다»', ()
   });
 
   it('고친 판은 404 를 내고 500 이 안 난다', async () => {
-    await bootApp('app.js', 3404);
+    await bootApp('snapshots/p2-32-final/app.js', 3404);
     for (const bad of ['abc', '1.5', '999']) {
       const res = await fetch(`${server.base}/api/posts/${bad}`);
       expect(res.status, bad).toBe(404);
@@ -197,7 +215,7 @@ describe('Step 3 — `...req.body` 가 여는 구멍 둘', () => {
   });
 
   it('고친 판은 모르는 이름도 `id` 도 그냥 무시한다', async () => {
-    await bootApp('app.js', 3407);
+    await bootApp('snapshots/p2-32-final/app.js', 3407);
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS,
       body: JSON.stringify({ id: 888, username: 'yuna', postImage: '/y.jpg', nickname: '유나' }),
@@ -224,7 +242,7 @@ describe('Step 4 — `null` 이 아니라 «던진다»', () => {
   });
 
   it('갈래를 넣은 판은 404 로 돌아온다 — 겉이 지난 시간과 같아진다', async () => {
-    await bootApp('app.js', 3409);
+    await bootApp('snapshots/p2-32-final/app.js', 3409);
     for (const [method, body] of [['PATCH', JSON.stringify({ likeCount: 7 })], ['DELETE', undefined]]) {
       const res = await fetch(`${server.base}/api/posts/999`, { method, headers: JSON_HEADERS, body });
       expect(res.status, method).toBe(404);
@@ -235,7 +253,7 @@ describe('Step 4 — `null` 이 아니라 «던진다»', () => {
   it('🔴 고치기도 받을 이름을 고른다 — 모르는 이름·`id` 에 500 이 안 난다', async () => {
     // 🚨 Step 3 이 만들기의 구멍 둘을 막았는데 고치기는 안 막으면, 같은 몸통을 PATCH 로
     //    보낼 때 그대로 500 이 난다(초고가 그랬고 독립 정독자가 잡았다).
-    await bootApp('app.js', 3415);
+    await bootApp('snapshots/p2-32-final/app.js', 3415);
     for (const body of [{ nickname: 'x' }, { id: 999 }]) {
       const res = await fetch(`${server.base}/api/posts/1`, {
         method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body),
@@ -256,7 +274,7 @@ describe('Step 4 — `null` 이 아니라 «던진다»', () => {
   it('🔴 `p2-23` 이 가르친 「깨진 몸통 400」이 안 덮였다', async () => {
     // 🚨 p2-25 가 「통째로 500 을 내면 400 이 덮인다」를 이 회차 최고의 함정으로 다뤘다.
     //    P2025 갈래를 맨 위에 넣어도 그 아래 err.status 갈래가 살아 있어야 한다.
-    await bootApp('app.js', 3410);
+    await bootApp('snapshots/p2-32-final/app.js', 3410);
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS, body: '{"username"',
     });
@@ -283,7 +301,7 @@ await prisma.$disconnect();`);
   it('🔴 `deleteMany` 만 쓰면 번호가 1 부터 «안» 시작한다', async () => {
     const probe = '__replay__/p230-num.mjs';
     writeFileSync(P(probe), `
-import { prisma } from '../db.js';
+import { prisma } from '../snapshots/p2-32-final/db.js';
 import { posts } from '../data/posts.js';
 await prisma.comment.deleteMany({});
 await prisma.post.deleteMany({});
@@ -323,7 +341,7 @@ await prisma.$disconnect();`);
 describe('Step 7·8 — 조건 · 정렬 · 개수', () => {
   // 🚨 서버를 «한 번만» 띄운다. it 마다 재기동하면 포트를 놓는 사이에 다음 it 이
   //    달려들어 「이미 물려 있다」로 죽는다 — 교안이 아니라 게이트가 만든 실패다.
-  beforeAll(async () => { seed(); await bootApp('app.js', 3420); }, 30000);
+  beforeAll(async () => { seed(); await bootApp('snapshots/p2-32-final/app.js', 3420); }, 30000);
 
   it('조건을 안 보내면 전부, 보내면 그 사람 것만', async () => {
     expect(await (await fetch(`${server.base}/api/posts`)).json()).toHaveLength(5);
@@ -394,7 +412,10 @@ describe('과제 2 — 안전한 시드', () => {
 // ── 교안 ↔ 코드베이스 ──────────────────────────────────────────────────────
 describe('인용이 코드베이스와 byte 동일한가', () => {
   // 🚨 스냅숏은 `snapshots/` 아래 있어 «불러오는 줄 하나만» 학생 표기와 다르다.
-  const asStudent = (src) => src.replace("from '../db.js'", "from './db.js'");
+  // 🚨 얼린 스냅숏은 게이트가 돌 수 있게 경로가 한 단 깊다 — 학생 표기로 되돌려 대조한다.
+  const asStudent = (src) => src
+    .replace("from '../db.js'", "from './db.js'")
+    .replaceAll("from '../../data/", "from './data/");   // 🚨 둘 있다 — replace 는 첫 건만 바꾼다
 
   it('🔴 교안의 `app.js` 완성본이 코드베이스와 byte 동일하다', () => {
     // 🚨 p2-24 가 이 검사 없이 배포됐다가 독립 정독자에게 「맞춰볼 데가 없다」로 잡혔다.
@@ -405,19 +426,19 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
 
   it('교안이 인용한 `db.js`·`seed.js`·데이터 파일이 코드베이스와 같다', () => {
     for (const [head, file] of [['// ~/instagram-api/db.js', 'db.js'],
-                                ['// ~/instagram-api/seed.js', 'seed.js'],
+                                ['// ~/instagram-api/seed.js', 'snapshots/p2-32-final/seed.js'],
                                 ['// ~/instagram-api/data/posts.js', 'data/posts.js'],
                                 ['// ~/instagram-api/data/comments.js', 'data/comments.js']]) {
       const quoted = blocksOf(LECTURE, 'javascript').filter((b) => b.startsWith(head));
       expect(quoted.length, head).toBe(1);
-      expect(quoted[0], head).toBe(read(P(file)).trimEnd());
+      expect(quoted[0], head).toBe(asStudent(read(P(file))).trimEnd());
     }
   });
 
   it('교안이 인용한 자바스크립트가 전부 코드베이스 «어딘가에» 실재한다', () => {
     // 🚨 「app.js 조각」만 볼 게 아니다 — 교안은 db.js·seed.js·데이터·실습 파일도
     //    조각으로 인용한다. 출처를 좁게 잡으면 그 몫이 통째로 무검사가 된다.
-    const sources = ['snapshots/p2-30.final.app.js', 'db.js', 'seed.js', 'check.js', 'data/posts.js', 'data/comments.js',
+    const sources = ['snapshots/p2-30.final.app.js', 'db.js', 'snapshots/p2-32-final/seed.js', 'check.js', 'data/posts.js', 'data/comments.js',
                      'lab/p2-30/bookstore.js', 'lab/p2-30/practice1.js', 'lab/p2-30/practice2.js',
                      'snapshots/p2-30.seed.naive.js', 'snapshots/p2-30.step7.app.js',
                      'snapshots/p2-30.step8.app.js', 'snapshots/p2-30.step8.broken.app.js',
