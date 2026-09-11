@@ -10,13 +10,17 @@ import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
-import { setupP229 } from '../sql/p2-29/setup.mjs';
+import { setupP229, setupP229Bookstore } from '../sql/p2-29/setup.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const GATE_URL = 'postgresql://postgres:postgres@localhost:5432/p231_gate';
 const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
-const ENV = { DATABASE_URL: GATE_URL };
+// 🚨 서점 실습도 «전용 DB» 에서 띄운다. 5433 의 진짜 `bookstore` 를 쓰면 학생이
+//    손으로 따라가던 상태를 게이트가 갈아엎는다(이 트랙이 instagram 에서 겪은 그것).
+const BOOK_GATE_URL = 'postgresql://postgres:postgres@localhost:5433/p231_book_gate';
+const BOOK_ADMIN = { ...ADMIN, port: 5433 };
+const ENV = { DATABASE_URL: GATE_URL, BOOKSTORE_URL: BOOK_GATE_URL };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 const LECTURE = P('../../part2/5-db-prisma/p2-31-layers-lecture.md');
@@ -53,7 +57,19 @@ beforeAll(async () => {
   await setupP229(db);
   await db.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP');
   seed();   // p2-30 종료 상태 — 게시물 1~5 · 댓글 1~9
-}, 60000);
+
+  const bookAdmin = new pg.Client(BOOK_ADMIN);
+  await bookAdmin.connect();
+  await bookAdmin.query('DROP DATABASE IF EXISTS p231_book_gate');
+  await bookAdmin.query('CREATE DATABASE p231_book_gate');
+  await bookAdmin.end();
+  const book = new pg.Client({ ...BOOK_ADMIN, database: 'p231_book_gate' });
+  await book.connect();
+  await setupP229Bookstore(book);
+  // p2-29 직접 해보기가 더한 칸 — 이게 없으면 서점 라우트가 전부 500 이다
+  await book.query('ALTER TABLE books ADD COLUMN IF NOT EXISTS is_sold_out BOOLEAN NOT NULL DEFAULT false');
+  await book.end();
+}, 90000);
 
 afterAll(async () => {
   if (server) { await server.stop(); server = null; }
@@ -64,6 +80,12 @@ afterAll(async () => {
     "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p231_gate' and pid <> pg_backend_pid()");
   await admin.query('DROP DATABASE IF EXISTS p231_gate');
   await admin.end();
+  const bookAdmin = new pg.Client(BOOK_ADMIN);
+  await bookAdmin.connect();
+  await bookAdmin.query(
+    "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p231_book_gate' and pid <> pg_backend_pid()");
+  await bookAdmin.query('DROP DATABASE IF EXISTS p231_book_gate');
+  await bookAdmin.end();
 });
 
 async function bootApp(file, port) {
@@ -200,10 +222,13 @@ describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안
     expect(n('snapshots/p2-30.final.app.js')).toBe(112);
   });
 
-  it('요청 파일을 한 글자도 안 고쳤다 — p2-30 이 쓴 그대로다', () => {
+  it('🔴 요청 파일을 한 글자도 안 고쳤다 — `code/p2-30` 가지가 들고 있는 그대로다', () => {
+    // 🚨 `HEAD` 와 대조하면 이 회차가 커밋할 때마다 기준이 따라 움직여 늘 통과한다.
+    //    비교 대상은 «지난 회차가 심어둔 가지» 여야 한다.
     const current = read(P('requests/posts.http'));
-    const atP230 = execFileSync('git', ['show', 'HEAD:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
+    const atP230 = execFileSync('git', ['show', 'code/p2-30:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
     expect(current).toBe(atP230);
+    expect(current.match(/^### /gm)).toHaveLength(12);
   });
 
   it('🔴 댓글이 달린 게시물을 지우면 «아직» 500 이다 — p2-33 이월 부채 그대로', async () => {
@@ -242,6 +267,67 @@ describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안
       expect(run(local)).toBeLessThan(3000);
     } finally { dropCopy(local); dropCopy(naive); }
   }, 40000);
+});
+
+// ── 직접 해보기 · 과제 — lab 도 같은 세 층으로 간다 ─────────────────────────
+describe('lab — 서점과 댓글도 같은 모양으로 선다', () => {
+  /** 서점 서버를 띄우고 여덟 가지를 재는다. 어느 시점 판에 물려도 같은 답이어야 한다. */
+  async function bookContract(base) {
+    return {
+      list: (await (await fetch(`${base}/api/books`)).json()).length,
+      one: (await fetch(`${base}/api/books/1`)).status,
+      missing: (await fetch(`${base}/api/books/999`)).status,
+      letters: (await fetch(`${base}/api/books/abc`)).status,
+      deleteMissing: (await fetch(`${base}/api/books/999`, { method: 'DELETE' })).status,
+      deleteLetters: (await fetch(`${base}/api/books/abc`, { method: 'DELETE' })).status,
+      byAuthor: (await (await fetch(`${base}/api/books?author=${encodeURIComponent('로버트 마틴')}`)).json()).length,
+      noRoute: (await fetch(`${base}/api/nope`)).status,
+    };
+  }
+  const BOOKS = { list: 6, one: 200, missing: 404, letters: 404, deleteMissing: 404,
+                  deleteLetters: 404, byAuthor: 2, noRoute: 404 };
+
+  it('직접 해보기 1 — 주소만 라우터로 옮긴 서점이 여덟을 지킨다', async () => {
+    await bootApp('snapshots/p2-31/lab1/practice1.js', 4000);
+    expect(await bookContract(server.base)).toEqual(BOOKS);
+  });
+
+  it('직접 해보기 2 — 검사를 미들웨어로 뺀 서점도 여덟을 지킨다', async () => {
+    await bootApp('snapshots/p2-31/lab2/practice1.js', 4000);
+    expect(await bookContract(server.base)).toEqual(BOOKS);
+  });
+
+  it('직접 해보기 3 — 서비스까지 간 서점도 여덟을 지키고, `P2025` 가 practice1 에서 사라진다', async () => {
+    const local = labCopy('lab/p2-31/practice1.js');
+    try {
+      await bootApp(local, 4000);
+      expect(await bookContract(server.base)).toEqual(BOOKS);
+    } finally { if (server) { await server.stop(); server = null; } dropCopy(local); }
+    expect(read(P('lab/p2-31/practice1.js'))).not.toContain('P2025');
+    expect(read(P('lab/p2-31/bookService.js'))).toContain('P2025');
+    expect(read(P('lab/p2-31/bookRoutes.js')).match(/bookstore/g)).toBeNull();
+  });
+
+  it('🔴 과제 1 — 댓글 서버도 세 층으로 서고 같은 답을 낸다', async () => {
+    const copies = ['lab/p2-31/commentService.js', 'lab/p2-31/commentRoutes.js', 'lab/p2-31/homework1.js']
+      .map((f) => labCopy(f));
+    // 사본끼리 서로를 부르게 이어준다 (파일 자체는 학생 표기 그대로다)
+    writeFileSync(P(copies[1]), read(P(copies[1])).replace("'./commentService.js'", "'./commentService.local.js'"));
+    writeFileSync(P(copies[2]), read(P(copies[2])).replace("'./commentRoutes.js'", "'./commentRoutes.local.js'"));
+    try {
+      await bootApp(copies[2], 4001);
+      expect((await (await fetch(`${server.base}/api/comments`)).json())).toHaveLength(9);
+      expect((await (await fetch(`${server.base}/api/comments?postId=1`)).json())).toHaveLength(3);
+      expect((await fetch(`${server.base}/api/comments/1`)).status).toBe(200);
+      for (const bad of ['999', 'abc']) {
+        expect((await fetch(`${server.base}/api/comments/${bad}`)).status, bad).toBe(404);
+        expect((await fetch(`${server.base}/api/comments/${bad}`, { method: 'DELETE' })).status, bad).toBe(404);
+      }
+      expect((await fetch(`${server.base}/api/nope`)).status).toBe(404);
+    } finally { if (server) { await server.stop(); server = null; } copies.forEach(dropCopy); }
+    expect(read(P('lab/p2-31/commentService.js')).match(/\bres\b/g)).toBeNull();
+    expect(read(P('lab/p2-31/commentRoutes.js')).match(/prisma/gi)).toBeNull();
+  });
 });
 
 // ── 교안·답안 (집필되면 켜진다) ─────────────────────────────────────────────
