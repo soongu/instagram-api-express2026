@@ -195,17 +195,34 @@ describe('첫 쿼리 — JS 쪽은 camelCase 로 돌아온다', () => {
 });
 
 describe('교안 ↔ 코드베이스 — 인용한 것이 실재한다', () => {
+  // 🚨 서점(직접 해보기·과제) 스키마도 함께 본다. 빼두면 교안의 ```prisma 블록 중
+  //    「직접 해보기」 몫이 통째로 무검사가 된다 — 이 트랙이 반복해서 당한
+  //    「게이트가 그 회차를 «안 보고» 통과했다」의 자리다.
   const schemaSources = () => [
     'snapshots/p2-29/schema-skeleton.prisma',
     'snapshots/p2-29/schema-pulled.prisma',
     'snapshots/p2-29/schema-mapped.prisma',
+    'snapshots/p2-29/schema-answers.prisma',
+    'snapshots/p2-29/lab-schema-pulled.prisma',
+    'snapshots/p2-29/lab-schema-mapped.prisma',
+    'snapshots/p2-29/lab-schema-answers.prisma',
+    'lab/p2-29/schema.prisma',
     'prisma/schema.prisma',
   ].map((f) => read(P(f)));
 
-  const sqlSources = () =>
-    readdirSync(P('prisma/migrations'))
-      .filter((d) => !d.endsWith('.toml'))
-      .map((d) => read(P(`prisma/migrations/${d}/migration.sql`)));
+  // 🚨 교안·답안의 ```sql 은 출처가 «셋» 이다. 하나라도 빼면 그 몫이 무검사가 된다.
+  //    ① 마이그레이션이 뽑아준 것(수업 + 직접 해보기) ② 과제 마이그레이션 스냅숏
+  //    ③ 학생이 VS Code 에 «손으로 치는» 조회·삽입(코퍼스로 따로 잠그고 실제로 돌린다)
+  const sqlSources = () => {
+    const out = [];
+    for (const dir of ['prisma/migrations', 'lab/p2-29/migrations'])
+      for (const d of readdirSync(P(dir)).filter((x) => !x.endsWith('.toml')))
+        out.push(read(P(`${dir}/${d}/migration.sql`)));
+    for (const f of ['snapshots/p2-29/answers-comments.sql', 'snapshots/p2-29/answers-publishers.sql',
+                     'sql/p2-29/queries.sql', 'sql/p2-29/answers.sql'])
+      out.push(read(P(f)));
+    return out;
+  };
 
   it.runIf(exists(LECTURE))('교안의 ```prisma 블록이 전부 코드베이스 스키마 안에 실재한다', () => {
     const srcs = schemaSources();
@@ -219,9 +236,45 @@ describe('교안 ↔ 코드베이스 — 인용한 것이 실재한다', () => {
     expect(missing).toEqual([]);
   });
 
-  it.runIf(exists(ANSWERS))('답안의 ```prisma 블록도 마찬가지다', () => {
-    const srcs = [...schemaSources(), ...blocksOf(ANSWERS, 'prisma')].slice(0, 4);
+  it.runIf(exists(ANSWERS))('답안의 ```prisma 블록도 전부 코드베이스 스키마 안에 실재한다', () => {
+    const srcs = schemaSources();
     const missing = blocksOf(ANSWERS, 'prisma').filter((b) => !srcs.some((s) => s.includes(b)));
     expect(missing).toEqual([]);
   });
+
+  it.runIf(exists(ANSWERS))('답안의 ```sql 블록도 전부 실재한다', () => {
+    const srcs = sqlSources();
+    const missing = blocksOf(ANSWERS, 'sql').filter((b) => !srcs.some((s) => s.includes(b)));
+    expect(missing).toEqual([]);
+  });
+});
+
+// 🚨 「손으로 치는 SQL」은 실재 대조만으로는 절반이다 — 실제로 돌려야 그 줄이 도는지 안다.
+//    캐논 「판정 없는 축은 그 자체로 FAIL」.
+describe('손으로 치는 SQL — 코퍼스를 실제로 돌린다', () => {
+  it('교안·답안의 조회·삽입이 두 DB 에서 전부 성공한다', async () => {
+    const bk = new pg.Client({ ...ADMIN, port: 5433, database: 'bookstore' });
+    await bk.connect();
+    const { setupP229Bookstore } = await import('../sql/p2-29/setup.mjs');
+    await setupP229Bookstore(bk);
+    // 과제 답안은 «그 과제의 마이그레이션을 적용한 뒤» 의 상태에서 출발한다.
+    await db.query(read(P('snapshots/p2-29/answers-comments.sql')));
+    // 과제[응용] 은 publishers 가 이미 있는 상태에서 출발한다.
+    await bk.query(read(P('snapshots/p2-29/answers-publishers.sql')));
+
+    const failed = [];
+    for (const f of ['sql/p2-29/queries.sql', 'sql/p2-29/answers.sql']) {
+      let cur = db;
+      for (const part of read(P(f)).split(/^-- @@(bookstore|instagram)?$/m)) {
+        if (part === 'bookstore') { cur = bk; continue; }
+        if (part === 'instagram') { cur = db; continue; }
+        const sql = (part || '').split('\n').filter((l) => !l.startsWith('--')).join('\n').trim();
+        if (!sql) continue;
+        try { await cur.query(sql); }
+        catch (e) { failed.push({ f, head: sql.split('\n')[0].slice(0, 50), code: e.code, msg: e.message }); }
+      }
+    }
+    await bk.end();
+    expect(failed).toEqual([]);
+  }, 60000);
 });

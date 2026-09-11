@@ -7,7 +7,7 @@
 // 🚨 blocks.sql 은 두 DB 를 «여섯 번» 오간다 — 첫 bookstore 에서 멈추면 뒤쪽 instagram
 //    블록을 통째로 놓친다. 건너뛰되 «계속 읽는다».
 import { readFileSync } from 'node:fs';
-import { parse, setupInstagram } from '../p2-28/corpus.mjs';
+import { parse, setupInstagram, setupBookstore } from '../p2-28/corpus.mjs';
 
 const D = new URL('../p2-28/', import.meta.url);
 
@@ -20,6 +20,21 @@ export async function setupP229(client) {
     for (const step of parse(readFileSync(new URL(f, D), 'utf8'))) {
       if (step.db) { onInstagram = step.db === 'instagram'; continue; }
       if (!onInstagram) continue;
+      try { await client.query(step.sql); } catch { /* 일부러 막히는 블록 */ }
+    }
+  }
+}
+
+/** 지정한 bookstore DB 를 p2-28 종료 상태로 되돌린다 (직접 해보기·과제 몫). */
+export async function setupP229Bookstore(client) {
+  await client.query('DROP TABLE IF EXISTS publishers CASCADE');
+  await client.query('DROP TABLE IF EXISTS _prisma_migrations');
+  await setupBookstore(client);
+  for (const f of ['blocks.sql', 'answers.sql']) {
+    let onBookstore = false;
+    for (const step of parse(readFileSync(new URL(f, D), 'utf8'))) {
+      if (step.db) { onBookstore = step.db === 'bookstore'; continue; }
+      if (!onBookstore) continue;
       try { await client.query(step.sql); } catch { /* 일부러 막히는 블록 */ }
     }
   }
