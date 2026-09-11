@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/db.js
+// ~/instagram-api/lab/bookstore.js
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/index.js';
 

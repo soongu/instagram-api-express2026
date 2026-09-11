@@ -1,5 +1,5 @@
 // ~/instagram-api/lab/practice1.js
-import { bookstore } from './db.js';
+import { bookstore } from './bookstore.js';
 
 const books = await bookstore.book.findMany({ orderBy: { id: 'asc' } });
 
