@@ -116,12 +116,12 @@ describe('Step 1·2 — 지금 표 둘과 그 안의 중복', () => {
     expect(r.rows[0]).toEqual({ p: 5, c: 9 });
   });
 
-  it('🔴 사람은 다섯인데 이름이 적힌 자리는 열네 군데다', async () => {
+  it('🔴 사람은 5명인데 이름이 적힌 곳은 14군데다', async () => {
     const r = await db.query(`
       select (select count(*) from (select username from posts union select username from comments) x)::int people,
              ((select count(*) from posts) + (select count(*) from comments))::int spots`);
     expect(r.rows[0]).toEqual({ people: 5, spots: 14 });
-    expect(read(LECTURE)).toContain('열네 군데');
+    expect(read(LECTURE)).toContain('14군데');
   });
 
   it('🚨 nayeon 은 댓글에만 있다 — posts 만 보면 네 명이다', async () => {
@@ -137,6 +137,29 @@ describe('Step 1·2 — 지금 표 둘과 그 안의 중복', () => {
     expect(r.rows[0]).toEqual({ n: 2, d: 1 });
   });
 
+  // 🚨 이 둘은 교안이 4칸 표의 «출처» 로 새로 실은 블록이다(2026-09-11 정독 반영).
+  //    어느 축도 안 보던 자리라 실행으로 잠근다 — 표의 게시물·댓글 칸이 여기서 나온다.
+  it('교안이 실은 표별 세기 SQL 두 줄이 실제로 돌고, 표의 칸과 같다', async () => {
+    const fence = read(LECTURE).split('```')
+      .find((b) => b.includes('적힌 곳') && b.includes('nayeon'));
+    const sqls = blocksOf(LECTURE, 'sql')
+      .filter((b) => /^SELECT username, COUNT\(\*\) AS (게시물|댓글)/.test(b.trim()));
+    expect(sqls.length, '표별 세기 블록').toBe(1);
+
+    for (const stmt of sqls[0].trim().split(';').map((x) => x.trim()).filter(Boolean)) {
+      const col = stmt.includes('AS 게시물') ? 1 : 2;
+      const r = await db.query(stmt);
+      expect(r.rows.length, stmt.slice(0, 40)).toBeGreaterThan(0);
+      for (const row of r.rows) {
+        const line = fence.split('\n').find((l) => l.trim().startsWith(row.username));
+        expect(line, row.username).toBeTruthy();
+        const nums = line.trim().split(/\s+/).slice(1).map(Number);
+        expect(nums[col - 1], `${row.username} / ${col === 1 ? '게시물' : '댓글'}`)
+          .toBe(Number(row[col === 1 ? '게시물' : '댓글']));
+      }
+    }
+  });
+
   it('교안이 인용한 누가-몇-번 표가 실측과 같다', async () => {
     const r = await db.query(`
       select u.username,
@@ -145,7 +168,7 @@ describe('Step 1·2 — 지금 표 둘과 그 안의 중복', () => {
       from (select username from posts union select username from comments) u
       order by 2 desc, 3 desc, 1`);   // 🚨 출력 별칭은 «식 안에서» 못 쓴다(Postgres)
     const fence = read(LECTURE).split('```')
-      .find((b) => b.includes('적힌 자리') && b.includes('nayeon'));
+      .find((b) => b.includes('적힌 곳') && b.includes('nayeon'));
     expect(fence, '누가 몇 번 적혀 있나 표').toBeTruthy();
     for (const row of r.rows) {
       const line = fence.split('\n').find((l) => l.trim().startsWith(row.username));
@@ -337,6 +360,26 @@ describe('Step 6·8 — 계약은 그대로, P2003 에는 이름이 붙는다', 
     expect(bad.status, 'authorId 를 안 보내면 Zod 400').toBe(400);
   });
 
+  it('🔴 Step 6 판은 include 없이도 400 을 낸다 — 그 시점에 실제로 돈다', async () => {
+    // 🚨 교안 Step 6 은 withAuthor 가 «아직 없는» 판을 싣는다. 최종본을 미리 실으면
+    //    학생 파일이 ReferenceError 로 죽는다(선언 전 사용). 그 중간 판을 띄워 잠근다.
+    mkdirSync(P('__replay__'), { recursive: true });
+    writeFileSync(P('__replay__/p233-step6-service.js'),
+      read(P('snapshots/p2-33/step6.postService.js')).replaceAll("from '../", "from '../"));
+    const probe = P('__replay__/p233-step6.mjs');
+    writeFileSync(probe, `
+import * as svc from './p233-step6-service.js';
+try { await svc.createPost({ authorId: 999, postImage: '/x.jpg' }); console.log('CREATED'); }
+catch (e) { console.log(e.status, e.message); }
+const list = await svc.getPosts({});
+console.log('list', list.length, 'username' in list[0]);
+const { prisma } = await import('../db.js');
+await prisma.$disconnect();`);
+    const out = execFileSync(process.execPath, [probe], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+    expect(out).toContain('400 그런 사용자는 없어요');
+    expect(out, 'Step 6 시점에는 username 이 아직 안 실린다').toContain('list 5 false');
+  });
+
   it('🚨 글쓴이를 지우는 것은 RESTRICT 가 막고, 그것도 P2003 이다', async () => {
     mkdirSync(P('__replay__'), { recursive: true });
     const probe = P('__replay__/p233-restrict.mjs');
@@ -428,6 +471,7 @@ describe('교안 ↔ 코드베이스', () => {
   const jsSources = () => [
     'services/postService.js', 'schemas/postSchema.js', 'seed.js', 'db.js', 'errors.js',
     'routes/posts.js', 'app.js', 'middlewares/validate.js',
+    'snapshots/p2-33/step6.postService.js',
     'lab/p2-33/practice1.js', 'lab/p2-33/commentService.js', 'lab/p2-33/commentSchema.js',
     'lab/p2-33/commentRoutes.js', 'lab/p2-33/homework2.js', 'lab/p2-33/bookstore.js',
   ].map((f) => read(P(f)));
@@ -439,7 +483,9 @@ describe('교안 ↔ 코드베이스', () => {
         .map((d) => read(P(`lab/p2-33/migrations/${d}/migration.sql`))));
 
   const prismaSources = () => [
-    'prisma/schema.prisma', 'snapshots/p2-33/schema-after-normalize.prisma', 'lab/p2-33/schema.prisma',
+    'prisma/schema.prisma', 'snapshots/p2-33/schema-after-normalize.prisma',
+    // 직접 해보기 2 가 보여주는 「지금 모습」 — p2-29 과제까지 끝낸 서점 스키마
+    'snapshots/p2-33/lab-schema-before.prisma', 'lab/p2-33/schema.prisma',
   ].map((f) => read(P(f)));
 
   /** 주석·빈 줄을 걷어낸 덩어리 — 교안은 발췌를 설명 주석과 함께 싣는다. */

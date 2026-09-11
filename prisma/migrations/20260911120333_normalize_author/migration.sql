@@ -28,7 +28,7 @@ SET "profile_image" = p."profile_image"
 FROM "posts" p
 WHERE p."username" = u."username" AND p."profile_image" IS NOT NULL;
 
--- ④ posts — 널을 허용해 칸을 먼저 더하고, 채우고, 그제서야 조인다.
+-- ④ posts — 널을 허용해 칸을 먼저 더하고, 채우고, 그제야 조인다.
 ALTER TABLE "posts" ADD COLUMN "author_id" INTEGER;
 
 UPDATE "posts" p
@@ -53,7 +53,7 @@ ALTER TABLE "comments" ALTER COLUMN "author_id" SET NOT NULL;
 
 ALTER TABLE "comments" DROP COLUMN "username";
 
--- ⑥ 관계를 못박는다. Prisma가 써준 두 줄 그대로다.
+-- ⑥ 외래 키를 건다. Prisma가 써준 두 줄 그대로다.
 ALTER TABLE "posts" ADD CONSTRAINT "posts_author_id_fkey" FOREIGN KEY ("author_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "comments" ADD CONSTRAINT "comments_author_id_fkey" FOREIGN KEY ("author_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
