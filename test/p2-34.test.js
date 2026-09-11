@@ -8,7 +8,7 @@
 //       N:M 은 같은 사람이 두 번 누르는 것을 막는다. 「적어두기만 한 규칙」이 아니다.
 //    ③ «바깥에서 본 모습» — 응답에 imageUrls 가 배열로 실린다.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
@@ -41,6 +41,7 @@ const P234_MIGRATIONS = [
   '20260911142735_add_post_images',
   '20260911142828_move_images_to_table',
   '20260911143803_add_comment_replies',
+  '20260911144541_add_post_likes',
 ];
 
 async function applyRoundMigrations() {
@@ -249,5 +250,106 @@ describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원�
     const after = await db.query(`
       select count(*)::int total, count(*) filter (where parent_id = 1)::int orphans from comments`);
     expect(after.rows[0], '원댓글 1 + 답글 2 = 3줄이 사라진다').toEqual({ total: 9, orphans: 0 });
+  });
+});
+
+// ── 축 ② N:M — 가운데 표가 「누가 어디에」 한 쌍을 받는다 ────────────────────
+
+describe('Step 6·7 — 좋아요는 가운데 표가 받고, 같은 쌍은 한 번만 들어간다', () => {
+  beforeAll(async () => {
+    seedLive();
+    await bootApp('app.js', 3442);
+  }, 60000);
+
+  it('🔴 암묵적 N:M 으로 적으면 칸 이름이 A·B 가 된다 — 그래서 안 쓴다', () => {
+    // 🚨 이 회차가 «명시적 중간 모델» 을 고른 근거다. 학생은 p2-27·p2-28 에서
+    //    원시 SQL 로 표를 열어보는 법을 배웠는데, A·B 로는 무엇이 무엇인지 모른다.
+    const schema = `
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  username String @unique
+  liked    Post[] @relation("Likes")
+
+  @@map("users")
+}
+
+model Post {
+  id      Int     @id @default(autoincrement())
+  content String?
+  likedBy User[]  @relation("Likes")
+
+  @@map("posts")
+}
+`;
+    mkdirSync(P('__replay__'), { recursive: true });
+    const file = P('__replay__/p234-implicit.prisma');
+    writeFileSync(file, schema);
+    const sql = prismaCli(['migrate', 'diff', '--from-empty', '--to-schema', file, '--script']);
+
+    expect(sql).toContain('CREATE TABLE "_Likes"');
+    expect(sql).toContain('"A" INTEGER NOT NULL');
+    expect(sql).toContain('"B" INTEGER NOT NULL');
+  });
+
+  it('🔴 우리 표는 이름이 있는 칸을 갖고, 같은 쌍에 UNIQUE 가 걸린다', async () => {
+    const cols = await db.query(
+      "select column_name from information_schema.columns where table_name = 'post_likes' order by ordinal_position");
+    expect(cols.rows.map((r) => r.column_name)).toEqual(['id', 'post_id', 'user_id']);
+
+    await db.query('insert into post_likes (post_id, user_id) values (1, 2)');
+    await expect(db.query('insert into post_likes (post_id, user_id) values (1, 2)'))
+      .rejects.toMatchObject({ code: '23505' });
+    await db.query('delete from post_likes where post_id = 1 and user_id = 2');
+  });
+
+  it('🔴 한 주소를 두 번 부르면 켜졌다가 꺼진다', async () => {
+    const press = () => fetch('http://127.0.0.1:3442/api/posts/3/likes', {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 2 }),
+    }).then((r) => r.json());
+
+    const on = await press();
+    expect(on).toEqual({ liked: true, likeCount: 77 });      // 시드가 76 으로 넣는다
+
+    const off = await press();
+    expect(off).toEqual({ liked: false, likeCount: 76 });
+
+    const rows = await db.query('select count(*)::int c from post_likes where post_id = 3');
+    expect(rows.rows[0].c, '꺼지면 줄도 사라진다').toBe(0);
+  });
+
+  it('여러 사람이 같은 게시물에 누르면 줄이 사람 수만큼 쌓인다', async () => {
+    for (const userId of [1, 2, 3]) {
+      await fetch('http://127.0.0.1:3442/api/posts/4/likes', {
+        method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId }),
+      });
+    }
+
+    const res = await fetch('http://127.0.0.1:3442/api/posts/4/likes');
+    expect(await res.json()).toEqual(['dahye', 'jaehoon', 'minji']);
+  });
+
+  it('없는 사람 번호로 누르면 400 이다', async () => {
+    const res = await fetch('http://127.0.0.1:3442/api/posts/1/likes', {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 999 }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('🚨 적어둔 like_count 와 표의 줄 수는 «같지 않다» — 생각해볼 주제의 재료다', async () => {
+    const r = await db.query(`
+      select p.like_count, (select count(*)::int from post_likes l where l.post_id = p.id) rows
+      from posts p where p.id = 1`);
+
+    expect(r.rows[0].like_count).toBe(130);
+    expect(r.rows[0].rows, '줄은 0개인데 칸에는 130 이 적혀 있다').toBe(0);
   });
 });

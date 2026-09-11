@@ -1,8 +1,9 @@
 // ~/instagram-api/routes/posts.js
 import express from 'express';
 import * as postService from '../services/postService.js';
+import * as likeService from '../services/likeService.js';
 import { validateBody } from '../middlewares/validate.js';
-import { postCreateSchema, postUpdateSchema } from '../schemas/postSchema.js';
+import { postCreateSchema, postUpdateSchema, likeSchema } from '../schemas/postSchema.js';
 import { NotFoundError } from '../errors.js';
 
 const router = express.Router();
@@ -50,6 +51,19 @@ router.delete('/:id', parseId, async (req, res) => {
   const deleted = await postService.removePost(req.postId);
 
   res.json(deleted);
+});
+
+router.get('/:id/likes', parseId, async (req, res) => {
+  const usernames = await likeService.getLikers(req.postId);
+
+  res.json(usernames);
+});
+
+// 한 주소로 켜고 끈다 — 이미 눌렀으면 취소, 아니면 추가.
+router.post('/:id/likes', parseId, validateBody(likeSchema), async (req, res) => {
+  const status = await likeService.toggleLike(req.postId, req.body.userId);
+
+  res.json(status);
 });
 
 export default router;

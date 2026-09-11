@@ -190,7 +190,8 @@ describe('첫 쿼리 — JS 쪽은 camelCase 로 돌아온다', () => {
   it('check.js 가 게시물 5개를 읽고 camelCase 로 찍는다', () => {
     prisma(['generate', '--config', 'snapshots/p2-29/generate.config.js']);
     mkdirSync(P('__replay__'), { recursive: true });
-    const frozen = read(P('check.js'))
+    // 🚨 얼린 판이다 — live check.js 는 p2-34 가 사진·답글을 보여주게 키웠다.
+    const frozen = read(P('snapshots/p2-33-final/check.js'))
       .replace("from '@prisma/client'", "from '../snapshots/p2-29/client/index.js'");
     expect(frozen).toContain('snapshots/p2-29/client');   // 바꿔 치는 데 실패하면 조용히 통과하지 않게
     writeFileSync(P('__replay__/p2-29.check.js'), frozen);
