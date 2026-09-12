@@ -333,6 +333,33 @@ describe('축 ⑩ — 과제 답안이 진짜 서버에서 돈다', () => {
     } finally { await s.stop(); }
   }, 30000);
 
+  it('🔴 [기초] «놓기 전» 에는 우리 프론트에도 헤더가 없다 — 답안이 그렇게 말한다', async () => {
+    // 학생이 이 과제를 시작하는 판은 `p2-36` 의 그 파일이다 — cors 가 «한 줄도» 없다.
+    const before = read(P('lab/p2-36/homework1.js'));
+    expect(before).not.toContain('cors');
+
+    const RUN2 = P('.p2-37-before');
+    rmSync(RUN2, { recursive: true, force: true });
+    cpSync(P('lab/p2-36'), RUN2, { recursive: true });
+    const PORT2 = 4038;
+    writeFileSync(`${RUN2}/homework1.js`,
+      readFileSync(`${RUN2}/homework1.js`, 'utf8').replaceAll('4001', String(PORT2)));
+    const s = await boot('.p2-37-before/homework1.js',
+      { port: PORT2, env: { ...ENV, PORT: String(PORT2) }, ready: '기다리고 있어요' });
+    try {
+      for (const origin of [OURS, 남, null]) {
+        const res = await fetch(`http://localhost:${PORT2}/api/comments?postId=1&limit=2`,
+          { headers: origin ? { Origin: origin } : {} });
+        expect(res.headers.get('access-control-allow-origin'),
+          `${origin ?? '(출처 없음)'} 에도 헤더가 없어야 한다`).toBeNull();
+        expect(res.status).toBe(200);
+      }
+    } finally {
+      await s.stop();
+      rmSync(RUN2, { recursive: true, force: true });
+    }
+  }, 30000);
+
   it('[응용] 허락 목록을 환경에서 받아 오고, 쉼표로 이어 적은 둘이 다 통한다', async () => {
     const src = read(P('lab/p2-37/homework2.js'));
     expect(src).toContain('process.env.CORS_ORIGIN');
