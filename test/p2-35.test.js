@@ -669,6 +669,30 @@ describe('인용이 코드베이스와 맞는가', () => {
     expect(withSelect[1], 'select 로 바꾸면 안 쓰는 칸이 빠진다').not.toContain('deactivated_at');
   });
 
+  it('🔴 교안이 더하라고 한 `.http` 요청 셋이 코드베이스에도 있다', () => {
+    // 🚨 이 축이 없어서 교안이 「posts.http 에서 좋아요를 눌러봐요」라고 했는데
+    //    그 파일에는 «3번 게시물 · userId 2» 만 있었다. 그대로 누르면 이 회차 장면이
+    //    한 줄도 재현되지 않는다(3번은 like_count 76 이고 누르는 사람도 다르다).
+    const http = read(P('requests/posts.http'));
+    for (const line of [
+      'GET http://localhost:3000/api/posts/1',
+      'POST http://localhost:3000/api/posts/1/likes',
+      'GET http://localhost:3000/api/posts/1/likes',
+    ]) expect(http, line).toContain(line);
+    expect(http, '누르는 사람은 dahye(1) 여야 한다').toMatch(/posts\/1\/likes[\s\S]{0,80}"userId": 1/);
+
+    // 교안이 그 셋을 «더하라고» 말하는지도 함께 본다.
+    expect(read(LECTURE), '더하라는 안내').toMatch(/`requests\/posts\.http` 맨 아래에 요청 셋을 더해/);
+  });
+
+  it('🔴 Step 8 이 `$disconnect` 를 남기라고 말한다 — 안 그러면 10초 멈춘다', () => {
+    // 🚨 `p2-31` 이 실측해둔 그 10.1초. 학생은 「멈췄다」로 읽고 Ctrl+C 를 누른다.
+    const lec = read(LECTURE);
+    const step8 = lec.slice(lec.indexOf('## Step 8'));
+    expect(step8, '맨 아래 $disconnect 줄을 그대로 두라고 말해야 한다')
+      .toMatch(/\$disconnect\(\);` 줄은 그대로 둬요/);
+  });
+
   it('🔴 교안이 인용한 트랜잭션 타임아웃 메시지가 실제 출력과 같다', () => {
     for (const phrase of [
       'Transaction API error: A commit cannot be executed on an expired transaction.',
