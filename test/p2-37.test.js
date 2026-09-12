@@ -14,7 +14,7 @@
 // 축 ⑦ 프론트 — 주소가 코드에 안 박혀 있고, 프록시 규칙이 우리 서버를 가리킨다.
 // 축 ⑧ 앞 회차가 가르친 것이 안 깨졌다.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import express from 'express';
 import cors from 'cors';
@@ -251,6 +251,114 @@ describe('축 ⑦ — 주소가 코드에 안 박혀 있고 프록시가 우리 
   });
 });
 
+// ── 축 ⑨ · 교안이 만들라고 한 `.http` 가 실재하고 그대로 돈다 ───────────
+describe('축 ⑨ — `requests/cors.http` 의 요청이 전부 교안이 말한 답을 준다', () => {
+  /** `.http` 파일을 「### 제목 / 메서드 주소 / 헤더들」 로 갈라 읽는다. */
+  const 요청들 = () => {
+    const 덩이 = read(P('requests/cors.http')).split(/^### /m).slice(1);
+    return 덩이.map((b) => {
+      const 줄 = b.split('\n').map((l) => l.trim());
+      const 제목 = 줄[0];
+      const [method, url] = 줄[1].split(/\s+/);
+      const headers = {};
+      for (const l of 줄.slice(2)) {
+        if (!l || l.startsWith('#')) continue;
+        const i = l.indexOf(':');
+        if (i < 0) break;
+        headers[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+      }
+      return { 제목, method, url, headers };
+    });
+  };
+
+  it('파일이 다섯 요청을 담고 있고 우리 서버를 가리킨다', () => {
+    const rs = 요청들();
+    expect(rs.length).toBe(5);
+    for (const r of rs) expect(r.url).toContain('localhost:3000');
+  });
+
+  it('🔴 그 다섯을 실제로 보내면 교안이 적은 그대로 갈린다', async () => {
+    const 결과 = [];
+    for (const r of 요청들()) {
+      // 교안의 3000 을 게이트가 띄운 포트로만 바꿔 «그 요청 그대로» 보낸다.
+      const res = await fetch(r.url.replace('localhost:3000', `localhost:${PORT}`),
+        { method: r.method, headers: r.headers });
+      결과.push({ 제목: r.제목, status: res.status, 허락: res.headers.get('access-control-allow-origin') });
+    }
+    expect(결과.map((x) => x.허락)).toEqual([OURS, null, null, OURS, null]);
+    // 막힌 요청도 서버는 그대로 답한다 — 200 이거나 preflight 의 204 다.
+    expect(결과.map((x) => x.status)).toEqual([200, 200, 200, 204, 204]);
+  });
+});
+
+// ── 축 ⑩ · 과제 — 답안 코드가 실재하고 실제로 돈다 ─────────────────────
+describe('축 ⑩ — 과제 답안이 진짜 서버에서 돈다', () => {
+
+  // 🚨 과제 파일의 `import '../db.js'` 는 «학생 배치» 기준이다
+  //    (`~/instagram-api/lab/homework1.js` → `~/instagram-api/db.js`).
+  //    회차별 보관 폴더(`lab/p2-37/`)에서 띄우면 한 단 깊어서 그 경로가 깨진다.
+  //    그래서 프로젝트 바로 아래에 학생과 «같은 깊이» 로 펼쳐놓고 띄운다 —
+  //    파일은 한 글자도 안 고치고 놓이는 곳만 맞춰주는 것이다.
+  //    🚨 그리고 학생 파일은 포트를 4001 로 박아 두는데 앞 회차 게이트들도 그 번호를
+  //    쓴다 — vitest 가 파일을 병렬로 돌리므로 사본에서만 번호를 갈라준다.
+  const LAB_PORT = 4037;
+  const RUN = P('.p2-37-run');
+  beforeAll(() => {
+    rmSync(RUN, { recursive: true, force: true });
+    cpSync(P('lab/p2-37'), RUN, { recursive: true });
+    for (const f of ['homework1.js', 'homework2.js']) {
+      writeFileSync(`${RUN}/${f}`, readFileSync(`${RUN}/${f}`, 'utf8').replaceAll('4001', String(LAB_PORT)));
+    }
+  });
+  afterAll(() => { rmSync(RUN, { recursive: true, force: true }); });
+  const 댓글 = (port, origin, headers = {}) =>
+    fetch(`http://localhost:${port}/api/comments?postId=1&limit=2`,
+      { headers: origin ? { Origin: origin, ...headers } : headers });
+
+  it('[기초] 댓글 서버에 좁힌 문이 놓여 있고, 우리 것만 허락한다', async () => {
+    const src = read(P('lab/p2-37/homework1.js'));
+    expect(src).toContain("import cors from 'cors'");
+    expect(src).toMatch(/cors\(\{\s*origin:\s*\[/);
+
+    const s = await boot('.p2-37-run/homework1.js',
+      { port: LAB_PORT, env: { ...ENV, PORT: String(LAB_PORT) }, ready: '기다리고 있어요' });
+    try {
+      const 우리 = await 댓글(LAB_PORT, OURS);
+      expect(우리.headers.get('access-control-allow-origin')).toBe(OURS);
+      const 남것 = await 댓글(LAB_PORT, 남);
+      expect(남것.headers.get('access-control-allow-origin')).toBeNull();
+      // 🔴 막힌 쪽도 서버는 그대로 답한다 — 과제 4번이 학생에게 확인시키는 그것이다.
+      expect(남것.status).toBe(200);
+      expect((await 남것.json()).items.length).toBeGreaterThan(0);
+    } finally { await s.stop(); }
+  }, 30000);
+
+  it('[응용] 허락 목록을 환경에서 받아 오고, 쉼표로 이어 적은 둘이 다 통한다', async () => {
+    const src = read(P('lab/p2-37/homework2.js'));
+    expect(src).toContain('process.env.CORS_ORIGIN');
+    expect(src).toMatch(/\.split\(','\)/);
+    expect(src, '목록을 코드에 다시 적어두면 뺀 것이 아니다').not.toContain("['http://localhost:5173']");
+
+    const 둘 = `${OURS},http://localhost:5174`;
+    const s = await boot('.p2-37-run/homework2.js',
+      { port: LAB_PORT, env: { ...ENV, PORT: String(LAB_PORT), CORS_ORIGIN: 둘 }, ready: '기다리고 있어요' });
+    try {
+      for (const 하나 of [OURS, 'http://localhost:5174']) {
+        const res = await 댓글(LAB_PORT, 하나);
+        expect(res.headers.get('access-control-allow-origin'), `${하나} 가 허락돼야 한다`).toBe(하나);
+      }
+      expect((await 댓글(LAB_PORT, 남)).headers.get('access-control-allow-origin')).toBeNull();
+    } finally { await s.stop(); }
+  }, 30000);
+
+  it('`requests/cors-comments.http` 가 실재하고 댓글 서버를 가리킨다', () => {
+    const http = read(P('requests/cors-comments.http'));
+    expect(http.split(/^### /m).length - 1).toBe(3);
+    expect(http).toContain('localhost:4001');
+    expect(http).toContain('Origin: http://localhost:5173');
+  });
+});
+
 // ── 축 ⑧ · 앞 회차가 안 깨졌다 ──────────────────────────────────────────
 describe('축 ⑧ — 앞 회차가 가르친 것이 그대로다', () => {
   it('게시물 목록은 여전히 봉투로 온다 — `p2-36` 계약', async () => {
@@ -270,5 +378,56 @@ describe('축 ⑧ — 앞 회차가 가르친 것이 그대로다', () => {
 
   it('`MY_USER_ID` 는 여전히 프론트 한 곳에만 적혀 있다 — `p2-36` 이 정한 것', () => {
     expect(FRONT('src/services/api.js')).toContain('export const MY_USER_ID');
+  });
+});
+
+// ── 인용 대조 — 교안·답안이 실은 코드가 코드베이스와 같은가 ─────────────
+describe('인용이 코드베이스와 맞는가', () => {
+  const LECTURE = P('../../part2/6-fullstack-join/p2-37-cors-proxy-env-lecture.md');
+  const ANSWERS = P('../../part2/6-fullstack-join/p2-37-cors-proxy-env-answers.md');
+  const squash = (t) => t.replace(/\s+/g, ' ').trim();
+  const blocksOf = (path, lang) =>
+    [...read(path).matchAll(new RegExp('```' + lang + '\\n([\\s\\S]*?)```', 'g'))].map((m) => m[1]);
+  const meaningful = (b) =>
+    b.split('\n').map((l) => squash(l).replace(/\s*\/\/[^"'`]*$/, '').trim())
+      .filter((l) => l.length > 12 && !l.startsWith('//') && !/^[}\]);,]+$/.test(l));
+
+  const sources = () => [
+    'app.js', 'lab/p2-37/homework1.js', 'lab/p2-37/homework2.js',
+    '../instagram-react/src/services/api.js',
+    '../instagram-react/vite.config.js',
+    // 🔑 교안은 «바꾸기 전» 코드도 인용한다 — 그것도 실재하는 코드다.
+    //    이 회차 시작 시점(p2-36 최종판)이 얼려져 있으니 코퍼스에 함께 둔다.
+    '../instagram-react/src/services/p2-36.final.api.snapshot.js',
+    'snapshots/p2-36.final.app.js',
+  ].map((f) => squash(read(P(f))));
+
+  for (const [이름, path] of [['교안', LECTURE], ['답안', ANSWERS]]) {
+    for (const lang of ['js', 'jsx', 'javascript']) {
+      it(`🔴 ${이름}의 \`\`\`${lang} 줄이 전부 코드베이스에 실재한다`, () => {
+        const srcs = sources();
+        const missing = [];
+        for (const b of blocksOf(path, lang)) {
+          for (const line of meaningful(b)) {
+            if (!srcs.some((x) => x.includes(line))) missing.push(line);
+          }
+        }
+        expect(missing).toEqual([]);
+      });
+    }
+  }
+
+  it('🔴 `.http` 인용도 실제 파일과 같다', () => {
+    const cors = squash(read(P('requests/cors.http')));
+    const comments = squash(read(P('requests/cors-comments.http')));
+    for (const [이름, path] of [['교안', LECTURE], ['답안', ANSWERS]]) {
+      for (const b of blocksOf(path, '')) {
+        const lines = b.split('\n').map((l) => l.trim())
+          .filter((l) => /^(GET|POST|OPTIONS|DELETE|PATCH)\s+http/.test(l) || /^(Origin|Access-Control-Request)/.test(l));
+        for (const l of lines) {
+          expect(cors.includes(l) || comments.includes(l), `${이름}: ${l}`).toBe(true);
+        }
+      }
+    }
   });
 });

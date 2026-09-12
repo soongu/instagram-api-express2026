@@ -1,0 +1,22 @@
+### 우리 프론트에서 온 것처럼 물어보기
+GET http://localhost:3000/api/posts?limit=1
+Origin: http://localhost:5173
+
+### 우리가 모르는 곳에서 온 것처럼 물어보기
+GET http://localhost:3000/api/posts?limit=1
+Origin: http://not-ours.example.com
+
+### 어디서 왔는지 안 대고 물어보기
+GET http://localhost:3000/api/posts?limit=1
+
+### 올리기 전에 미리 물어보는 요청 — 우리 프론트
+OPTIONS http://localhost:3000/api/posts
+Origin: http://localhost:5173
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type
+
+### 올리기 전에 미리 물어보는 요청 — 모르는 곳
+OPTIONS http://localhost:3000/api/posts
+Origin: http://not-ours.example.com
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type
