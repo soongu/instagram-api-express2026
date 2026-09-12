@@ -21,12 +21,13 @@ function parseId(req, res, next) {
 }
 
 router.get('/', async (req, res) => {
-  const posts = await postService.getPosts({
+  const page = await postService.getPosts({
     username: req.query.username,
     limit: Number(req.query.limit) || undefined,
+    cursor: Number(req.query.cursor) || undefined,
   });
 
-  res.json(posts);
+  res.json(page);
 });
 
 router.get('/:id', parseId, async (req, res) => {

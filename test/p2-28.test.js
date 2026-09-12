@@ -14,7 +14,31 @@ import pg from 'pg';
 import { parse, quoted, lectureCorpus, answerCorpus, setupInstagram, setupBookstore }
   from '../sql/p2-28/corpus.mjs';
 
-const PG = { host: 'localhost', port: 5432, database: 'instagram', user: 'postgres', password: 'postgres' };
+// 🚨 전용 DB 에서 돈다 — 이 회차는 `posts`·`comments` 를 통째로 DROP 하고 다시 만드는데,
+//    그것을 수업 DB(`instagram`)에 대고 하면 «학생이 지금까지 쌓은 것» 이 사라진다.
+//    2026-09-12 실측 — 앞 세션의 전수 실행이 실제로 수업 DB 를 p2-33 이전 모양으로 되돌려놨고,
+//    그 망가진 상태에서만 이 회차가 통과하고 있었다(복구하니 DROP 이 외래 키에 막혔다).
+const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
+const PG = { ...ADMIN, database: 'p228_gate' };
+
+async function 전용DB만들기() {
+  const admin = new pg.Client(ADMIN);
+  await admin.connect();
+  await admin.query(
+    "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p228_gate' and pid <> pg_backend_pid()");
+  await admin.query('DROP DATABASE IF EXISTS p228_gate');
+  await admin.query('CREATE DATABASE p228_gate');
+  await admin.end();
+}
+
+async function 전용DB지우기() {
+  const admin = new pg.Client(ADMIN);
+  await admin.connect();
+  await admin.query(
+    "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p228_gate' and pid <> pg_backend_pid()");
+  await admin.query('DROP DATABASE IF EXISTS p228_gate');
+  await admin.end();
+}
 const BOOKSTORE = { ...PG, port: 5433, database: 'bookstore' };
 const LECTURE = new URL('../../../part2/5-db-prisma/p2-28-join-aggregate-lecture.md', import.meta.url);
 const ANSWERS = new URL('../../../part2/5-db-prisma/p2-28-join-aggregate-answers.md', import.meta.url);
@@ -43,6 +67,7 @@ async function run(raw) {
 }
 
 beforeAll(async () => {
+  await 전용DB만들기();
   db = new pg.Client(PG); bk = new pg.Client(BOOKSTORE);
   await db.connect(); await bk.connect();
   await reset();
@@ -55,6 +80,8 @@ afterAll(async () => {
     await bk?.query('DROP TABLE IF EXISTS authors CASCADE');
     await bk?.query('DROP TABLE IF EXISTS reviews');
   } finally { await db?.end(); await bk?.end(); }
+
+  await 전용DB지우기();
 });
 
 describe('교안·답안 ↔ 코퍼스 — 인용한 SQL 이 «전량·순서까지» 같다', () => {

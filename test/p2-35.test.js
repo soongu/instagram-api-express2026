@@ -43,8 +43,11 @@ const seedFrozen = () =>
     { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
 /** 이 회차가 고친 시드 — 학생이 실제로 돌리는 그 파일이다. */
+// 🚨 p2-36 이 `data/posts.js` 의 사진 주소를 «브라우저에서 열리는» 주소로 바꾼다.
+//    이 축이 묻는 것은 «p2-35 의 중첩 쓰기 시드가 데이터를 그대로 두는가» 라서,
+//    비교 대상은 이 회차 최종판이지 그 뒤에 자란 데이터가 아니다.
 const seedLive = () =>
-  execFileSync(process.execPath, [P('seed.js')],
+  execFileSync(process.execPath, [P('snapshots/p2-35-final/seed.js')],
     { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
 async function bootApp(file, port, env = {}) {
@@ -278,8 +281,8 @@ describe('Step 6·7 — 읽는 방법을 갈았는데 응답은 한 글자도 �
     expect(Object.keys(before)).toHaveLength(CONTRACT_PATHS.length);
   });
 
-  it('🔴 지금 앱의 응답이 그 기준선과 «글자 그대로» 같다', async () => {
-    await bootApp('app.js', 3454);
+  it('🔴 이 회차 최종판의 응답이 그 기준선과 «글자 그대로» 같다', async () => {
+    await bootApp('snapshots/p2-35-final/app.js', 3454);
     expect(await contractOf(server.base)).toEqual(before);
   });
 

@@ -15,11 +15,36 @@ import pg from 'pg';
 import mongoose from 'mongoose';
 import { LOCAL_MONGO_URL } from './helpers/boot.js';
 
-const PG = { host: 'localhost', port: 5432, database: 'instagram', user: 'postgres', password: 'postgres' };
+// 🚨 전용 DB 에서 돈다 — 이 회차는 `posts`·`comments` 를 통째로 DROP 하고 다시 만드는데,
+//    그것을 수업 DB(`instagram`)에 대고 하면 «학생이 지금까지 쌓은 것» 이 사라진다.
+//    2026-09-12 실측 — 앞 세션의 전수 실행이 실제로 수업 DB 를 p2-33 이전 모양으로 되돌려놨고,
+//    그 망가진 상태에서만 이 회차가 통과하고 있었다(복구하니 DROP 이 외래 키에 막혔다).
+const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
+const PG = { ...ADMIN, database: 'p226_gate' };
+
+async function 전용DB만들기() {
+  const admin = new pg.Client(ADMIN);
+  await admin.connect();
+  await admin.query(
+    "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p226_gate' and pid <> pg_backend_pid()");
+  await admin.query('DROP DATABASE IF EXISTS p226_gate');
+  await admin.query('CREATE DATABASE p226_gate');
+  await admin.end();
+}
+
+async function 전용DB지우기() {
+  const admin = new pg.Client(ADMIN);
+  await admin.connect();
+  await admin.query(
+    "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p226_gate' and pid <> pg_backend_pid()");
+  await admin.query('DROP DATABASE IF EXISTS p226_gate');
+  await admin.end();
+}
 const sql = (n) => readFileSync(new URL(`../sql/p2-26/${n}`, import.meta.url), 'utf8');
 
 let db;
 beforeAll(async () => {
+  await 전용DB만들기();
   db = new pg.Client(PG);
   await db.connect();
   await db.query('DROP TABLE IF EXISTS comments');
@@ -27,7 +52,9 @@ beforeAll(async () => {
   await db.query(sql('03-posts.sql'));
   await db.query(sql('04-insert.sql'));
 }, 30000);
-afterAll(async () => { await db?.end(); });
+afterAll(async () => { await db?.end(); 
+  await 전용DB지우기();
+});
 
 // 실패를 «에러 객체»로 받는다 — 교안이 인용할 메시지가 여기서 나온다
 async function refused(text, params = []) {
@@ -129,8 +156,16 @@ describe('조립 — Step 5→6→8 을 «교안 순서 그대로» 이어 돌�
 
 describe('Step 8 — 교안이 인용하는 DDL 이 postgres:18 에서 그대로 돈다', () => {
   it('학생이 붙는 포트가 곧 게이트가 붙는 포트다', async () => {
-    const { rows } = await db.query('SELECT current_database() AS db, current_user AS usr');
-    expect(rows[0]).toEqual({ db: 'instagram', usr: 'postgres' });
+    // 🔑 «이름» 만 다르다 — 이 회차는 표를 통째로 DROP 하므로 수업 DB 를 쓰면 학생이
+    //    쌓아온 것이 사라진다. 포트·계정·이미지는 학생이 붙는 그것과 같아야 한다.
+    const { rows } = await db.query('SELECT current_user AS usr');
+    expect(rows[0]).toEqual({ usr: 'postgres' });
+    expect(PG.port).toBe(5432);
+
+    const compose = readFileSync(new URL('../compose.yaml', import.meta.url), 'utf8');
+    expect(compose, '학생이 띄우는 그 설정이 5432 를 연다').toContain('5432:5432');
+    expect(compose, '학생이 붙는 DB 이름').toContain('POSTGRES_DB: instagram');
+    expect(compose).toContain('POSTGRES_USER: postgres');
   });
 
   it('표 모양이 교안이 그려 보일 그것과 같다', async () => {
