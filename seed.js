@@ -29,26 +29,20 @@ await prisma.user.createMany({
 const users = await prisma.user.findMany();
 const idOf = (username) => users.find((user) => user.username === username).id;
 
-await prisma.post.createMany({
-  data: posts.map(({ username, profileImage, images, ...post }) => ({
-    ...post,
-    authorId: idOf(username),
-    createdAt: new Date(Date.now() - post.minutesAgo * 60 * 1000),
-  })),
-});
-
-// 사진은 이제 게시물의 칸이 아니라 따로 선 표라, 게시물을 넣은 «뒤에» 번호를 보고 넣는다.
-// 넣은 차례대로 번호가 매겨지니 목록 순서가 그대로 게시물 순서다.
-const createdPosts = await prisma.post.findMany({ orderBy: { id: 'asc' } });
-
-await prisma.postImage.createMany({
-  data: createdPosts.flatMap((post, index) =>
-    posts[index].images.map((imageUrl, order) => ({
-      postId: post.id,
-      imageUrl,
-      imgOrder: order + 1,
-    }))),
-});
+// 게시물과 그 사진을 «한 번에» 만든다.
+// 번호를 나중에 다시 읽어서 채워 넣을 일이 없다.
+for (const { username, profileImage, images, ...post } of posts) {
+  await prisma.post.create({
+    data: {
+      ...post,
+      authorId: idOf(username),
+      createdAt: new Date(Date.now() - post.minutesAgo * 60 * 1000),
+      images: {
+        create: images.map((imageUrl, order) => ({ imageUrl, imgOrder: order + 1 })),
+      },
+    },
+  });
+}
 
 await prisma.comment.createMany({
   data: comments.map(({ username, replies, ...comment }) => ({
@@ -58,6 +52,8 @@ await prisma.comment.createMany({
 });
 
 // 답글도 같은 comments 표에 들어간다. 다만 가리킬 원댓글이 먼저 있어야 하니 한 박자 뒤다.
+// 여기는 일부러 두 박자로 둔다 — 중첩해서 적으면 답글이 원댓글 바로 뒤에 들어가
+// 댓글 번호가 통째로 밀린다. 지금 번호를 그대로 두려고 이 차례를 지킨다.
 const createdComments = await prisma.comment.findMany({ orderBy: { id: 'asc' } });
 
 await prisma.comment.createMany({

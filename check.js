@@ -3,37 +3,28 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-const prisma = new PrismaClient({ adapter });
 
-// 사진은 이제 게시물의 칸이 아니라 딸린 표의 줄이라, 함께 읽어야 보인다.
-const withImages = await prisma.post.findMany({
-  include: { images: { orderBy: { imgOrder: 'asc' } } },
-  orderBy: { id: 'asc' },
-});
+// 보낸 질의를 세어보려고 로그를 받는다. 터미널에 바로 찍는 대신 우리가 센다.
+const prisma = new PrismaClient({ adapter, log: [{ emit: 'event', level: 'query' }] });
 
-for (const post of withImages) {
-  const urls = post.images.map((image) => image.imageUrl).join(', ');
-  console.log(`${post.id}번 ${post.postAlt} — 사진 ${post.images.length}장: ${urls}`);
+let sent = 0;
+prisma.$on('query', () => { sent += 1; });
+
+// ① 하나씩 돌기 — 게시물을 읽은 뒤 글쓴이와 사진은 게시물마다 따로 물어본다.
+sent = 0;
+const posts = await prisma.post.findMany();
+
+for (const post of posts) {
+  await prisma.user.findUnique({ where: { id: post.authorId } });
+  await prisma.postImage.findMany({ where: { postId: post.id } });
 }
 
-// 답글은 원댓글과 «같은 표» 에 있다. 그래서 그냥 읽으면 둘이 섞여 나온다.
-const all = await prisma.comment.findMany();
-console.log(`\ncomments 표의 줄은 모두 ${all.length}개예요.`);
+console.log(`하나씩 돌기 — 게시물 ${posts.length}개에 질의 ${sent}번`);
 
-// 원댓글만 고르려면 「가리키는 원댓글이 없는 줄」을 찾는다.
-const roots = await prisma.comment.findMany({
-  where: { parentId: null },
-  include: { replies: true },
-  orderBy: { id: 'asc' },
-});
+// ② 함께 읽기 — 똑같은 것을 한 번의 부탁으로.
+sent = 0;
+await prisma.post.findMany({ include: { author: true, images: true } });
 
-console.log(`그중 원댓글은 ${roots.length}개고, 나머지는 어딘가에 달린 답글이에요.\n`);
-
-for (const comment of roots) {
-  console.log(`${comment.id}번 "${comment.content}" — 답글 ${comment.replies.length}개`);
-  for (const reply of comment.replies) {
-    console.log(`    └ ${reply.id}번 "${reply.content}"`);
-  }
-}
+console.log(`함께 읽기 — 게시물 ${posts.length}개에 질의 ${sent}번`);
 
 await prisma.$disconnect();

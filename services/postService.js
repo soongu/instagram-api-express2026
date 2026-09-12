@@ -14,16 +14,25 @@ function flatten({ author, images, ...post }) {
   };
 }
 
+// 쓸 칸만 골라서 받는다 — 안 쓰는 칸은 아예 안 실어 온다.
 // 사진은 언제나 차례대로 읽는다 — 캐러셀이 넘기는 순서가 이 차례다.
-const withRelations = {
-  author: true,
-  images: { orderBy: { imgOrder: 'asc' } },
+const postFields = {
+  id: true,
+  authorId: true,
+  postAlt: true,
+  content: true,
+  minutesAgo: true,
+  likeCount: true,
+  commentCount: true,
+  createdAt: true,
+  author: { select: { username: true, profileImage: true } },
+  images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' } },
 };
 
 export async function getPosts({ username, limit }) {
   const posts = await prisma.post.findMany({
     where: { author: { username } },
-    include: withRelations,
+    select: postFields,
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
@@ -34,7 +43,7 @@ export async function getPosts({ username, limit }) {
 export async function getPost(id) {
   const post = await prisma.post.findUnique({
     where: { id },
-    include: withRelations,
+    select: postFields,
   });
 
   if (!post) throw new NotFoundError('그런 게시물은 없어요');
@@ -44,18 +53,19 @@ export async function getPost(id) {
 
 export async function createPost({ imageUrls, ...data }) {
   try {
-    const post = await prisma.post.create({ data });
-
-    // 사진은 게시물의 칸이 아니라 딴 표의 줄이라, 게시물이 생겨 번호를 받은 «뒤에» 넣는다.
-    await prisma.postImage.createMany({
-      data: imageUrls.map((imageUrl, order) => ({
-        postId: post.id,
-        imageUrl,
-        imgOrder: order + 1,
-      })),
+    // 게시물과 사진을 «한 번의 부탁» 으로 만든다.
+    // 사진이 없는 게시물이 잠깐이라도 남는 일이 아예 안 생긴다.
+    const post = await prisma.post.create({
+      data: {
+        ...data,
+        images: {
+          create: imageUrls.map((imageUrl, order) => ({ imageUrl, imgOrder: order + 1 })),
+        },
+      },
+      select: postFields,
     });
 
-    return getPost(post.id);
+    return flatten(post);
   } catch (error) {
     if (error.code === 'P2003') throw new BadRequestError('그런 사용자는 없어요');
     throw error;
@@ -67,7 +77,7 @@ export async function updatePost(id, data) {
     const post = await prisma.post.update({
       where: { id },
       data,
-      include: withRelations,
+      select: postFields,
     });
 
     return flatten(post);
@@ -82,7 +92,7 @@ export async function removePost(id) {
   try {
     const post = await prisma.post.delete({
       where: { id },
-      include: withRelations,
+      select: postFields,
     });
 
     return flatten(post);

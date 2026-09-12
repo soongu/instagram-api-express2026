@@ -63,9 +63,9 @@ const seedFrozen = () =>
   execFileSync(process.execPath, [P('snapshots/p2-33-final/seed.js')],
     { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
-/** 이 회차가 고친 시드 — 학생이 실제로 돌리는 그 파일이다. */
+/** 이 회차가 고친 시드 — 🚨 `p2-35` 가 중첩 쓰기로 다시 고치므로 그 «시점» 을 얼려서 본다. */
 const seedLive = () =>
-  execFileSync(process.execPath, [P('seed.js')],
+  execFileSync(process.execPath, [P('snapshots/p2-34-final/seed.js')],
     { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
 beforeAll(async () => {
@@ -281,7 +281,8 @@ describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원�
   });
 
   it('🔴 원댓글만 걸러 읽으면 답글이 딸려 온다', async () => {
-    const out = execFileSync(process.execPath, [P('check.js')],
+    // 🚨 `p2-35` 가 `check.js` 를 질의 «세는» 도구로 다시 쓴다 — 그 «시점» 을 얼려서 돌린다.
+    const out = execFileSync(process.execPath, [P('snapshots/p2-34-final/check.js')],
       { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
     expect(out).toContain('comments 표의 줄은 모두 12개예요.');
@@ -472,8 +473,12 @@ describe('인용이 코드베이스와 맞는가', () => {
   ].map((f) => read(P(f)));
 
   const jsSources = () => [
-    'services/postService.js', 'services/likeService.js', 'schemas/postSchema.js',
-    'routes/posts.js', 'seed.js', 'db.js', 'errors.js', 'check.js',
+    // 🚨 `p2-35` 가 $transaction·중첩 쓰기·select 로 이 셋을 고친다 — 그 «시점» 을 얼려서 본다.
+    'snapshots/p2-34-final/services/postService.js',
+    'snapshots/p2-34-final/services/likeService.js',
+    'snapshots/p2-34-final/seed.js',
+    'snapshots/p2-34-final/check.js',
+    'schemas/postSchema.js', 'routes/posts.js', 'db.js', 'errors.js',
     'data/posts.js', 'data/comments.js',
     // Step 3 시점 시드 — 그때는 post_likes 가 아직 없어 비우기 목록이 한 칸 짧다.
     'snapshots/p2-34/seed.step3.js',
