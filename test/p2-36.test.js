@@ -338,6 +338,12 @@ describe('인용이 코드베이스와 맞는가', () => {
     // 🔑 교안은 «바꾸기 전» 코드도 인용한다 — 그것도 실재하는 코드다.
     //    이 회차 시작 시점(p2-21 최종판)이 얼려져 있으니 그것을 코퍼스에 함께 둔다.
     '../instagram-react/src/services/p2-21.final.api.snapshot.js',
+    // 🔑 그리고 이 회차가 «만든» 판도 얼려 둔다 (2026-09-13 `p2-37`).
+    //    `p2-37` 이 `baseURL` 을 환경변수로 빼내므로 live 파일에는 이 회차가 인용한
+    //    `baseURL: "http://localhost:3000/api"` 가 없어진다. 그 인용은 여전히 참이고
+    //    (이 회차가 실제로 그렇게 적게 했다) 소급 수정할 대상이 아니라, 그 시점
+    //    파일을 코퍼스에 두는 것이 맞다 — `p2-36` 이 `p2-34` 에 해준 것과 같은 처리다.
+    '../instagram-react/src/services/p2-36.final.api.snapshot.js',
     '../instagram-react/src/hooks/p2-21.final.usePosts.snapshot.js',
     '../instagram-react/src/components/p2-21.final.FeedList.snapshot.jsx',
     '../instagram-react/src/components/p2-21.final.FeedItemActions.snapshot.jsx',
