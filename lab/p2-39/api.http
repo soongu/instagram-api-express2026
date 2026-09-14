@@ -5,6 +5,9 @@
 ### 분류 목록
 GET http://localhost:3000/api/categories
 
+### 이웃 목록 — 로그인이 없어서 글을 올릴 때 자기 닉네임을 여기서 고른다
+GET http://localhost:3000/api/neighbors
+
 ### 나눔 글 목록 — 한 분류만, 한 번에 10개씩
 GET http://localhost:3000/api/shares?categoryId=1&limit=10
 
