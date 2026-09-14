@@ -14,7 +14,7 @@ GET http://localhost:3000/api/shares?categoryId=1&limit=10
 ### 다음 목록 — 앞 응답의 마지막 나눔 번호를 커서로
 GET http://localhost:3000/api/shares?categoryId=1&limit=10&cursor=11
 
-### 나눔 하나
+### 나눔 상세
 GET http://localhost:3000/api/shares/3
 
 ### 나눔 올리기
