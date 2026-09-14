@@ -260,6 +260,12 @@ describe('p2-39 ⑥ 과제 [응용] — 인스타그램 프로필', () => {
     expect(sql).not.toMatch(/DROP/);
   });
 
+  // 답안이 name 에 물음표를 붙인 이유 — 비워둘 수 없는 칸은 줄이 이미 있으면 못 더한다.
+  it('줄이 이미 있는 표에 비워둘 수 없는 칸을 기본값 없이 더하면 막힌다 (23502)', async () => {
+    await expect(db.query('ALTER TABLE users ADD COLUMN nickname2 VARCHAR(50) NOT NULL'))
+      .rejects.toMatchObject({ code: '23502' });
+  });
+
   it('이미 있는 회원은 이름이 비어 있어도 들어간다', async () => {
     await db.query(`INSERT INTO users (username) VALUES ('nayeon')`);
     const { rows } = await db.query(`SELECT name FROM users WHERE username = 'nayeon'`);
@@ -270,6 +276,13 @@ describe('p2-39 ⑥ 과제 [응용] — 인스타그램 프로필', () => {
     await db.query('INSERT INTO follows (follower_id, following_id) VALUES (1, 2)');
     await expect(db.query('INSERT INTO follows (follower_id, following_id) VALUES (1, 2)'))
       .rejects.toMatchObject({ code: '23505' });
+  });
+
+  // 답안 「이렇게 하면 더 좋아요」 — @@unique 는 같은 쌍만 막고 자기 자신 팔로우는 못 막는다.
+  it('자기 자신을 팔로우하는 줄은 표가 막지 않는다', async () => {
+    await db.query('INSERT INTO follows (follower_id, following_id) VALUES (1, 1)');
+    const { rows } = await db.query('SELECT count(*)::int AS n FROM follows WHERE follower_id = following_id');
+    expect(rows[0].n).toBe(1);
   });
 
   it('팔로워 수는 칸이 없어도 follows 에서 셀 수 있다', async () => {
@@ -322,5 +335,58 @@ describe('p2-39 ⑦ 과제 [기초] 답안 — 규칙을 표에서 막는 판', 
   it('신청하지 않은 이웃을 받을 사람으로 고르면 표가 막는다 (23503)', async () => {
     await expect(db.query('UPDATE shares SET receiver_id = 3 WHERE id = 1'))
       .rejects.toMatchObject({ code: '23503', constraint: 'shares_id_receiver_id_fkey' });
+  });
+
+  // 답안이 대가로 드는 장면 — 받을 사람으로 골린 신청 줄은 나눔 표가 붙잡고 있어 못 지운다.
+  it('받을 사람으로 골린 신청은 지울 수 없다 (23001 · RESTRICT) — 실습 2 의 취소와 부딪힌다', async () => {
+    await expect(db.query('DELETE FROM share_requests WHERE share_id = 1 AND neighbor_id = 2'))
+      .rejects.toMatchObject({ code: '23001', constraint: 'shares_id_receiver_id_fkey' });
+  });
+});
+
+describe('p2-39 ⑧ 답안이 코드베이스와 같다', () => {
+  const ANSWERS = P('../../part2/6-fullstack-join/p2-39-project-plan-answers.md');
+  const blocksOf = (lang) => {
+    const out = []; let cur = null;
+    for (const l of read(ANSWERS).split('\n')) {
+      if (cur === null && l.trim() === '```' + lang) cur = [];
+      else if (cur !== null && l.trim() === '```') { out.push(cur); cur = null; }
+      else if (cur !== null) cur.push(l);
+    }
+    return out;
+  };
+  const squash = (t) => t.trim().replace(/\s+/g, ' ');
+  const missing = (lang, sources) => {
+    const src = new Set(sources.flatMap((t) => t.split('\n').map(squash)));
+    return blocksOf(lang).flat().map(squash).filter((l) => l && l !== '...' && !src.has(l));
+  };
+
+  it('```prisma 줄이 전부 과제판 스키마들에 실재한다', () => {
+    const files = [SCHEMA, 'lab/p2-39/homework1.prisma', 'lab/p2-39/homework1-strict.prisma', 'lab/p2-39/homework2.prisma'];
+    expect(blocksOf('prisma').length).toBeGreaterThan(0);
+    expect(missing('prisma', files.map((f) => read(P(f))))).toEqual([]);
+  });
+
+  it('```http 줄이 전부 homework2.http 에 실재한다', () => {
+    expect(missing('http', [read(P('lab/p2-39/homework2.http'))])).toEqual([]);
+  });
+
+  it('```sql 줄이 전부 과제판의 실제 migrate diff 출력에 있다', () => {
+    const sql = prismaCli(['migrate', 'diff', '--from-empty', '--to-schema', P('lab/p2-39/homework1.prisma'), '--script']);
+    expect(blocksOf('sql').length).toBeGreaterThan(0);
+    expect(missing('sql', [sql])).toEqual([]);
+  });
+
+  it('[응용] 「지우는 줄은 하나도 없다」 — 지금 스키마에서 과제판까지의 SQL 에 DROP 이 없다', () => {
+    const sql = prismaCli(['migrate', 'diff', '--from-schema', P('prisma/schema.prisma'), '--to-schema', P('lab/p2-39/homework2.prisma'), '--script']);
+    expect(sql).not.toMatch(/DROP/);
+  });
+
+  it('[응용] 화면이 받던 값 여섯이 가짜 서버 profiles 에 실제로 있다', () => {
+    // 🚨 작업트리가 아니라 `main` 에서 읽는다 — 이 세션 동안 React 작업트리가 두 번 다른 회차로
+    //    체크아웃됐고, 그때마다 작업트리를 읽는 축이 거짓 빨강을 냈다(p2-18 판에는 profiles 가 없다).
+    const db = JSON.parse(execFileSync('git', ['-C', P('../instagram-react'), 'show', 'main:mock/db.json'], { encoding: 'utf8' }));
+    expect(Object.keys(db.profiles[0]).filter((k) => k !== 'id').sort())
+      .toEqual(['followerCount', 'followingCount', 'name', 'postCount', 'profileImage', 'username']);
   });
 });
