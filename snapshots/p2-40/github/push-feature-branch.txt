@@ -1,0 +1,7 @@
+remote:
+remote: Create a pull request for 'docs/templates' on GitHub by visiting:
+remote:      https://github.com/soongu/p2-40-ruleset-probe/pull/new/docs/templates
+remote:
+To github.com:soongu/p2-40-ruleset-probe.git
+ * [new branch]      docs/templates -> docs/templates
+branch 'docs/templates' set up to track 'origin/docs/templates'.

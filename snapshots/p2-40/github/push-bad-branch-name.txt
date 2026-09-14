@@ -1,0 +1,8 @@
+remote: error: GH013: Repository rule violations found for refs/heads/wip-test.
+remote: Review all repository rules at https://github.com/soongu/p2-40-ruleset-probe/rules?ref=refs%2Fheads%2Fwip-test
+remote:
+remote: - Cannot create ref due to creations being restricted.
+remote:
+To github.com:soongu/p2-40-ruleset-probe.git
+ ! [remote rejected] wip-test -> wip-test (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:soongu/p2-40-ruleset-probe.git'

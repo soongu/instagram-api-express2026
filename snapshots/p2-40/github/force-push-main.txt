@@ -1,0 +1,10 @@
+remote: error: GH013: Repository rule violations found for refs/heads/main.
+remote: Review all repository rules at https://github.com/soongu/p2-40-ruleset-probe/rules?ref=refs%2Fheads%2Fmain
+remote:
+remote: - Cannot force-push to this branch
+remote:
+remote: - Changes must be made through a pull request.
+remote:
+To github.com:soongu/p2-40-ruleset-probe.git
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:soongu/p2-40-ruleset-probe.git'
