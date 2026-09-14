@@ -26,7 +26,9 @@ const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
 const GATE_URL = 'postgresql://postgres:postgres@localhost:5432/p237_gate';
-const ENV = { DATABASE_URL: GATE_URL };
+// `p2-38` 부터 `app.js` 가 허락 목록을 환경에서 받는다 — 학생이 `--env-file`
+// 로 넣어주는 그 자리에 게이트가 자기 값을 넣는다(`boot.js` 가 정한 방식).
+const ENV = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:5173' };
 const PORT = 3462;
 
 const read = (p) => readFileSync(p, 'utf8');
@@ -98,8 +100,12 @@ describe('축 ① — 문이 우리 프론트만으로 좁혀졌다', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe(OURS);
   });
 
-  it('`app.js` 가 허락 목록을 «배열» 로 적어뒀다', () => {
-    const src = read(P('app.js'));
+  // 🚨 `p2-38` 이 허락 목록을 `CORS_ORIGIN` 으로 빼면서 이 «줄의 모양» 이 바뀐다.
+  //    동작(무엇이 되비쳐지는가)은 그대로라 위아래 축은 live 로 두고, 글자 모양을
+  //    보는 이 축만 «그 시점 스냅숏» 으로 얼려 떼어낸다 — 이 회차 자신이 `p2-36`
+  //    에 쓴 그 방법이다. live 로 두면 뒷 회차가 이 축을 거짓으로 빨갛게 만든다.
+  it('`app.js` 가 허락 목록을 «배열» 로 적어뒀다 (그 시점 판)', () => {
+    const src = read(P('snapshots/p2-37.final.app.js'));
     expect(src).not.toMatch(/app\.use\(cors\(\)\)/);
     expect(src).toMatch(/origin:\s*\[/);
     expect(src).toContain(OURS);

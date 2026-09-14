@@ -5,6 +5,7 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
+    "build": "prisma generate && prisma migrate deploy",
     "dev": "node --watch --env-file=.env app.js",
     "seed": "node --env-file=.env seed.js",
     "test": "vitest run"
