@@ -615,6 +615,8 @@ describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => 
   //    워킹 트리 대조는 이 회차 교안이 틀렸다고 말하게 되는데, 그건 거짓이다.
   const real = (rel) =>
     execFileSync('git', ['show', `code/p2-24:${rel}`], { encoding: 'utf-8' });
+  const realLab = (rel) =>
+    readFileSync(new URL(`../${rel}`, import.meta.url), 'utf-8');
 
   it('🔴 교안의 `app.js` 완성본이 코드베이스와 byte 동일하다', () => {
     // 🚨 이 검사는 뒤늦게 생겼다 — 초고에 «완성본 전체» 블록이 아예 없었고
@@ -674,6 +676,20 @@ describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => 
     dropLocal(local);
   });
 
+  it('교안의 실습 1~3 해설 및 모델 여섯이 코드베이스와 같다', () => {
+    const pairs = [
+      ['// ~/instagram-api/lab/practice1.js', 'lab/p2-24/practice1.js'],
+      ['// ~/instagram-api/lab/Story.js', 'lab/p2-24/Story.js'],
+      ['// ~/instagram-api/lab/practice2.js', 'lab/p2-24/practice2.js'],
+      ['// ~/instagram-api/lab/Book.js', 'lab/p2-24/Book.js'],
+      ['// ~/instagram-api/lab/practice3.js', 'lab/p2-24/practice3.js'],
+      ['// ~/instagram-api/lab/practice4.js', 'lab/p2-24/practice4.js'],
+    ];
+    for (const [head, path] of pairs) {
+      expect(blocksOf(LEC, head).at(-1), head).toBe(realLab(path));
+    }
+  });
+
   it('답안의 완성본 넷이 코드베이스와 같다', () => {
     const pairs = [
       ['// ~/instagram-api/lab/Comment.js', 'lab/p2-24/Comment.js'],
@@ -683,6 +699,7 @@ describe('교안·답안 인용이 코드베이스와 byte 동일한가', () => 
     ];
     for (const [head, path] of pairs) {
       expect(blocksOf(ANS, head).at(-1), head).toBe(real(path));
+      expect(blocksOf(ANS, head).at(-1), head).toBe(realLab(path));
     }
   });
 
