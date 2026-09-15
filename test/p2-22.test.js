@@ -1,7 +1,8 @@
 // 내부 검증 전용 — 교안에 한 줄도 인용하지 않는다.
 import { describe, it, expect, afterEach } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { boot } from './helpers/boot.js';
 
@@ -164,7 +165,9 @@ describe('실습·과제 — 학생이 만드는 것', () => {
 
   it('실습2 — 줄 순서를 뒤집어도 둘 다 걸린다 (마디 수가 다르므로)', async () => {
     // 교안 토글이 주장하는 것을 실제로 잰다.
-    server = await boot('lab/p2-22/practice2.js', { port: 4000 });
+    // 🚨 2026-09-15 전까지 이 축은 «안 뒤집은» lab 파일을 띄우고 있었다 — 이름만
+    //    「뒤집어도」였고 실제로는 아무것도 안 뒤집었다. 뒤집은 판을 따로 얼린다.
+    server = await boot('snapshots/p2-22.practice2.swapped.js', { port: 4000 });
     const list = await (await at('/api/profiles')).json();
     const one = await (await at('/api/profiles/jaehoon')).json();
     expect(Array.isArray(list)).toBe(true);
@@ -186,7 +189,7 @@ describe('실습·과제 — 학생이 만드는 것', () => {
     server = await boot('lab/p2-22/homework1.js', { port: 4000 });
     expect(await (await at('/api/stories')).json()).toHaveLength(4);
     const codes = [];
-    for (const p of ['/api/stories', '/api/stories/2', '/api/stories/99', '/api/authors']) {
+    for (const p of ['/api/stories', '/api/stories/2', '/api/stories/99', '/api/highlights']) {
       codes.push((await at(p)).status);
     }
     expect(codes).toEqual([200, 200, 404, 404]);
@@ -270,6 +273,72 @@ describe('교안 인용이 코드베이스와 byte 동일한가', () => {
     const real = readFileSync(new URL('../snapshots/p2-22.data-posts.js', import.meta.url), 'utf-8');
     expect(quoted).toHaveLength(1);
     expect(quoted[0]).toBe(real);
+  });
+
+  // 🚨 2026-09-15 낭독 retrofit 에서 추가. 이 축이 없던 동안 교안 실습 해설 셋이
+  //    lab 파일과 따로 놀았다 — 실습 1 은 요구사항이 「자기 이름」인데 해설이 이름이
+  //    아닌 문장을 돌려줬고, 실습 3 은 책 목록이 과제 답안과 달랐다.
+  //    lab/p2-22/ 는 회차별 폴더라 자라지 않으므로 워킹 트리를 읽어도 된다.
+  const ANS = '../../../part2/4-node-backend/p2-22-express-start-answers.md';
+  const lab = (name) => readFileSync(new URL(`../lab/p2-22/${name}.js`, import.meta.url), 'utf-8');
+
+  for (const name of ['practice1', 'practice2', 'practice3']) {
+    it(`교안 ${name} 해설 코드가 lab 파일과 같다`, () => {
+      const quoted = blocksOf(LEC, `// ~/instagram-api/lab/${name}.js`);
+      expect(quoted).toHaveLength(1);
+      expect(quoted[0]).toBe(lab(name));
+    });
+  }
+
+  it('답안 homework1 코드가 lab 파일과 같다', () => {
+    const quoted = blocksOf(ANS, '// ~/instagram-api/lab/homework1.js');
+    expect(quoted).toHaveLength(1);
+    expect(quoted[0]).toBe(lab('homework1'));
+  });
+
+  it('답안 homework2 완성본(마지막 블록)이 lab 파일과 같다', () => {
+    const quoted = blocksOf(ANS, '// ~/instagram-api/lab/homework2.js');
+    expect(quoted.at(-1)).toBe(lab('homework2'));
+  });
+
+  it('교안 Step 6 의 두 .http 블록을 이으면 스냅숏과 같다', () => {
+    const md = readFileSync(new URL(LEC, import.meta.url), 'utf-8');
+    const http = [...md.matchAll(/```\n(###[\s\S]*?)```/g)].map((m) => m[1]);
+    const real = readFileSync(new URL('../snapshots/p2-22.posts.http', import.meta.url), 'utf-8');
+    expect(`${http[0]}\n${http[1]}`).toBe(real);
+  });
+
+  it('교안 실습 3 해설의 .http 가 스냅숏과 같다', () => {
+    const md = readFileSync(new URL(LEC, import.meta.url), 'utf-8');
+    const http = [...md.matchAll(/```\n(###[\s\S]*?)```/g)].map((m) => m[1]);
+    const real = readFileSync(new URL('../snapshots/p2-22.books.http', import.meta.url), 'utf-8');
+    expect(http.filter((b) => b.includes('/api/books'))).toEqual([real]);
+  });
+});
+
+describe('포트를 이미 누가 쓰고 있으면 — Express 5 는 «에러 없이» 끝난다', () => {
+  // 🚨 2026-09-15 낭독 retrofit 에서 교안·답안의 거짓을 잡은 축이다.
+  //    교안은 뒤에 띄운 쪽이 `Error: listen EADDRINUSE` 를 남기고 끝난다고 적었고,
+  //    답안 채점표도 「EADDRINUSE 오류가 나면서」라고 적었다. Express 5 의
+  //    `app.listen(port, cb)` 는 cb 를 `server.once('error', cb)` 에도 건다
+  //    (express/lib/application.js). 우리 cb 는 에러 인자를 안 보고 인사만 찍으니
+  //    학생 화면에는 «기다리고 있어요» 한 줄이 찍히고 곧바로 프롬프트가 돌아온다.
+  //    그리고 브라우저에서 보이는 것은 «먼저 띄운» 서버의 답이다.
+  it('뒤에 띄운 쪽은 인사 한 줄만 찍고 exit 0, 앞에 띄운 쪽이 계속 답한다', async () => {
+    server = await boot('lab/p2-22/practice1.js', { port: 4000 });
+    const env = { ...process.env };
+    delete env.NODE_ENV;
+    delete env.VITEST;
+    const second = spawnSync(process.execPath, ['lab/p2-22/practice2.js'], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)), env, encoding: 'utf-8', timeout: 5000,
+    });
+    expect(second.status).toBe(0);
+    expect(second.stdout.trim()).toBe('실습 서버가 4000번 포트에서 기다리고 있어요.');
+    expect(second.stderr).toBe('');
+    const res = await fetch(`${server.base}/api/profiles/minji`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+    expect(await res.text()).toContain('Cannot GET /api/profiles/minji');
   });
 });
 
