@@ -106,13 +106,13 @@ describe('착수 상태 — 「지난 시간 그대로」에서 출발한다', (
     expect(r.rows[0]).toEqual({ p: 5, c: 9 });
   });
 
-  it('🔴 교안이 말하는 「주소 다섯 개」가 실제 수와 같다', () => {
+  it('🔴 교안이 말하는 「주소 5개」가 실제 수와 같다', () => {
     // 🚨 p2-23·p2-25 가 두 번 틀린 자리다(`/` 를 세느냐 마느냐). 게시물 주소는 다섯,
     //    파일 전체 라우트는 여섯이다. 교안은 «게시물 주소» 다섯을 말한다.
     const app = read(P230_APP);
     expect(app.match(/^app\.(?:get|post|patch|delete)\('\/api\/posts/gm)).toHaveLength(5);
     expect(app.match(/^app\.(?:get|post|patch|delete)\(/gm)).toHaveLength(6);
-    expect(read(LECTURE)).toContain('주소 다섯 개');
+    expect(read(LECTURE)).toContain('주소 5개');
   });
 
   it('🔴 `:id` 를 쓰는 주소가 셋이고, 숫자로 바꿔주는 줄도 셋이다', () => {
