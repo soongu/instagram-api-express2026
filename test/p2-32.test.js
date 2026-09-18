@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
+import { sendAll, changedFields } from './helpers/send-http.js';
 import { setupP229Bookstore } from '../sql/p2-29/setup.mjs';
 import { setupP230 } from '../sql/p2-30/setup.mjs';
 import { HttpError, NotFoundError, BadRequestError } from '../errors.js';
@@ -139,6 +140,20 @@ describe('최종판 — 실제 서버', () => {
     const body = await res.json();
     expect(body.username).toBe('jaehoon');
     expect(body.id).toBeTypeOf('number');
+  });
+
+  it('🔴 스키마가 받는 칸 5개와 「받지 않아요」로 적은 칸을 합치면 게시물의 칸 전부다', async () => {
+    // Step 5 — 「번호·하트 수·댓글 수·작성 시각·고친 시각은 저장할 때 채워지니까 받지 않아요」.
+    // 🔀 2026-09-19 audit — 고친 시각(`updatedAt`)이 생겼고, 원래부터 빠져 있던 댓글 수도 함께 적었다.
+    const { postCreateSchema } = await import('../snapshots/p2-32-final/schemas/postSchema.js');
+    const res = await fetch(`${server.base}/api/posts`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ username: 'jaehoon', postImage: 'a.jpg' }),
+    });
+    const body = await res.json();
+    const notTaken = ['id', 'likeCount', 'commentCount', 'createdAt', 'updatedAt'];
+    expect([...Object.keys(postCreateSchema.shape), ...notTaken].sort()).toEqual(Object.keys(body).sort());
+    expect(read(LECTURE)).toContain('번호·하트 수·댓글 수·작성 시각·고친 시각은 저장할 때 채워지니까 받지 않아요.');
   });
 
   it('🔴 POST 에 id 를 실어 보내도 서버가 정한 번호로 만들어진다 — 주입 구멍이 막혔다', async () => {
@@ -291,6 +306,27 @@ describe('Step 4 중간 상태 — 실제 서버', () => {
       message: '보낸 내용이 규칙에 안 맞아요',
       details: { errors: [], properties: { postImage: { errors: ['Invalid input: expected string, received undefined'] } } },
     });
+    await server.stop(); server = null;
+  });
+
+  it('🔴 요청 12개를 시작 판·완성 판에 보내면 「사진 없이 올리기」 하나와 새 게시물의 번호·두 시각만 달라진다', async () => {
+    // 교안 마지막 Step — 「시작할 때 봐둔 답과 달라지는 것은 「사진 없이 올리기」 하나예요 … 나머지 11개는
+    // 새로 올린 게시물의 번호와 두 시각만 빼면 답이 그대로여야 해요」.
+    // 🔀 2026-09-19 audit — 「번호와 시각」을 「번호와 두 시각」으로 맞추면서 그 주장 전체를 잠근다.
+    // 요청 파일은 p2-30 부터 한 글자도 안 바뀌었다(`code/p2-30`·`code/p2-31`·`code/p2-32` 가지가 같다).
+    const http = execFileSync('git', ['show', 'code/p2-31:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
+    await bootApp('snapshots/p2-31-final/app.js', 3634);
+    const before = await sendAll(http, server.base);
+    await bootApp('snapshots/p2-32-final/app.js', 3635);
+    const after = await sendAll(http, server.base);
+    expect(before).toHaveLength(12);
+    expect(changedFields(before, after)).toEqual([
+      '게시물 올리기: id,createdAt,updatedAt',
+      '사진 없이 올리기: message,details',
+      '방금 올린 게시물의 하트 수 고치기: id,createdAt,updatedAt',
+      '방금 올린 게시물 지우기: id,createdAt,updatedAt',
+    ]);
+    expect(read(LECTURE)).toContain('나머지 11개는 새로 올린 게시물의 번호와 두 시각만 빼면 답이 그대로여야 해요.');
     await server.stop(); server = null;
   });
 });

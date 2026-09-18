@@ -16,6 +16,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
+import { sendAll, changedFields } from './helpers/send-http.js';
 import { setupP229Bookstore } from '../sql/p2-29/setup.mjs';
 import { setupP230 } from '../sql/p2-30/setup.mjs';
 
@@ -217,6 +218,47 @@ describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안
     expect(await contractHolds(server.base)).toEqual(CONTRACT);
   });
 
+  it('🔴 요청 12개를 나누기 전·뒤 서버에 보내면 달라지는 값은 새 게시물의 번호·작성 시각·고친 시각 셋뿐이다', async () => {
+    // 교안 「시작하기 전에」의 비교 기준 — 「달라지는 값은 딱 셋 … 그 세 값 말고는 글자 하나까지 같아야 해요」.
+    // 🔀 2026-09-19 audit — 게시물에 `updatedAt` 이 생겨 고치기 요청이 그 값을 바꾼다. 둘이던 것이 셋이 됐다.
+    // 요청 파일은 이 회차가 안 고친 그것(`code/p2-30` 가지)을 보낸다 — 위 「한 글자도 안 고쳤다」 축과 같은 출처다.
+    const http = execFileSync('git', ['show', 'code/p2-30:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
+    await bootApp('snapshots/p2-30.final.app.js', 3508);
+    const before = await sendAll(http, server.base);
+    await bootApp('snapshots/p2-31-final/app.js', 3509);
+    const after = await sendAll(http, server.base);
+    expect(before).toHaveLength(12);
+    expect(changedFields(before, after)).toEqual([
+      '게시물 올리기: id,createdAt,updatedAt',
+      '방금 올린 게시물의 하트 수 고치기: id,createdAt,updatedAt',
+      '방금 올린 게시물 지우기: id,createdAt,updatedAt',
+    ]);
+    // 고친 시각은 번호·작성 시각과 «따로» 움직인다 — 고치기 응답에서 작성 시각과 갈린다
+    const patched = after.find((r) => r.title === '방금 올린 게시물의 하트 수 고치기');
+    expect(patched.body.updatedAt).not.toBe(patched.body.createdAt);
+    expect(read(LECTURE)).toContain('번호(`id`), 작성 시각(`createdAt`), 고친 시각(`updatedAt`)');
+    expect(read(LECTURE)).toContain('**그 세 값 말고는 글자 하나까지 같아야 해요.**');
+  });
+
+  it('🔴 시드를 다시 넣으면 게시물 5개의 두 시각만 «모두» 바뀐다 — 처음 봐둔 답과 그 시각을 빼고 비교하는 이유', async () => {
+    // 교안 「시작하기 전에」 — 「시드는 실행할 때마다 게시물 5개의 두 시각을 새로 매기니까, 그 뒤로는 처음 봐둔 답과
+    // 비교할 때 그 시각들도 빼고 보세요」. 두 낭독이 함께 잡은 모순(2026-09-19)을 잠근다 — 답을 «새로» 받게 하면
+    // 라우트가 망가진 채 끊긴 경우 망가진 답이 기준이 된다(재낭독이 잡았다). 그래서 «시각만» 달라지는지까지 본다.
+    await bootApp('snapshots/p2-31-final/app.js', 3510);
+    const before = await (await fetch(`${server.base}/api/posts`)).json();
+    await new Promise((r) => setTimeout(r, 20));   // 같은 밀리초에 다시 넣지 않게
+    seed();
+    const after = await (await fetch(`${server.base}/api/posts`)).json();
+    expect(after.map((p) => p.id)).toEqual(before.map((p) => p.id));
+    after.forEach((p, i) => {
+      expect(p.createdAt, `${p.id}번`).not.toBe(before[i].createdAt);
+      expect(p.updatedAt, `${p.id}번`).not.toBe(before[i].updatedAt);
+    });
+    const strip = ({ createdAt, updatedAt, ...rest }) => rest;
+    expect(after.map(strip)).toEqual(before.map(strip));
+    expect(read(LECTURE)).toContain('게시물 5개의 두 시각을 새로 매기니까, 그 뒤로는 처음 봐둔 답과 비교할 때 그 시각들도 빼고 보세요.');
+  });
+
   it('🔴 `app.js` 에 Prisma 도 `P2025` 도 한 번도 안 나온다', () => {
     const app = read(P('snapshots/p2-31-final/app.js'));
     expect(app.match(/prisma/gi)).toBeNull();
@@ -353,6 +395,23 @@ describe('lab — 서점과 댓글도 같은 모양으로 선다', () => {
         expect((await fetch(`${server.base}/api/comments/${bad}`, { method: 'DELETE' })).status, bad).toBe(404);
       }
       expect((await fetch(`${server.base}/api/nope`)).status).toBe(404);
+
+      // 🔀 2026-09-19 audit — 답안이 보여준 목록 첫 항목이 실제 첫 항목과 같다(시각 두 칸의 값만 빼고)
+      const list = await (await fetch(`${server.base}/api/comments`)).json();
+      const shown = JSON.parse(blocksOf(ANSWERS, 'json').find((b) => b.includes('"저도 가봤어요"')));
+      expect(Object.keys(shown)).toEqual(Object.keys(list[0]));
+      expect(shown).not.toHaveProperty('minutesAgo');
+      expect({ ...shown, createdAt: null, updatedAt: null }).toEqual({ ...list[0], createdAt: null, updatedAt: null });
+      // 한 번도 안 고친 댓글이라 두 시각이 같다 — 답안이 이것을 확인 기준으로 준다
+      expect(list[0].updatedAt).toBe(list[0].createdAt);
+      expect(shown.updatedAt).toBe(shown.createdAt);
+      // 「시드를 마지막으로 실행한 시각에서 8분을 뺀 값」 — 1분을 뺀 3번 댓글과 7분 차이다
+      const gap = Date.parse(list[2].createdAt) - Date.parse(list[0].createdAt);
+      expect(Math.abs(gap - 7 * 60 * 1000)).toBeLessThan(1000);
+      // 교안의 날짜 흐름 — 댓글 updated_at 마이그레이션(p2-29 과제) 뒤, 정규화 마이그레이션(p2-33) 앞
+      expect(Date.parse(shown.createdAt)).toBeGreaterThan(Date.parse('2026-09-30T11:49:26Z'));
+      expect(Date.parse(shown.createdAt)).toBeLessThan(Date.parse('2026-10-01T12:03:33Z'));
+      expect(read(ANSWERS)).toContain('8분을 뺀 값');
     } finally { if (server) { await server.stop(); server = null; } copies.forEach(dropCopy); }
     expect(read(P('lab/p2-31/commentService.js')).match(/\bres\b/g)).toBeNull();
     expect(read(P('lab/p2-31/commentRoutes.js')).match(/prisma/gi)).toBeNull();
