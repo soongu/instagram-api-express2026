@@ -40,10 +40,10 @@ const prismaCli = (args, env = {}) =>
 
 /** 이 회차가 만드는 마이그레이션 — 착수 상태 위에 이것만 얹는다. */
 const P234_MIGRATIONS = [
-  '20260911142735_add_post_images',
-  '20260911142828_move_images_to_table',
-  '20260911143803_add_comment_replies',
-  '20260911144541_add_post_likes',
+  '20261001142735_add_post_images',
+  '20261001142828_move_images_to_table',
+  '20261001143803_add_comment_replies',
+  '20261001144541_add_post_likes',
 ];
 
 async function applyRoundMigrations() {

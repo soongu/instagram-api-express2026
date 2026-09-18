@@ -21,7 +21,6 @@ const postFields = {
   authorId: true,
   postAlt: true,
   content: true,
-  minutesAgo: true,
   likeCount: true,
   commentCount: true,
   createdAt: true,

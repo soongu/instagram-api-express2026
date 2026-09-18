@@ -38,10 +38,10 @@ model Post {
   author       User      @relation(fields: [authorId], references: [id])
   postAlt      String?   @map("post_alt")
   content      String?
-  minutesAgo   Int       @default(0) @map("minutes_ago")
   likeCount    Int       @default(0) @map("like_count")
   commentCount Int       @default(0) @map("comment_count")
   createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
   comments     Comment[]
   images       PostImage[]
   likes        PostLike[]
@@ -71,14 +71,15 @@ model PostImage {
 }
 
 model Comment {
-  id         Int    @id @default(autoincrement())
-  postId     Int    @map("post_id")
-  post       Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
-  authorId   Int    @map("author_id")
-  author     User   @relation(fields: [authorId], references: [id])
-  content    String
-  likeCount  Int    @default(0) @map("like_count")
-  minutesAgo Int    @default(0) @map("minutes_ago")
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  Int      @map("author_id")
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  likeCount Int      @default(0) @map("like_count")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   parentId Int?      @map("parent_id")
   parent   Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)

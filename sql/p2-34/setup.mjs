@@ -12,10 +12,12 @@ const MIG = new URL('../../prisma/migrations/', import.meta.url);
 /** p2-33 종료 시점까지의 마이그레이션 — 이 뒤는 이 회차가 만드는 것이다. */
 export const P233_MIGRATIONS = [
   '0_init',
-  '20260910232755_add_created_at',
-  '20260911120333_normalize_author',
-  '20260911120412_cascade_comments',
-  '20260911130714_add_user_deactivated_at',
+  // 🔀 2026-09-18 audit — p2-29 가 더한 두 칸(교안 add_updated_at · 과제 [기초] 댓글). 옛 판은 add_created_at 하나였다.
+  '20260930062755_add_updated_at',
+  '20260930114926_add_comment_updated_at',
+  '20261001120333_normalize_author',
+  '20261001120412_cascade_comments',
+  '20261001130714_add_user_deactivated_at',
 ];
 
 /** instagram 을 p2-33 종료 상태로 — users 5 · posts 5(author_id) · comments 9 · post_image 칸 하나. */

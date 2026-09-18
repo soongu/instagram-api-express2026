@@ -3,6 +3,13 @@ import { prisma } from './db.js';
 import { posts } from './data/posts.js';
 import { comments } from './data/comments.js';
 
+// 데이터 파일은 «몇 분 전» 을 적어둔다 — 언제 실행해도 방금 올라온 글처럼 들어가게.
+// 표에는 그 칸이 없으니 빼내고 작성 시각으로 바꾼다. 한 번도 안 고친 줄이라 고친 시각도 같다.
+function withTimes({ minutesAgo, ...row }) {
+  const createdAt = new Date(Date.now() - minutesAgo * 60 * 1000);
+  return { ...row, createdAt, updatedAt: createdAt };
+}
+
 // 표를 하나 만들 때마다 이 목록에 넣어야 한다.
 // 빠뜨리면 「외래 키가 걸린 표는 못 비운다」며 막힌다.
 await prisma.$executeRaw`
@@ -34,9 +41,8 @@ const idOf = (username) => users.find((user) => user.username === username).id;
 for (const { username, profileImage, images, ...post } of posts) {
   await prisma.post.create({
     data: {
-      ...post,
+      ...withTimes(post),
       authorId: idOf(username),
-      createdAt: new Date(Date.now() - post.minutesAgo * 60 * 1000),
       images: {
         create: images.map((imageUrl, order) => ({ imageUrl, imgOrder: order + 1 })),
       },
@@ -46,7 +52,7 @@ for (const { username, profileImage, images, ...post } of posts) {
 
 await prisma.comment.createMany({
   data: comments.map(({ username, replies, ...comment }) => ({
-    ...comment,
+    ...withTimes(comment),
     authorId: idOf(username),
   })),
 });
@@ -59,7 +65,7 @@ const createdComments = await prisma.comment.findMany({ orderBy: { id: 'asc' } }
 await prisma.comment.createMany({
   data: createdComments.flatMap((comment, index) =>
     (comments[index].replies ?? []).map(({ username, ...reply }) => ({
-      ...reply,
+      ...withTimes(reply),
       postId: comment.postId,
       authorId: idOf(username),
       parentId: comment.id,
