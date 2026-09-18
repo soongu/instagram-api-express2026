@@ -243,6 +243,54 @@ describe('최종판 — 실제 서버', () => {
   });
 });
 
+// ── Step 4 중간 상태 — 서비스는 던지고, 고치기 라우트는 아직 칸을 골라 꺼낸다 ──────
+// 🔑 2026-09-18 낭독 retrofit — Step 4 발췌가 고치기 라우트의 «칸 골라 꺼내기» 를 설명 없이
+//    `req.body` 통째로 바꿔, Step 6 까지 p2-30 이 막은 `id` 주입 구멍이 다시 열려 있었다.
+//    교안을 p2-31 판(골라 꺼내기 유지)으로 되돌렸으니, 그 조합이 실제로 도는지 여기서 잠근다.
+describe('Step 4 중간 상태 — 실제 서버', () => {
+  it('🔴 404 는 서비스와 parseId 가 넘긴 NotFoundError 로 나가고, id 는 여전히 걸러진다', async () => {
+    await bootApp('snapshots/p2-32-step4/app.js', 3632);
+    const b = server.base;
+    const notFound = { message: '그런 게시물은 없어요' };
+    expect((await fetch(`${b}/api/posts/1`)).status).toBe(200);
+    for (const [path, init] of [
+      ['/api/posts/999', {}],
+      ['/api/posts/abc', {}],
+      ['/api/posts/999', { method: 'PATCH', headers: JSON_HEADERS, body: '{"likeCount":3}' }],
+      ['/api/posts/999', { method: 'DELETE' }],
+    ]) {
+      const res = await fetch(`${b}${path}`, init);
+      expect(res.status, `${init.method ?? 'GET'} ${path}`).toBe(404);
+      expect(await res.json()).toEqual(notFound);
+    }
+    const patched = await fetch(`${b}/api/posts/1`, {
+      method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ id: 777, likeCount: 4 }),
+    });
+    expect(patched.status).toBe(200);
+    expect((await patched.json()).id).toBe(1);
+    // 만들기의 손 검사는 Step 6 까지 그대로다 — 요청 12개의 「사진 없이 올리기」 기준 답.
+    const noImage = await fetch(`${b}/api/posts`, {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ username: 'yuna' }),
+    });
+    expect(noImage.status).toBe(400);
+    expect(await noImage.json()).toEqual({ message: 'username과 postImage는 꼭 있어야 해요' });
+    await server.stop(); server = null;
+  });
+
+  it('🔴 완성본에서 「사진 없이 올리기」 는 같은 400 이지만 메시지와 details 가 바뀐다', async () => {
+    await bootApp('snapshots/p2-32-final/app.js', 3633);
+    const res = await fetch(`${server.base}/api/posts`, {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ username: 'yuna' }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      message: '보낸 내용이 규칙에 안 맞아요',
+      details: { errors: [], properties: { postImage: { errors: ['Invalid input: expected string, received undefined'] } } },
+    });
+    await server.stop(); server = null;
+  });
+});
+
 // ── 정적 검사 — 몸통이 실제로 가벼워졌는가 ──────────────────────────────────
 describe('최종판 — 코드 모양', () => {
   it('🔴 라우터에 `if (!post)`·`res.status(404)` 가 더는 없다', () => {
@@ -333,10 +381,6 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     "console.error(e)             # class 로 만든 것\nHttpError: 그런 게시물은 없어요\n    at file:///.../errors.js:5:12\n    ...\n    { status: 404 }\n\nconsole.error({ status: 404, message: '그런 게시물은 없어요' })   # 그냥 객체\n{ status: 404, message: '그런 게시물은 없어요' }",
     // Step 3 — app.js 나머지는 안 바뀐다는 생략 표시.
     '// ...',
-    // Step 4 — parseId·서비스가 throw 로 바뀐 «직후, Zod 이전» 중간 상태(patch 만 validateBody
-    // 가 없다). 실제로 돌려서 검증했다(404·200 둘 다 확인) 但 파일로 얼려두지 않아 SOURCES
-    // 풀에는 없다. 앞뒤 GET·DELETE 조각은 최종판과 동일해 SKETCHES 없이도 통과한다.
-    "router.patch('/:id', parseId, async (req, res) => {\n  const post = await postService.updatePost(req.postId, req.body);",
     // Step 5 — postCreateSchema 의 «첫 판»(postFields 로 리팩터링되기 전). 같은 Step 안에서
     // 스스로 대체된다 — 최종 파일에는 postFields 를 쓰는 두 번째 판만 남는다.
     "export const postCreateSchema = z.object({\n  username: z.string().min(1).max(50),\n  profileImage: z.string().optional(),\n  postImage: z.string().min(1),\n  postAlt: z.string().optional(),\n  content: z.string().optional(),\n});",
@@ -353,6 +397,7 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     'snapshots/p2-32-final/schemas/postSchema.js', 'middlewares/validate.js',
     'snapshots/p2-31-final/app.js', 'snapshots/p2-31-final/routes/posts.js',
     'snapshots/p2-31-final/services/postService.js',
+    'snapshots/p2-32-step4/routes/posts.js',
     'lab/p2-32/practice1.js', 'lab/p2-32/bookRoutes.js', 'lab/p2-32/bookService.js',
     'lab/p2-32/commentRoutes.js', 'lab/p2-32/commentService.js', 'lab/p2-32/commentSchema.js',
     'lab/p2-32/homework1.js', 'lab/p2-32/homework2.js',
