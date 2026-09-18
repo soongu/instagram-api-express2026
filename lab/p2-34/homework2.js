@@ -1,19 +1,18 @@
 // ~/instagram-api/lab/homework2.js
 import { prisma } from '../db.js';
 
-// 적어둔 숫자와 실제 줄 수를 나란히 찍는다. _count 는 딸린 것의 개수만 세어 준다.
+// 적어둔 숫자와 실제 줄 수를 나란히 찍는다.
+// 실제 줄 수는 post_likes 에서 그 게시물의 줄만 골라 센다.
 async function report(title) {
-  const posts = await prisma.post.findMany({
-    include: { _count: { select: { likes: true } } },
-    orderBy: { id: 'asc' },
-  });
+  const posts = await prisma.post.findMany({ orderBy: { id: 'asc' } });
 
   console.log(`\n${title}`);
   console.log('   id   like_count   실제 줄 수');
   for (const post of posts) {
+    const count = await prisma.postLike.count({ where: { postId: post.id } });
     const id = String(post.id).padStart(2);
     const written = String(post.likeCount).padStart(10);
-    const actual = String(post._count.likes).padStart(10);
+    const actual = String(count).padStart(10);
     console.log(`   ${id}   ${written}   ${actual}`);
   }
 }
@@ -31,7 +30,7 @@ await prisma.postLike.createMany({
   ],
 });
 
-// 적어둔 숫자를 실제 줄 수로 맞춘다 — 게시물을 하나씩 돌면서 세고 고친다.
+// 적어둔 숫자를 실제 줄 수로 맞춘다 — 게시물을 하나씩 차례로 세고 고친다.
 const posts = await prisma.post.findMany({ orderBy: { id: 'asc' } });
 
 for (const post of posts) {

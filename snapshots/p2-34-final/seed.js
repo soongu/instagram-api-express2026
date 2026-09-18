@@ -37,7 +37,7 @@ await prisma.post.createMany({
   })),
 });
 
-// 사진은 이제 게시물의 칸이 아니라 따로 선 표라, 게시물을 넣은 «뒤에» 번호를 보고 넣는다.
+// 사진은 이제 게시물의 칸이 아니라 따로 있는 표라, 게시물을 넣은 «뒤에» 번호를 보고 넣는다.
 // 넣은 차례대로 번호가 매겨지니 목록 순서가 그대로 게시물 순서다.
 const createdPosts = await prisma.post.findMany({ orderBy: { id: 'asc' } });
 
@@ -57,7 +57,7 @@ await prisma.comment.createMany({
   })),
 });
 
-// 답글도 같은 comments 표에 들어간다. 다만 가리킬 원댓글이 먼저 있어야 하니 한 박자 뒤다.
+// 답글도 같은 comments 표에 들어간다. 다만 가리킬 원댓글이 먼저 있어야 하니 원댓글을 넣은 «뒤에» 넣는다.
 const createdComments = await prisma.comment.findMany({ orderBy: { id: 'asc' } });
 
 await prisma.comment.createMany({
