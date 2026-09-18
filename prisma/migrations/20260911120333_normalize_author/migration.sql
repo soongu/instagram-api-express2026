@@ -28,7 +28,7 @@ SET "profile_image" = p."profile_image"
 FROM "posts" p
 WHERE p."username" = u."username" AND p."profile_image" IS NOT NULL;
 
--- ④ posts — 널을 허용해 칸을 먼저 더하고, 채우고, 그제야 조인다.
+-- ④ posts — 널을 허용해 칸을 먼저 더하고, 채우고, 그다음에 NOT NULL을 건다.
 ALTER TABLE "posts" ADD COLUMN "author_id" INTEGER;
 
 UPDATE "posts" p
@@ -41,7 +41,7 @@ ALTER TABLE "posts" ALTER COLUMN "author_id" SET NOT NULL;
 ALTER TABLE "posts" DROP COLUMN "username",
 DROP COLUMN "profile_image";
 
--- ⑤ comments — 같은 세 박자.
+-- ⑤ comments — 같은 세 단계.
 ALTER TABLE "comments" ADD COLUMN "author_id" INTEGER;
 
 UPDATE "comments" c

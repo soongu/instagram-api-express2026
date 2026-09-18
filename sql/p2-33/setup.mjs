@@ -11,7 +11,7 @@ import { setupP229, setupP229Bookstore } from '../p2-29/setup.mjs';
 
 const SNAP = new URL('../../snapshots/p2-29/', import.meta.url);
 
-/** instagram 을 p2-32 종료 상태로 — posts 5 · comments 9 · username 이 글자인 판. */
+/** instagram 을 p2-29 SQL 코퍼스 상태로 + created_at — 🚨 p2-30 시드는 테스트가 따로 돌린다(번호 1~5). */
 export async function setupP233(client) {
   await client.query('DROP TABLE IF EXISTS users CASCADE');   // 이 회차가 만드는 표
   await setupP229(client);

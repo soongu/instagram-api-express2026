@@ -78,6 +78,14 @@ beforeAll(async () => {
   db = new pg.Client({ ...ADMIN, database: 'p233_gate' });
   await db.connect();
   await setupP233(db);
+  // 🚨 p2-30 Step 6 이 시드를 Prisma 로 다시 써서 «실행»했다 — 그 뒤로 학생 표는 번호 1~5 ·
+  //    시드 데이터(dahye 사진 있음 · 2번 본문 「오늘 아침에 구운 크루아상」)다. SQL 코퍼스만
+  //    재생하면 p2-27 의 번호(1·2·3·6·7)와 값이 남아 교안이 학생 화면에 없는 출력을 싣는다
+  //    (2026-09-18 낭독 retrofit 에서 발견 — 번호 6·7 · 「4 non-null」 · dahye 사진 없음).
+  //    그래서 p2-30~32 게이트가 쓰는 그 시드를 그대로 한 번 돌린다(그 시점 클라이언트).
+  prismaCli(['generate', '--config', 'snapshots/p2-29/generate.config.js']);
+  execFileSync(process.execPath, [P('snapshots/p2-32-final/seed.js')],
+    { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
   const bookAdmin = new pg.Client(BOOK_ADMIN);
   await bookAdmin.connect();
@@ -118,6 +126,13 @@ describe('Step 1·2 — 지금 표 둘과 그 안의 중복', () => {
     const r = await db.query(
       'select (select count(*)::int from posts) p, (select count(*)::int from comments) c');
     expect(r.rows[0]).toEqual({ p: 5, c: 9 });
+  });
+
+  it('🚨 번호는 1~5 이고 사진은 다섯 줄 모두에 있다 — p2-30 시드 뒤의 판', async () => {
+    const r = await db.query(
+      'select id, username, profile_image is not null has_photo from posts order by id');
+    expect(r.rows.map((x) => x.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(r.rows.every((x) => x.has_photo), 'dahye 도 사진이 있다').toBe(true);
   });
 
   it('🔴 사람은 5명인데 이름이 적힌 곳은 14군데다', async () => {
@@ -222,14 +237,23 @@ describe('Step 5 — 마이그레이션 둘의 대조', () => {
       'select p.id, u.username from posts p join users u on u.id = p.author_id order by p.id');
     expect(r.rows).toEqual([
       { id: 1, username: 'jaehoon' }, { id: 2, username: 'minji' }, { id: 3, username: 'seungwoo' },
-      { id: 6, username: 'minji' }, { id: 7, username: 'dahye' },
+      { id: 4, username: 'minji' }, { id: 5, username: 'dahye' },
     ]);
+  });
+
+  it('교안 Step 6 의 JOIN 표가 실측과 같다', async () => {
+    const r = await db.query(
+      'SELECT p.id, u.username, p.post_alt FROM posts p JOIN users u ON u.id = p.author_id ORDER BY p.id');
+    const fence = read(LECTURE).split('```').find((b) => b.includes('post_alt') && b.includes('새 렌즈'));
+    expect(fence, 'JOIN 결과 표').toBeTruthy();
+    const rows = fence.trim().split('\n').slice(1).map((l) => l.trim().split(/\s{2,}/));
+    expect(rows).toEqual(r.rows.map((x) => [String(x.id), x.username, x.post_alt]));
   });
 
   it('users 의 번호가 아이디 순이고 사진이 옮겨졌다 — 교안 표와 같다', async () => {
     const r = await db.query('select id, username, profile_image from users order by id');
     expect(r.rows).toEqual([
-      { id: 1, username: 'dahye', profile_image: null },
+      { id: 1, username: 'dahye', profile_image: '/images/dahye.jpg' },
       { id: 2, username: 'jaehoon', profile_image: '/images/jaehoon.jpg' },
       { id: 3, username: 'minji', profile_image: '/images/minji.jpg' },
       { id: 4, username: 'nayeon', profile_image: null },
@@ -384,11 +408,21 @@ try { await svc.createPost({ authorId: 999, postImage: '/x.jpg' }); console.log(
 catch (e) { console.log(e.status, e.message); }
 const list = await svc.getPosts({});
 console.log('list', list.length, 'username' in list[0]);
+// Step 8 첫 「게시물 목록」 — Step 7 이 1번을 지운 뒤 맨 앞 게시물
+console.log('FIRST ' + JSON.stringify(list.filter((p) => p.id !== 1)[0]));
 const { prisma } = await import('../snapshots/p2-33-final/db.js');
 await prisma.$disconnect();`);
     const out = execFileSync(process.execPath, [probe], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
     expect(out).toContain('400 그런 사용자는 없어요');
     expect(out, 'Step 6 시점에는 username 이 아직 안 실린다').toContain('list 5 false');
+    // 🚨 Step 8 이 싣는 맨 앞 게시물 — 시드 데이터(2번 본문·댓글 4)라야 학생 화면과 같다.
+    const first = JSON.parse(out.split('\n').find((l) => l.startsWith('FIRST ')).slice('FIRST '.length));
+    const shown = blocksOf(LECTURE, 'json').find((b) => b.includes('"authorId": 3') && b.includes('"minutesAgo": 45'));
+    expect(shown, 'Step 8 의 맨 앞 게시물 json').toBeTruthy();
+    const { createdAt: _a, ...want } = first;
+    const { createdAt: _b, ...got } = JSON.parse(shown);
+    expect(got).toEqual(want);
+    expect(Object.keys(JSON.parse(shown)), '칸 순서도 응답과 같다').toEqual(Object.keys(first));
   });
 
   it('🚨 글쓴이를 지우는 것은 RESTRICT 가 막고, 그것도 P2003 이다', async () => {
@@ -438,7 +472,7 @@ describe('직접 해보기 — 서점', () => {
       '--to-schema', 'lab/p2-33/schema.prisma', '--script'])
       .replace(/^Loaded Prisma config.*\n\n?/, '');
     expect(diff).toContain('DROP COLUMN "author"');
-    // 🔑 NOT NULL 칸을 더하지 않으니 세 박자가 필요 없다 — 그게 이 실습의 답이다.
+    // 🔑 NOT NULL 칸을 더하지 않으니 세 단계가 필요 없다 — 그게 이 실습의 답이다.
     expect(diff).not.toContain('NOT NULL');
     // 관계 이름만 바꾼 것은 DB 에 한 줄도 안 남는다.
     expect(diff).not.toMatch(/authorRef/);
@@ -551,9 +585,14 @@ describe('교안 ↔ 코드베이스', () => {
   it('🚨 교안이 인용한 CLI 경고가 실제 출력과 같다', () => {
     const lec = read(LECTURE);
     for (const phrase of [
+      // 🚨 Step 번호는 0 부터다 — 2026-09-18 학생 상태(p2-30 시드 뒤)에서 pty 로 다시 받았다.
+      '• Step 0 Added the required column `author_id` to the `comments` table without a default value.',
+      '• Step 1 Added the required column `author_id` to the `posts` table without a default value.',
       'There are 9 rows in this table, it is not possible to execute this step.',
       'There are 5 rows in this table, it is not possible to execute this step.',
       'You are about to drop the column `username` on the `posts` table, which still contains 5 non-null values.',
+      // 🚨 시드 뒤라 dahye 도 사진이 있다 — 4 가 아니라 5.
+      'You are about to drop the column `profile_image` on the `posts` table, which still contains 5 non-null values.',
       'You can now edit it and apply it by running prisma migrate dev.',
     ]) expect(lec, phrase.slice(0, 40)).toContain(phrase);
   });
