@@ -2,7 +2,7 @@
 //
 // 🚨 손으로 적지 않는다. p2-28 코퍼스(교안 blocks + 답안 answers)를 «재생해서» 세운다.
 //    p2-28 이 바뀌면 여기가 따라 바뀌고, 그래야 이 회차가 「지난 시간 그대로」에서 출발한다.
-// 🚨 Prisma 가 남기는 것(_prisma_migrations)과 이 회차가 더하는 칸(created_at)도 함께 지운다.
+// 🚨 Prisma 가 남기는 것(_prisma_migrations)과 이 회차가 더하는 칸(updated_at)도 함께 지운다.
 //    안 지우면 게이트를 두 번 돌릴 때 두 번째가 「이미 baseline 됨」에서 출발해 축이 침묵한다.
 // 🚨 blocks.sql 은 두 DB 를 «여섯 번» 오간다 — 첫 bookstore 에서 멈추면 뒤쪽 instagram
 //    블록을 통째로 놓친다. 건너뛰되 «계속 읽는다».

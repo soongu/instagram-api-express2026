@@ -4,10 +4,13 @@
 //    「다이어그램-코드 드리프트」가 되므로, 교안이 인용하는 것은 전부 코드베이스 파일과
 //    글자 단위로 대조한다.
 // 🚨 진짜 instagram DB 를 안 건드린다 — 전용 DB(p229_gate)를 p2-28 종료 상태로 세워서 쓴다.
-//    p2-26~28 게이트가 같은 DB 를 쓰는데, 이 회차가 _prisma_migrations 와 created_at 을
+//    p2-26~28 게이트가 같은 DB 를 쓰는데, 이 회차가 _prisma_migrations 와 updated_at 을
 //    남기면 그 회차들의 reset 이 다른 상태에서 출발한다.
 // 🚨 시각과 폴더 이름은 «돌릴 때마다 다르다» — 값이 아니라 성질을 잰다.
-//    (20260910232755_add_created_at 의 앞자리는 마이그레이션을 «만든 순간»이다.)
+//    (20260930062755_add_updated_at 의 앞자리는 마이그레이션을 «만든 순간»이다.)
+// 🚨 이력은 «그 회차 시점» 판(snapshots/p2-29/migrations)과 대조한다 — 라이브 prisma/migrations 는
+//    뒤 회차가 키운 판이라, 거기에 기대면 뒤 회차의 재구축이 이 회차 축을 흔든다(2026-09-18 audit:
+//    라이브 이력은 p2-30 세션이 스키마·시드와 함께 다시 짓는다).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, readdirSync, writeFileSync, copyFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -42,7 +45,7 @@ const prismaSoft = (args, env = {}) => {
 };
 
 const migrationDir = (suffix) =>
-  readdirSync(P('prisma/migrations')).find((d) => d.endsWith(suffix));
+  readdirSync(P('snapshots/p2-29/migrations')).find((d) => d.endsWith(suffix));
 
 let db;
 
@@ -90,16 +93,23 @@ describe('db pull — 손으로 만든 표가 파일이 된다', () => {
 
   it('p2-28 의 외래 키가 «관계»로 적힌다 — 양쪽 모두', () => {
     const s = read(P('snapshots/p2-29/schema-pulled.prisma'));
-    expect(s).toContain('posts       posts  @relation(fields: [post_id], references: [id]');
+    expect(s).toContain('posts      posts    @relation(fields: [post_id], references: [id]');
     expect(s).toContain('comments      comments[]');
   });
 
   it('칸 이름은 DB 가 쓰는 그대로 — camelCase 는 «한 글자도» 없다', () => {
     const s = read(P('snapshots/p2-29/schema-pulled.prisma'));
-    for (const raw of ['profile_image', 'post_image', 'post_alt', 'minutes_ago', 'like_count', 'comment_count'])
+    for (const raw of ['profile_image', 'post_image', 'post_alt', 'like_count', 'comment_count', 'created_at'])
       expect(s).toContain(raw);
-    for (const camel of ['profileImage', 'postImage', 'likeCount', 'commentCount'])
+    for (const camel of ['profileImage', 'postImage', 'likeCount', 'commentCount', 'createdAt'])
       expect(s).not.toContain(camel);
+  });
+
+  it('p2-26 이 «TIMESTAMP(3)» 으로 지은 칸은 메모 없이 DateTime 으로 온다 — 교안 Step 3 이 기대는 사실', () => {
+    const s = read(P('snapshots/p2-29/schema-pulled.prisma'));
+    expect(s).toContain('created_at DateTime @default(now())');
+    expect(s).not.toContain('@db.Timestamp');
+    expect(s).not.toContain('minutes_ago');
   });
 
   it('🚨 db pull 은 맨 윗줄 경로 주석을 «지운다»', () => {
@@ -123,19 +133,23 @@ describe('베이스라인 — 이미 있는 표를 이력의 첫 칸으로', () 
   it('뽑히는 SQL 이 0_init/migration.sql 과 «글자 단위로» 같다', () => {
     const out = prisma(['migrate', 'diff', '--from-empty',
       '--to-schema', 'snapshots/p2-29/schema-mapped.prisma', '--script']);
-    const committed = read(P('prisma/migrations/0_init/migration.sql'));
+    const committed = read(P('snapshots/p2-29/migrations/0_init/migration.sql'));
     expect(out.replace(/^Loaded Prisma config.*\n\n?/, '').trim()).toBe(committed.trim());
   });
 
   it('그 SQL 은 학생이 세 회차 동안 «손으로 쓴 그것»이다', () => {
-    const sql = read(P('prisma/migrations/0_init/migration.sql'));
+    const sql = read(P('snapshots/p2-29/migrations/0_init/migration.sql'));
     expect(sql).toContain('CREATE TABLE "posts"');
     expect(sql).toContain('CREATE TABLE "comments"');
     expect(sql).toContain('ADD CONSTRAINT "comments_post_id_fkey" FOREIGN KEY ("post_id") REFERENCES "posts"("id")');
+    // 학생이 적은 `DEFAULT now()` 가 `CURRENT_TIMESTAMP` 로 적힌다 — 교안 Step 6 이 한 줄로 짚는다.
+    expect(sql.match(/"created_at" TIMESTAMP\(3\) NOT NULL DEFAULT CURRENT_TIMESTAMP/g)).toHaveLength(2);
+    expect(sql).not.toContain('minutes_ago');
   });
 
   it('resolve 하면 이력의 첫 칸이 「이미 적용됨」으로 박히고 데이터가 «그대로» 남는다', async () => {
-    prisma(['migrate', 'resolve', '--applied', '0_init']);
+    // 그 회차 시점 이력(snapshots)으로 등재한다 — 라이브 0_init 은 뒤 회차 판일 수 있다.
+    prisma(['migrate', 'resolve', '--applied', '0_init', '--config', 'snapshots/p2-29/deploy.config.js']);
 
     const applied = await db.query(
       'select migration_name, finished_at from _prisma_migrations order by started_at');
@@ -154,23 +168,33 @@ describe('베이스라인 — 이미 있는 표를 이력의 첫 칸으로', () 
 });
 
 describe('migrate — 칸을 하나 더하면 이력이 자란다', () => {
-  it('뽑히는 SQL 이 add_created_at 마이그레이션과 같다', () => {
+  it('뽑히는 SQL 이 add_updated_at 마이그레이션과 같다', () => {
     const out = prisma(['migrate', 'diff',
       '--from-schema', 'snapshots/p2-29/schema-mapped.prisma',
       '--to-schema', 'snapshots/p2-29/schema-final.prisma', '--script']);
-    const dir = migrationDir('_add_created_at');
+    const dir = migrationDir('_add_updated_at');
     expect(dir).toBeTruthy();
-    const committed = read(P(`prisma/migrations/${dir}/migration.sql`));
+    const committed = read(P(`snapshots/p2-29/migrations/${dir}/migration.sql`));
     expect(out.replace(/^Loaded Prisma config.*\n\n?/, '').trim()).toBe(committed.trim());
   });
 
-  it('🚨 이미 든 5줄은 «전부 같은 시각»을 받는다 — minutes_ago 와 어긋난다', async () => {
+  it('🚨 @updatedAt 은 SQL 어디에도 안 남는다 — 기본값만 DB 의 몫이다', () => {
+    const sql = read(P(`snapshots/p2-29/migrations/${migrationDir('_add_updated_at')}/migration.sql`));
+    expect(sql).toContain('ADD COLUMN     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP');
+    expect(sql).not.toMatch(/updatedAt|TRIGGER/i);
+  });
+
+  it('🚨 이미 든 5줄의 updated_at 은 «전부 같은 시각» — created_at 은 제각각이다', async () => {
     prisma(['migrate', 'deploy', '--config', 'snapshots/p2-29/deploy.config.js']);
-    const r = await db.query('select minutes_ago, created_at from posts order by id');
+    const r = await db.query('select created_at, updated_at from posts order by id');
     expect(r.rows).toHaveLength(5);
-    const stamps = new Set(r.rows.map((x) => x.created_at.getTime()));
-    expect(stamps.size).toBe(1);                       // 다섯 줄이 «한» 시각
-    expect(new Set(r.rows.map((x) => x.minutes_ago)).size).toBeGreaterThan(1); // 원래 값은 제각각
+    expect(new Set(r.rows.map((x) => x.updated_at.getTime())).size).toBe(1);   // 다섯 줄이 «한» 시각
+    expect(new Set(r.rows.map((x) => x.created_at.getTime())).size).toBe(5);   // 쓴 시각은 제각각
+    // 그 «한 시각» 은 마이그레이션을 실행한 순간이다. (created_at 과 앞뒤를 재지 않는다 —
+    // 게시물의 created_at 은 교안 속 날짜(2026-09-28)라 게이트를 돌리는 실제 날짜보다 뒤일 수 있다.)
+    const fresh = await db.query(
+      'select bool_and(abs(extract(epoch from updated_at - localtimestamp)) < 120) as ok from posts');
+    expect(fresh.rows[0].ok).toBe(true);
   });
 
   it('이력만으로 스키마가 «그대로» 되살아난다', () => {
@@ -199,10 +223,36 @@ describe('첫 쿼리 — JS 쪽은 camelCase 로 돌아온다', () => {
       cwd: P('.'), encoding: 'utf8', env: { ...process.env, DATABASE_URL: GATE_URL },
     });
     expect(out).toContain('게시물 5개를 읽었어요.');
-    for (const camel of ['profileImage', 'postImage', 'postAlt', 'minutesAgo', 'likeCount', 'commentCount', 'createdAt'])
+    for (const camel of ['profileImage', 'postImage', 'postAlt', 'likeCount', 'commentCount', 'createdAt', 'updatedAt'])
       expect(out).toContain(camel);
-    for (const raw of ['profile_image', 'post_image', 'like_count'])
+    for (const raw of ['profile_image', 'post_image', 'like_count', 'minutesAgo', 'updated_at'])
       expect(out).not.toContain(raw);
+    // 교안 Step 8 이 보여주는 첫 게시물의 쓴 시각 — p2-26 이 UTC 리터럴로 넣은 값 그대로
+    expect(out).toContain('createdAt: 2026-09-28T08:48:00.000Z');
+  });
+
+  // 🚨 교안 Step 7 ⚠️ 가 기대는 사실 — `@updatedAt` 은 «Prisma 가» 채운다.
+  //    Prisma 로 고치면 바뀌고, SQL 로 직접 고치면 안 바뀌고, SQL 로 넣으면 DB 기본값이 채운다.
+  it('Prisma update 는 updatedAt 을 바꾸고 SQL UPDATE 는 안 바꾼다', () => {
+    const probe = `
+      import { PrismaPg } from '@prisma/adapter-pg';
+      import { PrismaClient } from '../snapshots/p2-29/client/index.js';
+      const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+      const at = async (id) => (await prisma.post.findUnique({ where: { id } })).updatedAt.getTime();
+      const b1 = await at(1), b2 = await at(2);
+      await prisma.post.update({ where: { id: 1 }, data: { likeCount: { increment: 1 } } });
+      await prisma.$executeRawUnsafe('UPDATE posts SET like_count = like_count + 1 WHERE id = 2');
+      await prisma.$executeRawUnsafe("INSERT INTO posts (username, post_image) VALUES ('probe', '/x.jpg')");
+      const ins = await prisma.post.findFirst({ where: { username: 'probe' } });
+      console.log(JSON.stringify({ viaPrisma: (await at(1)) > b1, viaSql: (await at(2)) !== b2,
+        insertFilled: ins.updatedAt instanceof Date }));
+      await prisma.post.delete({ where: { id: ins.id } });
+      await prisma.$disconnect();`;
+    writeFileSync(P('__replay__/p2-29.updatedat.js'), probe);
+    const out = execFileSync(process.execPath, [P('__replay__/p2-29.updatedat.js')], {
+      cwd: P('.'), encoding: 'utf8', env: { ...process.env, DATABASE_URL: GATE_URL },
+    });
+    expect(JSON.parse(out.trim().split('\n').pop())).toEqual({ viaPrisma: true, viaSql: false, insertFilled: true });
   });
 });
 

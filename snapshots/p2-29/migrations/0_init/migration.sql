@@ -9,9 +9,9 @@ CREATE TABLE "posts" (
     "post_image" TEXT NOT NULL,
     "post_alt" TEXT,
     "content" TEXT,
-    "minutes_ago" INTEGER NOT NULL DEFAULT 0,
     "like_count" INTEGER NOT NULL DEFAULT 0,
     "comment_count" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "posts_pkey" PRIMARY KEY ("id")
 );
@@ -23,7 +23,7 @@ CREATE TABLE "comments" (
     "username" VARCHAR(50) NOT NULL,
     "content" TEXT NOT NULL,
     "like_count" INTEGER NOT NULL DEFAULT 0,
-    "minutes_ago" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "comments_pkey" PRIMARY KEY ("id")
 );
