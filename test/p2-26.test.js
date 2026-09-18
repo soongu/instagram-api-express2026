@@ -73,7 +73,7 @@ describe('교안 ↔ 코드베이스 — 인용한 SQL 이 파일과 글자 단�
   const body = (f) => sql(f).split('\n').filter(l => !l.startsWith('--')).join('\n').trim();
 
   it('교안 sql 블록을 실제로 세었다 (0건이면 이 축이 침묵한 것이다)', () => {
-    expect(blocks.length).toBe(14);
+    expect(blocks.length).toBe(15);
   });
 
   it('Step 5 첫 표가 01-first-table.sql 과 같다', () => {
@@ -94,7 +94,7 @@ describe('교안 ↔ 코드베이스 — 인용한 SQL 이 파일과 글자 단�
 
   // 🚨 교안 «전부» 를 위에서 아래로 실제로 돌린다. 판정은 「몇 개가 막히나」다 —
   //    Step 7 이 일부러 막는 셋 말고 다른 것이 막히면 교안이 안 돌아가는 것이다.
-  it('14블록을 교안 순서대로 돌리면 «정확히 셋» 만 막힌다', async () => {
+  it('15블록을 교안 순서대로 돌리면 «정확히 셋» 만 막힌다', async () => {
     const c = new pg.Client(PG);
     await c.connect();
     try {
@@ -171,12 +171,13 @@ describe('Step 8 — 교안이 인용하는 DDL 이 postgres:18 에서 그대로
   it('표 모양이 교안이 그려 보일 그것과 같다', async () => {
     const { rows } = await db.query(`
       SELECT column_name, data_type, character_maximum_length AS len,
-             is_nullable, column_default
+             datetime_precision, is_nullable, column_default
         FROM information_schema.columns
        WHERE table_name = 'posts' ORDER BY ordinal_position`);
+    // 🔀 2026-09-18 — `minutes_ago` 칸은 관계형 DB 에 한 번도 안 생긴다. 올린 시각(audit 칸)이 맨 끝에 온다.
     expect(rows.map(r => r.column_name)).toEqual([
       'id', 'username', 'profile_image', 'post_image', 'post_alt',
-      'content', 'minutes_ago', 'like_count', 'comment_count',
+      'content', 'like_count', 'comment_count', 'created_at',
     ]);
     const by = Object.fromEntries(rows.map(r => [r.column_name, r]));
     // SERIAL 은 «자료형» 이 아니라 integer + nextval 기본값이다 — 교안이 이걸 짚는다
@@ -188,6 +189,12 @@ describe('Step 8 — 교안이 인용하는 DDL 이 postgres:18 에서 그대로
     expect(by.post_image.is_nullable).toBe('NO');
     expect(by.profile_image.is_nullable).toBe('YES');
     expect(by.like_count.column_default).toBe('0');
+    // TIMESTAMP(3) — 괄호 안 3 이 「초 아래 세 자리」. 괄호를 빼면 6 이 되고 p2-29 `db pull` 에
+    // `@db.Timestamp(6)` 이 붙는다(2026-09-18 Prisma 7.10 실측 — (3) 이면 아무것도 안 붙는다).
+    expect(by.created_at.data_type).toBe('timestamp without time zone');
+    expect(by.created_at.datetime_precision).toBe(3);
+    expect(by.created_at.is_nullable).toBe('NO');
+    expect(by.created_at.column_default).toBe('now()');
   });
 
   it('PRIMARY KEY 가 실제로 걸려 있다', async () => {
@@ -210,9 +217,11 @@ describe('Step 8 — 교안이 인용하는 DDL 이 postgres:18 에서 그대로
 
   it('DEFAULT 는 «칸을 안 적었을 때만» 채운다', async () => {
     await db.query(`INSERT INTO posts (username, post_image) VALUES ('nayeon', '/images/p4.jpg')`);
-    const { rows } = await db.query(`SELECT minutes_ago, like_count, comment_count, content
+    const { rows } = await db.query(`SELECT like_count, comment_count, content,
+                                            created_at IS NOT NULL AS stamped,
+                                            localtimestamp - created_at < interval '1 minute' AS just_now
                                        FROM posts WHERE username = 'nayeon'`);
-    expect(rows[0]).toEqual({ minutes_ago: 0, like_count: 0, comment_count: 0, content: null });
+    expect(rows[0]).toEqual({ like_count: 0, comment_count: 0, content: null, stamped: true, just_now: true });
   });
 });
 
@@ -346,4 +355,125 @@ describe('오프닝 — 앱을 «안 거치면» 몽고에는 그대로 들어�
     await raw.deleteMany({});
     await mongoose.disconnect();
   }, 30000);
+});
+
+// 🔀 2026-09-18 audit 칸 retrofit — 「몇 분 전」 숫자 대신 올린 시각 `created_at` 을 둔다.
+//    교안 Step 8 이 새로 하는 주장을 하나씩 실행으로 잠근다. 계획: progress/audit-columns-retrofit-plan.md
+describe('Step 8 — 올린 시각(created_at)', () => {
+  // 🚨 적은 값은 «UTC» 다 — 낭독(2026-09-18)이 「17:48 은 한국 시각으로 읽히는데 ⚠️ 는 UTC 로 담는다고
+  //    한다」를 잡았다. now() 로 채운 댓글과 같은 기준이어야 뒤 회차의 「N분 전」 계산이 안 어긋난다.
+  it('직접 적은 시각은 «글자 그대로» 들어가고, 최신순이 jaehoon → minji → seungwoo 다', async () => {
+    // node-pg 는 timestamp 를 «로컬 시각» Date 로 읽는다 — 서버 글자로 비교해야 교안 결과 표와 같다
+    const { rows } = await db.query(
+      `SELECT id, created_at::text AS at FROM posts WHERE id <= 3 ORDER BY created_at DESC`);
+    expect(rows).toEqual([
+      { id: 1, at: '2026-09-28 08:48:00' },   // 한국 시각 17:48 — 18:00 의 12분 전
+      { id: 2, at: '2026-09-28 08:15:00' },   // 한국 시각 17:15 — 45분 전
+      { id: 3, at: '2026-09-28 06:00:00' },   // 한국 시각 15:00 — 180분 전
+    ]);
+  });
+
+  it('🚨 한 INSERT 로 넣은 여러 줄은 DEFAULT now() 가 «같은 시각» 이다 — 그래서 셋은 직접 적는다', async () => {
+    await db.query('DROP TABLE IF EXISTS tie');
+    await db.query(`CREATE TABLE tie (id SERIAL PRIMARY KEY, u TEXT, created_at TIMESTAMP(3) NOT NULL DEFAULT now())`);
+    await db.query(`INSERT INTO tie (u) VALUES ('a'), ('b'), ('c')`);
+    const { rows } = await db.query('SELECT count(DISTINCT created_at)::int AS n FROM tie');
+    expect(rows[0].n).toBe(1);          // 누가 먼저 올렸는지 구분할 수 없다
+    await db.query('DROP TABLE tie');
+  });
+
+  it('Step 8 의 `SELECT now();` — 끝이 `+00` 이고, 한국 시각에서 9시간을 뺀 값이다', async () => {
+    const { rows } = await db.query('SELECT now()::text AS t');
+    expect(rows[0].t).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(\.\d+)?\+00$/);
+  });
+
+  it('도커 PostgreSQL 은 시간대가 UTC 라 now() 로 채운 시각이 한국 시각보다 9시간 이르다', async () => {
+    // 🔑 VS Code 확장(ms-ossdata.vscode-pgsql 1.30.1)도 시간대를 따로 안 건다 — 확장의 tools
+    //    service 를 JSON-RPC 로 직접 몰아 `SHOW timezone` = Etc/UTC 를 확인했다(2026-09-18).
+    const { rows } = await db.query(`SELECT current_setting('TimeZone') AS tz,
+      (now() AT TIME ZONE 'Asia/Seoul') - localtimestamp AS gap`);
+    expect(rows[0].tz).toBe('Etc/UTC');
+    expect(rows[0].gap).toEqual({ hours: 9 });
+  });
+
+  it('Step 3 직접 설치 안내 — 교안의 ALTER DATABASE 한 줄이 «새 연결» 의 시간대를 UTC 로 맞춘다', async () => {
+    // 직접 설치본은 initdb 가 설치 컴퓨터의 시간대를 postgresql.conf 에 적는다 — TZ=Asia/Seoul 로
+    // 띄운 postgres:18 이 Asia/Seoul(source=configuration file)이었다(2026-09-18 실측). 여기서는 그 상태를
+    // 데이터베이스 설정으로 흉내 낸 뒤, 교안 문장 그대로(DB 이름만 바꿔) 되돌린다.
+    const md = readFileSync(new URL('../../../part2/5-db-prisma/p2-26-relational-table-lecture.md', import.meta.url), 'utf8');
+    const line = md.match(/`(ALTER DATABASE instagram SET timezone TO 'UTC';)`/)[1];
+    const tzOfNew = async () => {
+      const c = new pg.Client(PG); await c.connect();
+      try { return (await c.query("SELECT current_setting('TimeZone') AS tz")).rows[0].tz; } finally { await c.end(); }
+    };
+    await db.query("ALTER DATABASE p226_gate SET timezone TO 'Asia/Seoul'");
+    expect(await tzOfNew()).toBe('Asia/Seoul');
+    await db.query(line.replace('instagram', 'p226_gate'));
+    expect(await tzOfNew()).toBe('UTC');
+  });
+
+  it('주제 2 의 전제 — DEFAULT 는 넣을 때만 채우고, 줄을 고칠 때는 그 칸을 안 건드린다', async () => {
+    await db.query('DROP TABLE IF EXISTS upd');
+    await db.query(`CREATE TABLE upd (id SERIAL PRIMARY KEY, u TEXT,
+      created_at TIMESTAMP(3) NOT NULL DEFAULT now(), updated_at TIMESTAMP(3) NOT NULL DEFAULT now())`);
+    await db.query(`INSERT INTO upd (u) VALUES ('a')`);
+    const before = (await db.query('SELECT updated_at::text AS t FROM upd')).rows[0].t;
+    await new Promise((r) => setTimeout(r, 30));
+    await db.query(`UPDATE upd SET u = 'b'`);
+    const after = (await db.query('SELECT updated_at::text AS t FROM upd')).rows[0].t;
+    expect(after).toBe(before);
+    await db.query('DROP TABLE upd');
+  });
+
+  it('주제 2 답안 — 트리거를 걸면 «어느 길로 고치든» updated_at 이 바뀐다', async () => {
+    await db.query('DROP TABLE IF EXISTS trg');
+    await db.query(`CREATE TABLE trg (id SERIAL PRIMARY KEY, u TEXT,
+      updated_at TIMESTAMP(3) NOT NULL DEFAULT now())`);
+    await db.query(`CREATE OR REPLACE FUNCTION touch() RETURNS trigger AS $$
+      BEGIN NEW.updated_at = clock_timestamp(); RETURN NEW; END $$ LANGUAGE plpgsql`);
+    await db.query('CREATE TRIGGER trg_touch BEFORE UPDATE ON trg FOR EACH ROW EXECUTE FUNCTION touch()');
+    await db.query(`INSERT INTO trg (u) VALUES ('a')`);
+    const before = (await db.query('SELECT updated_at::text AS t FROM trg')).rows[0].t;
+    await new Promise((r) => setTimeout(r, 30));
+    await db.query(`UPDATE trg SET u = 'b'`);       // 앱이 아니라 SQL 로 곧바로 고친다
+    const after = (await db.query('SELECT updated_at::text AS t FROM trg')).rows[0].t;
+    expect(after).not.toBe(before);
+    await db.query('DROP TABLE trg');
+    await db.query('DROP FUNCTION touch()');
+  });
+});
+
+describe('답안 [기초] — 댓글 표 (답안 문서의 SQL 을 그대로 돌린다)', () => {
+  const ans = readFileSync(new URL('../../../part2/5-db-prisma/p2-26-relational-table-answers.md',
+                                   import.meta.url), 'utf8');
+  const ablocks = [...ans.matchAll(/```sql\n([\s\S]*?)```/g)].map(m => m[1].trim());
+
+  it('CREATE · INSERT 셋 · SELECT 가 돌고, 안 적은 칸을 DEFAULT 가 채운다', async () => {
+    expect(ablocks[0]).toMatch(/^CREATE TABLE comments/);
+    await db.query('DROP TABLE IF EXISTS comments');
+    await db.query(ablocks[0]);
+    for (const line of ablocks[1].split('\n')) await db.query(line);   // 학생처럼 한 문장씩
+    const { rows } = await db.query(
+      `SELECT id, username, like_count, created_at IS NOT NULL AS stamped FROM comments ORDER BY id`);
+    expect(rows).toEqual([
+      { id: 1, username: 'minji',    like_count: 7, stamped: true },
+      { id: 2, username: 'seungwoo', like_count: 0, stamped: true },
+      { id: 3, username: 'nayeon',   like_count: 0, stamped: true },
+    ]);
+    const { rows: [col] } = await db.query(`SELECT datetime_precision FROM information_schema.columns
+      WHERE table_name = 'comments' AND column_name = 'created_at'`);
+    expect(col.datetime_precision).toBe(3);
+    expect(ablocks[2]).toBe('SELECT id, username, like_count, created_at FROM comments ORDER BY id;');
+    await db.query(ablocks[2]);
+  });
+
+  it('막힌 둘 — 답안이 인용한 메시지와 DETAIL 모양(끝에 시각이 붙는다)', async () => {
+    const miss = await db.query(`INSERT INTO comments (post_id, username) VALUES (1, 'minji')`).catch(e => e);
+    expect(miss.message).toBe('null value in column "content" of relation "comments" violates not-null constraint');
+    expect(miss.detail).toMatch(/^Failing row contains \(4, 1, minji, null, 0, \d{4}-\d\d-\d\d \d\d:\d\d:\d\d(\.\d{1,3})?\)\.$/);
+    const extra = await db.query(
+      `INSERT INTO comments (post_id, username, content, is_reply) VALUES (1, 'minji', 'x', true)`).catch(e => e);
+    expect(extra.message).toBe('column "is_reply" of relation "comments" does not exist');
+    await db.query('DROP TABLE comments');
+  });
 });
