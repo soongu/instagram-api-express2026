@@ -48,7 +48,6 @@ app.post('/api/posts', async (req, res) => {
       ...req.body,
       likeCount: 0,
       commentCount: 0,
-      minutesAgo: 0,
     },
   });
 

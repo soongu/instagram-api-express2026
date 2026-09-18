@@ -1,6 +1,10 @@
 // p2-30 「Prisma 로 CRUD — 라우트 다섯 · 시딩 · 쿼리 파라미터」 게이트
 //
 // 🚨 진짜 instagram DB 를 안 건드린다 — 전용 DB(p230_gate)를 p2-29 종료 상태로 세워서 쓴다.
+//    🔀 2026-09-18 audit — 「종료 상태」에 과제 [기초](댓글 updated_at)와 «정렬 없는 목록 순서»까지 넣었다
+//       (sql/p2-30/setup.mjs). 이 회차 시드가 댓글 updated_at 을 채우고 「시작하기 전에」가 그 과제를
+//       먼저 하라고 한다. 순서는 학생 이력을 재생해 잰 2·3·6·1·7 이다 — 번호순 1·2·3·6·7 로 두면
+//       교안 Step 1·5 의 「목록 맨 앞」이 게이트에서만 참이 된다(2026-09-18 전까지 실제로 그랬다).
 // 🚨 교안이 「이렇게 하면 이렇게 된다」고 주장하는 «중간 상태» 는 snapshots 로 얼려 실제로 띄운다.
 //    산문으로만 적힌 주장은 어느 게이트도 못 보기 때문이다(p2-24 에서 셋이 정반대였다).
 // 🚨 lab 파일은 학생 표기(`../db.js`)라 그대로는 안 돈다 — 사본에서 한 단 더 깊게 고쳐 띄운다.
@@ -15,7 +19,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
-import { setupP229 } from '../sql/p2-29/setup.mjs';
+import { setupP230 } from '../sql/p2-30/setup.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -23,6 +27,10 @@ const GATE_URL = 'postgresql://postgres:postgres@localhost:5432/p230_gate';
 const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
 const ENV = { DATABASE_URL: GATE_URL };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+/** prisma CLI — 게이트 전용 클라이언트를 낼 때만 쓴다(학생 명령이 아니다). */
+const prismaCli = (args) =>
+  execFileSync(P('node_modules/.bin/prisma'), args, { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
 // 🚨 **이 회차가 보는 `app.js` 는 «얼린 판» 이다** (2026-09-11 `p2-31` 착수 시).
 //    `p2-31` 이 그 파일을 `routes/`·`services/` 로 가르면서 라우트가 통째로 빠져나가,
@@ -54,6 +62,9 @@ const seed = (file = 'snapshots/p2-32-final/seed.js', args = []) =>
   execFileSync(process.execPath, [P(frozenDb(file)), ...args], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
 beforeAll(async () => {
+  // 🚨 이 회차 «그 시점» 클라이언트(게시물·댓글 updated_at 을 아는 판)를 먼저 낸다.
+  //    gitignore 된 생성물이라 매번 만든다. output 이 회차 폴더라 수업 클라이언트를 안 덮는다.
+  prismaCli(['generate', '--config', 'snapshots/p2-30/generate.config.js']);
   const admin = new pg.Client(ADMIN);
   await admin.connect();
   await admin.query('DROP DATABASE IF EXISTS p230_gate');
@@ -61,8 +72,7 @@ beforeAll(async () => {
   await admin.end();
   db = new pg.Client({ ...ADMIN, database: 'p230_gate' });
   await db.connect();
-  await setupP229(db);
-  await db.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP');
+  await setupP230(db);
 }, 60000);
 
 afterAll(async () => {
@@ -106,6 +116,20 @@ describe('착수 상태 — 「지난 시간 그대로」에서 출발한다', (
     expect(r.rows[0]).toEqual({ p: 5, c: 9 });
   });
 
+  it('🔴 두 표에 audit 칸 둘이 다 있고 minutes_ago 는 없다 — 과제 [기초]까지 한 판', async () => {
+    const r = await db.query(`select table_name t, column_name c from information_schema.columns
+      where table_name in ('posts', 'comments') and column_name in ('created_at', 'updated_at', 'minutes_ago')
+      order by 1, 2`);
+    expect(r.rows.map((x) => `${x.t}.${x.c}`)).toEqual(
+      ['comments.created_at', 'comments.updated_at', 'posts.created_at', 'posts.updated_at']);
+  });
+
+  it('🔴 정렬 없이 읽으면 학생 표와 같은 순서 — 2·3·6·1·7', async () => {
+    // 학생 이력 재생 실측(2026-09-18) — p2-27 이 1번을 두 번 고친 뒤 7번을 넣었다.
+    const r = await db.query('select id from posts');
+    expect(r.rows.map((x) => x.id)).toEqual([2, 3, 6, 1, 7]);
+  });
+
   it('🔴 교안이 말하는 「주소 5개」가 실제 수와 같다', () => {
     // 🚨 p2-23·p2-25 가 두 번 틀린 자리다(`/` 를 세느냐 마느냐). 게시물 주소는 다섯,
     //    파일 전체 라우트는 여섯이다. 교안은 «게시물 주소» 다섯을 말한다.
@@ -134,6 +158,19 @@ describe('Step 1 — 목록만 갈아 끼운 판이 실제로 그렇게 돈다',
     const res = await fetch(`${server.base}/api/posts`);
     expect(res.status).toBe(200);
     expect(await res.json()).toHaveLength(5);
+  });
+
+  it('🔴 교안이 보여준 목록 맨 앞이 실제 맨 앞과 같다 — 칸 이름·순서·값(고친 시각만 빼고)', async () => {
+    await bootApp('snapshots/p2-30.step1.app.js', 3411);
+    const actual = (await (await fetch(`${server.base}/api/posts`)).json())[0];
+    const shown = blocksOf(LECTURE, 'json').find((b) => b.startsWith('[') && b.includes('"postAlt"'));
+    expect(shown).toBeTruthy();
+    const first = JSON.parse(`${shown.replace(/,\s*$/, '')}]`)[0];
+    expect(Object.keys(first)).toEqual(Object.keys(actual));
+    expect(first).not.toHaveProperty('minutesAgo');
+    // updatedAt 은 마이그레이션을 실행한 순간이라 학생마다 다르다 — 교안은 p2-29 가 보여준 그 값을 쓴다
+    expect({ ...first, updatedAt: null }).toEqual({ ...actual, updatedAt: null });
+    expect(first.updatedAt).toBe('2026-09-30T06:27:55.147Z');
   });
 
   it('🔴 나머지 넷은 `ReferenceError: Post is not defined` 로 500 이다', async () => {
@@ -187,6 +224,17 @@ describe('Step 2 — 글자를 그대로 넘기면 Prisma 가 «막는다»', ()
 
 // ── Step 3 — 받을 칸을 고른다 ───────────────────────────────────────────────
 describe('Step 3 — `...req.body` 가 여는 구멍 둘', () => {
+  it('🔴 순진한 판도 평범한 요청에는 201 이다 — `minutesAgo: 0` 을 옮겨 적었으면 여기서 500', async () => {
+    // 교안이 「201이 오고 게시물도 잘 만들어지는데」라고 한다. 표에 없는 칸을 남기면 거짓이 된다.
+    await bootApp('snapshots/p2-30.step3.naive.app.js', 3412);
+    const res = await fetch(`${server.base}/api/posts`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ username: 'yuna', postImage: '/images/post-9.jpg' }),
+    });
+    expect(res.status).toBe(201);
+    expect(read(P('snapshots/p2-30.step3.naive.app.js'))).not.toContain('minutesAgo');
+  });
+
   it('🔴 순진한 판은 모르는 이름에 500 을 낸다', async () => {
     await bootApp('snapshots/p2-30.step3.naive.app.js', 3405);
     const res = await fetch(`${server.base}/api/posts`, {
@@ -229,7 +277,11 @@ describe('Step 3 — `...req.body` 가 여는 구멍 둘', () => {
     expect(body.id).not.toBe(888);
     expect(body.likeCount).toBe(0);      // 스키마 기본값이 준다
     expect(body.commentCount).toBe(0);
-    expect(body.minutesAgo).toBe(0);
+    expect(body).not.toHaveProperty('minutesAgo');
+    // 🔴 교안 — 「새로 만든 게시물은 createdAt과 updatedAt이 같은 값으로 시작해요」(2026-09-18 실측)
+    expect(body.createdAt).toBeTruthy();
+    expect(body.updatedAt).toBe(body.createdAt);
+    expect(read(LECTURE)).toContain('같은 값으로 시작해요');
   });
 });
 
@@ -267,12 +319,17 @@ describe('Step 4 — `null` 이 아니라 «던진다»', () => {
     }
     // 안 보낸 칸은 그대로 남는다 — data 의 undefined 는 「안 바꿈」이다
     const before = await (await fetch(`${server.base}/api/posts/1`)).json();
+    await new Promise((r) => setTimeout(r, 20));   // 고친 시각이 같은 밀리초에 겹치지 않게
     const after = await (await fetch(`${server.base}/api/posts/1`, {
       method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 7 }),
     })).json();
     expect(after.likeCount).toBe(7);
     expect(after.content).toBe(before.content);
     expect(after.username).toBe(before.username);
+    // 🔴 교안 — 「updatedAt도 요청을 보낸 순간의 시각으로 바뀌어 있어요 … createdAt은 그대로예요」
+    expect(after.createdAt).toBe(before.createdAt);
+    expect(new Date(after.updatedAt).getTime()).toBeGreaterThan(new Date(before.updatedAt).getTime());
+    expect(Math.abs(Date.now() - new Date(after.updatedAt).getTime())).toBeLessThan(10000);
   });
 
   it('🔴 `p2-23` 이 가르친 「깨진 몸통 400」이 안 덮였다', async () => {
@@ -284,6 +341,39 @@ describe('Step 4 — `null` 이 아니라 «던진다»', () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ message: '보낸 내용을 읽을 수 없어요' });
+  });
+});
+
+// ── Step 5 — 「목록의 첫 게시물 하나」 ─────────────────────────────────────
+describe('Step 5 — 목록 맨 앞이 3번으로 바뀌어 있다', () => {
+  it('🔴 Step 3 에서 올리고 Step 4 에서 2번을 고친 뒤의 맨 앞이 교안의 응답과 같다', async () => {
+    // 🚨 앞 describe 들이 1번을 여러 번 고쳐서 이 DB 의 순서가 학생 것과 달라졌다 — 착수 상태부터 다시 세운다.
+    await setupP230(db);
+    await bootApp('snapshots/p2-32-final/app.js', 3413);
+    // Step 3 — 평범하게 올리기 · 777 (순진한 판은 그 번호로 들어갔지만 줄이 뒤에 붙는 것은 같다) · 다시 올리기
+    for (const body of [{ username: 'yuna', postImage: '/images/post-9.jpg' },
+                        { username: 'hacker', postImage: '/images/post-9.jpg' },
+                        { username: 'yuna', postImage: '/images/post-9.jpg' }]) {
+      const r = await fetch(`${server.base}/api/posts`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
+      expect(r.status).toBe(201);
+    }
+    // Step 4 — 2번 하트 수 고치기
+    expect((await fetch(`${server.base}/api/posts/2`, {
+      method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 7 }),
+    })).status).toBe(200);
+    const list = await (await fetch(`${server.base}/api/posts`)).json();
+    // 🚨 완성판 목록은 최신순으로 정렬한다 — Step 5 시점 학생 서버는 아직 orderBy 가 없다.
+    //    그래서 목록 순서는 DB 에서 직접 잰다(정렬 없는 SELECT = 학생 서버의 findMany()).
+    const order = (await db.query('select id from posts')).rows.map((x) => x.id);
+    expect(order[0]).toBe(3);
+    expect(order.at(-1)).toBe(2);
+    const actual = await (await fetch(`${server.base}/api/posts/${order[0]}`)).json();
+    const shown = blocksOf(LECTURE, 'json').find((b) => b.startsWith('{') && b.includes('"postAlt"'));
+    const one = JSON.parse(shown);
+    expect(Object.keys(one)).toEqual(Object.keys(actual));
+    expect({ ...one, updatedAt: null }).toEqual({ ...actual, updatedAt: null });
+    expect(one.updatedAt).toBe('2026-09-30T06:27:55.147Z');
+    expect(list.length).toBe(8);
   });
 });
 
@@ -309,7 +399,7 @@ import { prisma } from '../snapshots/p2-32-final/db.js';
 import { posts } from '../snapshots/p2-33-final/data/posts.js';
 await prisma.comment.deleteMany({});
 await prisma.post.deleteMany({});
-await prisma.post.createMany({ data: posts.map((p) => ({ ...p })) });
+await prisma.post.createMany({ data: posts.map(({ minutesAgo, ...p }) => p) });
 const made = await prisma.post.findMany({ orderBy: { id: 'asc' } });
 console.log(JSON.stringify(made.map((p) => p.id)));
 await prisma.$disconnect();`);
@@ -317,6 +407,37 @@ await prisma.$disconnect();`);
     const ids = JSON.parse(out.trim().split('\n').at(-1));
     expect(ids[0]).toBeGreaterThan(1);
     expect(read(LECTURE)).toContain('1부터가 아니에요');
+    dropCopy(probe);
+  });
+
+  it('🔴 데이터 파일의 `minutesAgo` 를 그대로 넘기면 Prisma 가 거절한다 — 표에 없는 칸', async () => {
+    const probe = '__replay__/p230-minutes.mjs';
+    writeFileSync(P(probe), `
+import { prisma } from '../snapshots/p2-32-final/db.js';
+import { posts } from '../snapshots/p2-33-final/data/posts.js';
+try { await prisma.post.createMany({ data: posts }); console.log('NOT-BLOCKED'); }
+catch (e) { console.log(e.message.split('\\n').filter(Boolean).at(-1)); }
+await prisma.$disconnect();`);
+    const out = execFileSync(process.execPath, [P(probe)], { encoding: 'utf8', env: { ...process.env, ...ENV } });
+    expect(out).toContain('Unknown argument `minutesAgo`.');
+    expect(read(LECTURE)).toContain('``Unknown argument `minutesAgo`.``');
+    dropCopy(probe);
+  });
+
+  it('🔴 「시작하기 전에」 — 댓글 칸이 없는 클라이언트는 시드에서 `updatedAt` 을 거절한다', async () => {
+    // p2-29 과제 [기초]를 안 한 학생 = p2-29 교안 끝 스키마. 검사는 쿼리를 보내기 전에 일어난다.
+    prismaCli(['generate', '--config', 'snapshots/p2-29/generate.config.js']);
+    const probe = '__replay__/p230-nohw.mjs';
+    writeFileSync(P(probe), `
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../snapshots/p2-29/client/index.js';
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+try { await prisma.comment.createMany({ data: [{ postId: 1, username: 'a', content: 'b', createdAt: new Date(), updatedAt: new Date() }] }); console.log('NOT-BLOCKED'); }
+catch (e) { console.log(e.message.split('\\n').filter(Boolean).at(-1)); }
+await prisma.$disconnect();`);
+    const out = execFileSync(process.execPath, [P(probe)], { encoding: 'utf8', env: { ...process.env, ...ENV } });
+    expect(out).toContain('Unknown argument `updatedAt`. Did you mean `createdAt`?');
+    expect(read(LECTURE)).toContain('``Unknown argument `updatedAt`. Did you mean `createdAt`?``');
     dropCopy(probe);
   });
 
@@ -338,6 +459,18 @@ await prisma.$disconnect();`);
     seed();
     const r = await db.query('select count(distinct created_at)::int n from posts');
     expect(r.rows[0].n).toBe(5);
+    const c = await db.query('select count(distinct created_at)::int n from comments');
+    expect(c.rows[0].n).toBe(9);
+  });
+
+  it('🔴 한 번도 안 고친 줄이라 고친 시각 = 작성 시각 — 게시물·댓글 둘 다', async () => {
+    // 교안 — 「updatedAt에도 같은 값을 넣었는데 … 한 번도 안 고친 줄은 고친 시각이 곧 작성 시각」.
+    //    안 넣으면 createMany 가 줄마다 같은 순간(시드를 실행한 시각)을 넣는다(2026-09-18 실측).
+    seed();
+    for (const t of ['posts', 'comments']) {
+      const r = await db.query(`select count(*)::int n from ${t} where updated_at <> created_at`);
+      expect(r.rows[0].n, t).toBe(0);
+    }
   });
 });
 
@@ -364,7 +497,9 @@ describe('Step 7·8 — 조건 · 정렬 · 개수', () => {
     const posts = await (await fetch(`${server.base}/api/posts`)).json();
     const times = posts.map((p) => new Date(p.createdAt).getTime());
     expect([...times].sort((a, b) => b - a)).toEqual(times);
-    expect(posts.map((p) => p.minutesAgo)).toEqual([...posts.map((p) => p.minutesAgo)].sort((a, b) => a - b));
+    // 데이터 파일 순서 = 12·45·180·300·420분 전 = 번호 1~5. 가장 최근(12분 전)이 맨 위다.
+    expect(posts.map((p) => p.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(posts[0]).not.toHaveProperty('minutesAgo');
   });
 
   afterAll(async () => { if (server) { await server.stop(); server = null; } });
@@ -464,6 +599,15 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
         if (!sources.some((s) => s.includes(chunk))) missing.push(chunk.split('\n')[0]);
     }
     expect(missing).toEqual([]);
+  });
+
+  it('🔴 교안의 ```prisma 블록이 그 시점 스키마에 실재한다', () => {
+    // 수업 스키마 = p2-29 교안 + 과제 [기초](시작하기 전에 · Step 3) · 서점 스키마 = lab/p2-29 (Step 3 직접 해보기)
+    const sources = [read(P('snapshots/p2-29/schema-answers.prisma')), read(P('lab/p2-29/schema.prisma'))];
+    const blocks = blocksOf(LECTURE, 'prisma');
+    expect(blocks.length).toBeGreaterThanOrEqual(3);
+    for (const b of blocks) expect(sources.some((src) => src.includes(b)), b.split('\n')[0]).toBe(true);
+    expect(blocks.join('\n')).not.toContain('minutesAgo');
   });
 
   it('답안이 인용한 lab 파일이 코드베이스와 같다', () => {

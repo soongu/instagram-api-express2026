@@ -83,7 +83,8 @@ beforeAll(async () => {
   //    재생하면 p2-27 의 번호(1·2·3·6·7)와 값이 남아 교안이 학생 화면에 없는 출력을 싣는다
   //    (2026-09-18 낭독 retrofit 에서 발견 — 번호 6·7 · 「4 non-null」 · dahye 사진 없음).
   //    그래서 p2-30~32 게이트가 쓰는 그 시드를 그대로 한 번 돌린다(그 시점 클라이언트).
-  prismaCli(['generate', '--config', 'snapshots/p2-29/generate.config.js']);
+  //    🔀 2026-09-18 audit — 그 시드가 댓글 updated_at 까지 채워서 p2-30 클라이언트로 바꿨다.
+  prismaCli(['generate', '--config', 'snapshots/p2-30/generate.config.js']);
   execFileSync(process.execPath, [P('snapshots/p2-32-final/seed.js')],
     { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 

@@ -16,7 +16,8 @@ import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
-import { setupP229, setupP229Bookstore } from '../sql/p2-29/setup.mjs';
+import { setupP229Bookstore } from '../sql/p2-29/setup.mjs';
+import { setupP230 } from '../sql/p2-30/setup.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -62,8 +63,11 @@ beforeAll(async () => {
   await admin.end();
   db = new pg.Client({ ...ADMIN, database: 'p231_gate' });
   await db.connect();
-  await setupP229(db);
-  await db.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP');
+  // 🔀 2026-09-18 audit — 착수 상태를 p2-30 판(과제 [기초]의 댓글 updated_at 포함)으로, 시드는 p2-30 클라이언트로.
+  //    gitignore 된 생성물이라 매번 만든다(output 이 회차 폴더라 수업 클라이언트를 안 덮는다).
+  execFileSync(P('node_modules/.bin/prisma'), ['generate', '--config', 'snapshots/p2-30/generate.config.js'],
+    { cwd: P('.'), encoding: 'utf8' });
+  await setupP230(db);
   seed();   // p2-30 종료 상태 — 게시물 1~5 · 댓글 1~9
 
   const bookAdmin = new pg.Client(BOOK_ADMIN);
