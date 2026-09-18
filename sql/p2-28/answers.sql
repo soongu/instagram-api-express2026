@@ -9,7 +9,7 @@
 -- @@
 SELECT p.post_alt, c.username, c.content, c.like_count
 FROM posts p JOIN comments c ON c.post_id = p.id
-ORDER BY c.like_count DESC, c.minutes_ago
+ORDER BY c.like_count DESC, c.created_at DESC
 LIMIT 3;
 -- @@
 SELECT p.id, p.post_alt, count(c.id) AS 댓글수, sum(c.like_count) AS 좋아요합

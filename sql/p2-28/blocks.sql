@@ -12,27 +12,27 @@ SELECT id, username, post_alt, comment_count FROM posts ORDER BY id;
 DROP TABLE comments;
 -- @@
 CREATE TABLE comments (
-  id          SERIAL      PRIMARY KEY,
-  post_id     INTEGER     NOT NULL,
-  username    VARCHAR(50) NOT NULL,
-  content     TEXT        NOT NULL,
-  like_count  INTEGER     NOT NULL DEFAULT 0,
-  minutes_ago INTEGER     NOT NULL DEFAULT 0
+  id         SERIAL       PRIMARY KEY,
+  post_id    INTEGER      NOT NULL,
+  username   VARCHAR(50)  NOT NULL,
+  content    TEXT         NOT NULL,
+  like_count INTEGER      NOT NULL DEFAULT 0,
+  created_at TIMESTAMP(3) NOT NULL DEFAULT now()
 );
 -- @@
-INSERT INTO comments (post_id, username, content, like_count, minutes_ago)
+INSERT INTO comments (post_id, username, content, like_count, created_at)
 VALUES
-  (1, 'minji',    '저도 가봤어요',         7,  10),
-  (1, 'seungwoo', '사진 잘 나왔네요',      2,   8),
-  (1, 'nayeon',   '다음에 같이 가요',      0,   5),
-  (2, 'jaehoon',  '크루아상 색이 좋네요', 12,  40),
-  (2, 'minji',    '레시피 공유해주세요',   5,  35),
-  (2, 'dahye',    '저도 구워볼래요',       3,  30),
-  (2, 'nayeon',   '냄새가 여기까지',      21,  12),
-  (3, 'seungwoo', '다음엔 저도 낄게요',   12, 120),
-  (3, 'dahye',    '코트 어디예요?',       30,  60);
+  (1, 'minji',    '저도 가봤어요',         7, '2026-09-28 08:50:00'),
+  (1, 'seungwoo', '사진 잘 나왔네요',      2, '2026-09-28 08:52:00'),
+  (1, 'nayeon',   '다음에 같이 가요',      0, '2026-09-28 08:55:00'),
+  (2, 'jaehoon',  '크루아상 색이 좋네요', 12, '2026-09-28 08:20:00'),
+  (2, 'minji',    '레시피 공유해주세요',   5, '2026-09-28 08:25:00'),
+  (2, 'dahye',    '저도 구워볼래요',       3, '2026-09-28 08:30:00'),
+  (2, 'nayeon',   '냄새가 여기까지',      21, '2026-09-28 08:48:00'),
+  (3, 'seungwoo', '다음엔 저도 낄게요',   12, '2026-09-28 07:00:00'),
+  (3, 'dahye',    '코트 어디예요?',       30, '2026-09-28 08:00:00');
 -- @@
-SELECT post_id, username, content, like_count FROM comments ORDER BY id;
+SELECT post_id, username, content, like_count, created_at FROM comments ORDER BY id;
 
 -- ── Step 1: 두 표는 서로를 모른다 ──────────────────────
 -- @@
@@ -100,22 +100,22 @@ SELECT * FROM posts JOIN comments ON comments.post_id = posts.id;
 -- @@
 SELECT posts.post_alt, comments.username, comments.content
 FROM posts JOIN comments ON comments.post_id = posts.id
-ORDER BY posts.id, comments.minutes_ago;
+ORDER BY posts.id, comments.created_at DESC;
 -- @@
 SELECT p.post_alt, c.username, c.content
 FROM posts p JOIN comments c ON c.post_id = p.id
 WHERE p.id = 1
-ORDER BY c.minutes_ago;
+ORDER BY c.created_at DESC;
 
 -- ── Step 4: 한쪽에만 있는 줄 ───────────────────────────
 -- @@
 SELECT p.id, p.post_alt, c.username, c.content
 FROM posts p JOIN comments c ON c.post_id = p.id
-ORDER BY p.id, c.minutes_ago;
+ORDER BY p.id, c.created_at DESC;
 -- @@
 SELECT p.id, p.post_alt, c.username, c.content
 FROM posts p LEFT JOIN comments c ON c.post_id = p.id
-ORDER BY p.id, c.minutes_ago;
+ORDER BY p.id, c.created_at DESC;
 
 -- ── 직접 해보기 2 (서점) ───────────────────────────────
 -- @@bookstore

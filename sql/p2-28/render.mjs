@@ -6,8 +6,25 @@ import { readFileSync } from 'node:fs';
 import { fence } from '../_fence.mjs';
 import { parse, setupInstagram, setupBookstore } from './corpus.mjs';
 
+// 🚨 TIMESTAMP(OID 1114) 는 «서버가 찍은 글자 그대로» 받는다 — 안 그러면 node-pg 가 로컬 시각
+//    `Date` 로 읽어서 `Mon Sep 28 2026 …` 같은 글자가 표에 찍힌다(sql/render-fences.mjs 와 같다).
+pg.types.setTypeParser(1114, (v) => v);
+
+// 🚨 수업 DB(`instagram`·`bookstore`)에 대고 돌리지 않는다 — 착수 상태를 세우면서 posts·comments·
+//    reviews 를 통째로 DROP 해서 그 DB 에 쌓인 상태를 날린다(2026-09-18 까지 실제로 그렇게 돌았다).
+//    두 서버에 이 스크립트 전용 DB 를 만들고 끝나면 지운다.
+const RENDER_DB = 'p228_render';
 const mk = (db, port) => new pg.Client({ host:'localhost', port, database:db, user:'postgres', password:'postgres' });
-const IG = mk('instagram', 5432), BK = mk('bookstore', 5433);
+async function scratch(port, drop) {
+  const admin = mk('postgres', port);
+  await admin.connect();
+  await admin.query(`select pg_terminate_backend(pid) from pg_stat_activity where datname = '${RENDER_DB}' and pid <> pg_backend_pid()`);
+  await admin.query(`DROP DATABASE IF EXISTS ${RENDER_DB}`);
+  if (!drop) await admin.query(`CREATE DATABASE ${RENDER_DB}`);
+  await admin.end();
+}
+await scratch(5432); await scratch(5433);
+const IG = mk(RENDER_DB, 5432), BK = mk(RENDER_DB, 5433);
 await IG.connect(); await BK.connect();
 await setupInstagram(IG); await setupBookstore(BK);
 
@@ -44,3 +61,4 @@ for (const step of parse(readFileSync(process.env.BLOCKS ?? 'sql/p2-28/blocks.sq
   }
 }
 await IG.end(); await BK.end();
+await scratch(5432, true); await scratch(5433, true);

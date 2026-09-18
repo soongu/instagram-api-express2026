@@ -124,7 +124,11 @@ describe('착수 상태 — p2-27 을 끝까지 따라간 학생과 어긋나지
     const replayed = (await db.query('SELECT * FROM posts ORDER BY id')).rows;
     await reset();
     const ours = (await db.query('SELECT * FROM posts ORDER BY id')).rows;
-    expect(ours).toEqual(replayed);           // 하드코딩한 착수 상태가 낡으면 여기서 빨개진다
+    // 🚨 7번의 created_at 은 p2-27 Step 8 을 «실행한 순간»의 now() 라 재생할 때마다 다르다.
+    //    그 칸 하나만 비어 있지 않은지 보고, 나머지는 전부 글자 그대로 대조한다.
+    expect(replayed.find((r) => r.id === 7).created_at).not.toBeNull();
+    const but7 = (rows) => rows.map((r) => (r.id === 7 ? { ...r, created_at: '(학생마다 다름)' } : r));
+    expect(but7(ours)).toEqual(but7(replayed)); // 하드코딩한 착수 상태가 낡으면 여기서 빨개진다
   }, 60000);
 
   it('오프닝이 대는 comment_count 가 실제 값이다', async () => {
@@ -133,6 +137,18 @@ describe('착수 상태 — p2-27 을 끝까지 따라간 학생과 어긋나지
       { id: 1, comment_count: 4 }, { id: 2, comment_count: 23 }, { id: 3, comment_count: 8 },
       { id: 6, comment_count: 11 }, { id: 7, comment_count: 0 }]);
   });
+
+  it('🚨 오늘 넣는 댓글 9줄은 시각이 전부 다르고, 저마다 자기 게시물보다 늦게 달렸다', async () => {
+    // 한 INSERT 의 DEFAULT now() 는 줄마다 같은 시각이다(p2-26 실측) — 시각을 안 적으면
+    // `ORDER BY c.created_at DESC` 가 동점이 되어 Step 3·4 의 표 순서가 정해지지 않는다.
+    await reset(); await run(lectureCorpus());
+    const r = await db.query(`SELECT count(DISTINCT c.created_at)::int AS n,
+      count(*) FILTER (WHERE c.created_at <= p.created_at)::int AS early,
+      max(c.created_at) <= '2026-09-28 09:00:00' AS before_now
+      FROM comments c JOIN posts p ON p.id = c.post_id`);
+    expect(r.rows[0]).toEqual({ n: 9, early: 0, before_now: true });
+    await reset();
+  }, 60000);
 
   it('🚨 오프닝의 근거 — 6번 게시물 댓글은 «어느 학생 표에도» 0개다', async () => {
     // p2-26 과제(post_id=1 셋)와 p2-27 과제(2·2·3·3)가 1·2·3 에만 댓글을 달게 했다.
@@ -239,8 +255,12 @@ describe('Step 3~4 — 잇기', () => {
     const r = await db.query('SELECT * FROM posts JOIN comments ON comments.post_id = posts.id');
     const names = r.fields.map((f) => f.name);
     expect(names.length).toBe(15);
+    // 교안 Step 3 의 칸 이름 그림이 이 순서를 그대로 늘어놓는다
+    expect(names).toEqual(['id', 'username', 'profile_image', 'post_image', 'post_alt', 'content',
+      'like_count', 'comment_count', 'created_at',
+      'id', 'post_id', 'username', 'content', 'like_count', 'created_at']);
     const dup = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))];
-    expect(dup).toEqual(['id', 'username', 'content', 'like_count', 'minutes_ago']);
+    expect(dup).toEqual(['id', 'username', 'content', 'like_count', 'created_at']);
     expect(r.rows.length).toBe(9);
   });
 
@@ -325,9 +345,13 @@ describe('답안 — 과제가 시킨 것과 답안이 답하는 것이 같다',
     const tie = await db.query('SELECT count(*)::int AS n FROM comments WHERE like_count = 12');
     expect(tie.rows[0].n).toBe(2);                       // 동점이 실재한다
     const r = await db.query(`SELECT c.content FROM posts p JOIN comments c ON c.post_id = p.id
-      ORDER BY c.like_count DESC, c.minutes_ago LIMIT 3`);
+      ORDER BY c.like_count DESC, c.created_at DESC LIMIT 3`);
     expect(r.rows.map((x) => x.content))
       .toEqual(['코트 어디예요?', '냄새가 여기까지', '크루아상 색이 좋네요']);
+    // 답안이 「`created_at` 뒤의 `DESC`를 빠뜨리면」으로 드는 반례 — 오래된 것이 먼저라 셋째 줄이 바뀐다
+    const asc = await db.query(`SELECT c.content FROM posts p JOIN comments c ON c.post_id = p.id
+      ORDER BY c.like_count DESC, c.created_at LIMIT 3`);
+    expect(asc.rows[2].content).toBe('다음엔 저도 낄게요');
   }, 60000);
   it('과제 2 — 저자는 다섯이고 로버트 마틴만 책이 둘이다', async () => {
     await reset(); await run(lectureCorpus()); await run(answerCorpus());
