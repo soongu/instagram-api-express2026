@@ -7,22 +7,26 @@
 -- @@instagram
 -- @@setup
 CREATE TABLE comments (
-  id          SERIAL      PRIMARY KEY,
-  post_id     INTEGER     NOT NULL,
-  username    VARCHAR(50) NOT NULL,
-  content     TEXT        NOT NULL,
-  like_count  INTEGER     NOT NULL DEFAULT 0,
-  minutes_ago INTEGER     NOT NULL DEFAULT 0
+  id         SERIAL       PRIMARY KEY,
+  post_id    INTEGER      NOT NULL,
+  username   VARCHAR(50)  NOT NULL,
+  content    TEXT         NOT NULL,
+  like_count INTEGER      NOT NULL DEFAULT 0,
+  created_at TIMESTAMP(3) NOT NULL DEFAULT now()
 );
 INSERT INTO comments (post_id, username, content, like_count) VALUES (1, 'minji', '저도 가봤어요', 7);
 INSERT INTO comments (post_id, username, content) VALUES (1, 'seungwoo', '사진 잘 나왔네요');
 INSERT INTO comments (post_id, username, content) VALUES (1, 'nayeon', '다음에 같이 가요');
+-- p2-26 과제 요구사항 10 이 «반드시» 시키는 실패 INSERT(content 비움)가 번호 4를 써버린다 —
+-- 그래서 과제를 끝까지 한 학생의 새 댓글은 5번부터다(2026-09-18 학생 낭독 두 번이 4번 기준 답안에서 멈췄다).
+-- 실패하는 문장 대신 그 흔적(시퀀스 4)만 재현한다.
+SELECT setval('comments_id_seq', 4);
 -- @@
-INSERT INTO comments (post_id, username, content, like_count, minutes_ago) VALUES
-  (2, 'jaehoon',  '크루아상 색이 좋네요',   0,  30),
-  (2, 'minji',    '레시피 공유해주세요',    5,  20),
-  (3, 'seungwoo', '다음엔 저도 낄게요',    12, 120),
-  (3, 'dahye',    '코트 어디예요?',        30,  60);
+INSERT INTO comments (post_id, username, content, like_count) VALUES
+  (2, 'jaehoon',  '크루아상 색이 좋네요',  0),
+  (2, 'minji',    '레시피 공유해주세요',   5),
+  (3, 'seungwoo', '다음엔 저도 낄게요',   12),
+  (3, 'dahye',    '코트 어디예요?',       30);
 -- @@
 SELECT id, username, content FROM comments WHERE post_id = 1;
 -- @@

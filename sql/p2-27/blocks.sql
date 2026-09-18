@@ -35,25 +35,27 @@ DROP TABLE stock_check;
 -- ── Step 2 ─────────────────────────────────────────────
 -- @@instagram
 -- @@
-INSERT INTO posts (username, profile_image, post_image, post_alt, content, minutes_ago, like_count, comment_count)
+-- 🚨 created_at 은 p2-26 과 같은 「지금」(한국 2026-09-28 18:00) 기준 옛 5·90·300분 전을 «UTC» 로 적는다.
+--    한 INSERT 의 DEFAULT now() 는 셋 다 같은 시각이라(p2-26 실측) 안 적으면 최신순이 동점이 된다.
+INSERT INTO posts (username, profile_image, post_image, post_alt, content, like_count, comment_count, created_at)
 VALUES
-  ('dahye',   '/images/dahye.jpg',   '/images/post-4.jpg', '아침 커피',    '커피 한 잔으로 시작하는 하루',   5,  43,  1),
-  ('jaehoon', '/images/jaehoon.jpg', '/images/post-5.jpg', '퇴근길 지하철', NULL,                           90,  12,  0),
-  ('minji',   '/images/minji.jpg',   '/images/post-6.jpg', '새 렌즈',      '오늘 도착한 렌즈',             300, 205, 11);
+  ('dahye',   '/images/dahye.jpg',   '/images/post-4.jpg', '아침 커피',     '커피 한 잔으로 시작하는 하루',  43,  1, '2026-09-28 08:55:00'),
+  ('jaehoon', '/images/jaehoon.jpg', '/images/post-5.jpg', '퇴근길 지하철', NULL,                            12,  0, '2026-09-28 07:30:00'),
+  ('minji',   '/images/minji.jpg',   '/images/post-6.jpg', '새 렌즈',       '오늘 도착한 렌즈',             205, 11, '2026-09-28 04:00:00');
 -- @@
 SELECT id, username, like_count FROM posts WHERE like_count > 100;
 -- @@
-SELECT id, username, minutes_ago FROM posts WHERE username = 'jaehoon';
+SELECT id, username, post_alt FROM posts WHERE username = 'jaehoon';
 -- @@
 SELECT id, username FROM posts WHERE username = 'Jaehoon';
 -- @@
 SELECT id, username, like_count FROM posts WHERE username <> 'jaehoon';
 -- @@
-SELECT id, username, minutes_ago FROM posts WHERE minutes_ago <= 45;
+SELECT id, username, comment_count FROM posts WHERE comment_count <= 8;
 
 -- ── Step 3 ─────────────────────────────────────────────
 -- @@
-SELECT id, username, like_count, minutes_ago FROM posts WHERE like_count > 100 AND minutes_ago < 60;
+SELECT id, username, like_count, comment_count FROM posts WHERE like_count > 100 AND comment_count > 10;
 -- @@
 SELECT id, username, like_count FROM posts WHERE username = 'minji' OR username = 'seungwoo';
 -- @@
@@ -115,15 +117,15 @@ SELECT id, username, content FROM posts WHERE content <> '오늘 도착한 렌�
 
 -- ── Step 6 ─────────────────────────────────────────────
 -- @@
-SELECT id, username, minutes_ago FROM posts ORDER BY minutes_ago;
+SELECT id, username, created_at FROM posts ORDER BY created_at;
 -- @@
-SELECT id, username, like_count FROM posts ORDER BY like_count DESC;
+SELECT id, username, created_at FROM posts ORDER BY created_at DESC;
 -- @@
-SELECT id, username, minutes_ago FROM posts ORDER BY username, minutes_ago;
+SELECT id, username, created_at FROM posts ORDER BY username, created_at;
 -- @@
-SELECT id, username, minutes_ago FROM posts ORDER BY minutes_ago LIMIT 5;
+SELECT id, username, created_at FROM posts ORDER BY created_at DESC LIMIT 5;
 -- @@
-SELECT id, username, minutes_ago FROM posts ORDER BY minutes_ago LIMIT 2 OFFSET 2;
+SELECT id, username, created_at FROM posts ORDER BY created_at DESC LIMIT 2 OFFSET 2;
 
 -- ── Step 7 ─────────────────────────────────────────────
 -- @@

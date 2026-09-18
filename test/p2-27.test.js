@@ -152,7 +152,7 @@ describe('Step 1 — 조건을 빠뜨리면', () => {
         WHERE table_name = 'posts' ORDER BY ordinal_position`);
     expect(cols.rows.map((r) => r.column_name)).toEqual([
       'id', 'username', 'profile_image', 'post_image', 'post_alt',
-      'content', 'minutes_ago', 'like_count', 'comment_count']);
+      'content', 'like_count', 'comment_count', 'created_at']);
   });
 
   it('🚨 WHERE 없는 UPDATE 는 «줄이 그대로 있어서» 더 조용하다', async () => {
@@ -176,6 +176,20 @@ describe('Step 2~4 — 조건으로 골라낸다', () => {
   it('예고가 약속한 셋이 전부 돈다 — 100 넘는 것 · 특정 사람 · (정렬은 Step 6)', async () => {
     expect(ids(await db.query('SELECT id FROM posts WHERE like_count > 100 ORDER BY id'))).toEqual([1, 2, 6]);
     expect(ids(await db.query("SELECT id FROM posts WHERE username = 'jaehoon' ORDER BY id"))).toEqual([1, 5]);
+  });
+
+  it('비교 기호 표의 두 예 — 댓글 수 < 10 · <= 8 이 «정확히 8» 에서 갈린다', async () => {
+    expect(ids(await db.query('SELECT id FROM posts WHERE comment_count < 10 ORDER BY id'))).toEqual([1, 3, 4, 5]);
+    expect(ids(await db.query('SELECT id FROM posts WHERE comment_count <= 8 ORDER BY id'))).toEqual([1, 3, 4, 5]);
+    expect(ids(await db.query('SELECT id FROM posts WHERE comment_count < 8 ORDER BY id'))).toEqual([1, 4, 5]); // 3번(8)이 빠진다
+    const three = await db.query('SELECT comment_count FROM posts WHERE id = 3');
+    expect(three.rows[0].comment_count).toBe(8);          // 「정확히 8」이 실제로 표에 있다
+  });
+
+  it('AND — 좋아요 100 초과 셋 중 댓글 10 초과만 남는다 (1번이 댓글 4개라 빠진다)', async () => {
+    expect(ids(await db.query('SELECT id FROM posts WHERE like_count > 100 AND comment_count > 10 ORDER BY id'))).toEqual([2, 6]);
+    const one = await db.query('SELECT like_count, comment_count FROM posts WHERE id = 1');
+    expect(one.rows[0]).toEqual({ like_count: 128, comment_count: 4 });
   });
 
   it('글자 조건은 대소문자를 구별한다', async () => {
@@ -236,24 +250,40 @@ describe('Step 6 — 줄 세워서 위에서 몇 개만', () => {
   });
   const ids = (r) => r.rows.map((x) => x.id);
 
-  it('최신순은 minutes_ago 가 «작은» 쪽이다 — 오름차순이 최신순이 된다', async () => {
-    expect(ids(await db.query('SELECT id FROM posts ORDER BY minutes_ago'))).toEqual([4, 1, 2, 5, 3, 6]);
+  it('🚨 여섯 줄의 created_at 이 «전부 다르다» — 동점이 없어야 최신순이 한 가지로 정해진다', async () => {
+    // p2-26 은 셋을, Step 2 는 셋을 «UTC 리터럴» 로 적었다. 한 INSERT 의 DEFAULT now() 는
+    // 줄마다 같은 시각이라(p2-26 실측) 안 적었으면 셋이 동점이 됐다.
+    const r = await db.query("SELECT id, to_char(created_at, 'YYYY-MM-DD HH24:MI:SS') AS t FROM posts ORDER BY id");
+    expect(r.rows).toEqual([
+      { id: 1, t: '2026-09-28 08:48:00' }, { id: 2, t: '2026-09-28 08:15:00' }, { id: 3, t: '2026-09-28 06:00:00' },
+      { id: 4, t: '2026-09-28 08:55:00' }, { id: 5, t: '2026-09-28 07:30:00' }, { id: 6, t: '2026-09-28 04:00:00' }]);
   });
 
-  it('DESC 는 큰 쪽부터', async () => {
-    expect(ids(await db.query('SELECT id FROM posts ORDER BY like_count DESC'))).toEqual([2, 6, 1, 3, 4, 5]);
+  it('created_at 오름차순은 «오래된» 것부터다 — 최신순을 원하면 DESC 가 필요하다', async () => {
+    expect(ids(await db.query('SELECT id FROM posts ORDER BY created_at'))).toEqual([6, 3, 5, 2, 1, 4]);
+  });
+
+  it('DESC 는 큰 쪽부터 — 시각은 늦을수록 커서 created_at DESC 가 최신순이다', async () => {
+    expect(ids(await db.query('SELECT id FROM posts ORDER BY created_at DESC'))).toEqual([4, 1, 2, 5, 3, 6]);
   });
 
   it('둘째 칸은 «동점일 때만» 일한다 — jaehoon 둘과 minji 둘이 그 자리다', async () => {
-    expect(ids(await db.query('SELECT id FROM posts ORDER BY username, minutes_ago'))).toEqual([4, 1, 5, 2, 6, 3]);
+    // 🚨 교안 블록은 둘째 기준을 «오름차순» 으로 둔다. 같은 사람 안에서 늦게 올린 쪽이 번호도
+    //    작아서(1<5 · 2<6) created_at DESC 로 두면 둘째 기준을 빼도 결과가 같다 — 효과가 안 보인다
+    //    (2026-09-18 학생 낭독이 잡았다). 오름차순이면 5가 1보다, 6이 2보다 먼저 와서 번호 순서와 어긋난다.
+    expect(ids(await db.query('SELECT id FROM posts ORDER BY username, created_at'))).toEqual([4, 5, 1, 6, 2, 3]);
+    // 교안 산문 「created_at DESC 처럼 그 열 뒤에만 DESC」 — 같은 사람 안에서만 최신순, 이름은 그대로
+    expect(ids(await db.query('SELECT id FROM posts ORDER BY username, created_at DESC'))).toEqual([4, 1, 5, 2, 6, 3]);
+    // DESC 는 바로 앞 칸에만 붙는다 — 이름까지 뒤집히면 seungwoo 가 맨 위로 온다
+    expect(ids(await db.query('SELECT id FROM posts ORDER BY username DESC, created_at DESC'))).toEqual([3, 2, 6, 1, 5, 4]);
     const dup = await db.query(
       'SELECT username FROM posts GROUP BY username HAVING count(*) > 1 ORDER BY username');
     expect(dup.rows.map((r) => r.username)).toEqual(['jaehoon', 'minji']); // 동점이 실재한다
   });
 
   it('LIMIT · OFFSET — p2-11 의 _page=2&_per_page=2 가 서버에서 하던 일', async () => {
-    expect(ids(await db.query('SELECT id FROM posts ORDER BY minutes_ago LIMIT 5'))).toEqual([4, 1, 2, 5, 3]);
-    expect(ids(await db.query('SELECT id FROM posts ORDER BY minutes_ago LIMIT 2 OFFSET 2'))).toEqual([2, 5]);
+    expect(ids(await db.query('SELECT id FROM posts ORDER BY created_at DESC LIMIT 5'))).toEqual([4, 1, 2, 5, 3]);
+    expect(ids(await db.query('SELECT id FROM posts ORDER BY created_at DESC LIMIT 2 OFFSET 2'))).toEqual([2, 5]);
   });
 
   it('🚨 한글 칸으로 줄을 세우면 가나다순이 아니다 — 글자 수가 적은 것부터 온다', async () => {
@@ -302,6 +332,11 @@ describe('Step 7~8 — 고치기와 지우기', () => {
     expect(ins.rows[0].id).toBe(7);                             // 4 가 아니라 7
   });
 
+  it('칸 3개만 적은 7번에도 created_at 이 채워진다 — Step 8 이 「넣은 시각이 들어가고」라고 말하는 근거', async () => {
+    const r = await db.query('SELECT like_count, comment_count, created_at IS NOT NULL AS has FROM posts WHERE id = 7');
+    expect(r.rows[0]).toEqual({ like_count: 0, comment_count: 0, has: true });
+  });
+
   it('DROP TABLE 은 번호를 «처음부터» 세운다 — p2-26 이 그렇게 가르쳤다', async () => {
     await reset();
     const ins = await db.query(
@@ -344,6 +379,19 @@ describe('답안 — 과제가 시킨 것과 답안이 답하는 것이 같다',
     expect(blocks).toEqual(answerCorpus().filter((c) => c.sql && !c.setup).map((c) => c.sql));
   });
 
+  it('흔한 실수 셋째 — ①의 `post_id = 1` 을 잘못 옮겨 오면 «개수는 같은 3줄» 인데 지워지는 댓글이 다르다', async () => {
+    await reset();
+    await db.query('DROP TABLE IF EXISTS comments');
+    const steps = answerCorpus().filter((c) => c.sql);
+    for (const st of steps.slice(0, 2)) await db.query(st.sql);            // setup(p2-26 과제) + 넷 더 넣기
+    await db.query('UPDATE comments SET like_count = like_count + 1 WHERE id = 1');   // 답안 6번
+    const right = await db.query('SELECT id FROM comments WHERE like_count = 0 ORDER BY id');
+    const wrong = await db.query('SELECT id FROM comments WHERE post_id = 1 ORDER BY id');
+    expect(right.rows.map((r) => r.id)).toEqual([2, 3, 5]);                // p2-26 의 실패 INSERT 로 새 댓글은 5번부터
+    expect(wrong.rows.map((r) => r.id)).toEqual([1, 2, 3]);                // 1번이 지워지고 5번이 남는다
+    await db.query('DROP TABLE IF EXISTS comments');
+  });
+
   it('답안 20블록이 순서대로 전부 돈다 — 하나도 안 막힌다', async () => {
     await reset();
     await resetBookstore();
@@ -362,6 +410,8 @@ describe('답안 — 과제가 시킨 것과 답안이 답하는 것이 같다',
     expect(i).toBe(20);
     // 과제가 시킨 결과가 실제로 남아 있다 — 댓글 넷, 리뷰 여섯
     expect((await db.query('SELECT count(*)::int AS n FROM comments')).rows[0].n).toBe(4);
+    // 답안 「7개 중 4개가 남았고 2·3·5번은 사라졌어요」 — 새 댓글이 5·6·7·8번인 학생 기준
+    expect((await db.query('SELECT id FROM comments ORDER BY id')).rows.map((r) => r.id)).toEqual([1, 6, 7, 8]);
     expect((await bk.query('SELECT count(*)::int AS n FROM reviews')).rows[0].n).toBe(6);
     await db.query('DROP TABLE IF EXISTS comments');
     await bk.query('DROP TABLE IF EXISTS reviews');
