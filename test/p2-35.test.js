@@ -26,6 +26,14 @@ const BOOK_GATE_URL = 'postgresql://postgres:postgres@localhost:5433/p235_book_g
 const ENV = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:5173' };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+// 🚨 이 회차의 코드는 «이 회차 스냅숏» 에서 읽고 띄운다. 라이브(`app.js`·`routes/`·
+//    `services/postService.js`)는 뒤 회차가 키운 판이다 — `p2-36` 이 목록을 커서 봉투로,
+//    `p2-38` 이 CORS 를 환경에서 받게 바꿨다. 그 판으로 재면 뒤 회차의 코드를 이 회차
+//    교안의 주장으로 재게 된다(2026-09-21 `p2-34` 게이트가 실제로 그랬다).
+//    그사이 안 바뀐 파일(`db.js`·`errors.js`·`middlewares/`·`schemas/`)만 라이브를 써도 된다.
+const S35 = 'snapshots/p2-35-final/';
+const APP35 = `${S35}app.js`;
+
 const LECTURE = P('../../part2/5-db-prisma/p2-35-transactions-lecture.md');
 const ANSWERS = P('../../part2/5-db-prisma/p2-35-transactions-answers.md');
 const read = (p) => readFileSync(p, 'utf8');
@@ -73,10 +81,10 @@ function crashApp() {
     .replace(/'\.\.\/schemas\//g, "'../../schemas/");
 
   writeFileSync(`${dir}/likeService.js`, up(read(P('snapshots/p2-35/likeService.crash.js'))));
-  writeFileSync(`${dir}/postService.js`, up(read(P('services/postService.js'))));
-  writeFileSync(`${dir}/posts.js`, up(read(P('routes/posts.js')))
+  writeFileSync(`${dir}/postService.js`, up(read(P(`${S35}services/postService.js`))));
+  writeFileSync(`${dir}/posts.js`, up(read(P(`${S35}routes/posts.js`)))
     .replace(/'\.\.\/services\//g, "'./"));
-  writeFileSync(`${dir}/app.crash.js`, read(P('app.js'))
+  writeFileSync(`${dir}/app.crash.js`, read(P(APP35))
     .replace("'./routes/posts.js'", "'./posts.js'")
     .replace("'./errors.js'", "'../../errors.js'"));
   return '__replay__/p235/app.crash.js';
@@ -87,19 +95,19 @@ function transactionCrashApp() {
   const dir = P('__replay__/p235');
   mkdirSync(dir, { recursive: true });
   const MARK = '      // 화면이 읽는 숫자는 따로 적어둔 칸이라, 켜고 끌 때마다 우리가 맞춰준다.';
-  const src = read(P('services/likeService.js'))
+  const src = read(P(`${S35}services/likeService.js`))
     .replace(MARK, "      throw new Error('서버가 갑자기 멈췄어요');\n\n" + MARK);
   if (!src.includes('서버가 갑자기 멈췄어요')) throw new Error('throw 를 끼울 자리를 못 찾았다');
   const up = (t) => t
     .replace(/'\.\.\/db\.js'/g, "'../../db.js'")
     .replace(/'\.\.\/errors\.js'/g, "'../../errors.js'");
   writeFileSync(`${dir}/likeService.js`, up(src));
-  writeFileSync(`${dir}/postService.js`, up(read(P('services/postService.js'))));
-  writeFileSync(`${dir}/posts.js`, up(read(P('routes/posts.js')))
+  writeFileSync(`${dir}/postService.js`, up(read(P(`${S35}services/postService.js`))));
+  writeFileSync(`${dir}/posts.js`, up(read(P(`${S35}routes/posts.js`)))
     .replace(/'\.\.\/services\//g, "'./")
     .replace("'../middlewares/", "'../../middlewares/")
     .replace("'../schemas/", "'../../schemas/"));
-  writeFileSync(`${dir}/app.tx.js`, read(P('app.js'))
+  writeFileSync(`${dir}/app.tx.js`, read(P(APP35))
     .replace("'./routes/posts.js'", "'./posts.js'").replace("'./errors.js'", "'../../errors.js'"));
   return '__replay__/p235/app.tx.js';
 }
@@ -157,7 +165,7 @@ describe('Step 1·2 — 묶기 전에는 어긋나고, 묶은 뒤에는 안 어�
 
   it('🔴 그 상태에서 «한 번 더» 누르면 숫자가 시작값보다 내려간다 (오프닝의 장면)', async () => {
     // 앞 검사가 남긴 어긋난 상태를 그대로 이어받는다 — 죽는 줄만 뺀 판으로 띄운다.
-    await bootApp('app.js', 3452);
+    await bootApp(APP35, 3452);
 
     const again = await fetch(`${server.base}/api/posts/1/likes`,
       { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) }).then((r) => r.json());
@@ -171,7 +179,7 @@ describe('Step 1·2 — 묶기 전에는 어긋나고, 묶은 뒤에는 안 어�
     await db.query('delete from post_likes');
     await db.query('update posts set like_count = 130 where id = 1');
 
-    const src = read(P('services/likeService.js'));
+    const src = read(P(`${S35}services/likeService.js`));
     expect(src, '$transaction 으로 묶여 있어야 한다').toContain('prisma.$transaction(async (tx) =>');
     expect(src, '읽기도 같은 묶음 안에 있어야 한다').toMatch(/tx\.postLike\.findUnique/);
     expect(src, '쓰기 둘 다 tx 로 가야 한다').toMatch(/tx\.post\.update/);
@@ -182,7 +190,7 @@ describe('Step 1·2 — 묶기 전에는 어긋나고, 묶은 뒤에는 안 어�
   it('🔴 켜고 끄기가 숫자와 줄을 «함께» 움직인다', async () => {
     await db.query('delete from post_likes');
     await db.query('update posts set like_count = 130 where id = 1');
-    await bootApp('app.js', 3452);
+    await bootApp(APP35, 3452);
 
     const press = (userId) => fetch(`${server.base}/api/posts/1/likes`,
       { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId }) }).then((r) => r.json());
@@ -243,7 +251,7 @@ describe('Step 1 → Step 2 를 «이어서» 하면 교안의 수치가 그대�
     expect(lec).toContain('{"id":1, ... "likeCount":130, ...}');
 
     // ② throw 를 지운 판 — 교안이 적은 값 그대로
-    await bootApp('app.js', 3460);
+    await bootApp(APP35, 3460);
     const ok = await fetch(`${server.base}/api/posts/1/likes`,
       { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) }).then((r) => r.json());
     expect(ok).toEqual({ liked: true, likeCount: 131 });
@@ -289,7 +297,7 @@ describe('Step 6·7 — 읽는 방법을 갈았는데 응답은 한 글자도 �
   });
 
   it('🔴 그런데 읽어 오는 양은 «줄었다» — select 가 안 쓰는 칸을 안 싣는다', async () => {
-    const src = read(P('services/postService.js'));
+    const src = read(P(`${S35}services/postService.js`));
     expect(src, 'select 로 골라 받아야 한다').toContain('const postFields = {');
     expect(src, 'include 로 통째로 받는 자리가 남아 있으면 안 된다')
       .not.toMatch(/include:\s*withRelations/);
@@ -308,7 +316,7 @@ describe('Step 4 — 게시물과 사진을 한 번에 만든다', () => {
 
   it('🔴 한 번의 create 로 사진까지 함께 생긴다', async () => {
     seedLive();
-    await bootApp('app.js', 3455);
+    await bootApp(APP35, 3455);
 
     const res = await fetch(`${server.base}/api/posts`,
       { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(newPost) });
@@ -341,20 +349,24 @@ describe('Step 4 — 게시물과 사진을 한 번에 만든다', () => {
   });
 
   it('🔴 시드도 게시물과 사진을 «한 번에» 만든다 — 번호를 다시 읽는 자리가 없다', () => {
-    const src = read(P('seed.js'));
+    const src = read(P(`${S35}seed.js`));
     expect(src, '중첩 쓰기여야 한다').toMatch(/images:\s*\{\s*\n?\s*create:/);
     expect(src, '게시물을 넣고 번호를 다시 읽어 사진을 넣던 두 박자가 사라져야 한다')
       .not.toContain('prisma.postImage.createMany');
   });
 
   it('🔴 그렇게 넣어도 데이터는 p2-34 판과 «글자 그대로» 같다', async () => {
+    // 🚨 두 시각은 시드를 «실행한 순간» 에서 거꾸로 센 값이라 두 번 실행하면 밀리초가 다르다.
+    //    그래서 시각 자체가 아니라 «지금에서 몇 분 전인가»(반올림)와 «두 시각이 같은가» 를 견준다 —
+    //    데이터 파일에 적힌 분이 그대로 들어갔는지가 이 축이 묻는 것이다.
+    const ago = 'round(extract(epoch from now() - created_at) / 60)::int mins, created_at = updated_at same';
     const dump = async () => {
       const q = (sql) => db.query(sql).then((r) => r.rows);
       return {
         users: await q('select id, username, profile_image from users order by id'),
-        posts: await q('select id, author_id, post_alt, content, minutes_ago, like_count, comment_count from posts order by id'),
+        posts: await q(`select id, author_id, post_alt, content, like_count, comment_count, ${ago} from posts order by id`),
         images: await q('select id, post_id, image_url, img_order from post_images order by id'),
-        comments: await q('select id, post_id, author_id, content, like_count, minutes_ago, parent_id from comments order by id'),
+        comments: await q(`select id, post_id, author_id, content, like_count, parent_id, ${ago} from comments order by id`),
       };
     };
 
@@ -369,7 +381,7 @@ describe('Step 4 — 게시물과 사진을 한 번에 만든다', () => {
 
 describe('Step 5·8 — 하나씩 돌기와 함께 읽기, 그리고 개수만 세기', () => {
   const runCheck = () =>
-    execFileSync(process.execPath, [P('check.js')],
+    execFileSync(process.execPath, [P(`${S35}check.js`)],
       { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
   it('🔴 check.js 가 11 번과 3 번을 찍는다 — 교안이 인용한 그 수치다', () => {
@@ -391,13 +403,138 @@ describe('Step 5·8 — 하나씩 돌기와 함께 읽기, 그리고 개수만 �
   it('🔴 include 의 질의 수는 «줄 수» 가 아니라 «관계 가지 수» 를 따라간다', async () => {
     // 게시물을 배로 늘려도 질의 수가 그대로여야 N+1 이 아니다.
     await db.query(
-      "insert into posts (author_id, content, minutes_ago) select author_id, content, minutes_ago from posts");
+      'insert into posts (author_id, content, created_at) select author_id, content, created_at from posts');
     const out = runCheck();
 
     expect(out, '게시물이 10개가 되면 하나씩 돌기는 21번으로 늘고').toContain('게시물 10개에 질의 21번');
     expect(out, '함께 읽기는 «그대로» 3번이다').toContain('게시물 10개에 질의 3번');
 
     seedLive();
+  });
+});
+
+// ── audit 칸 — 시각은 숫자가 아니라 두 시각이다 ─────────────────────────────
+//
+// 🚨 이 회차는 칸을 «고르는» 회차라 audit 칸이 두 번 걸린다. 시드(중첩 쓰기)가 두 시각을
+//    넣는가, 그리고 `postFields`·`commentFields` 가 두 시각을 «둘 다» 고르는가. 하나라도
+//    빠뜨리면 「응답은 한 글자도 안 달라졌어요」가 거짓이 된다 — `include` 판은 두 시각을
+//    전부 싣기 때문이다(audit 전 판은 `minutesAgo` 를 고르고 있었다).
+
+const scalarKeysOf = (block) => [...block.matchAll(/^ {2}(\w+): true,$/gm)].map((m) => m[1]);
+const blockOf = (text, name) => {
+  const m = text.match(new RegExp(`const ${name} = \\{\\n[\\s\\S]*?\\n\\};`));
+  if (!m) throw new Error(`${name} 블록을 못 찾았다`);
+  return m[0];
+};
+
+describe('audit 칸 — 시드는 두 시각을 넣고, 고르는 목록은 두 시각을 둘 다 고른다', () => {
+  let seedOut = '';
+
+  beforeAll(() => { seedOut = seedLive(); }, 60000);
+
+  it('🔴 minutes_ago 칸은 두 표 어디에도 없고 audit 칸 넷이 서 있다', async () => {
+    const r = await db.query(`
+      select table_name, column_name from information_schema.columns
+       where table_name in ('posts', 'comments')
+         and column_name in ('minutes_ago', 'created_at', 'updated_at')
+       order by table_name, column_name`);
+
+    expect(r.rows).toEqual([
+      { table_name: 'comments', column_name: 'created_at' },
+      { table_name: 'comments', column_name: 'updated_at' },
+      { table_name: 'posts', column_name: 'created_at' },
+      { table_name: 'posts', column_name: 'updated_at' },
+    ]);
+
+    // 🚨 이 회차는 데이터 파일의 다리(`minutesAgo`)를 인용하지 않는다 — 칸 이름도 필드 이름도 0건.
+    //    나중에 `withTimes` 를 인용하게 되면 이 줄을 `p2-34` 판(칸 이름만)으로 좁힌다.
+    for (const [name, path] of [['교안', LECTURE], ['답안', ANSWERS]]) {
+      expect(read(path), name).not.toMatch(/minutes_ago|minutesAgo/);
+    }
+  });
+
+  it('🚨 이 회차 끝 시드가 실제로 돌고, 교안이 인용한 그 줄을 찍는다', () => {
+    const line = '사람 5명, 게시물 5개, 사진 8장, 댓글 9개, 답글 3개를 넣었어요.';
+
+    expect(seedOut.trim()).toBe(line);
+    expect(read(LECTURE)).toContain(line);
+  });
+
+  it('🔴 중첩 쓰기로 바꾼 시드도 두 시각을 줄마다 같게 넣는다 — 답글까지', async () => {
+    const posts = await db.query('select id, created_at, updated_at from posts order by id');
+    const comments = await db.query('select id, created_at, updated_at from comments order by id');
+
+    expect(posts.rows).toHaveLength(5);
+    expect(comments.rows).toHaveLength(12);
+    for (const row of [...posts.rows, ...comments.rows]) {
+      expect(row.created_at.getTime(), `${row.id}번 — 한 번도 안 고쳤으니 두 시각이 같다`)
+        .toBe(row.updated_at.getTime());
+    }
+  });
+
+  it('🔴 목록 응답에 두 시각이 «둘 다» 실린다 — 칸 이름과 차례까지', async () => {
+    await bootApp(APP35, 3461);
+    const [post] = await fetch(`${server.base}/api/posts?username=jaehoon`).then((r) => r.json());
+
+    expect(Object.keys(post)).toEqual(['id', 'authorId', 'postAlt', 'content', 'likeCount',
+      'commentCount', 'createdAt', 'updatedAt', 'username', 'profileImage', 'imageUrls']);
+    expect(post.updatedAt, '시드가 막 넣은 게시물이라 두 시각이 같다').toBe(post.createdAt);
+  });
+
+  it('🔴 교안의 postFields 가 코드베이스와 byte 동일하고, 칸 8개가 본문의 「칸 8개」다', () => {
+    const lec = read(LECTURE);
+    const block = blockOf(lec, 'postFields');
+
+    expect(block).toBe(blockOf(read(P(`${S35}services/postService.js`)), 'postFields'));
+    expect(scalarKeysOf(block)).toEqual(['id', 'authorId', 'postAlt', 'content', 'likeCount',
+      'commentCount', 'createdAt', 'updatedAt']);
+    expect(lec.match(/칸 8개/g), 'Step 7 의 두 문장').toHaveLength(2);
+  });
+
+  it('🔴 답안의 commentFields 가 코드베이스와 byte 동일하고, 교안 요구사항·채점표와 칸 수가 같다', () => {
+    const block = blockOf(read(ANSWERS), 'commentFields');
+    const keys = scalarKeysOf(block);
+
+    expect(block).toBe(blockOf(read(P('lab/p2-35/commentService.js')), 'commentFields'));
+    expect(block, '[기초] 스냅숏도 같은 목록이다')
+      .toBe(blockOf(read(P('snapshots/p2-35/commentService.select-only.js')), 'commentFields'));
+    expect(keys).toEqual(['id', 'postId', 'authorId', 'content', 'likeCount',
+      'createdAt', 'updatedAt', 'parentId']);
+
+    // 교안 과제 요구사항 3 이 그 칸들을 «같은 차례로» 나열한다.
+    const req = read(LECTURE).split('\n').find((l) => l.startsWith('3. 댓글에서 필요한 칸은'));
+    expect([...req.matchAll(/`(\w+)`/g)].map((m) => m[1]).slice(0, keys.length)).toEqual(keys);
+    expect(read(ANSWERS), '채점표의 칸 수').toContain(`댓글 칸 ${keys.length}개`);
+  });
+
+  it('🚨 select 는 «적은 차례대로» 칸을 싣는다 — 과제가 「이 차례를 지켜 적으라」고 하는 근거', () => {
+    // 🚨 두 낭독 중 학생이 물었다 — 차례가 응답에 안 드러나면 이 안내는 군더더기이고,
+    //    드러나면 두 시각을 목록 끝에 적은 학생이 맞게 짜고도 「글자 그대로 같다」에서 떨어진다.
+    mkdirSync(P('__replay__'), { recursive: true });
+    writeFileSync(P('__replay__/p235-order.mjs'), [
+      "import { prisma } from '../db.js';",
+      'const keys = (select) => prisma.comment.findFirst({ where: { id: 1 }, select })',
+      "  .then((c) => Object.keys(c).join(','));",
+      'console.log(await keys({ id: true, parentId: true, content: true }));',
+      'console.log(await keys({ content: true, parentId: true, id: true }));',
+      'await prisma.$disconnect();',
+    ].join('\n'));
+    const out = execFileSync(process.execPath, [P('__replay__/p235-order.mjs')],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+
+    expect(out.trim().split('\n')).toEqual(['id,parentId,content', 'content,parentId,id']);
+    expect(read(LECTURE)).toContain('`select`에 적은 차례가 그대로 응답의 칸 차례가 되니까');
+    expect(read(ANSWERS)).toContain('`select`는 적은 차례대로 칸을 실어 오거든요');
+  });
+
+  it('🚨 사슬 — 이 회차는 스키마·데이터·`withTimes` 를 안 바꾼다(p2-34 종료 판과 byte 동일)', () => {
+    // 🚨 audit retrofit 때 실제로 갈라져 있었다 — `p2-35-final` 스키마만 `minutes_ago` 판으로 남았다.
+    for (const f of ['prisma/schema.prisma', 'data/posts.js', 'data/comments.js']) {
+      expect(read(P(`${S35}${f}`)), f).toBe(read(P(`snapshots/p2-34-final/${f}`)));
+    }
+    const fn = (t) => t.slice(t.indexOf('function withTimes('), t.indexOf('\n}\n', t.indexOf('function withTimes(')) + 3);
+    expect(fn(read(P(`${S35}seed.js`)))).toBe(fn(read(P('snapshots/p2-34-final/seed.js'))));
+    expect(read(LECTURE), '교안이 스키마를 안 건드린다고 말한다').toContain('스키마도 안 건드리니');
   });
 });
 
@@ -592,8 +729,9 @@ describe('인용이 코드베이스와 맞는가', () => {
     [...read(path).matchAll(new RegExp('```' + lang + '\\n([\\s\\S]*?)```', 'g'))].map((m) => m[1].trimEnd());
 
   const jsSources = () => [
-    'services/postService.js', 'services/likeService.js', 'seed.js', 'check.js',
-    'db.js', 'errors.js', 'routes/posts.js', 'schemas/postSchema.js',
+    // 이 회차 끝 학생 파일 — 라이브는 뒤 회차가 키운 판이라 출처로 안 쓴다(맨 위 S35 주석).
+    ...['services/postService.js', 'services/likeService.js', 'seed.js', 'check.js',
+      'db.js', 'errors.js', 'routes/posts.js', 'schemas/postSchema.js'].map((f) => `${S35}${f}`),
     // 교안이 「지난 시간에 쓴 것」으로 싣는 판 — 그 시점 스냅숏이 출처다.
     'snapshots/p2-34-final/services/likeService.js',
     'snapshots/p2-34-final/services/postService.js',
@@ -643,14 +781,14 @@ describe('인용이 코드베이스와 맞는가', () => {
         .replace("'@prisma/adapter-pg'", "'@prisma/adapter-pg'"));
       writeFileSync(P('__replay__/p235/postService.js'), read(P(serviceSrc))
         .replace("'../db.js'", "'./db.js'").replace("'../errors.js'", "'../../errors.js'"));
-      writeFileSync(P('__replay__/p235/likeService.js'), read(P('services/likeService.js'))
+      writeFileSync(P('__replay__/p235/likeService.js'), read(P(`${S35}services/likeService.js`))
         .replace("'../db.js'", "'./db.js'").replace("'../errors.js'", "'../../errors.js'"));
-      writeFileSync(P('__replay__/p235/posts.js'), read(P('routes/posts.js'))
+      writeFileSync(P('__replay__/p235/posts.js'), read(P(`${S35}routes/posts.js`))
         .replace(/'\.\.\/services\//g, "'./")
         .replace("'../middlewares/", "'../../middlewares/")
         .replace("'../schemas/", "'../../schemas/")
         .replace("'../errors.js'", "'../../errors.js'"));
-      writeFileSync(P('__replay__/p235/app.log.js'), read(P('app.js'))
+      writeFileSync(P('__replay__/p235/app.log.js'), read(P(APP35))
         .replace("'./routes/posts.js'", "'./posts.js'")
         .replace("'./errors.js'", "'../../errors.js'"));
       await bootApp('__replay__/p235/app.log.js', port);
@@ -661,7 +799,7 @@ describe('인용이 코드베이스와 맞는가', () => {
 
     const lec = read(LECTURE);
     const withInclude = await grab('snapshots/p2-34-final/services/postService.js', 3456);
-    const withSelect = await grab('services/postService.js', 3457);
+    const withSelect = await grab(`${S35}services/postService.js`, 3457);
 
     expect(withInclude, 'include 판은 질의 3개').toHaveLength(3);
     expect(withSelect, 'select 판도 질의 3개').toHaveLength(3);
@@ -672,6 +810,10 @@ describe('인용이 코드베이스와 맞는가', () => {
     // 그리고 select 판에서 사라진 칸이 실제로 사라졌는지.
     expect(withInclude[1]).toContain('deactivated_at');
     expect(withSelect[1], 'select 로 바꾸면 안 쓰는 칸이 빠진다').not.toContain('deactivated_at');
+    // 🚨 교안 Step 7 이 「게시물 질의는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐다」고 한다.
+    //    postFields 가 칸 하나라도 빠뜨리면(audit 전 판이 updatedAt 을 몰랐다) 이 줄이 달라진다.
+    expect(withSelect[0], '게시물 질의는 include 판과 글자 그대로 같다').toBe(withInclude[0]);
+    expect(lec).toContain('게시물 질의는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐고');
   });
 
   it('🔴 교안이 더하라고 한 `.http` 요청 셋이 코드베이스에도 있다', () => {

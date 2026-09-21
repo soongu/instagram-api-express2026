@@ -14,7 +14,8 @@ const commentFields = {
   authorId: true,
   content: true,
   likeCount: true,
-  minutesAgo: true,
+  createdAt: true,
+  updatedAt: true,
   parentId: true,
   author: { select: { username: true } },
 };

@@ -24,10 +24,10 @@ model Post {
   author       User      @relation(fields: [authorId], references: [id])
   postAlt      String?   @map("post_alt")
   content      String?
-  minutesAgo   Int       @default(0) @map("minutes_ago")
   likeCount    Int       @default(0) @map("like_count")
   commentCount Int       @default(0) @map("comment_count")
   createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
   comments     Comment[]
   images       PostImage[]
   likes        PostLike[]
@@ -59,14 +59,15 @@ model PostImage {
 }
 
 model Comment {
-  id         Int    @id @default(autoincrement())
-  postId     Int    @map("post_id")
-  post       Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
-  authorId   Int    @map("author_id")
-  author     User   @relation(fields: [authorId], references: [id])
-  content    String
-  likeCount  Int    @default(0) @map("like_count")
-  minutesAgo Int    @default(0) @map("minutes_ago")
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  Int      @map("author_id")
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  likeCount Int      @default(0) @map("like_count")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   // 같은 표가 자기를 가리킨다 — 답글이 달린 «원댓글» 번호다.
   // 원댓글은 이 칸이 비어 있으므로 물음표가 붙는다.

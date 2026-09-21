@@ -24,6 +24,7 @@ const postFields = {
   likeCount: true,
   commentCount: true,
   createdAt: true,
+  updatedAt: true,
   author: { select: { username: true, profileImage: true } },
   images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' } },
 };
