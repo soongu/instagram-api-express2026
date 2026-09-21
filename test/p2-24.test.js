@@ -66,11 +66,17 @@ describe('게이트가 스스로를 검산한다 — 사본은 «MONGO_URL 한 �
     // 학생 쪽은 `~/instagram-api/lab/` 하나인데 코드베이스는 `lab/p2-24/` 로 한 겹 깊다.
     // 교안 인용의 정전은 학생 표기이므로 파일을 그대로 두고 띄울 때만 고친다.
     expect(labPathRewrites('lab/p2-24/practice2.js')).toHaveLength(0);   // 같은 폴더만 부른다
+    // 🚨 `data/posts.js` 는 «한 단 더 깊어지는» 것에 더해 «얼린 판» 으로 간다
+    //    (2026-09-11 `p2-30` 착수 시). 그 회차가 시드를 Prisma 로 옮기며 그 파일을
+    //    세 개짜리 배열에서 데이터베이스에 든 다섯으로 다시 쓰기 때문이다.
     const hw3 = labPathRewrites('lab/p2-24/homework3.js');
     expect(hw3).toHaveLength(2);
     for (const [, before, after] of hw3) {
       expect(before).toMatch(/from '\.\.\/(models|data)\//);
-      expect(after).toBe(before.replace("from '../", "from '../../"));
+      expect(after).toBe(
+        before.includes("/data/posts.js")
+          ? before.replace("from '../data/posts.js'", "from '../../snapshots/p2-22.data-posts.js'")
+          : before.replace("from '../", "from '../../"));
     }
   });
 
@@ -95,7 +101,7 @@ describe('앞 회차를 얼려 떼어냈다 — 그 판이 정말 그 회차 것
   it.each(['p2-22', 'p2-23'])('%s 완성본은 그 브랜치와 «불러오는 줄 하나만» 다르다', (round) => {
     const theirs = fromBranch(`code/${round}`, 'app.js');
     expect(snap(`${round}.final.app.js`))
-      .toBe(theirs.replace("'./data/posts.js'", "'../data/posts.js'"));
+      .toBe(theirs.replace("'./data/posts.js'", "'./p2-22.data-posts.js'"));
   });
 
   // 🚨 이 회차 «자신» 도 얼렸다 (2026-09-07 `p2-25` 착수). `app.js` 는 계속 자라는
@@ -106,11 +112,19 @@ describe('앞 회차를 얼려 떼어냈다 — 그 판이 정말 그 회차 것
     expect(snap('p2-24.final.seed.js')).toBe(
       fromBranch('code/p2-24', 'seed.js')
         .replace("'./models/Post.js'", "'../models/Post.js'")
-        .replace("'./data/posts.js'", "'../data/posts.js'"));
+        .replace("'./data/posts.js'", "'./p2-22.data-posts.js'"));
   });
 
   it.each(['p2-23', 'p2-24'])('%s 의 `posts.http` 얼린 판은 그 브랜치와 byte 동일하다', (round) => {
     expect(snap(`${round}.posts.http`)).toBe(fromBranch(`code/${round}`, 'requests/posts.http'));
+  });
+
+  // 🚨 `data/posts.js` 도 얼렸다 (2026-09-11 `p2-30` 착수 시). `p2-22`~`p2-29` 내내
+  //    byte 동일했던 파일인데 `p2-30` 이 시드를 Prisma 로 옮기며 «세 개짜리 배열» 을
+  //    데이터베이스에 든 다섯으로 다시 쓴다. 앞 회차 스냅숏 열 장이 이 파일을
+  //    불러오므로, 안 얼리면 `p2-22`·`p2-23` 의 「목록이 셋이다」가 통째로 거짓이 된다.
+  it('`data/posts.js` 얼린 판은 그 브랜치와 byte 동일하다', () => {
+    expect(snap('p2-22.data-posts.js')).toBe(fromBranch('code/p2-22', 'data/posts.js'));
   });
 });
 

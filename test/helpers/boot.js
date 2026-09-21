@@ -111,6 +111,11 @@ export function localSource(file, url = LOCAL_MONGO_URL) {
   if (/^lab\/p2-\d+\//.test(file)) {
     out = out.replace(/from '\.\.\/(models|data)\//g, "from '../../$1/");
   }
+  // 🚨 `data/posts.js` 는 «얼린 판» 을 보게 한다 (2026-09-11 `p2-30` 착수 시).
+  //    `p2-30` 이 시드를 Prisma 로 옮기며 그 파일을 «세 개짜리 배열» 에서
+  //    데이터베이스에 든 다섯으로 다시 쓴다. 이 함수를 쓰는 것은 몽고 시절
+  //    회차(`p2-22`~`p2-25`)뿐이라, 그 회차들이 보는 것은 그때의 셋이어야 맞다.
+  out = out.replace("from '../../data/posts.js'", "from '../../snapshots/p2-22.data-posts.js'");
   return out;
 }
 

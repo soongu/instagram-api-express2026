@@ -13,12 +13,12 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 describe('오프닝 — `p2-22` 완성본은 GET 말고는 전부 「그런 주소는 없어요」', () => {
   // 🚨 스냅숏이 `snapshots/` 아래 있어서 «불러오는 줄 한 곳만» 다르다
-  //    (`./data/posts.js` → `../data/posts.js`). 그 한 줄 말고는 한 글자도
+  //    (`./data/posts.js` → `./p2-22.data-posts.js`). 그 한 줄 말고는 한 글자도
   //    다르면 안 된다 — 오프닝이 「어제 만든 그 서버」라고 말하기 때문이다.
   it('스냅숏이 `code/p2-22` 의 `app.js` 와 «불러오는 줄 하나만» 다르다', () => {
     const theirs = execFileSync('git', ['show', 'code/p2-22:app.js'], { encoding: 'utf-8' });
     const mine = readFileSync(new URL('../snapshots/p2-23.opening.app.js', import.meta.url), 'utf-8');
-    expect(mine).toBe(theirs.replace("'./data/posts.js'", "'../data/posts.js'"));
+    expect(mine).toBe(theirs.replace("'./data/posts.js'", "'./p2-22.data-posts.js'"));
   });
 
   it('같은 주소인데 방식만 바꾸면 404 가 온다', async () => {

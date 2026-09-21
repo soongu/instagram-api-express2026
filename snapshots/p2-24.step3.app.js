@@ -1,7 +1,7 @@
 // ~/instagram-api/app.js
 import express from 'express';
 import mongoose from 'mongoose';
-import { posts } from '../data/posts.js';
+import { posts } from './p2-22.data-posts.js';
 
 const MONGO_URL = 'mongodb+srv://<사용자이름>:<비밀번호>@cluster0.xxxxx.mongodb.net/instagram';
 
