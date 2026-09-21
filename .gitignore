@@ -39,3 +39,6 @@ lab/generated-p2-34/
 lab/generated-p2-35/
 .p2-37-run/
 .p2-37-before/
+
+# 게이트가 교안 블록으로 그 시점 학생 폴더를 세우는 자리 (p2-32)
+.p2-32-blocks/

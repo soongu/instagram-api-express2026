@@ -10,7 +10,7 @@
 //       동작 검사를 live 로 남겨둘 수 없다 — 남기면 옛 계약을 영원히 요구하게 된다.
 //       새 계약이 안 깨졌다는 증거는 p2-33 자기 테스트가 «12요청 대조»로 따로 세운다.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
@@ -328,6 +328,74 @@ describe('Step 4 중간 상태 — 실제 서버', () => {
     ]);
     expect(read(LECTURE)).toContain('나머지 11개는 새로 올린 게시물의 번호와 두 시각만 빼면 답이 그대로여야 해요.');
     await server.stop(); server = null;
+  });
+});
+
+// ── 명령 블록 — 교안이 찍어둔 출력이 «실제로» 그 글자인가 ──────────────────
+// 🚨 replay.py 는 이 자리를 원리적으로 못 본다 — 짝이 bash(명령)→bash(출력)이라
+//    앞의 javascript 블록과 엮여 MISMATCH 다섯을 낸다(2026-09-19 실측). 그래서 이 축이 대신 잰다.
+// 🔑 그 시점 학생 폴더를 «교안 블록만으로» 재현한다 — 경로 주석이 달린 javascript 블록을
+//    순서대로 써 내려가면 뒤 판이 앞 판을 덮어서, 명령이 놓인 자리의 파일 상태가 그대로 선다.
+//    (errors.js 는 L65 → L136, schemas/postSchema.js 는 L545 → L586 으로 자란다.)
+describe('교안의 `node -e` 명령 다섯이 적어둔 출력을 그대로 낸다', () => {
+  const FOLDER = P('.p2-32-blocks');   // ROOT 안이라 `zod` 가 ../node_modules 로 풀린다
+
+  /** ```펜스를 언어·줄번호와 함께 뽑는다. */
+  const fenced = () => {
+    const out = [];
+    let cur = null;
+    read(LECTURE).split('\n').forEach((line, i) => {
+      if (!line.startsWith('```')) { if (cur) cur.lines.push(line); return; }
+      if (cur) { out.push(cur); cur = null; } else cur = { lang: line.slice(3).trim(), start: i + 1, lines: [] };
+    });
+    return out;
+  };
+
+  // replay.py 의 규칙 둘을 그대로 쓴다 — 경로는 <script> 로, `...` 는 와일드카드로.
+  const SCRIPT_PATH = /(?:file:\/\/)?\/\S*?([\w.-]+\.(?:js|mjs|cjs))(:\d+)?/g;
+  // 🚨 `-e` 로 돌린 코드의 스택 줄은 파일명이 `[eval1]` 이라 replay 의 경로 정규식에 안 걸린다.
+  //    교안은 이 줄을 학생 컴퓨터 경로로 적으므로(하네스 관례) 그 모양으로 맞춘다.
+  const EVAL_PATH = /file:\/\/\S*?\/(\[eval\d*\])/g;
+  const canon = (text) => text.replace(/\n+$/, '').split('\n')
+    .filter((l) => !/^Node\.js v[\d.]+$/.test(l.trim()))
+    .map((l) => l.replace(EVAL_PATH, 'file:///Users/hong/instagram-api/$1'))
+    .map((l) => l.replace(SCRIPT_PATH, '<script>$2'));
+  const matches = (expected, actual) => {
+    if (!expected.includes('    ...')) return expected.join('\n') === actual.join('\n');
+    const [head, tail] = [expected.slice(0, expected.indexOf('    ...')), expected.slice(expected.indexOf('    ...') + 1)];
+    return actual.slice(0, head.length).join('\n') === head.join('\n')
+      && actual.slice(actual.length - tail.length).join('\n') === tail.join('\n');
+  };
+
+  it('🔴 다섯 명령이 교안이 적어둔 출력을 «글자 그대로» 낸다', () => {
+    const blocks = fenced();
+    rmSync(FOLDER, { recursive: true, force: true });
+    mkdirSync(FOLDER, { recursive: true });
+    const ran = [];
+    try {
+      blocks.forEach((b, i) => {
+        const body = b.lines.join('\n');
+        if (b.lang === 'javascript' && b.lines[0]?.startsWith('// ~/instagram-api/')) {
+          const rel = b.lines[0].replace('// ~/instagram-api/', '').trim();
+          mkdirSync(P(`.p2-32-blocks/${rel}`).replace(/\/[^/]+$/, ''), { recursive: true });
+          writeFileSync(P(`.p2-32-blocks/${rel}`), `${body}\n`);
+          return;
+        }
+        if (b.lang !== 'bash' || !body.startsWith('node --input-type=module')) return;
+        const expected = canon(blocks[i + 1].lines.join('\n'));
+        // `console.error` 를 쓰는 블록이 있어 stderr 까지 받는다 — 학생이 보는 화면이 그것이다
+        const out = execFileSync('bash', ['-c', `${body.replace('node ', `${process.execPath} `)} 2>&1`],
+          { cwd: FOLDER, encoding: 'utf8' });
+        const actual = canon(out);
+        expect(matches(expected, actual), `L${b.start} 명령 → L${blocks[i + 1].start} 출력\n기대:\n${expected.join('\n')}\n실제:\n${actual.join('\n')}`).toBe(true);
+        ran.push(body);
+      });
+    } finally { rmSync(FOLDER, { recursive: true, force: true }); }
+    // 명령 블록이 늘거나 줄면 이 축이 알아챈다 — 새 블록이 조용히 안 재지는 것을 막는다.
+    // 🚨 줄 번호로 적었다가 문단 하나를 나누자 두 줄 밀려 깨졌다(2026-09-21) — «무엇을 돌렸나» 로 센다.
+    expect(ran).toHaveLength(5);
+    expect(ran.filter((c) => c.includes("from './errors.js'"))).toHaveLength(3);
+    expect(ran.filter((c) => c.includes("from './schemas/postSchema.js'"))).toHaveLength(2);
   });
 });
 
