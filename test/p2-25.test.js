@@ -676,10 +676,23 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     }
   });
 
-  it('`.env.example` 인용이 코드베이스와 같다', () => {
+  // 🚨 `.env.example` 은 회차를 따라 «자란다» — p2-29 가 DATABASE_URL 을 더한다.
+  //    live 파일로 재면 이 축이 뒷 회차 부채를 가리거나(값이 늘어도 모름) 거짓으로
+  //    빨개진다(늘어난 줄 때문에). 그래서 «그 시점 스냅숏» 으로 얼려 떼어낸다 —
+  //    p2-22 가 posts.http 에 쓴 그 방법이다.
+  it('`.env.example` 인용이 그 시점 코드베이스와 같다', () => {
     const md = readFileSync(new URL(LEC, import.meta.url), 'utf-8');
     const m = /```\n(# ~\/instagram-api\/\.env\.example\n[\s\S]*?)```/.exec(md);
     expect(m).not.toBeNull();
-    expect(real('.env.example')).toBe(m[1]);
+    expect(real('snapshots/p2-25.env.example')).toBe(m[1]);
+  });
+
+  // 그리고 «지금» 파일이 그 스냅숏에서 어떻게 자랐는지도 함께 잠근다 — 얼린 축이
+  // 조용히 낡지 않게, 자란 줄이 무엇인지까지 못박아 둔다.
+  it('지금 `.env.example` 은 그 시점 것에 이름만 더해져 있다', () => {
+    const then = real('snapshots/p2-25.env.example').trimEnd().split('\n');
+    const now = real('.env.example').trimEnd().split('\n');
+    expect(now.slice(0, then.length)).toEqual(then);
+    expect(now.slice(then.length)).toEqual(['DATABASE_URL=']);
   });
 });

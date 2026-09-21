@@ -1,0 +1,30 @@
+datasource db {
+  provider = "postgresql"
+}
+
+model authors {
+  id    Int     @id @default(autoincrement())
+  name  String  @db.VarChar(100)
+  books books[]
+}
+
+model books {
+  id        Int       @id @default(autoincrement())
+  title     String    @db.VarChar(200)
+  author    String    @db.VarChar(100)
+  price     Int
+  stock     Int       @default(0)
+  author_id Int?
+  authors   authors?  @relation(fields: [author_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviews   reviews[]
+}
+
+model reviews {
+  id         Int     @id @default(autoincrement())
+  book_title String  @db.VarChar(200)
+  reviewer   String  @db.VarChar(100)
+  score      Int
+  comment    String?
+  book_id    Int?
+  books      books?  @relation(fields: [book_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
