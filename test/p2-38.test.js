@@ -16,8 +16,9 @@
 // 축 ⑧ 값이 없으면 «시끄럽게» 죽는다 — 조용히 전부 막히지 않는다.
 // 축 ⑨ 프론트 — 가짜 서버 주소가 코드에 안 박혀 있다.
 // 축 ⑩ 앞 회차가 안 깨졌다.
-// 축 ⑪ 교안이 실은 배포 출력(로그 · 시드 한 줄 · 마이그레이션 개수)이 실제 출력과 같다.
+// 축 ⑪ 교안이 실은 배포 출력(로그 · 시드 펜스의 경고 첫 줄과 시드 줄 · 마이그레이션 개수)이 실제 출력과 같다.
 // 축 ⑫ 답안 [기초] 5번 — 다시 시드하면 댓글 `createdAt` 이 달라진다(로컬인지 가리는 단서).
+// 축 ⑬ `sslmode=require` 주소를 쓰는 서버는 뜰 때가 아니라 첫 요청 때 SSL 경고를 한 번 찍는다.
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import {
   readFileSync, existsSync, renameSync, readdirSync, rmSync, cpSync, writeFileSync,
@@ -365,17 +366,46 @@ describe('축 ⑪ — 교안이 실은 배포 출력이 실제 출력과 같다'
     for (const 줄 of prisma줄) expect(둘째배포).toContain(줄);
   });
 
-  // 🚨 게이트 DB 는 로컬이라 주소에 `?sslmode=require` 가 없다. 학생이 Neon 주소로 시드하면
-  //    `pg-connection-string` 2.14 가 이 줄 «앞»에 SECURITY WARNING 여러 줄을 더 찍는다
-  //    (2026-09-21 로컬에 `?sslmode=require` 를 붙여 실측 · 실제 Neon 은 미실측). 이 축은
-  //    마지막 한 줄만 잰다 — 교안이 그 경고를 말하느냐는 사람이 본다(`p2-42` 는 말한다).
-  it('시드 한 줄이 실제 출력과 글자 그대로 같다', () => {
-    expect(시드출력, '축 ① 이 먼저 돌아야 한다').not.toBe('');
+  // 🔀 2026-09-21 — 교안 Step 3 이 Neon 첫 시드의 SECURITY WARNING 을 싣는다(`p2-42` 에 맞췄다).
+  //    펜스는 「경고 첫 줄 · `...` · 시드 줄」 세 줄이다. 게이트 DB 는 로컬이라 주소에 `sslmode` 가
+  //    없으니 두 끝을 따로 잰다 — 마지막 줄은 축 ① 의 실제 시드와, 첫 줄은 `?sslmode=require` 를
+  //    붙여 «실제로 친» 시드의 경고와. 로컬 서버는 SSL 을 안 받아 그 시드는 연결에서 실패하지만,
+  //    경고는 연결을 시도할 때 찍히므로 첫 줄을 재기에는 충분하다(표는 안 건드린다).
+  //    🔑 「경고 → 시드 줄」 «순서» 는 SSL 을 켠 임시 PostgreSQL + `NODE_EXTRA_CA_CERTS` 로 연결에
+  //    «성공하는» 판을 한 번 실측했다(2026-09-21 · 실제 Neon 은 미실측). 게이트는 그 서버를 못 띄운다.
+  const SSL_URL = `${GATE_URL}?sslmode=require`;
+  const 시드펜스 = () => {
     const src = read(LECTURE);
     const 뒤 = src.slice(src.indexOf('```bash\nnpm run seed\n```'));
-    const 인용 = 뒤.match(/```bash\nnpm run seed\n```\s*```\n([\s\S]*?)```/)[1].trim();
-    expect(인용).toBe(시드출력.trim());
+    return 뒤.match(/```bash\nnpm run seed\n```\s*```\n([\s\S]*?)```/)[1].trim().split('\n');
+  };
+  /** 학생이 치는 그 파일을 주소만 바꿔 친다 — 경고는 stderr 로 나가서 둘을 합쳐 본다. */
+  const 시드전체 = (url) => {
+    const r = spawnSync(process.execPath, [P('seed.js')], {
+      cwd: P('.'), encoding: 'utf8', timeout: 60000,
+      env: { ...process.env, DATABASE_URL: url },
+    });
+    return `${r.stdout}${r.stderr}`;
+  };
+  const 숫자빼기 = (l) => l.replace(/^\(node:\d+\)/, '(node:N)');
+
+  it('시드 펜스의 마지막 줄이 실제 시드 출력과 글자 그대로 같다', () => {
+    expect(시드출력, '축 ① 이 먼저 돌아야 한다').not.toBe('');
+    expect(시드펜스().at(-1)).toBe(시드출력.trim());
   });
+
+  it('시드 펜스의 첫 줄이 `sslmode=require` 주소로 친 시드의 실제 경고 첫 줄과 같다', () => {
+    const 펜스 = 시드펜스();
+    expect(펜스).toHaveLength(3);
+    expect(펜스[1]).toBe('...');
+    const 경고 = 시드전체(SSL_URL).split('\n').find((l) => l.includes('SECURITY WARNING'));
+    expect(경고, '`sslmode=require` 주소인데 경고가 안 찍혔다').toBeDefined();
+    expect(숫자빼기(펜스[0])).toBe(숫자빼기(경고));
+  }, 60000);
+
+  it('주소에 `sslmode` 가 없으면 그 경고가 안 찍힌다 — 「로컬에서는 못 봤던」 이유', () => {
+    expect(시드전체(GATE_URL)).not.toContain('SECURITY WARNING');
+  }, 60000);
 
   it('마이그레이션 «개수» 를 말하는 자리가 전부 폴더 수와 같다', () => {
     const N = 폴더들().length;
@@ -448,5 +478,32 @@ describe('축 ⑫ — 다시 시드하면 댓글 `createdAt` 만 달라진다', 
       vi.setSystemTime(Date.parse(뒤[0].createdAt) + 30_000);
       expect(뒤.map((c) => timeAgo(c.createdAt))).toEqual(앞.map((c) => timeAgo(c.createdAt)));
     } finally { vi.useRealTimers(); }
+  }, 60000);
+});
+
+// ── 축 ⑬ — `sslmode=require` 주소를 쓰는 서버는 «뜰 때» 가 아니라 «첫 요청 때» 경고를 찍는다 ──
+// 교안 Step 3 「이 주소를 쓰는 프로그램은 데이터베이스에 처음 연결하는 순간 이 경고를 한 번 찍어요」 와
+// 답안 [기초] 3·4 「첫 요청을 받은 뒤에야 나타나요」 의 근거. 로컬 서버는 SSL 을 안 받아 그 요청은
+// 500 으로 끝나지만, 보려는 것은 «언제 찍히나» 다 — 연결에 성공하는 판(임시 SSL 서버)에서도
+// 뜬 뒤 첫 요청 때 찍혔다(2026-09-21 실측 · `app.js` · `lab/homework1.js` 둘 다).
+describe('축 ⑬ — 서버는 첫 요청 때 SSL 경고를 한 번 찍는다', () => {
+  const 포트 = 3482;
+
+  it('뜰 때의 출력에는 없고, 첫 요청 뒤에 한 번 생기며, 두 번째 요청에는 더 안 찍힌다', async () => {
+    const s = await boot('app.js', {
+      port: 포트,
+      env: { DATABASE_URL: `${GATE_URL}?sslmode=require`, PORT: String(포트), CORS_ORIGIN: OURS },
+      ready: `${포트}번 포트에서`,
+    });
+    const 센다 = () => s.tail().split('SECURITY WARNING').length - 1;
+    try {
+      expect(s.log).not.toContain('SECURITY WARNING');
+      await 물어보기(OURS, { port: 포트 });
+      await new Promise((r) => setTimeout(r, 300));
+      expect(센다(), '첫 요청 뒤에 경고가 한 번 찍혀야 한다').toBe(1);
+      await 물어보기(OURS, { port: 포트 });
+      await new Promise((r) => setTimeout(r, 300));
+      expect(센다(), '경고는 프로그램마다 한 번뿐이다').toBe(1);
+    } finally { await s.stop(); }
   }, 60000);
 });
