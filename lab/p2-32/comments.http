@@ -1,0 +1,17 @@
+### 댓글 목록
+GET http://localhost:4001/api/comments
+
+### 1번 게시물의 댓글만
+GET http://localhost:4001/api/comments?postId=1
+
+### 댓글 하나
+GET http://localhost:4001/api/comments/1
+
+### 없는 댓글
+GET http://localhost:4001/api/comments/999
+
+### 번호가 들어갈 곳에 아무 글자나
+GET http://localhost:4001/api/comments/abc
+
+### 없는 댓글 지우기
+DELETE http://localhost:4001/api/comments/999
