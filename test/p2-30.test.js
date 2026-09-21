@@ -18,6 +18,11 @@ const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'post
 const ENV = { DATABASE_URL: GATE_URL };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+// 🚨 **이 회차가 보는 `app.js` 는 «얼린 판» 이다** (2026-09-11 `p2-31` 착수 시).
+//    `p2-31` 이 그 파일을 `routes/`·`services/` 로 가르면서 라우트가 통째로 빠져나가,
+//    live 로 보면 이 회차 축 넷이 거짓 FAIL 을 낸다(「주소 다섯」·「Number 셋」·완성본
+//    byte 동일·인용 출처). `p2-30` 이 `p2-25` 에게 한 것과 같은 처리다.
+const P230_APP = P('snapshots/p2-30.final.app.js');
 const LECTURE = P('../../part2/5-db-prisma/p2-30-prisma-crud-lecture.md');
 const ANSWERS = P('../../part2/5-db-prisma/p2-30-prisma-crud-answers.md');
 const read = (p) => readFileSync(p, 'utf8');
@@ -84,14 +89,14 @@ describe('착수 상태 — 「지난 시간 그대로」에서 출발한다', (
   it('🔴 교안이 말하는 「주소 다섯 개」가 실제 수와 같다', () => {
     // 🚨 p2-23·p2-25 가 두 번 틀린 자리다(`/` 를 세느냐 마느냐). 게시물 주소는 다섯,
     //    파일 전체 라우트는 여섯이다. 교안은 «게시물 주소» 다섯을 말한다.
-    const app = read(P('app.js'));
+    const app = read(P230_APP);
     expect(app.match(/^app\.(?:get|post|patch|delete)\('\/api\/posts/gm)).toHaveLength(5);
     expect(app.match(/^app\.(?:get|post|patch|delete)\(/gm)).toHaveLength(6);
     expect(read(LECTURE)).toContain('주소 다섯 개');
   });
 
   it('🔴 `:id` 를 쓰는 주소가 셋이고, 숫자로 바꿔주는 줄도 셋이다', () => {
-    const app = read(P('app.js'));
+    const app = read(P230_APP);
     expect(app.match(/'\/api\/posts\/:id'/g)).toHaveLength(3);
     expect(app.match(/Number\(req\.params\.id\)/g)).toHaveLength(3);
     expect(app.match(/Number\.isInteger/g)).toHaveLength(3);
@@ -395,7 +400,7 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     // 🚨 p2-24 가 이 검사 없이 배포됐다가 독립 정독자에게 「맞춰볼 데가 없다」로 잡혔다.
     const quoted = blocksOf(LECTURE, 'javascript').filter((b) => b.startsWith('// ~/instagram-api/app.js'));
     expect(quoted.length).toBeGreaterThanOrEqual(1);
-    expect(quoted.at(-1)).toBe(read(P('app.js')).trimEnd());
+    expect(quoted.at(-1)).toBe(asStudent(read(P230_APP)).trimEnd());
   });
 
   it('교안이 인용한 `db.js`·`seed.js`·데이터 파일이 코드베이스와 같다', () => {
@@ -412,7 +417,7 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
   it('교안이 인용한 자바스크립트가 전부 코드베이스 «어딘가에» 실재한다', () => {
     // 🚨 「app.js 조각」만 볼 게 아니다 — 교안은 db.js·seed.js·데이터·실습 파일도
     //    조각으로 인용한다. 출처를 좁게 잡으면 그 몫이 통째로 무검사가 된다.
-    const sources = ['app.js', 'db.js', 'seed.js', 'check.js', 'data/posts.js', 'data/comments.js',
+    const sources = ['snapshots/p2-30.final.app.js', 'db.js', 'seed.js', 'check.js', 'data/posts.js', 'data/comments.js',
                      'lab/p2-30/bookstore.js', 'lab/p2-30/practice1.js', 'lab/p2-30/practice2.js',
                      'snapshots/p2-30.seed.naive.js', 'snapshots/p2-30.step7.app.js',
                      'snapshots/p2-30.step8.app.js', 'snapshots/p2-30.step8.broken.app.js',
