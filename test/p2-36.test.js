@@ -182,6 +182,49 @@ describe('Step 3 — 프론트가 만드는 질의가 그대로 통한다', () =
   });
 });
 
+// ── 축 ②-b 몇 분 전 — 서버는 «시각» 을 주고 화면이 센다 ───────────────
+describe('Step 5 — 몇 분 전이 숫자가 아니라 시각으로 온다', () => {
+  // 🔑 화면이 쓰는 그 함수를 그대로 불러와 진짜 서버의 답에 먹인다 (이 파일의 원칙).
+  const 화면의timeAgo = async () =>
+    (await import(P('../instagram-react/src/utils/timeAgo.js'))).timeAgo;
+
+  it('🔴 목록 한 건에 `minutesAgo` 가 없고 두 시각이 ISO 글자로 온다 — 옛 화면이 「분 전」만 그린 까닭', async () => {
+    const { body } = await getJson('/api/posts?limit=99');
+    for (const post of body.items) {
+      expect(post, `${post.id}번에 옛 칸이 남았다`).not.toHaveProperty('minutesAgo');
+      expect(post.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(post.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    }
+  });
+
+  it('🔴 시드 직후 화면에는 12분 전 · 45분 전 · 3시간 전 · 5시간 전 · 7시간 전 — 교안의 표', async () => {
+    const timeAgo = await 화면의timeAgo();
+    const { body } = await getJson('/api/posts?limit=99');
+    expect(body.items.map((p) => p.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(body.items.map((p) => timeAgo(p.createdAt)))
+      .toEqual(['12분 전', '45분 전', '3시간 전', '5시간 전', '7시간 전']);
+  });
+
+  it('🔴 방금 올린 게시물은 「방금 전」 — 서버가 만든 순간을 두 시각에 똑같이 적어 돌려준다', async () => {
+    const timeAgo = await 화면의timeAgo();
+    const res = await fetch(`${server.base}/api/posts`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        authorId: 2, postAlt: '내가 올린 사진', content: '',
+        imageUrls: ['https://picsum.photos/seed/now/600/600'],
+      }),
+    });
+    const 만든것 = await res.json();
+    expect(res.status).toBe(201);
+    expect(만든것).not.toHaveProperty('minutesAgo');
+    expect(만든것.createdAt).toBe(만든것.updatedAt);
+    expect(timeAgo(만든것.createdAt)).toBe('방금 전');
+
+    await fetch(`${server.base}/api/posts/${만든것.id}`, { method: 'DELETE' });
+  });
+});
+
 describe('Step 5·6 — 프론트가 보내는 몸통이 서버가 받는 모양이다', () => {
   it('🔴 올리기 몸통이 Zod 를 통과한다 — 프론트가 적는 칸 넷 그대로', async () => {
     const 모달 = FRONT('components/CreateFeedModal.jsx');
@@ -337,6 +380,10 @@ describe('인용이 코드베이스와 맞는가', () => {
     '../instagram-react/src/components/FeedList.jsx',
     '../instagram-react/src/components/FeedItemActions.jsx',
     '../instagram-react/src/components/CreateFeedModal.jsx',
+    '../instagram-react/src/components/FeedItem.jsx',
+    '../instagram-react/src/components/FeedItemContent.jsx',
+    '../instagram-react/src/components/FeedItemCaption.jsx',
+    '../instagram-react/src/utils/timeAgo.js',
     // 🔑 교안은 «바꾸기 전» 코드도 인용한다 — 그것도 실재하는 코드다.
     //    이 회차 시작 시점(p2-21 최종판)이 얼려져 있으니 그것을 코퍼스에 함께 둔다.
     '../instagram-react/src/services/p2-21.final.api.snapshot.js',
@@ -350,6 +397,10 @@ describe('인용이 코드베이스와 맞는가', () => {
     '../instagram-react/src/components/p2-21.final.FeedList.snapshot.jsx',
     '../instagram-react/src/components/p2-21.final.FeedItemActions.snapshot.jsx',
     '../instagram-react/src/components/p2-21.final.CreateFeedModal.snapshot.jsx',
+    // `p2-36` Step 5 가 `minutesAgo` 를 `createdAt` 으로 바꾸기 «전» 의 세 파일.
+    '../instagram-react/src/components/p2-21.final.FeedItem.snapshot.jsx',
+    '../instagram-react/src/components/p2-21.final.FeedItemContent.snapshot.jsx',
+    '../instagram-react/src/components/p2-21.final.FeedItemCaption.snapshot.jsx',
   ].map((f) => squash(read(P(f))));
 
   for (const [이름, path] of [['교안', LECTURE], ['답안', ANSWERS]]) {
@@ -378,6 +429,49 @@ describe('인용이 코드베이스와 맞는가', () => {
     expect(Object.keys(body.details).sort(), '교안이 properties 한 겹을 그린다')
       .toEqual(['errors', 'properties']);
     expect(lec, '그 한 겹이 교안에도 있어야 한다').toContain('"properties": {');
+  });
+
+  it('🔴 몸통이 100KB 를 넘으면 413 과 「보낸 내용을 읽을 수 없어요」 — Step 6 머리의 ⚠️', async () => {
+    const 올리기 = (kb) => fetch(`${server.base}/api/posts`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        authorId: 2, postAlt: 'x', content: '',
+        imageUrls: [`data:image/jpeg;base64,${'A'.repeat(kb * 1024)}`],
+      }),
+    });
+    // 70KB 사진은 글자로 바꾸면 93KB 쯤 — 한도 안이라 올라간다.
+    const 작은것 = await 올리기(Math.ceil(70 * 4 / 3));
+    expect(작은것.status).toBe(201);
+    await fetch(`${server.base}/api/posts/${(await 작은것.json()).id}`, { method: 'DELETE' });
+
+    const 큰것 = await 올리기(150);
+    expect(큰것.status).toBe(413);
+    expect(await 큰것.json()).toEqual({ message: '보낸 내용을 읽을 수 없어요' });
+
+    const lec = read(LECTURE);
+    expect(lec).toContain('100KB가 넘는 몸통은 받지 않는데');
+    expect(lec).toContain('413과 함께 「보낸 내용을 읽을 수 없어요」가 오는데');
+    // ⚠️ 가 Step 6 의 «첫 업로드보다 앞» 에 있어야 한다 — 큰 사진이면 첫 장면(400)부터 413 으로 바뀐다.
+    const step6 = lec.slice(lec.indexOf('## Step 6'));
+    expect(step6.indexOf('⚠️ **오늘 올릴 사진은 작은 것으로')).toBeLessThan(step6.indexOf('「만들기」를 눌러'));
+  });
+
+  it('🔴 Step 5 가 싣는 수치가 실물과 같다 — 가짜 서버의 32 · 시드 직후 표 다섯 줄', async () => {
+    const lec = read(LECTURE);
+    // 비교 상자의 왼쪽 — 가짜 서버 1번 게시물(jaehoon)의 숫자.
+    const mock = JSON.parse(read(P('../instagram-react/mock/db.json')));
+    expect(mock.posts[0].username).toBe('jaehoon');
+    expect(mock.posts[0].minutesAgo).toBe(32);
+    expect(lec).toContain(' 가짜 서버   minutesAgo: 32\n');
+
+    // 표의 오른쪽 칸 — 이 파일 위쪽 축이 진짜 서버 답으로 이미 계산해 확인한 그 다섯 글자.
+    const 줄들 = [['12', '12분 전'], ['45', '45분 전'], ['180', '3시간 전'], ['300', '5시간 전'], ['420', '7시간 전']];
+    for (const [숫자, 화면] of 줄들) {
+      expect(lec).toContain(` ${숫자.padEnd(24)}${화면}\n`);
+    }
+    const 시드 = read(P('data/posts.js'));
+    expect([...시드.matchAll(/minutesAgo: (\d+)/g)].map((m) => m[1])).toEqual(줄들.map(([n]) => n));
   });
 
   it('🔴 교안이 시킨 세 요청의 결과가 교안이 적은 그대로다', async () => {
