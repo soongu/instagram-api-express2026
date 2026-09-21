@@ -1,6 +1,9 @@
--- p2-27 답안이 인용하는 SQL «전량 · 순서대로» — 구분자 `-- @@`
--- `-- @@bookstore` / `-- @@instagram` 은 대상 DB. `-- @@setup` 은 답안 블록이 아니다
---   (p2-26 과제로 학생이 이미 만들어둔 상태를 재현하는 자리).
+-- p2-27 답안이 인용하는 SQL «전량 · 답안 순서 그대로» — 구분자 `-- @@`
+--
+-- 🚨 2026-09-11 재생성. 이 파일은 만들어져 있었지만 «게이트가 읽지도 않았고»(p2-27 테스트가
+--    ANSWERS 를 채점 포인트 수 세는 데만 썼다) 그 사이에 답안 문서와 어긋나 있었다
+--    (문서 20블록 ↔ 파일 19블록 · 11번부터 순서가 밀려 있었다). 문서에서 다시 뽑았다.
+-- `-- @@setup` 은 답안 블록이 아니라 p2-26 과제 산출물을 재현하는 자리다.
 -- @@instagram
 -- @@setup
 CREATE TABLE comments (
@@ -42,6 +45,8 @@ SELECT id, username, like_count FROM comments WHERE like_count = 0;
 DELETE FROM comments WHERE like_count = 0;
 -- @@
 SELECT id, post_id, username, like_count FROM comments ORDER BY id;
+-- @@
+DELETE FROM comments WHERE like_count = 0 RETURNING id, username;
 
 -- ── 과제 2 [응용] (서점) ───────────────────────────────
 -- @@bookstore
@@ -64,8 +69,6 @@ INSERT INTO reviews (book_title, reviewer, score, comment) VALUES
 -- @@
 SELECT id, reviewer, comment FROM reviews WHERE comment <> '별로예요';
 -- @@
-SELECT id, reviewer, comment FROM reviews WHERE comment <> '별로예요' ORDER BY id;
--- @@
 SELECT id, reviewer, score FROM reviews WHERE comment IS NULL;
 -- @@
 SELECT id, reviewer, comment FROM reviews WHERE comment <> '별로예요' OR comment IS NULL;
@@ -75,3 +78,5 @@ UPDATE reviews SET comment = '한 줄 평을 아직 안 남겼어요' WHERE comm
 SELECT id, reviewer, comment FROM reviews WHERE comment <> '별로예요';
 -- @@
 SELECT id, reviewer, comment FROM reviews WHERE comment <> '별로예요' ORDER BY id;
+-- @@
+SELECT id, reviewer FROM reviews WHERE COALESCE(comment, '') <> '별로예요';

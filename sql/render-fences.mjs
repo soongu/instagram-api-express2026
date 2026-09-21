@@ -8,24 +8,9 @@
 // 숫자 칸은 오른쪽 정렬, 글자 칸은 왼쪽 정렬. 한글=2칸.
 import pg from 'pg';
 import { readFileSync } from 'node:fs';
-const W = (s) => [...String(s)].reduce((a, c) => {
-  const cp = c.codePointAt(0);
-  const wide = (cp>=0x1100&&cp<=0x115F)||(cp>=0x2E80&&cp<=0xA4CF)||(cp>=0xAC00&&cp<=0xD7A3)
-    ||(cp>=0xF900&&cp<=0xFAFF)||(cp>=0xFE30&&cp<=0xFE6F)||(cp>=0xFF00&&cp<=0xFF60)
-    ||(cp>=0xFFE0&&cp<=0xFFE6)||(cp>=0x2460&&cp<=0x24FF);
-  return a + (wide ? 2 : 1);
-}, 0);
-const pad = (s, n, right) => right ? ' '.repeat(Math.max(0,n-W(s))) + s : s + ' '.repeat(Math.max(0,n-W(s)));
-
-export function fence(rows, fields, { indent = 3, gap = 3, nullAs = '' } = {}) {
-  const cols = fields.map((f) => f.name);
-  const isNum = cols.map((c) => rows.some(r => typeof r[c] === 'number') );
-  const cell = (r, c) => r[c] === null || r[c] === undefined ? nullAs : String(r[c]);
-  const wid = cols.map((c, i) => Math.max(W(c), ...rows.map((r) => W(cell(r, c)))));
-  const line = (cells) => ' '.repeat(indent) +
-    cells.map((v, i) => pad(v, wid[i], isNum[i])).join(' '.repeat(gap)).replace(/\s+$/, '');
-  return [line(cols), ...rows.map((r) => line(cols.map((c) => cell(r, c))))].join('\n');
-}
+// 폭 계산·펜스 조립은 `_fence.mjs` 로 옮겼다 — p2-28 이 같은 자를 쓴다.
+export { fence, W, pad } from './_fence.mjs';
+import { fence } from './_fence.mjs';
 
 const mk = (db, port) => new pg.Client({host:'localhost',port,database:db,user:'postgres',password:'postgres'});
 const IG = mk('instagram',5432), BK = mk('bookstore',5433);

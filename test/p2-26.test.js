@@ -22,7 +22,8 @@ let db;
 beforeAll(async () => {
   db = new pg.Client(PG);
   await db.connect();
-  await db.query('DROP TABLE IF EXISTS posts');
+  await db.query('DROP TABLE IF EXISTS comments');
+      await db.query('DROP TABLE IF EXISTS posts');
   await db.query(sql('03-posts.sql'));
   await db.query(sql('04-insert.sql'));
 }, 30000);
@@ -70,7 +71,10 @@ describe('교안 ↔ 코드베이스 — 인용한 SQL 이 파일과 글자 단�
     const c = new pg.Client(PG);
     await c.connect();
     try {
+      await c.query('DROP TABLE IF EXISTS comments');
       await c.query('DROP TABLE IF EXISTS posts');
+      await c.query('DROP TABLE IF EXISTS authors CASCADE');
+      await c.query('DROP TABLE IF EXISTS reviews');
       await c.query('DROP TABLE IF EXISTS books');
       const failed = [];
       for (const [n, b] of blocks.entries()) {
@@ -83,6 +87,8 @@ describe('교안 ↔ 코드베이스 — 인용한 SQL 이 파일과 글자 단�
       // 마지막 SELECT 가 게시물 셋을 돌려준다 — 교안 끝까지 살아 있다는 뜻
       const { rows } = await c.query('SELECT count(*)::int AS n FROM posts');
       expect(rows[0].n).toBe(3);
+      await c.query('DROP TABLE IF EXISTS authors CASCADE');
+      await c.query('DROP TABLE IF EXISTS reviews');
       await c.query('DROP TABLE IF EXISTS books');
     } finally { await c.end(); }
   }, 60000);
@@ -93,6 +99,7 @@ describe('조립 — Step 5→6→8 을 «교안 순서 그대로» 이어 돌�
     const one = new pg.Client(PG);
     await one.connect();
     try {
+      await one.query('DROP TABLE IF EXISTS comments');
       await one.query('DROP TABLE IF EXISTS posts');
       await one.query(sql('01-first-table.sql'));          // Step 5
       await one.query('DROP TABLE posts');                 // Step 6 이 지우라고 말한다

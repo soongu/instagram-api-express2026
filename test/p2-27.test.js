@@ -40,11 +40,16 @@ const seedBlock = () => quoted().find((s) => s.startsWith('INSERT INTO posts (us
 let db, bk;
 const BASE = () => p26('03-posts.sql') + '\n' + p26('04-insert.sql');
 async function reset() {
+  // 🚨 comments 를 «먼저» 지운다. p2-28 이 comments→posts 외래 키를 세우기 때문에,
+  //    남아 있으면 DROP TABLE posts 가 2BP01 로 죽는다(2026-09-11 실측).
+  await db.query('DROP TABLE IF EXISTS comments');
   await db.query('DROP TABLE IF EXISTS posts');
   await db.query(BASE());
 }
 // 서점 DB 를 «p2-26 종료 상태» 로 되돌린다 — 그 회차 실습이 books 한 권을 남겼다.
 async function resetBookstore() {
+  await bk.query('DROP TABLE IF EXISTS authors CASCADE');   // p2-28 답안이 만든다
+  await bk.query('DROP TABLE IF EXISTS reviews');           // p2-28 이 books 를 가리키게 한다
   await bk.query('DROP TABLE IF EXISTS stock_check');
   await bk.query('DROP TABLE IF EXISTS books');
   await bk.query(`CREATE TABLE books (id SERIAL PRIMARY KEY, title VARCHAR(200) NOT NULL,
@@ -278,9 +283,60 @@ describe('Step 7~8 — 고치기와 지우기', () => {
   });
 });
 
+// 🚨 이 축은 2026-09-11 까지 «침묵하고 있었다». sql/p2-27/answers.sql 이 만들어져 있는데
+//    테스트가 그 파일을 읽지도 않았고, 그 사이 답안 문서와 어긋나 있었다(문서 20 ↔ 파일 19).
+//    캐논 「판정 없는 축은 그 자체로 FAIL」 그대로다 — 코퍼스를 문서에서 다시 뽑고 켰다.
+function answerCorpus() {
+  const raw = readFileSync(new URL('../sql/p2-27/answers.sql', import.meta.url), 'utf8');
+  const parts = raw.split(/^-- @@(setup|bookstore|instagram)?$/m);
+  const out = [];
+  for (let i = 1; i < parts.length; i += 2) {
+    const mark = parts[i];
+    const body = (parts[i + 1] || '').split('\n').filter((l) => !l.startsWith('--')).join('\n').trim();
+    if (mark === 'bookstore' || mark === 'instagram') out.push({ db: mark });
+    if (!body) continue;
+    out.push(mark === 'setup' ? { setup: true, sql: body } : { sql: body });
+  }
+  return out;
+}
+
 describe('답안 — 과제가 시킨 것과 답안이 답하는 것이 같다', () => {
   it('답안 파일이 있고 채점 포인트가 과제 수(2)만큼 있다', () => {
     const md = readFileSync(ANSWERS, 'utf8');
     expect([...md.matchAll(/^### 채점 포인트/gm)].length).toBe(2);
   });
+
+  it('답안 sql 블록을 실제로 세었다 (0건이면 이 축이 침묵한 것이다)', () => {
+    const md = readFileSync(ANSWERS, 'utf8');
+    expect([...md.matchAll(/```sql\n([\s\S]*?)```/g)].length).toBe(20);
+  });
+
+  it('답안 블록 목록이 코퍼스와 «순서까지» 같다', () => {
+    const md = readFileSync(ANSWERS, 'utf8');
+    const blocks = [...md.matchAll(/```sql\n([\s\S]*?)```/g)].map((m) => m[1].trim());
+    expect(blocks).toEqual(answerCorpus().filter((c) => c.sql && !c.setup).map((c) => c.sql));
+  });
+
+  it('답안 20블록이 순서대로 전부 돈다 — 하나도 안 막힌다', async () => {
+    await reset();
+    await resetBookstore();
+    await db.query('DROP TABLE IF EXISTS comments');
+    await bk.query('DROP TABLE IF EXISTS reviews');
+    const failed = [];
+    let cur = db, i = 0;
+    for (const step of answerCorpus()) {
+      if (step.db) { cur = step.db === 'bookstore' ? bk : db; continue; }
+      if (step.setup) { await cur.query(step.sql); continue; }
+      i += 1;
+      try { await cur.query(step.sql); }
+      catch (e) { failed.push({ n: i, code: e.code, head: step.sql.split('\n')[0].slice(0, 46) }); }
+    }
+    expect(failed).toEqual([]);
+    expect(i).toBe(20);
+    // 과제가 시킨 결과가 실제로 남아 있다 — 댓글 넷, 리뷰 여섯
+    expect((await db.query('SELECT count(*)::int AS n FROM comments')).rows[0].n).toBe(4);
+    expect((await bk.query('SELECT count(*)::int AS n FROM reviews')).rows[0].n).toBe(6);
+    await db.query('DROP TABLE IF EXISTS comments');
+    await bk.query('DROP TABLE IF EXISTS reviews');
+  }, 60000);
 });
