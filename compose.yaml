@@ -1,0 +1,16 @@
+# ~/instagram-api/compose.yaml
+services:
+  db:
+    image: postgres:18
+    container_name: instagram-db
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: instagram
+    volumes:
+      - instagram-data:/var/lib/postgresql
+
+volumes:
+  instagram-data:

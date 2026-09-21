@@ -1,0 +1,16 @@
+# ~/instagram-api/lab/compose.yaml
+services:
+  db:
+    image: postgres:18
+    container_name: bookstore-db
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bookstore
+    volumes:
+      - bookstore-data:/var/lib/postgresql
+
+volumes:
+  bookstore-data:
