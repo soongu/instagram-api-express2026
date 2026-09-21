@@ -5,15 +5,17 @@ import { PrismaClient } from '@prisma/client';
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
-// 사진은 이제 게시물의 칸이 아니라 딸린 표의 줄이라, 함께 읽어야 보인다.
-const withImages = await prisma.post.findMany({
-  include: { images: { orderBy: { imgOrder: 'asc' } } },
+const posts = await prisma.post.findMany({ orderBy: { id: 'asc' } });
+console.log(`게시물 ${posts.length}개를 읽었어요.`);
+console.log(posts[0]);
+
+const withComments = await prisma.post.findMany({
+  include: { comments: true },
   orderBy: { id: 'asc' },
 });
 
-for (const post of withImages) {
-  const urls = post.images.map((image) => image.imageUrl).join(', ');
-  console.log(`${post.id}번 ${post.postAlt} — 사진 ${post.images.length}장: ${urls}`);
+for (const post of withComments) {
+  console.log(`${post.id}번 ${post.postAlt} — 댓글 ${post.comments.length}개`);
 }
 
 // 답글은 원댓글과 «같은 표» 에 있다. 그래서 그냥 읽으면 둘이 섞여 나온다.

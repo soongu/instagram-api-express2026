@@ -147,7 +147,9 @@ describe('Step 3 — 응답에 imageUrls 가 배열로 실린다', () => {
       read(P('snapshots/p2-34/seed.step3.js')).replace(/from '\.\//g, "from '../"));
 
     seedLive();
-    await bootApp('snapshots/p2-35-final/app.js', 3441);
+    // 🚨 이 회차의 앱을 띄운다 — p2-35 판을 띄우면 그 회차가 고친 select·$transaction 을
+    //    p2-34 교안의 주장으로 재게 된다(audit retrofit 때 실제로 그래서 빨개졌다).
+    await bootApp('snapshots/p2-34-final/app.js', 3441);
   }, 60000);
 
   it('🚨 Step 3 시점 시드가 실제로 돌고, 교안이 인용한 그 줄을 찍는다', async () => {
@@ -261,6 +263,34 @@ describe('Step 3 — 응답에 imageUrls 가 배열로 실린다', () => {
 describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원댓글을 가리킨다', () => {
   beforeAll(() => { seedLive(); }, 60000);
 
+  it('🚨 Step 5 의 check.js 가 실제로 돌고, 교안이 인용한 줄이 그대로 나온다', () => {
+    // 🚨 학생은 이 파일에 «더하는» 것이지 갈아치우는 것이 아니다 —
+    //    그래서 위쪽에 p2-33 이 남긴 「N번 {postAlt} — 댓글 N개」 줄이 먼저 찍힌다.
+    const out = execFileSync(process.execPath, [P('snapshots/p2-34-final/check.js')],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+
+    for (const line of [
+      'comments 표의 줄은 모두 12개예요.',
+      '그중 원댓글은 9개고, 나머지는 어딘가에 달린 답글이에요.',
+      '1번 "저도 가봤어요" — 답글 2개',
+      '    └ 10번 "다음엔 같이 가요"',
+      '    └ 11번 "저도 껴주세요"',
+      '2번 "사진 잘 나왔네요" — 답글 0개',
+      '3번 "다음에 같이 가요" — 답글 0개',
+      '4번 "크루아상 색이 좋네요" — 답글 1개',
+      '    └ 12번 "이번엔 잘 구워졌어요"',
+      '5번 "레시피 공유해주세요" — 답글 0개',
+    ]) {
+      expect(out, `실행 출력에 없다 — ${line}`).toContain(line);
+      expect(read(LECTURE), `교안에 없다 — ${line}`).toContain(line);
+    }
+
+    // 🚨 교안 본문이 근거로 쓰는 «생략된 위쪽» 줄 — 이것이 없으면
+    //    「1번 게시물의 댓글이 3개가 아니라 5개로 나온 것도」가 가리킬 데가 없어진다.
+    expect(out, '원댓글 3 + 답글 2 = 5').toContain('1번 노을 진 한강 — 댓글 5개');
+    expect(read(LECTURE)).toContain('1번 게시물의 댓글이 3개가 아니라 5개로 나온 것도');
+  });
+
   it('🔴 댓글 표에 답글까지 12줄이 들어가고, 원댓글은 9개다', async () => {
     const r = await db.query(`
       select count(*)::int total,
@@ -315,7 +345,7 @@ describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원�
 describe('Step 6·7 — 좋아요는 가운데 표가 받고, 같은 쌍은 한 번만 들어간다', () => {
   beforeAll(async () => {
     seedLive();
-    await bootApp('snapshots/p2-35-final/app.js', 3442);
+    await bootApp('snapshots/p2-34-final/app.js', 3442);
   }, 60000);
 
   it('🔴 암묵적 N:M 으로 적으면 칸 이름이 A·B 가 된다 — 그래서 안 쓴다', () => {
@@ -385,6 +415,70 @@ describe('Step 6·7 — 좋아요는 가운데 표가 받고, 같은 쌍은 한 
 });
 
 // ── 직접 해보기 — 서점에서 세 관계를 한 번씩 ────────────────────────────────
+
+// ── audit 칸 — 시각은 숫자가 아니라 두 시각이다 ─────────────────────────────
+
+describe('audit 칸 — 시드가 minutes_ago 가 아니라 두 시각을 넣는다', () => {
+  let seedOut = '';
+
+  beforeAll(() => { seedOut = seedLive(); }, 60000);
+
+  it('🔴 minutes_ago 칸은 두 표 어디에도 없고 audit 칸 넷이 서 있다', async () => {
+    const r = await db.query(`
+      select table_name, column_name from information_schema.columns
+       where table_name in ('posts', 'comments')
+         and column_name in ('minutes_ago', 'created_at', 'updated_at')
+       order by table_name, column_name`);
+
+    expect(r.rows).toEqual([
+      { table_name: 'comments', column_name: 'created_at' },
+      { table_name: 'comments', column_name: 'updated_at' },
+      { table_name: 'posts', column_name: 'created_at' },
+      { table_name: 'posts', column_name: 'updated_at' },
+    ]);
+
+    // 🚨 칸 «이름» 은 교안에도 0건이어야 한다. `minutesAgo`(데이터 파일의 다리)는 남는다.
+    for (const [name, path] of [['교안', LECTURE], ['답안', ANSWERS]]) {
+      expect(read(path), name).not.toContain('minutes_ago');
+    }
+  });
+
+  it('🚨 이 회차 끝 시드가 실제로 돌고, 교안이 인용한 그 줄을 찍는다', () => {
+    const line = '사람 5명, 게시물 5개, 사진 8장, 댓글 9개, 답글 3개를 넣었어요.';
+
+    expect(seedOut.trim()).toBe(line);
+    expect(read(LECTURE)).toContain(line);
+  });
+
+  it('🔴 시드가 넣은 두 시각이 줄마다 같다 — 답글 3줄까지', async () => {
+    const posts = await db.query('select id, created_at, updated_at from posts order by id');
+    const comments = await db.query(
+      'select id, parent_id, created_at, updated_at from comments order by id');
+
+    expect(posts.rows).toHaveLength(5);
+    expect(comments.rows).toHaveLength(12);
+    // 🚨 답글도 withTimes 를 거치는 자리다 — 안 거치면 시드가 `Unknown argument minutesAgo` 로 죽는다.
+    expect(comments.rows.filter((r) => r.parent_id !== null)).toHaveLength(3);
+
+    for (const row of [...posts.rows, ...comments.rows]) {
+      expect(row.created_at.getTime(), `${row.id}번 — 한 번도 안 고쳤으니 두 시각이 같다`)
+        .toBe(row.updated_at.getTime());
+    }
+  });
+
+  it('🔴 답글은 원댓글보다 «늦다» — 데이터에 적어둔 분이 그대로 차례가 된다', async () => {
+    const r = await db.query(`
+      select c.id, c.created_at, p.id parent_id, p.created_at parent_created_at
+        from comments c join comments p on p.id = c.parent_id
+       order by c.id`);
+
+    expect(r.rows).toHaveLength(3);
+    for (const row of r.rows) {
+      expect(row.created_at.getTime(), `${row.id}번 답글이 ${row.parent_id}번 원댓글보다 늦다`)
+        .toBeGreaterThan(row.parent_created_at.getTime());
+    }
+  });
+});
 
 describe('직접 해보기 1~3 — 서점에도 같은 셋이 있다', () => {
   let book = null;
@@ -554,6 +648,12 @@ describe('인용이 코드베이스와 맞는가', () => {
     ]) expect(lec, phrase.slice(0, 45)).toContain(phrase);
   });
 
+  it('🚨 착수 스냅숏이 p2-33 종료 스키마와 byte 동일하다 — 사슬이 끊기면 앞 회차와 갈린다', () => {
+    // 🚨 audit retrofit 때 실제로 갈라져 있었다 — 앞 회차가 뒤쪽만 고치면 여기가 조용히 옛 판으로 남는다.
+    expect(read(P('snapshots/p2-34/schema.before.prisma')))
+      .toBe(read(P('snapshots/p2-33-final/prisma/schema.prisma')));
+  });
+
   it('교안과 답안이 둘 다 있다', () => {
     expect(exists(LECTURE), '교안').toBe(true);
     expect(exists(ANSWERS), '답안').toBe(true);
@@ -659,5 +759,45 @@ describe('과제 [기초]·[응용] — 답안이 실제로 돈다', () => {
     expect(out).toContain('고친 뒤');
     expect(out).toContain('    1            2            2');
     expect(out).toContain('    4            0            0');
+  });
+
+  it('🔴 답안이 실은 답글 JSON 이 실제 응답과 칸 이름·차례까지 같다', async () => {
+    seedLive();
+    await bootApp('__replay__/p234-homework1.js', 4010);
+
+    // 답안의 「6. 확인」 순서 그대로 — 먼저 원댓글(13번), 그 원댓글에 답글(14번).
+    const rootRes = await fetch('http://127.0.0.1:4010/api/comments', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 1, authorId: 3, content: '저도 한강 좋아해요' }),
+    });
+    const root = await rootRes.json();
+
+    expect(rootRes.status).toBe(201);
+    expect(root.id, '시드 12줄 다음 번호').toBe(13);
+    expect(root.parentId).toBe(null);
+
+    const res = await fetch('http://127.0.0.1:4010/api/comments', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 2, authorId: 5, content: '저도요', parentId: 13 }),
+    });
+    const reply = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(reply).toMatchObject({
+      id: 14, postId: 1, authorId: 5, content: '저도요', likeCount: 0, parentId: 13, username: 'seungwoo',
+    });
+    // 🚨 방금 만든 답글이라 두 시각이 «같은 값» 이고, 시드 시각이 아니라 요청을 보낸 순간이다.
+    expect(reply.createdAt).toBe(reply.updatedAt);
+    expect(Date.now() - new Date(reply.createdAt).getTime(),
+      '요청을 보낸 순간이지 시드 시각이 아니다').toBeLessThan(60000);
+
+    // 답안 블록이 그 응답과 같은 칸을 같은 차례로 싣는다 — minutes_ago 가 빠지고 두 시각이 들어온 자리다.
+    const block = [...read(ANSWERS).matchAll(/```json\n([\s\S]*?)```/g)]
+      .map((m) => m[1]).find((b) => b.includes('"id": 14'));
+
+    expect(block, '답안의 14번 답글 JSON').toBeTruthy();
+    expect(Object.keys(JSON.parse(block))).toEqual(Object.keys(reply));
   });
 });

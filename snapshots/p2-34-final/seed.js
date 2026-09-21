@@ -3,6 +3,11 @@ import { prisma } from './db.js';
 import { posts } from './data/posts.js';
 import { comments } from './data/comments.js';
 
+function withTimes({ minutesAgo, ...row }) {
+  const createdAt = new Date(Date.now() - minutesAgo * 60 * 1000);
+  return { ...row, createdAt, updatedAt: createdAt };
+}
+
 // 표를 하나 만들 때마다 이 목록에 넣어야 한다.
 // 빠뜨리면 「외래 키가 걸린 표는 못 비운다」며 막힌다.
 await prisma.$executeRaw`
@@ -31,9 +36,8 @@ const idOf = (username) => users.find((user) => user.username === username).id;
 
 await prisma.post.createMany({
   data: posts.map(({ username, profileImage, images, ...post }) => ({
-    ...post,
+    ...withTimes(post),
     authorId: idOf(username),
-    createdAt: new Date(Date.now() - post.minutesAgo * 60 * 1000),
   })),
 });
 
@@ -52,7 +56,7 @@ await prisma.postImage.createMany({
 
 await prisma.comment.createMany({
   data: comments.map(({ username, replies, ...comment }) => ({
-    ...comment,
+    ...withTimes(comment),
     authorId: idOf(username),
   })),
 });
@@ -63,7 +67,7 @@ const createdComments = await prisma.comment.findMany({ orderBy: { id: 'asc' } }
 await prisma.comment.createMany({
   data: createdComments.flatMap((comment, index) =>
     (comments[index].replies ?? []).map(({ username, ...reply }) => ({
-      ...reply,
+      ...withTimes(reply),
       postId: comment.postId,
       authorId: idOf(username),
       parentId: comment.id,
