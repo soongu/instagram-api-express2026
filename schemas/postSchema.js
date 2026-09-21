@@ -2,8 +2,7 @@
 import { z } from 'zod';
 
 const postFields = {
-  username: z.string().min(1).max(50),
-  profileImage: z.string().optional(),
+  authorId: z.number().int().positive(),
   postImage: z.string().min(1),
   postAlt: z.string().optional(),
   content: z.string().optional(),

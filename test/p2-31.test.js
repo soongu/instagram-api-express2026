@@ -5,6 +5,12 @@
 //    그래서 p2-30 이 잠근 계약을 이 회차 최종판에 «그대로» 다시 물린다.
 // 🚨 교안이 「이렇게 하면 이렇게 된다」고 주장하는 중간 상태는 snapshots/p2-31/ 로 얼려
 //    실제로 띄운다. 산문으로만 적힌 주장은 어느 게이트도 못 보기 때문이다.
+// 🚨 p2-33 이 정규화(posts.username → author_id)를 하면서 이 회차가 «자라는 파일»로 보던
+//    것들을 snapshots/p2-32-final/ 로 얼렸다. 안 얼리면 이 회차 축들이 거짓 FAIL 이 된다 —
+//    캐논 「앞 회차 테스트가 자라는 파일을 live 로 보면 다음 회차 부채를 가린다」.
+//    🔑 이번엔 «계약 자체»가 바뀌었다(POST 몸통이 username → authorId). 그래서 p2-31 처럼
+//       동작 검사를 live 로 남겨둘 수 없다 — 남기면 옛 계약을 영원히 요구하게 된다.
+//       새 계약이 안 깨졌다는 증거는 p2-33 자기 테스트가 «12요청 대조»로 따로 세운다.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -37,13 +43,13 @@ let server = null;
 function labCopy(rel) {
   const local = rel.replace(/\.js$/, '.local.js');
   writeFileSync(P(local), read(P(rel))
-    .replace(/from '\.\.\/(db|services|routes)\//g, "from '../../$1/")
-    .replace(/from '\.\.\/db\.js'/g, "from '../../db.js'"));
+    .replace(/from '\.\.\/(db|services|routes)\//g, "from '../../snapshots/p2-32-final/$1/")
+    .replace(/from '\.\.\/db\.js'/g, "from '../../snapshots/p2-32-final/db.js'"));
   return local;
 }
 const dropCopy = (local) => { try { unlinkSync(P(local)); } catch { /* 이미 없음 */ } };
 
-const seed = (file = 'seed.js', args = []) =>
+const seed = (file = 'snapshots/p2-32-final/seed.js', args = []) =>
   execFileSync(process.execPath, [P(file), ...args], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
 beforeAll(async () => {
@@ -88,7 +94,17 @@ afterAll(async () => {
   await bookAdmin.end();
 });
 
+/** 스냅숏이 부르는 `../db.js` 는 live 클라이언트다 — p2-33 정규화 뒤로는 이 회차 DB 를 모른다. */
+function frozenDb(rel) {
+  const src = read(P(rel));
+  if (!src.includes("from '../db.js'")) return rel;
+  const local = rel.replace(/\.js$/, '.frozen.js');
+  writeFileSync(P(local), src.replace("from '../db.js'", "from './p2-32-final/db.js'"));
+  return local;
+}
+
 async function bootApp(file, port) {
+  file = frozenDb(file);
   if (server) { await server.stop(); server = null; await new Promise((r) => setTimeout(r, 150)); }
   server = await boot(file, { port, env: { ...ENV, PORT: String(port) }, ready: `${port}번 포트에서` });
   return server;
@@ -230,7 +246,9 @@ describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안
   it('🔴 요청 파일을 한 글자도 안 고쳤다 — `code/p2-30` 가지가 들고 있는 그대로다', () => {
     // 🚨 `HEAD` 와 대조하면 이 회차가 커밋할 때마다 기준이 따라 움직여 늘 통과한다.
     //    비교 대상은 «지난 회차가 심어둔 가지» 여야 한다.
-    const current = read(P('requests/posts.http'));
+    // 🚨 live 를 보면 안 된다 — p2-33 이 POST 몸통을 authorId 로 바꾸면서 이 파일을 고친다.
+    //    이 축이 묻는 것은 «p2-31 이 고쳤나» 이므로 가지 둘을 맞대야 한다.
+    const current = execFileSync('git', ['show', 'code/p2-31:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
     const atP230 = execFileSync('git', ['show', 'code/p2-30:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
     expect(current).toBe(atP230);
     expect(current.match(/^### /gm)).toHaveLength(12);

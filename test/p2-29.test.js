@@ -9,7 +9,7 @@
 // 🚨 시각과 폴더 이름은 «돌릴 때마다 다르다» — 값이 아니라 성질을 잰다.
 //    (20260910232755_add_created_at 의 앞자리는 마이그레이션을 «만든 순간»이다.)
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, readdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, copyFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { setupP229 } from '../sql/p2-29/setup.mjs';
@@ -157,7 +157,7 @@ describe('migrate — 칸을 하나 더하면 이력이 자란다', () => {
   it('뽑히는 SQL 이 add_created_at 마이그레이션과 같다', () => {
     const out = prisma(['migrate', 'diff',
       '--from-schema', 'snapshots/p2-29/schema-mapped.prisma',
-      '--to-schema', 'prisma/schema.prisma', '--script']);
+      '--to-schema', 'snapshots/p2-29/schema-final.prisma', '--script']);
     const dir = migrationDir('_add_created_at');
     expect(dir).toBeTruthy();
     const committed = read(P(`prisma/migrations/${dir}/migration.sql`));
@@ -165,7 +165,7 @@ describe('migrate — 칸을 하나 더하면 이력이 자란다', () => {
   });
 
   it('🚨 이미 든 5줄은 «전부 같은 시각»을 받는다 — minutes_ago 와 어긋난다', async () => {
-    prisma(['migrate', 'deploy']);
+    prisma(['migrate', 'deploy', '--config', 'snapshots/p2-29/deploy.config.js']);
     const r = await db.query('select minutes_ago, created_at from posts order by id');
     expect(r.rows).toHaveLength(5);
     const stamps = new Set(r.rows.map((x) => x.created_at.getTime()));
@@ -175,15 +175,26 @@ describe('migrate — 칸을 하나 더하면 이력이 자란다', () => {
 
   it('이력만으로 스키마가 «그대로» 되살아난다', () => {
     const out = prisma(['migrate', 'diff', '--config', 'snapshots/p2-29/history.config.js',
-      '--from-migrations', './prisma/migrations', '--to-schema', './prisma/schema.prisma', '--script']);
+      '--from-migrations', './snapshots/p2-29/migrations',
+      '--to-schema', './snapshots/p2-29/schema-final.prisma', '--script']);
     expect(out).toContain('This is an empty migration');
   });
 });
 
 describe('첫 쿼리 — JS 쪽은 camelCase 로 돌아온다', () => {
+  // 🚨 «그 시점» 클라이언트로 돌린다. 학생 파일 `check.js` 는 `@prisma/client` 를 부르는데,
+  //    그것은 지금 p2-33 의 정규화된 모델을 아는 판이라 p229_gate(글자 판)에서는 안 돈다.
+  //    그래서 import 한 줄만 얼린 클라이언트로 바꿔 __replay__ 에서 돌린다 —
+  //    `withLocalMongo` 가 쓰는 그 처리이고, 학생 파일 자체는 한 글자도 안 고친다.
+  //    🚫 얼린 스키마에 `output` 을 안 주면 generate 가 수업 클라이언트를 덮어쓴다(p2-29 사고).
   it('check.js 가 게시물 5개를 읽고 camelCase 로 찍는다', () => {
-    prisma(['generate']);
-    const out = execFileSync(process.execPath, [P('check.js')], {
+    prisma(['generate', '--config', 'snapshots/p2-29/generate.config.js']);
+    mkdirSync(P('__replay__'), { recursive: true });
+    const frozen = read(P('check.js'))
+      .replace("from '@prisma/client'", "from '../snapshots/p2-29/client/index.js'");
+    expect(frozen).toContain('snapshots/p2-29/client');   // 바꿔 치는 데 실패하면 조용히 통과하지 않게
+    writeFileSync(P('__replay__/p2-29.check.js'), frozen);
+    const out = execFileSync(process.execPath, [P('__replay__/p2-29.check.js')], {
       cwd: P('.'), encoding: 'utf8', env: { ...process.env, DATABASE_URL: GATE_URL },
     });
     expect(out).toContain('게시물 5개를 읽었어요.');
@@ -207,7 +218,7 @@ describe('교안 ↔ 코드베이스 — 인용한 것이 실재한다', () => {
     'snapshots/p2-29/lab-schema-mapped.prisma',
     'snapshots/p2-29/lab-schema-answers.prisma',
     'lab/p2-29/schema.prisma',
-    'prisma/schema.prisma',
+    'snapshots/p2-29/schema-final.prisma',
   ].map((f) => read(P(f)));
 
   // 🚨 교안·답안의 ```sql 은 출처가 «셋» 이다. 하나라도 빼면 그 몫이 무검사가 된다.
@@ -215,7 +226,7 @@ describe('교안 ↔ 코드베이스 — 인용한 것이 실재한다', () => {
   //    ③ 학생이 VS Code 에 «손으로 치는» 조회·삽입(코퍼스로 따로 잠그고 실제로 돌린다)
   const sqlSources = () => {
     const out = [];
-    for (const dir of ['prisma/migrations', 'lab/p2-29/migrations'])
+    for (const dir of ['snapshots/p2-29/migrations', 'lab/p2-29/migrations'])
       for (const d of readdirSync(P(dir)).filter((x) => !x.endsWith('.toml')))
         out.push(read(P(`${dir}/${d}/migration.sql`)));
     for (const f of ['snapshots/p2-29/answers-comments.sql', 'snapshots/p2-29/answers-publishers.sql',

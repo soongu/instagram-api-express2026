@@ -3,6 +3,12 @@
 // 🚨 진짜 instagram DB 를 안 건드린다 — 전용 DB(p232_gate)를 p2-31 종료 상태로 세워서 쓴다.
 // 🚨 이 회차는 p2-31 과 달리 «새 기능이 있다» — id 주입 차단·타입 검증·400 상세 메시지가
 //    새로 생긴다. 그래서 계약 검사(옛 행동 유지)와 신규 행동 검사를 함께 본다.
+// 🚨 p2-33 이 정규화(posts.username → author_id)를 하면서 이 회차가 «자라는 파일»로 보던
+//    것들을 snapshots/p2-32-final/ 로 얼렸다. 안 얼리면 이 회차 축들이 거짓 FAIL 이 된다 —
+//    캐논 「앞 회차 테스트가 자라는 파일을 live 로 보면 다음 회차 부채를 가린다」.
+//    🔑 이번엔 «계약 자체»가 바뀌었다(POST 몸통이 username → authorId). 그래서 p2-31 처럼
+//       동작 검사를 live 로 남겨둘 수 없다 — 남기면 옛 계약을 영원히 요구하게 된다.
+//       새 계약이 안 깨졌다는 증거는 p2-33 자기 테스트가 «12요청 대조»로 따로 세운다.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -34,13 +40,13 @@ let server = null;
 function labCopy(rel) {
   const local = rel.replace(/\.js$/, '.local.js');
   writeFileSync(P(local), read(P(rel))
-    .replace(/from '\.\.\/(db|services|routes|errors|schemas|middlewares)\//g, "from '../../$1/")
-    .replace(/from '\.\.\/(db|errors)\.js'/g, "from '../../$1.js'"));
+    .replace(/from '\.\.\/(db|services|routes|errors|schemas|middlewares)\//g, "from '../../snapshots/p2-32-final/$1/")
+    .replace(/from '\.\.\/(db|errors)\.js'/g, "from '../../snapshots/p2-32-final/$1.js'"));
   return local;
 }
 const dropCopy = (local) => { try { unlinkSync(P(local)); } catch { /* 이미 없음 */ } };
 
-const seed = (file = 'seed.js', args = []) =>
+const seed = (file = 'snapshots/p2-32-final/seed.js', args = []) =>
   execFileSync(process.execPath, [P(file), ...args], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
 beforeAll(async () => {
@@ -118,7 +124,7 @@ describe('최종판 — 실제 서버', () => {
   });
 
   it('POST 정상 요청은 201 로 만들어진다', async () => {
-    await bootApp('app.js', 3600);
+    await bootApp('snapshots/p2-32-final/app.js', 3600);
     const res = await fetch(`${server.base}/api/posts`, {
       method: 'POST', headers: JSON_HEADERS,
       body: JSON.stringify({ username: 'jaehoon', postImage: 'a.jpg', content: '오늘' }),
@@ -238,26 +244,26 @@ describe('최종판 — 실제 서버', () => {
 // ── 정적 검사 — 몸통이 실제로 가벼워졌는가 ──────────────────────────────────
 describe('최종판 — 코드 모양', () => {
   it('🔴 라우터에 `if (!post)`·`res.status(404)` 가 더는 없다', () => {
-    const router = read(P('routes/posts.js'));
+    const router = read(P('snapshots/p2-32-final/routes/posts.js'));
     expect(router).not.toContain('if (!post)');
     expect(router).not.toContain('if (!deleted)');
     expect(router.match(/res\.status\(404\)/g)).toBeNull();
   });
 
   it('🔴 서비스에 `try`/`catch`/`P2025` 가 그대로 있다 — Prisma 이름은 여기서 끝난다', () => {
-    const service = read(P('services/postService.js'));
+    const service = read(P('snapshots/p2-32-final/services/postService.js'));
     expect(service).toContain('P2025');
     expect(service).toContain('NotFoundError');
   });
 
   it('🔴 라우터가 아는 것은 이름뿐이다 — Zod 가 라우터 안이 아니라 미들웨어에 있다', () => {
-    const router = read(P('routes/posts.js'));
+    const router = read(P('snapshots/p2-32-final/routes/posts.js'));
     expect(router).not.toContain("from 'zod'");
     expect(router).toContain('validateBody');
   });
 
   it('app.js 의 에러 미들웨어가 instanceof 로 판별한다', () => {
-    expect(read(P('app.js'))).toContain('instanceof HttpError');
+    expect(read(P('snapshots/p2-32-final/app.js'))).toContain('instanceof HttpError');
   });
 });
 
@@ -340,8 +346,9 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     .join('\n');
 
   const SOURCES = [
-    'errors.js', 'app.js', 'db.js', 'routes/posts.js', 'services/postService.js',
-    'schemas/postSchema.js', 'middlewares/validate.js',
+    'errors.js', 'snapshots/p2-32-final/app.js', 'db.js',
+    'snapshots/p2-32-final/routes/posts.js', 'snapshots/p2-32-final/services/postService.js',
+    'snapshots/p2-32-final/schemas/postSchema.js', 'middlewares/validate.js',
     'snapshots/p2-31-final/app.js', 'snapshots/p2-31-final/routes/posts.js',
     'snapshots/p2-31-final/services/postService.js',
     'lab/p2-32/practice1.js', 'lab/p2-32/bookRoutes.js', 'lab/p2-32/bookService.js',
@@ -379,8 +386,8 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
 
   it('🔴 완성본으로 인용한 파일 둘이 byte 동일하다', () => {
     const pairs = [
-      [LECTURE, '// ~/instagram-api/routes/posts.js', ['routes/posts.js']],
-      [LECTURE, '// ~/instagram-api/services/postService.js', ['services/postService.js']],
+      [LECTURE, '// ~/instagram-api/routes/posts.js', ['snapshots/p2-32-final/routes/posts.js']],
+      [LECTURE, '// ~/instagram-api/services/postService.js', ['snapshots/p2-32-final/services/postService.js']],
     ];
     for (const [doc, head, files] of pairs) {
       // Step 7 전에도 부분 발췌가 같은 헤더로 시작하므로, «가장 긴»(완성본) 블록만 본다.
