@@ -3,6 +3,11 @@ import { prisma } from './db.js';
 import { posts } from './data/posts.js';
 import { comments } from './data/comments.js';
 
+function withTimes({ minutesAgo, ...row }) {
+  const createdAt = new Date(Date.now() - minutesAgo * 60 * 1000);
+  return { ...row, createdAt, updatedAt: createdAt };
+}
+
 await prisma.$executeRaw`TRUNCATE TABLE comments, posts, users RESTART IDENTITY`;
 
 // 사람을 먼저 넣는다 — 게시물과 댓글이 가리킬 대상이라서.
@@ -27,15 +32,14 @@ const idOf = (username) => users.find((user) => user.username === username).id;
 
 await prisma.post.createMany({
   data: posts.map(({ username, profileImage, ...post }) => ({
-    ...post,
+    ...withTimes(post),
     authorId: idOf(username),
-    createdAt: new Date(Date.now() - post.minutesAgo * 60 * 1000),
   })),
 });
 
 await prisma.comment.createMany({
   data: comments.map(({ username, ...comment }) => ({
-    ...comment,
+    ...withTimes(comment),
     authorId: idOf(username),
   })),
 });

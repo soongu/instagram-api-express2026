@@ -32,6 +32,10 @@ const blocksOf = (path, lang) =>
 
 let db = null;
 let server = null;
+/** 정규화 «전» 게시물·댓글의 두 시각 — 마이그레이션이 그것을 건드리나 보려고 담아둔다. */
+let timesBefore = null;
+/** 이 회차 시드의 stdout — 교안 bash 블록과 대조한다. */
+let seedOut = '';
 
 const prismaCli = (args, env = {}) =>
   execFileSync(P('node_modules/.bin/prisma'), args, {
@@ -180,6 +184,38 @@ describe('Step 1·2 — 지금 표 둘과 그 안의 중복', () => {
     }
   });
 
+  // 🔀 2026-09-18~ audit retrofit — minutes_ago 칸은 관계형 DB 에 한 번도 생기지 않는다.
+  //    p2-26 이 created_at 으로 시작하고 p2-29 가 updated_at 을 더했다.
+  it('🔴 minutes_ago 칸은 두 표 어디에도 없고, audit 칸 넷이 서 있다', async () => {
+    const r = await db.query(`
+      select table_name, column_name from information_schema.columns
+      where table_name in ('posts','comments') and column_name in ('minutes_ago','created_at','updated_at')
+      order by table_name, column_name`);
+    expect(r.rows).toEqual([
+      { table_name: 'comments', column_name: 'created_at' },
+      { table_name: 'comments', column_name: 'updated_at' },
+      { table_name: 'posts', column_name: 'created_at' },
+      { table_name: 'posts', column_name: 'updated_at' },
+    ]);
+    // 🚨 교안에 남은 `minutesAgo` 는 시드의 «다리» 뿐이다 — data/*.js 는 분을 적어두고
+    //    withTimes 가 그것을 시각으로 바꿔 넣는다(캐논: 그 다리는 유지한다).
+    //    표의 칸 이름 `minutes_ago` 는 한 건도 없어야 한다.
+    expect(read(LECTURE), '교안에 칸 이름 minutes_ago 가 남으면 안 된다').not.toContain('minutes_ago');
+  });
+
+  it('🚨 한 번도 안 고친 줄이라 두 시각이 같다 — 시드가 withTimes 로 넣은 판', async () => {
+    const p = await db.query('select id, created_at, updated_at from posts order by id');
+    const c = await db.query('select id, created_at, updated_at from comments order by id');
+    expect(p.rows).toHaveLength(5);
+    expect(c.rows).toHaveLength(9);
+    for (const row of [...p.rows, ...c.rows]) {
+      expect(row.updated_at.getTime(), `${row.id}번의 두 시각`).toBe(row.created_at.getTime());
+    }
+    // 🚨 시각이 줄마다 달라야 p2-30 이 세운 정렬 축이 산다(같으면 최신순이 동점이다).
+    expect(new Set(p.rows.map((r) => r.created_at.getTime())).size, '게시물 5개의 시각이 서로 다르다').toBe(5);
+    timesBefore = Object.fromEntries(p.rows.map((r) => [r.id, [r.created_at.getTime(), r.updated_at.getTime()]]));
+  });
+
   it('교안이 인용한 누가-몇-번 표가 실측과 같다', async () => {
     const r = await db.query(`
       select u.username,
@@ -231,6 +267,21 @@ describe('Step 5 — 마이그레이션 둘의 대조', () => {
     const r = await db.query(
       'select (select count(*)::int from posts) p, (select count(*)::int from comments) c, (select count(*)::int from users) u');
     expect(r.rows[0]).toEqual({ p: 5, c: 9, u: 5 });
+  });
+
+  // 🔴 이 회차의 audit 축 — 교안 Step 8 이 「두 시각이 서로 같다」고 싣는 근거다.
+  //    @updatedAt 은 Prisma 클라이언트가 채우는 규칙이라, 마이그레이션의 raw SQL UPDATE
+  //    (author_id 를 채우는 그 줄)로는 안 바뀐다. DB 의 DEFAULT 는 INSERT 때만 동작한다.
+  //    2026-09-21 실측 — 정규화 전후로 게시물 5줄의 두 시각이 밀리초까지 그대로였다.
+  it('🔴 글쓴이를 옮긴 UPDATE 가 updated_at 을 «안» 건드린다', async () => {
+    expect(timesBefore, '정규화 전 시각을 담아뒀다').toBeTruthy();
+    const migration = read(P(`prisma/migrations/${migrationDir('_normalize_author')}/migration.sql`));
+    expect(migration, 'author_id 를 채우는 UPDATE 가 실제로 있다').toContain('SET "author_id" = u."id"');
+
+    const r = await db.query('select id, created_at, updated_at from posts order by id');
+    for (const row of r.rows) {
+      expect([row.created_at.getTime(), row.updated_at.getTime()], `${row.id}번`).toEqual(timesBefore[row.id]);
+    }
   });
 
   it('글쓴이가 번호로 이어져 이름이 그대로 따라온다', async () => {
@@ -332,13 +383,36 @@ describe('Step 6·8 — 계약은 그대로, P2003 에는 이름이 붙는다', 
   beforeAll(() => {
     // 🚨 얼린 시드다 — live seed.js 는 p2-34 가 사진·좋아요·답글까지 넣게 키우므로
     //    이 회차 게이트 DB(그 표들이 없는 판)에서는 안 돈다.
-    execFileSync(process.execPath, [P('snapshots/p2-33-final/seed.js')], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+    seedOut = execFileSync(process.execPath, [P('snapshots/p2-33-final/seed.js')], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
   }, 30000);
 
   it('시드가 사람 5명·게시물 5개·댓글 9개를 넣는다', async () => {
     const r = await db.query(
       'select (select count(*)::int from users) u, (select count(*)::int from posts) p, (select count(*)::int from comments) c');
     expect(r.rows[0]).toEqual({ u: 5, p: 5, c: 9 });
+  });
+
+  // 🚨 replay 가 이 짝을 못 본다 — 시드는 루트 파일이라 `./db.js` 를 부르는데
+  //    그 게이트는 블록을 `__replay__/` 에 놓아 형제 파일이 안 풀린다(ERR_MODULE_NOT_FOUND).
+  //    교안이 싣는 그 한 줄은 여기서 실행으로 잠근다.
+  it('🔴 교안이 싣는 시드 출력 한 줄이 실제 출력과 같다', () => {
+    const shown = blocksOf(LECTURE, 'bash').find((b) => b.includes('넣었어요.'));
+    expect(shown, '시드 출력 bash 블록').toBeTruthy();
+    expect(seedOut.trim()).toBe(shown.trim());
+  });
+
+  // 🔀 2026-09-21 audit — 시드가 withTimes 로 두 시각을 «같은 값» 으로 넣는다.
+  //    게시물·댓글 전부이고, 줄마다 시각이 달라야 최신순 정렬이 동점이 안 된다.
+  it('🔴 시드가 넣은 두 시각이 줄마다 같고, 줄 사이에서는 서로 다르다', async () => {
+    const p = await db.query('select id, created_at, updated_at from posts order by id');
+    const c = await db.query('select id, created_at, updated_at from comments order by id');
+    for (const row of [...p.rows, ...c.rows]) {
+      expect(row.updated_at.getTime(), `${row.id}번의 두 시각`).toBe(row.created_at.getTime());
+    }
+    expect(new Set(p.rows.map((r) => r.created_at.getTime())).size).toBe(5);
+    const r = await db.query(
+      "select count(*)::int n from information_schema.columns where table_name in ('posts','comments') and column_name = 'minutes_ago'");
+    expect(r.rows[0].n, '정규화 뒤에도 minutes_ago 칸은 없다').toBe(0);
   });
 
   it('🔴 목록 응답이 «평평한» username·profileImage 를 싣는다 — author 객체가 아니다', async () => {
@@ -417,13 +491,45 @@ await prisma.$disconnect();`);
     expect(out).toContain('400 그런 사용자는 없어요');
     expect(out, 'Step 6 시점에는 username 이 아직 안 실린다').toContain('list 5 false');
     // 🚨 Step 8 이 싣는 맨 앞 게시물 — 시드 데이터(2번 본문·댓글 4)라야 학생 화면과 같다.
+    //    🔀 2026-09-21 audit — 고르는 열쇠였던 minutesAgo 가 사라져서 commentCount 로 바꿨다.
     const first = JSON.parse(out.split('\n').find((l) => l.startsWith('FIRST ')).slice('FIRST '.length));
-    const shown = blocksOf(LECTURE, 'json').find((b) => b.includes('"authorId": 3') && b.includes('"minutesAgo": 45'));
+    const shown = blocksOf(LECTURE, 'json').find((b) => b.includes('"authorId": 3') && b.includes('"commentCount": 4'));
     expect(shown, 'Step 8 의 맨 앞 게시물 json').toBeTruthy();
-    const { createdAt: _a, ...want } = first;
-    const { createdAt: _b, ...got } = JSON.parse(shown);
+    // 두 시각은 «시드를 실행한 순간» 이라 값은 못 잠근다 — 칸이 있는지와 서로 같은지만 본다.
+    const { createdAt: _a, updatedAt: _b, ...want } = first;
+    const shownObj = JSON.parse(shown);
+    const { createdAt, updatedAt, ...got } = shownObj;
     expect(got).toEqual(want);
-    expect(Object.keys(JSON.parse(shown)), '칸 순서도 응답과 같다').toEqual(Object.keys(first));
+    expect(typeof createdAt, 'createdAt 이 실려 있다').toBe('string');
+    expect(updatedAt, '한 번도 안 고친 게시물이라 두 시각이 같다').toBe(createdAt);
+    expect(new Date(createdAt).toISOString(), 'Z 가 붙은 ISO 시각이다').toBe(createdAt);
+    expect(Object.keys(shownObj), '칸 순서도 응답과 같다').toEqual(Object.keys(first));
+  });
+
+  // 🔴 과제 [응용] — 답안이 싣는 다섯 줄을 실제로 돌려 본다.
+  //    replay 는 이 블록에 닿지 못한다(`../db.js` 가 라이브 클라이언트라 이 회차 DB 에서 안 돈다 ·
+  //    DATABASE_URL 도 안 준다). 그래서 이 회차 클라이언트로 갈아 끼워 여기서 돌린다.
+  //    🚨 시각 한 줄은 실행할 때마다 달라지니 «모양» 으로만 잠근다.
+  it('🔴 과제 [응용] homework2 가 답안이 싣는 다섯 줄을 낸다', async () => {
+    mkdirSync(P('__replay__'), { recursive: true });
+    const probe = P('__replay__/p233-homework2.js');
+    writeFileSync(probe, read(P('lab/p2-33/homework2.js'))
+      .replace("from '../db.js'", "from '../snapshots/p2-33-final/db.js'"));
+    const out = execFileSync(process.execPath, [probe],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } }).trim().split('\n');
+
+    const shown = blocksOf(ANSWERS, 'bash').find((b) => b.includes('탈퇴 처리'));
+    expect(shown, '과제 [응용] 출력 블록').toBeTruthy();
+    const want = shown.trim().split('\n');
+    expect(out).toHaveLength(want.length);
+    // 첫 줄은 「minji 탈퇴 처리 — <ISO 시각>」 — 시각만 다르고 나머지는 글자까지 같다.
+    expect(out[0]).toMatch(/^minji 탈퇴 처리 — \d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
+    expect(want[0]).toMatch(/^minji 탈퇴 처리 — \d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
+    expect(out.slice(1), '나머지 네 줄은 축자로 같다').toEqual(want.slice(1));
+
+    // 🚨 되돌리는 줄까지 돌았는지 — 다음 축이 이 DB 를 이어 쓴다.
+    const r = await db.query("select deactivated_at from users where username = 'minji'");
+    expect(r.rows[0].deactivated_at, '끝에 다시 비웠다').toBeNull();
   });
 
   it('🚨 글쓴이를 지우는 것은 RESTRICT 가 막고, 그것도 P2003 이다', async () => {
