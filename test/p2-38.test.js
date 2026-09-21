@@ -16,9 +16,13 @@
 // 축 ⑧ 값이 없으면 «시끄럽게» 죽는다 — 조용히 전부 막히지 않는다.
 // 축 ⑨ 프론트 — 가짜 서버 주소가 코드에 안 박혀 있다.
 // 축 ⑩ 앞 회차가 안 깨졌다.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, existsSync, renameSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+// 축 ⑪ 교안이 실은 배포 출력(로그 · 시드 한 줄 · 마이그레이션 개수)이 실제 출력과 같다.
+// 축 ⑫ 답안 [기초] 5번 — 다시 시드하면 댓글 `createdAt` 이 달라진다(로컬인지 가리는 단서).
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import {
+  readFileSync, existsSync, renameSync, readdirSync, rmSync, cpSync, writeFileSync,
+} from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
 
@@ -45,6 +49,11 @@ const 남 = 'http://evil.example.com';
 
 let db = null;
 let server = null;
+
+// 축 ① 이 학생과 같은 순서로 친 명령의 «실제 출력» — 축 ⑪ 이 교안 인용과 대조한다.
+let 첫배포 = '';
+let 둘째배포 = '';
+let 시드출력 = '';
 
 /** 학생이 배포에서 치는 그 명령을 그대로 — `.env` 를 안 읽고 환경변수만 받는다. */
 const prisma = (args, env = ENV) =>
@@ -85,6 +94,7 @@ describe('축 ① — 빈 데이터베이스가 «명령 두 줄» 로 쓸 수 �
 
   it('`prisma migrate deploy` 가 마이그레이션 전부를 올린다', async () => {
     const out = prisma(['migrate', 'deploy']);
+    첫배포 = out;
     expect(out).toContain('migrations have been successfully applied');
 
     const { rows } = await db.query(
@@ -100,13 +110,13 @@ describe('축 ① — 빈 데이터베이스가 «명령 두 줄» 로 쓸 수 �
   it('`migrate deploy` 는 «새 마이그레이션을 만들지» 않는다 — 있는 것만 올린다', () => {
     // `migrate dev` 와 갈리는 자리다. 배포 DB 를 보고 스키마를 고쳐 쓰면 안 된다.
     const before = execFileSync('ls', [P('prisma/migrations')], { encoding: 'utf8' });
-    prisma(['migrate', 'deploy']);
+    둘째배포 = prisma(['migrate', 'deploy']);
     const after = execFileSync('ls', [P('prisma/migrations')], { encoding: 'utf8' });
     expect(after).toBe(before);
   }, 120000);
 
   it('시드가 그 표를 채운다', async () => {
-    seed();
+    시드출력 = seed();
     const { rows } = await db.query('select count(*)::int as n from posts');
     expect(rows[0].n).toBeGreaterThan(0);
   }, 60000);
@@ -149,8 +159,15 @@ describe('축 ③ — 평소 자리(내 컴퓨터)가 안 깨졌다', () => {
     // 학생이 늘 치는 모양이다. 가드를 넣다가 이쪽을 깨뜨리면 수업이 멈춘다.
     const env = { ...process.env };
     delete env.DATABASE_URL;
-    const out = execFileSync('npx', ['prisma', 'migrate', 'status'],
+    // 🚨 종료 코드는 안 본다. `.env` 가 가리키는 수업 DB 에 안 올린 마이그레이션이 있으면
+    //    `migrate status` 는 설정을 잘 읽고도 exit 1 로 끝난다 — 이 축이 재는 것(설정 파일이
+    //    `.env` 를 읽었나)과 상관없는 DB 상태다. 수업 DB 를 맞추려고 갈아엎지도 않는다.
+    //    가드가 깨지면 설정을 읽는 자리에서 멈춰 아래 두 줄이 아예 안 찍힌다.
+    const run = spawnSync('npx', ['prisma', 'migrate', 'status'],
       { cwd: P('.'), encoding: 'utf8', env });
+    const out = `${run.stdout}${run.stderr}`;
+    expect(out).not.toContain('ENOENT');
+    expect(out).toMatch(/Datasource "db": PostgreSQL database "\w+"/);
     expect(out).toContain('migrations found');
   }, 120000);
 });
@@ -311,4 +328,125 @@ describe('축 ⑩ — 앞 회차가 안 깨졌다', () => {
   it('`p2-25` — 서버는 여전히 `PORT` 를 환경에서 받는다', () => {
     expect(read(P('app.js'))).toContain('process.env.PORT');
   });
+});
+
+// ── 축 ⑪ — 교안이 실은 배포 출력이 실제 출력과 같다 ───────────────────────
+// 🔑 audit 칸 retrofit(2026-09-18~)이 마이그레이션을 9 → 10개로 늘리고 폴더 이름을 옮겼다.
+//    그때 교안의 개수 여섯 곳과 로그 인용은 손으로 고쳤는데 잠그는 축이 없었다(2026-09-21).
+//    출력은 축 ① 이 빈 DB 에 «학생과 같은 순서로» 친 그대로다 — 여기서 다시 치지 않는다.
+describe('축 ⑪ — 교안이 실은 배포 출력이 실제 출력과 같다', () => {
+  const LECTURE = P('../../part2/6-fullstack-join/p2-38-fullstack-deploy-lecture.md');
+  const 폴더들 = () => readdirSync(P('prisma/migrations'), { withFileTypes: true })
+    .filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  /** `표지` 문장 바로 뒤에 오는 첫 펜스의 줄들 — `...` 과 빈 줄은 뺀다. */
+  const 펜스뒤 = (표지) => {
+    const src = read(LECTURE);
+    const at = src.indexOf(표지);
+    expect(at, `교안에서 「${표지}」 를 못 찾았다`).toBeGreaterThan(-1);
+    return src.slice(at).match(/```[a-z]*\n([\s\S]*?)```/)[1]
+      .split('\n').filter((l) => l.trim() && l.trim() !== '...');
+  };
+  const 적용줄 = (lines) => lines.filter((l) => l.startsWith('Applying migration'));
+
+  it('첫 `migrate deploy` 인용의 줄이 전부 실제 출력에 있고, 적용 차례가 앞머리와 같다', () => {
+    expect(첫배포, '축 ① 이 먼저 돌아야 한다').not.toBe('');
+    const 인용 = 펜스뒤('찍히는 내용은 이래요.');
+    for (const 줄 of 인용) expect(첫배포).toContain(줄);
+    const 실제 = 적용줄(첫배포.split('\n'));
+    expect(실제).toEqual(폴더들().map((n) => `Applying migration \`${n}\``));
+    expect(실제.slice(0, 적용줄(인용).length)).toEqual(적용줄(인용));
+  });
+
+  it('배포 서비스 로그의 Prisma 두 줄이 «이미 올린 뒤» 의 `migrate deploy` 출력과 같다', () => {
+    expect(둘째배포, '축 ① 이 먼저 돌아야 한다').not.toBe('');
+    const 로그 = 펜스뒤('### 로그를 읽어요');
+    const prisma줄 = 로그.filter((l) => /migrations found|pending migrations/.test(l));
+    expect(prisma줄).toHaveLength(2);
+    for (const 줄 of prisma줄) expect(둘째배포).toContain(줄);
+  });
+
+  // 🚨 게이트 DB 는 로컬이라 주소에 `?sslmode=require` 가 없다. 학생이 Neon 주소로 시드하면
+  //    `pg-connection-string` 2.14 가 이 줄 «앞»에 SECURITY WARNING 여러 줄을 더 찍는다
+  //    (2026-09-21 로컬에 `?sslmode=require` 를 붙여 실측 · 실제 Neon 은 미실측). 이 축은
+  //    마지막 한 줄만 잰다 — 교안이 그 경고를 말하느냐는 사람이 본다(`p2-42` 는 말한다).
+  it('시드 한 줄이 실제 출력과 글자 그대로 같다', () => {
+    expect(시드출력, '축 ① 이 먼저 돌아야 한다').not.toBe('');
+    const src = read(LECTURE);
+    const 뒤 = src.slice(src.indexOf('```bash\nnpm run seed\n```'));
+    const 인용 = 뒤.match(/```bash\nnpm run seed\n```\s*```\n([\s\S]*?)```/)[1].trim();
+    expect(인용).toBe(시드출력.trim());
+  });
+
+  it('마이그레이션 «개수» 를 말하는 자리가 전부 폴더 수와 같다', () => {
+    const N = 폴더들().length;
+    expect(N).toBe(10);
+    const src = read(LECTURE);
+    const 자리 = [
+      /바꾼 횟수\s+(\d+)번/g, /마이그레이션이 (\d+)개/g, /(\d+)개의 마이그레이션/g,
+      /마이그레이션 (\d+)개가/g, /같은 (\d+)개를/g, /(\d+)개의 이름/g, /(\d+) migrations found/g,
+    ];
+    let 센것 = 0;
+    for (const re of 자리) {
+      const 값들 = [...src.matchAll(re)].map((m) => Number(m[1]));
+      expect(값들.length, `${re} 가 교안에 없다 — 문장을 바꿨으면 이 목록도 고친다`).toBeGreaterThan(0);
+      for (const v of 값들) expect(v, `${re}`).toBe(N);
+      센것 += 값들.length;
+    }
+    expect(센것).toBe(8);
+  });
+});
+
+// ── 축 ⑫ — 답안 [기초] 5번: 다시 시드하면 `createdAt` 이 달라진다 ──────────
+// 답안은 「4번에 적어둔 댓글과 «같은 `id`» 의 `createdAt` 이 다르면 로컬에서 온 것」이라 하고,
+// 교안 Step 3 은 「화면의 시각 차이는 시드 시점이 가까우면 거의 없어서 확인 방법으로 못 쓴다」고 한다.
+// 두 시드를 «같은 DB» 에 몇 초 사이로 실행해 두 주장을 함께 잰다 — 같은 `id` 는 내용이 같고,
+// 밀리초 시각은 다르고, 화면 글자는 같다. 🔑 `id` 로 짝짓는다 — 순서로 짝지으면 서로 다른 댓글을
+// 대도 「다르다」가 나와서 답안의 방법이 틀렸어도 초록이 된다(학생 낭독이 잡은 구멍).
+describe('축 ⑫ — 다시 시드하면 댓글 `createdAt` 만 달라진다', () => {
+  const LAB_PORT = 4138;
+  const RUN = P('.p2-38-run');
+  beforeAll(() => {
+    // 학생 배치(`~/instagram-api/lab/homework1.js` → `../db.js`)와 같은 깊이로 펼친다 — `p2-37` 게이트와 같은 까닭.
+    rmSync(RUN, { recursive: true, force: true });
+    cpSync(P('lab/p2-37'), RUN, { recursive: true });
+    writeFileSync(`${RUN}/homework1.js`,
+      readFileSync(`${RUN}/homework1.js`, 'utf8').replaceAll('4001', String(LAB_PORT)));
+  });
+  afterAll(() => { rmSync(RUN, { recursive: true, force: true }); });
+
+  const 댓글들 = async () => {
+    const res = await fetch(`http://localhost:${LAB_PORT}/api/comments?postId=1&limit=2`);
+    expect(res.status).toBe(200);
+    return (await res.json()).items;
+  };
+
+  it('같은 `id` 는 내용이 같고 `createdAt` 은 밀리초까지 달라지며, 화면 글자는 같다', async () => {
+    const s = await boot('.p2-38-run/homework1.js',
+      { port: LAB_PORT, env: { ...ENV }, ready: '기다리고 있어요' });
+    let 앞 = null;
+    let 뒤 = null;
+    try {
+      앞 = await 댓글들();
+      seed();
+      뒤 = await 댓글들();
+    } finally { await s.stop(); }
+
+    expect(앞.length).toBeGreaterThan(0);
+    // 시드는 표를 비울 때 번호도 1부터 다시 매긴다 — 같은 `id` 가 같은 댓글이다.
+    expect(뒤.map((c) => c.id)).toEqual(앞.map((c) => c.id));
+    for (const a of 앞) {
+      const b = 뒤.find((c) => c.id === a.id);
+      expect(b.content).toBe(a.content);
+      expect(a.createdAt).toMatch(/\.\d{3}Z$/);
+      expect(b.createdAt, '다시 시드했는데 같은 댓글의 시각이 그대로다').not.toBe(a.createdAt);
+    }
+
+    // 화면이 분 단위로 자르는 것 — 뒤 시드 30초 뒤의 «지금» 으로 둘을 같은 함수에 먹인다.
+    const { timeAgo } = await import(P('../instagram-react/src/utils/timeAgo.js'));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.parse(뒤[0].createdAt) + 30_000);
+      expect(뒤.map((c) => timeAgo(c.createdAt))).toEqual(앞.map((c) => timeAgo(c.createdAt)));
+    } finally { vi.useRealTimers(); }
+  }, 60000);
 });
