@@ -474,6 +474,38 @@ describe('인용이 코드베이스와 맞는가', () => {
     expect([...시드.matchAll(/minutesAgo: (\d+)/g)].map((m) => m[1])).toEqual(줄들.map(([n]) => n));
   });
 
+  it('🔴 교안이 더하라는 `.http` 요청과 이름으로 부르는 요청이 전부 요청 파일에 있다', () => {
+    // 🚨 초판은 이미 파일에 있는 요청(`### 최신 두 개만` · `### 1번 게시물에 dahye가 좋아요`)을
+    //    «새로 적으라» 고 했고, 봉투로 바뀐 뒤 깨지는 `{{list[0].id}}` 를 말하지 않았다(2026-09-22 낭독).
+    const lec = read(LECTURE);
+    const http = read(P('requests/posts.http'));
+    for (const q of blocksOf(LECTURE, 'http')) {
+      expect(http, q.split('\n')[0]).toContain(q.trim());
+    }
+    const 제목들 = [...lec.matchAll(/`(### [^`]+)`/g)].map((m) => m[1]);
+    expect(제목들.length, '요청을 제목으로 부른다').toBeGreaterThanOrEqual(4);
+    for (const 제목 of 제목들) expect(http, 제목).toContain(`${제목}\n`);
+
+    expect(http).toContain('GET http://localhost:3000/api/posts/{{list.items[0].id}}');
+    expect(http, '옛 배열 판이 남으면 목록이 봉투가 된 뒤 이 요청이 깨진다').not.toContain('{{list[0].id}}');
+    expect(lec).toContain('`{{list.items[0].id}}`로 고쳐주세요');
+    // 앞 회차가 인용한 옛 줄은 얼린 판에 남아 있다(`p2-30` 게이트가 그것을 본다).
+    expect(read(P('snapshots/p2-35.posts.http'))).toContain('{{list[0].id}}');
+  });
+
+  it('🔴 답글도 제 게시물 번호를 갖는다 — 답안이 댓글 5개가 사라진 이유를 `post` 관계로 설명한다', async () => {
+    // 🚨 답안 초판은 「답글은 게시물이 아니라 원댓글을 가리켜서, 원댓글이 사라져 답글이 사라진다」고 했다.
+    //    학생 에이전트가 부모 외래 키를 뺀 채 게시물을 지워도 답글이 지워지는 것을 보였다(2026-09-22).
+    const { rows } = await db.query(
+      'select r.id, r.post_id, p.post_id as parent_post from comments r join comments p on p.id = r.parent_id');
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(r.post_id, `답글 ${r.id}`).toBe(r.parent_post);
+
+    const ans = read(ANSWERS);
+    expect(ans).not.toContain('답글은 게시물이 아니라 원댓글을 가리키고');
+    expect(ans).toContain('`Comment`의 `post` 관계로 바로 지워지거든요');
+  });
+
   it('🔴 교안이 시킨 세 요청의 결과가 교안이 적은 그대로다', async () => {
     const lec = read(LECTURE);
     expect(lec).toContain('?limit=2             items = 1, 2      hasNext = true');

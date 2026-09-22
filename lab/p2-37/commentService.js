@@ -26,7 +26,7 @@ function withReplies({ replies, ...comment }) {
 }
 
 export async function getComments({ postId, limit = 5, cursor }) {
-  // 게시물 목록과 같은 모양으로 준다 — 한 장 더 받아 보고 다음이 있는지 알아낸다.
+  // 게시물 목록과 같은 형식으로 준다 — 하나 더 받아 보고 다음이 있는지 알아낸다.
   const comments = await prisma.comment.findMany({
     // 답글은 원댓글 안에 담아 보내므로 목록에는 원댓글만 싣는다.
     where: { postId, parentId: null },
@@ -45,7 +45,7 @@ export async function getComments({ postId, limit = 5, cursor }) {
 }
 
 // 답글이 많은 원댓글은 통째로 보내면 응답이 길어진다.
-// 게시물·댓글 목록과 같은 모양으로, 원댓글 하나에 딸린 답글만 장으로 나눠 준다.
+// 게시물·댓글 목록과 같은 형식으로, 원댓글 하나에 딸린 답글만 페이지로 나눠 준다.
 export async function getReplies({ parentId, limit = 3, cursor }) {
   const parent = await prisma.comment.findUnique({ where: { id: parentId } });
 

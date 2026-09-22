@@ -3,7 +3,7 @@
 GET http://localhost:3000/api/posts
 
 ### 목록의 첫 게시물 하나
-GET http://localhost:3000/api/posts/{{list[0].id}}
+GET http://localhost:3000/api/posts/{{list.items[0].id}}
 
 ### 없는 게시물
 GET http://localhost:3000/api/posts/999
@@ -91,3 +91,9 @@ Content-Type: application/json
 
 ### 1번 게시물 좋아요 누른 사람들
 GET http://localhost:3000/api/posts/1/likes
+
+### 2번 다음부터
+GET http://localhost:3000/api/posts?limit=2&cursor=2
+
+### 4번 다음부터
+GET http://localhost:3000/api/posts?limit=2&cursor=4

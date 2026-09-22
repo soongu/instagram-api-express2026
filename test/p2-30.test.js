@@ -632,7 +632,10 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
   it('🔴 교안이 인용한 `.http` 가 그 시점 요청 파일과 같다', () => {
     // 🚨 출처가 둘이다 — 「고친 뒤」는 지금 파일, 「고치기 전」은 p2-25 시점 스냅숏.
     //    한쪽만 보면 교안이 대조용으로 보여주는 옛 판이 거짓 FAIL 로 잡힌다.
-    const sources = [read(P('requests/posts.http')), read(P('snapshots/p2-25.posts.http'))];
+    // 🧊 `p2-36` 이 목록을 봉투로 바꾸며 `{{list[0].id}}` 를 `{{list.items[0].id}}` 로 고치게 했다 —
+    //    이 회차가 인용한 그 줄은 `p2-35` 끝 판(얼린 사본)에 있다.
+    const sources = [read(P('requests/posts.http')), read(P('snapshots/p2-25.posts.http')),
+      read(P('snapshots/p2-35.posts.http'))];
     const missing = [];
     for (const q of blocksOf(LECTURE, 'http')) {
       if (!q.startsWith('###')) continue;         // 본문이 «보여주기만» 하는 요청 (파일에 안 넣는다)

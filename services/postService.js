@@ -36,7 +36,7 @@ export async function getPosts({ username, limit = 5, cursor }) {
     select: postFields,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
-    // 커서가 오면 «그 게시물 다음» 부터다. 커서가 가리키는 줄 자신은 건너뛴다.
+    // 커서가 오면 «그 게시물 다음»부터다. 커서가 가리키는 줄 자신은 건너뛴다.
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
 
