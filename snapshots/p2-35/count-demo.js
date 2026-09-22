@@ -1,4 +1,4 @@
-// _count — 딸린 것의 «개수» 만 세어 온다. 줄은 한 개도 안 실려 오고 질의도 안 늘어난다.
+// _count — 딸린 것의 «개수» 만 세어 온다. 줄은 한 개도 안 실려 오고 쿼리도 안 늘어난다.
 import { prisma } from '../../db.js';
 
 const posts = await prisma.post.findMany({

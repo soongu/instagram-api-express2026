@@ -7,7 +7,7 @@ import { BadRequestError, NotFoundError } from '../errors.js';
 export async function toggleLike(postId, userId) {
   try {
     // 줄을 넣고 빼는 일과 숫자를 고치는 일은 «함께» 끝나야 한다.
-    // 하나라도 실패하면 셋 다 없던 일이 된다 — 읽기도 같은 묶음 안에 둔다.
+    // 하나라도 실패하면 둘 다 없던 일이 된다 — 무엇을 할지 정하는 읽기도 같은 트랜잭션 안에 둔다.
     return await prisma.$transaction(async (tx) => {
       const existing = await tx.postLike.findUnique({
         where: { postId_userId: { postId, userId } },

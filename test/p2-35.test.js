@@ -248,14 +248,14 @@ describe('Step 1 → Step 2 를 «이어서» 하면 교안의 수치가 그대�
       { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) });
     expect(res.status).toBe(500);
     expect(await stateOfPost1(), '묶었으니 줄도 숫자도 안 남는다').toEqual({ likeCount: 130, likes: 0 });
-    expect(lec).toContain('{"id":1, ... "likeCount":130, ...}');
+    expect(lec, '롤백 뒤 남은 것').toContain('`likeCount`는 130 그대로이고, 누른 사람 목록은 빈 목록(`[]`)이에요');
 
     // ② throw 를 지운 판 — 교안이 적은 값 그대로
     await bootApp(APP35, 3460);
     const ok = await fetch(`${server.base}/api/posts/1/likes`,
       { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) }).then((r) => r.json());
     expect(ok).toEqual({ liked: true, likeCount: 131 });
-    expect(lec, '교안이 적어둔 값과 같아야 한다').toContain('{"liked":true,"likeCount":131}');
+    expect(lec, '교안이 적어둔 값과 같아야 한다').toContain('{\n  "liked": true,\n  "likeCount": 131\n}');
 
     const likers = await fetch(`${server.base}/api/posts/1/likes`).then((r) => r.json());
     expect(likers).toEqual(['dahye']);
@@ -377,9 +377,9 @@ describe('Step 4 — 게시물과 사진을 한 번에 만든다', () => {
   });
 });
 
-// ── 축 ④ 질의 수와 _count ───────────────────────────────────────────────────
+// ── 축 ④ 쿼리 수와 _count ───────────────────────────────────────────────────
 
-describe('Step 5·8 — 하나씩 돌기와 함께 읽기, 그리고 개수만 세기', () => {
+describe('Step 5·8 — 하나씩 읽기와 함께 읽기, 그리고 개수만 세기', () => {
   const runCheck = () =>
     execFileSync(process.execPath, [P(`${S35}check.js`)],
       { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
@@ -388,26 +388,26 @@ describe('Step 5·8 — 하나씩 돌기와 함께 읽기, 그리고 개수만 �
     seedLive();
     const out = runCheck();
 
-    expect(out).toContain('하나씩 돌기 — 게시물 5개에 질의 11번');
-    expect(out).toContain('함께 읽기 — 게시물 5개에 질의 3번');
+    expect(out).toContain('하나씩 읽기 — 게시물 5개에 쿼리 11번');
+    expect(out).toContain('함께 읽기 — 게시물 5개에 쿼리 3번');
   });
 
   it('🚨 그 수치가 «흔들리지» 않는다 — 세 번 돌려 같은 값', () => {
     for (let i = 0; i < 3; i += 1) {
       const out = runCheck();
-      expect(out).toContain('질의 11번');
-      expect(out).toContain('질의 3번');
+      expect(out).toContain('쿼리 11번');
+      expect(out).toContain('쿼리 3번');
     }
   });
 
-  it('🔴 include 의 질의 수는 «줄 수» 가 아니라 «관계 가지 수» 를 따라간다', async () => {
-    // 게시물을 배로 늘려도 질의 수가 그대로여야 N+1 이 아니다.
+  it('🔴 include 의 쿼리 수는 «줄 수» 가 아니라 «관계 가지 수» 를 따라간다', async () => {
+    // 게시물을 배로 늘려도 쿼리 수가 그대로여야 N+1 이 아니다.
     await db.query(
       'insert into posts (author_id, content, created_at) select author_id, content, created_at from posts');
     const out = runCheck();
 
-    expect(out, '게시물이 10개가 되면 하나씩 돌기는 21번으로 늘고').toContain('게시물 10개에 질의 21번');
-    expect(out, '함께 읽기는 «그대로» 3번이다').toContain('게시물 10개에 질의 3번');
+    expect(out, '게시물이 10개가 되면 하나씩 읽기는 21번으로 늘고').toContain('게시물 10개에 쿼리 21번');
+    expect(out, '함께 읽기는 «그대로» 3번이다').toContain('게시물 10개에 쿼리 3번');
 
     seedLive();
   });
@@ -801,8 +801,8 @@ describe('인용이 코드베이스와 맞는가', () => {
     const withInclude = await grab('snapshots/p2-34-final/services/postService.js', 3456);
     const withSelect = await grab(`${S35}services/postService.js`, 3457);
 
-    expect(withInclude, 'include 판은 질의 3개').toHaveLength(3);
-    expect(withSelect, 'select 판도 질의 3개').toHaveLength(3);
+    expect(withInclude, 'include 판은 쿼리 3개').toHaveLength(3);
+    expect(withSelect, 'select 판도 쿼리 3개').toHaveLength(3);
     // 교안이 실은 줄이 실제 로그에 «글자 그대로» 있어야 한다.
     for (const line of [...withInclude, withSelect[1], withSelect[2]]) {
       expect(lec, line.slice(0, 60)).toContain(line);
@@ -810,10 +810,10 @@ describe('인용이 코드베이스와 맞는가', () => {
     // 그리고 select 판에서 사라진 칸이 실제로 사라졌는지.
     expect(withInclude[1]).toContain('deactivated_at');
     expect(withSelect[1], 'select 로 바꾸면 안 쓰는 칸이 빠진다').not.toContain('deactivated_at');
-    // 🚨 교안 Step 7 이 「게시물 질의는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐다」고 한다.
+    // 🚨 교안 Step 7 이 「게시물 쿼리는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐다」고 한다.
     //    postFields 가 칸 하나라도 빠뜨리면(audit 전 판이 updatedAt 을 몰랐다) 이 줄이 달라진다.
-    expect(withSelect[0], '게시물 질의는 include 판과 글자 그대로 같다').toBe(withInclude[0]);
-    expect(lec).toContain('게시물 질의는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐고');
+    expect(withSelect[0], '게시물 쿼리는 include 판과 글자 그대로 같다').toBe(withInclude[0]);
+    expect(lec).toContain('게시물 쿼리는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐고');
   });
 
   it('🔴 교안이 더하라고 한 `.http` 요청 셋이 코드베이스에도 있다', () => {

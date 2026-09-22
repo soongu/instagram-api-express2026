@@ -78,10 +78,10 @@ Content-Type: application/json
 ### 좋아요 누른 사람들
 GET http://localhost:3000/api/posts/3/likes
 
-### 1번 게시물 지금 상태 — 좋아요 실험 전후로 확인
+### 1번 게시물 지금 상태
 GET http://localhost:3000/api/posts/1
 
-### 1번 게시물에 dahye 가 좋아요
+### 1번 게시물에 dahye가 좋아요
 POST http://localhost:3000/api/posts/1/likes
 Content-Type: application/json
 
