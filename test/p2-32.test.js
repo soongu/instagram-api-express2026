@@ -464,18 +464,31 @@ describe('lab — 서점(직접 해보기)과 댓글(과제)', () => {
     expect(read(P('lab/p2-32/commentRoutes.js')).match(/prisma/gi)).toBeNull();
   });
 
-  it('🔴 과제 [응용] — Zod 스키마를 서버 없이 그대로 쓴다', () => {
+  it('🔴 과제 [응용] — Zod 스키마를 서버 없이 그대로 쓴다 · 답안 출력이 «한 글자도 안 다르게» 나온다', () => {
+    // 🚨 예전 판은 핵심 문구만 `toContain` 해서 `10번` 을 아무도 안 봤다(2026-09-23 게이트 Q1 — replay 는
+    //    이 블록을 🈳 DB 로 여기 넘긴다). 착수 상태는 학생 이력에서 뽑았다 — 댓글을 만드는 요청은 `p2-31`·`p2-32`
+    //    어디에도 없고(`comments.http` 에 POST 0개), `p2-31` 답안이 댓글이 8개면 `npm run seed` 를 치게 한다.
+    //    시드는 `RESTART IDENTITY` 라 그 학생의 다음 댓글이 곧 10번이다. 이 파일의 앞 축과 상관없게 여기서 다시 세운다.
+    // 답안 — 「여러분 화면의 번호는 이와 다를 수 있어요. 댓글 번호도 게시물처럼 만들 때마다 하나씩 올라가거든요.」
+    //    그 이유까지 잠근다 — 한 번 더 돌리면 번호만 하나 커지고 나머지는 한 글자도 안 달라진다.
+    const doc = read(ANSWERS);
+    const at = doc.indexOf('`node --env-file=.env lab/homework2.js`로 실행하면 이렇게 나와요.');
+    expect(at, '답안에 과제 2 실행 문장이 없습니다').toBeGreaterThan(-1);
+    const fence = doc.slice(at).match(/```bash\n([\s\S]*?)```/)[1].trimEnd();
+    expect(fence.match(/^10번 /gm)).toHaveLength(2);
+    expect(doc).toContain('여러분 화면의 번호는 이와 다를 수 있어요. 댓글 번호도 게시물처럼 만들 때마다 하나씩 올라가거든요.');
+
     const copies = ['lab/p2-32/commentSchema.js', 'lab/p2-32/commentService.js', 'lab/p2-32/homework2.js']
       .map((f) => labCopy(f));
     writeFileSync(P(copies[2]), read(P(copies[2]))
       .replace("'./commentSchema.js'", "'./commentSchema.local.js'")
       .replace("'./commentService.js'", "'./commentService.local.js'"));
+    const run = () => execFileSync(process.execPath, [P(copies[2])],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } }).trimEnd();
     try {
-      const out = execFileSync(process.execPath, [P(copies[2])],
-        { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
-      expect(out).toContain('댓글을 만들었어요');
-      expect(out).toContain('댓글을 다시 지웠어요');
-      expect(out).toContain('일부러 틀린 입력은 막혔어요');
+      seed();
+      expect(run()).toBe(fence);
+      expect(run()).toBe(fence.replace(/^10번 /gm, '11번 '));
     } finally { copies.forEach(dropCopy); }
   });
 });

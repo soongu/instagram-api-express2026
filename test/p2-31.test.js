@@ -310,14 +310,45 @@ describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안
     expect(server.tail()).toContain('P2003');
   });
 
-  it('🔴 서비스는 서버 없이도 쓸 수 있다 — `res` 를 안 쓴 값이 이것이다', () => {
+  /** 답안 과제 2 의 기대 출력 — 「`node --env-file=.env lab/homework2.js`로 실행하면 이렇게 나와요.」 바로 뒤 펜스. */
+  const homework2Fence = () => {
+    const doc = read(ANSWERS);
+    const at = doc.indexOf('`node --env-file=.env lab/homework2.js`로 실행하면 이렇게 나와요.');
+    expect(at, '답안에 과제 2 실행 문장이 없습니다').toBeGreaterThan(-1);
+    return doc.slice(at).match(/```bash\n([\s\S]*?)```/)[1].trimEnd();
+  };
+  const runHomework2 = () => {
     const local = labCopy('lab/p2-31/homework2.js');
     try {
-      const out = execFileSync(process.execPath, [P(local)],
-        { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
-      expect(out).toContain('게시물을 만들었어요');
-      expect(out).toContain('게시물을 다시 지웠어요');
+      return execFileSync(process.execPath, [P(local)],
+        { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } }).trimEnd();
     } finally { dropCopy(local); }
+  };
+
+  it('🔴 서비스는 서버 없이도 쓸 수 있다 — 시드를 막 넣은 판에서 답안 출력이 «한 글자도 안 다르게» 나온다', () => {
+    // 🚨 예전 판은 `toContain('게시물을 만들었어요')` 만 봐서 `6번` 도, 최신순 목록 세 줄도 아무도 안 봤다
+    //    (2026-09-23 게이트 Q1 — replay 는 이 블록을 🈳 DB 로 여기 넘긴다). 답안이 그 번호의 전제를 직접
+    //    적어둔다 — 「위 출력은 시드를 막 넣은 데이터베이스에서 실행해서 6번이 나왔는데」. 이 파일의 앞 축들이
+    //    요청 12개를 보내며 번호를 먹었으니 그 전제를 여기서 다시 세운다.
+    seed();
+    expect(runHomework2()).toBe(homework2Fence());
+    expect(read(ANSWERS)).toContain('위 출력은 시드를 막 넣은 데이터베이스에서 실행해서 6번이 나왔는데');
+  });
+
+  it('🔴 요청 12개를 한 번 보낸 뒤에는 번호만 «하나» 커진다 — 「여러분 화면의 번호는 이보다 클 거예요」', async () => {
+    // 답안 — 「오늘 요청 12개를 보낼 때마다 게시물을 하나씩 올렸다 지웠는데, 새로 만들 때마다 다음 번호가
+    //    붙고 지운 번호는 다시 쓰지 않거든요」. 학생이 수업에서 한 일(요청 파일을 위에서부터)을 한 번 되풀이한다.
+    //    🔑 번호 말고는 목록·문구가 한 글자도 안 달라야 한다 — 올렸다 지운 게시물이 목록에 안 남는다는 뜻이다.
+    seed();
+    await bootApp('snapshots/p2-31-final/app.js', 3511);
+    const http = execFileSync('git', ['show', 'code/p2-31:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
+    const sent = await sendAll(http, server.base);
+    await server.stop(); server = null;
+    expect(sent.filter((r) => r.title === '게시물 올리기').map((r) => r.status)).toEqual([201]);
+    const fence = homework2Fence();
+    expect(fence.match(/^6(번 | )/gm)).toHaveLength(3);
+    expect(runHomework2()).toBe(fence.replace(/^6(번 | )/gm, '7$1'));
+    expect(read(ANSWERS)).toContain('여러분 화면의 번호는 이보다 클 거예요.');
   });
 
   it('🔴 `$disconnect()` 를 빼면 «다 찍고도» 10초를 더 앉아 있는다', () => {
