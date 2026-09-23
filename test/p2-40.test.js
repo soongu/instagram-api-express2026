@@ -78,6 +78,18 @@ const squashMerge = (branch, title) => {
 
 const RULE4_MATE = '4. 브랜치 이름은 `feat/`·`fix/`·`docs/` 중 하나로 시작한다.';
 const RULE4_ME = '4. PR은 연 날 안에 한 사람이 읽고 댓글을 남긴다.';
+// Step 7 — 충돌을 풀고 올리기 전에 치는 확인. blob 해시는 내용에서 나오므로 교안대로 친 학생 모두에게 같다.
+const DIFF_REVIEW_RULE = [
+  'diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md',
+  'index 51d203a..f4d6cc3 100644',
+  '--- a/CONTRIBUTING.md',
+  '+++ b/CONTRIBUTING.md',
+  '@@ -4,3 +4,4 @@',
+  ' 2. 강제 push는 자기 기능 브랜치에서만 `--force-with-lease`로 한다.',
+  ' 3. 브랜치를 둘이 같이 쓰게 되면 팀 채팅에 먼저 알리고, 그때부터 그 브랜치는 rebase하지 않는다.',
+  ` ${RULE4_MATE}`,
+  `+${RULE4_ME.replace(/^4\./, '5.')}`,
+].join('\n');
 
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -212,6 +224,12 @@ describe('p2-40 ② 로컬 git — 교안이 인용하는 출력이 실제로 �
     let hintPullLog;
     let lease;
     let matePull;
+    let diffCheck;
+    let keepMateCont;
+    let keepMateDiff;
+    let keepMineDiff;
+    let retryReset;
+    let retryRebase;
 
     beforeAll(() => {
       // 나 — 동료보다 먼저 브랜치를 땄다
@@ -236,9 +254,28 @@ describe('p2-40 ② 로컬 git — 교안이 인용하는 출력이 실제로 �
       rebase = git(ME, 'rebase', 'main');
       status = git(ME, 'status');
       conflicted = read(join(ME, 'CONTRIBUTING.md'));
+      // 충돌을 «틀리게» 푼 두 판 — 교안의 `git diff main..docs/review-rule` 확인이 가려내는가 (2026-09-23 학생 낭독)
+      const keepMate = join(tmp, 'nanum-keep-mate');
+      const keepMine = join(tmp, 'nanum-keep-mine');
+      cpSync(ME, keepMate, { recursive: true });
+      cpSync(ME, keepMine, { recursive: true });
       writeFileSync(join(ME, 'CONTRIBUTING.md'), read(P(`${LAB}/CONTRIBUTING.resolved.md`)));
       git(ME, 'add', 'CONTRIBUTING.md');
       cont = git(ME, 'rebase', '--continue');
+      diffCheck = git(ME, 'diff', 'main..docs/review-rule');
+      // 위쪽(HEAD = 동료)만 남긴 판 — VS Code 의 Accept Current Change
+      git(keepMate, 'checkout', '--ours', 'CONTRIBUTING.md');
+      git(keepMate, 'add', 'CONTRIBUTING.md');
+      keepMateCont = git(keepMate, 'rebase', '--continue');
+      keepMateDiff = git(keepMate, 'diff', 'main..docs/review-rule');
+      // 교안이 주는 되돌리기 — 아직 push 전이라 원격의 내 브랜치가 rebase 전 모습이다
+      retryReset = git(keepMate, 'reset', '--hard', 'origin/docs/review-rule');
+      retryRebase = git(keepMate, 'rebase', 'main');
+      // 아래쪽(내 것)만 남긴 판
+      git(keepMine, 'checkout', '--theirs', 'CONTRIBUTING.md');
+      git(keepMine, 'add', 'CONTRIBUTING.md');
+      git(keepMine, 'rebase', '--continue');
+      keepMineDiff = git(keepMine, 'diff', 'main..docs/review-rule');
       plainPush = git(ME, 'push');
       // hint 대로 `git pull` 을 치면 어떻게 되나 — 흐름을 안 흔들게 복사본에서 잰다
       const copy = join(tmp, 'nanum-hint-pull');
@@ -289,6 +326,21 @@ describe('p2-40 ② 로컬 git — 교안이 인용하는 출력이 실제로 �
       expect(matePull.out).toContain('from the remote, but no such ref was fetched.');
     });
 
+    it('올리기 전 확인 — 제대로 푼 판은 `+5.` 한 줄만, 동료 쪽만 남긴 판은 빈 출력, 내 쪽만 남긴 판은 `-4.` 줄이 보인다', () => {
+      expect(diffCheck.out).toBe(`${DIFF_REVIEW_RULE}\n`);
+      expect(keepMateCont.status, keepMateCont.out).toBe(0);
+      expect(keepMateCont.out).toContain('Successfully rebased and updated refs/heads/docs/review-rule.');
+      expect(keepMateDiff.out).toBe('');
+      expect(keepMineDiff.out).toContain(`-${RULE4_MATE}`);
+      expect(keepMineDiff.out).toContain(`+${RULE4_ME}`);
+    });
+
+    it('틀리게 풀었으면 `reset --hard origin/docs/review-rule` 로 rebase 전으로 돌아가 다시 rebase 하면 같은 충돌이 난다', () => {
+      expect(retryReset.out).toMatch(/^HEAD is now at [0-9a-f]{7} PR을 읽는 규칙을 더한다\n$/);
+      expect(retryRebase.status).not.toBe(0);
+      expect(retryRebase.out).toContain('CONFLICT (content): Merge conflict in CONTRIBUTING.md');
+    });
+
     it('옮긴 브랜치는 평범한 push 가 거절되고, `--force-with-lease` 는 통과한다', () => {
       expect(plainPush.status).not.toBe(0);
       expect(plainPush.out).toMatch(/! \[rejected\]\s+docs\/review-rule -> docs\/review-rule \(non-fast-forward\)/);
@@ -300,13 +352,24 @@ describe('p2-40 ② 로컬 git — 교안이 인용하는 출력이 실제로 �
   describe('Squash 로 합친 뒤 뒷정리', () => {
     let prune;
     let deleteSmall;
+    let deleteBeforePrune;
 
     beforeAll(() => {
       squashMerge('docs/review-rule', 'PR을 읽는 규칙을 더한다 (#5)');
       git(ME, 'switch', 'main');
       git(ME, 'pull');
+      // Step 6 — 순서를 바꿔 prune 전에 지우면: 아직 남은 origin/… 과 비교해 경고만 찍고 지운다 (2026-09-23 학생 낭독)
+      const early = join(tmp, 'nanum-delete-before-prune');
+      cpSync(ME, early, { recursive: true });
+      deleteBeforePrune = git(early, 'branch', '-d', 'docs/review-rule');
       prune = git(ME, 'fetch', '--prune');
       deleteSmall = git(ME, 'branch', '-d', 'docs/review-rule');
+    });
+
+    it('`fetch --prune` 보다 먼저 `branch -d` 를 치면 거절 대신 경고와 함께 지워진다 — 교안이 순서를 지키라고 하는 이유', () => {
+      expect(deleteBeforePrune.status, deleteBeforePrune.out).toBe(0);
+      expect(deleteBeforePrune.out).toContain("warning: deleting branch 'docs/review-rule' that has been merged to");
+      expect(deleteBeforePrune.out).toContain('Deleted branch docs/review-rule');
     });
 
     it('`fetch --prune` 이 GitHub 가 지운 브랜치의 흔적을 치운다', () => {
@@ -341,6 +404,10 @@ describe('p2-40 ② 로컬 git — 교안이 인용하는 출력이 실제로 �
     let delBeforePrune;
     let prune3;
     let delAfterPrune;
+    let keepMineEditor;
+    let keepMineCont3;
+    let keepMineLog3;
+    let keepMineRetry;
 
     beforeAll(() => {
       git(ME, 'switch', 'main');
@@ -363,6 +430,19 @@ describe('p2-40 ② 로컬 git — 교안이 인용하는 출력이 실제로 �
       git(ME, 'switch', 'docs/list-limit-12');
       rebase = git(ME, 'rebase', 'main');
       conflicted = read(join(ME, 'api.http'));
+      // 헷갈려서 «내 값(12)» 을 남긴 판 — 해설이 «편집기가 열렸고 log 에 커밋이 하나» 로 알아보게 한다 (2026-09-23 학생 낭독)
+      {
+        const keep12 = join(tmp, 'nanum-keep-12');
+        cpSync(ME, keep12, { recursive: true });
+        writeFileSync(join(keep12, 'api.http'), conflicted.replace(/<<<<<<< HEAD\n[\s\S]*?=======\n([\s\S]*?)>>>>>>> [^\n]*\n/, '$1'));
+        git(keep12, 'add', 'api.http');
+        // 편집기를 «실패하는 편집기» 로 두면 편집기를 부르는지가 드러난다
+        keepMineEditor = spawnSync('git', ['rebase', '--continue'], { cwd: keep12, env: { ...ENV, GIT_EDITOR: 'false' }, encoding: 'utf8' });
+        keepMineCont3 = git(keep12, 'rebase', '--continue');
+        keepMineLog3 = git(keep12, 'log', '--oneline', 'main..docs/list-limit-12');
+        git(keep12, 'reset', '--hard', 'origin/docs/list-limit-12');
+        keepMineRetry = git(keep12, 'rebase', 'main');
+      }
       // 팀이 동료의 값(20)을 고르기로 했다 — 표시 세 줄과 내 줄을 지운다
       writeFileSync(join(ME, 'api.http'), conflicted.replace(/<<<<<<< HEAD\n([\s\S]*?)=======\n[\s\S]*?>>>>>>> [^\n]*\n/, '$1'));
       git(ME, 'add', 'api.http');
@@ -387,6 +467,13 @@ describe('p2-40 ② 로컬 git — 교안이 인용하는 출력이 실제로 �
       expect(git(MERGER, 'push', 'origin', '--delete', 'docs/list-limit-12').status).toBe(0);
       prune3 = git(ME, 'fetch', '--prune');
       delAfterPrune = git(ME, 'branch', '-d', 'docs/list-limit-12');
+    });
+
+    it('반대로 내 값(12)을 남기면 편집기가 열리고 log 에 커밋이 하나 보인다 — 해설이 주는 되돌리기로 같은 충돌부터 다시 한다', () => {
+      expect(keepMineEditor.status).not.toBe(0);
+      expect(keepMineCont3.status, keepMineCont3.out).toBe(0);
+      expect(keepMineLog3.out.trim().split('\n')).toHaveLength(1);
+      expect(keepMineRetry.out).toContain('CONFLICT (content): Merge conflict in api.http');
     });
 
     it('같은 줄의 값이 달라서 api.http 에서 멈춘다', () => {
@@ -494,6 +581,50 @@ describe('p2-40 ③ GitHub — 얼려둔 실측', () => {
   });
 });
 
+describe('p2-40 ②-b 동료가 규칙 끝에서 Enter 를 안 쳤으면 — 올리기 전 확인에 `\\ No newline` 짝이 낀다 (2026-09-23 학생 낭독)', () => {
+  // VS Code 는 기본값에서 파일 끝 줄바꿈을 넣지 않는다(files.insertFinalNewline 꺼짐). 교안이 Enter 를 치라고 하지만
+  // 빠뜨린 학생도 제대로 푼 판을 «틀렸다» 로 읽지 않게, 교안 판정 문단이 이 모양을 설명한다.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'p240-nonl-')));
+  const origin = join(root, 'origin.git');
+  const me = join(root, 'nanum');
+  const mate = join(root, 'nanum-mate');
+  let diff;
+
+  beforeAll(() => {
+    git(root, 'init', '--bare', origin);
+    mkdirSync(me);
+    copyFileSync(P(`${LAB}/CONTRIBUTING.md`), join(me, 'CONTRIBUTING.md'));
+    git(me, 'init');
+    git(me, 'add', '.');
+    git(me, 'commit', '-m', '팀 규칙');
+    git(me, 'remote', 'add', 'origin', origin);
+    git(me, 'push', '-u', 'origin', 'main');
+    git(root, 'clone', origin, mate);
+    git(me, 'switch', '-c', 'docs/review-rule');
+    appendFileSync(join(me, 'CONTRIBUTING.md'), RULE4_ME);            // 줄바꿈 없이
+    git(me, 'commit', '-am', 'PR을 읽는 규칙을 더한다');
+    appendFileSync(join(mate, 'CONTRIBUTING.md'), RULE4_MATE);        // 줄바꿈 없이 — main 에 먼저 들어간다
+    git(mate, 'commit', '-am', '브랜치 이름 규칙을 더한다');
+    git(mate, 'push', 'origin', 'main');
+    git(me, 'fetch');
+    git(me, 'rebase', 'origin/main');
+    // 교안대로 푼다 — 표시 세 줄을 지우고 내 규칙을 5번으로
+    const c = read(join(me, 'CONTRIBUTING.md'))
+      .replace('<<<<<<< HEAD\n', '').replace('=======\n', '').replace(/>>>>>>> [^\n]*\n?/, '')
+      .replace(RULE4_ME, RULE4_ME.replace(/^4\./, '5.'));
+    writeFileSync(join(me, 'CONTRIBUTING.md'), c);
+    git(me, 'add', 'CONTRIBUTING.md');
+    git(me, 'rebase', '--continue');
+    diff = git(me, 'diff', 'origin/main..docs/review-rule');
+  });
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  it('제대로 푼 판인데도 `-4.`/`+4.` 가 같은 글자로 짝지어 나오고 그 사이에 `\\ No newline at end of file` 이 낀다', () => {
+    expect(diff.out).toContain(`-${RULE4_MATE}\n\\ No newline at end of file\n+${RULE4_MATE}\n`);
+    expect(diff.out).toContain(`+${RULE4_ME.replace(/^4\./, '5.')}`);
+  });
+});
+
 describe('p2-40 ④ 교안 — 인용한 파일과 출력이 코드베이스·실측과 한 글자도 다르지 않다', () => {
   const LECTURE = P('../../part2/6-fullstack-join/p2-40-team-repo-lecture.md');
   const fences = () => {
@@ -544,6 +675,11 @@ describe('p2-40 ④ 교안 — 인용한 파일과 출력이 코드베이스·�
 
   it('맥 사용자의 개인 무시 목록 두 줄은 ② 가 쓴 파일 위치(~/.config/git/ignore)와 같다', () => {
     expect(has('bash', 'mkdir -p ~/.config/git\necho ".DS_Store" >> ~/.config/git/ignore')).toBe(true);
+  });
+
+  it('Step 7 의 올리기 전 확인 — 명령과 출력이 ② 가 실제로 뽑은 것과 같다', () => {
+    expect(has('bash', 'git diff main..docs/review-rule')).toBe(true);
+    expect(has('', DIFF_REVIEW_RULE)).toBe(true);
   });
 });
 
