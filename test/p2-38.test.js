@@ -19,11 +19,14 @@
 // 축 ⑪ 교안이 실은 배포 출력(로그 · 시드 펜스의 경고 첫 줄과 시드 줄 · 마이그레이션 개수)이 실제 출력과 같다.
 // 축 ⑫ 답안 [기초] 5번 — 다시 시드하면 댓글 `createdAt` 이 달라진다(로컬인지 가리는 단서).
 // 축 ⑬ `sslmode=require` 주소를 쓰는 서버는 뜰 때가 아니라 첫 요청 때 SSL 경고를 한 번 찍는다.
+// 축 ⑭ 가드 없는 `prisma.config.js` 는 `.env` 없는 곳에서 에러 «한 줄» 로 멈춘다 — 교안 펜스와 같다.
+// 축 ⑮ `.env` 를 저장하면 `--watch` 가 세 줄(Change detected · Restarting · 시작 줄)을 찍는다 — 교안 펜스와 같다.
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import {
   readFileSync, existsSync, renameSync, readdirSync, rmSync, cpSync, writeFileSync,
+  mkdirSync, symlinkSync,
 } from 'node:fs';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
 
@@ -412,8 +415,9 @@ describe('축 ⑪ — 교안이 실은 배포 출력이 실제 출력과 같다'
     expect(N).toBe(10);
     const src = read(LECTURE);
     const 자리 = [
-      /바꾼 횟수\s+(\d+)번/g, /마이그레이션이 (\d+)개/g, /(\d+)개의 마이그레이션/g,
-      /마이그레이션 (\d+)개가/g, /같은 (\d+)개를/g, /(\d+)개의 이름/g, /(\d+) migrations found/g,
+      // 🔀 2026-09-23 낭독 — 「10개의 마이그레이션」·「10개의 이름」을 「마이그레이션 10개가」·「이름 10개」로 고쳤다(번역투).
+      /바꾼 횟수\s+(\d+)번/g, /마이그레이션이 (\d+)개/g,
+      /마이그레이션 (\d+)개가/g, /같은 (\d+)개를/g, /이름 (\d+)개/g, /(\d+) migrations found/g,
     ];
     let 센것 = 0;
     for (const re of 자리) {
@@ -505,5 +509,95 @@ describe('축 ⑬ — 서버는 첫 요청 때 SSL 경고를 한 번 찍는다',
       await new Promise((r) => setTimeout(r, 300));
       expect(센다(), '경고는 프로그램마다 한 번뿐이다').toBe(1);
     } finally { await s.stop(); }
+  }, 60000);
+});
+
+// ── 교안 펜스 읽기 — 축 ⑭·⑮ 가 같이 쓴다 ─────────────────────────────────
+/** `표지` 문장 바로 뒤에 오는 첫 펜스의 줄들 — `...` 과 빈 줄은 뺀다. */
+function 교안펜스(표지) {
+  const src = read(P('../../part2/6-fullstack-join/p2-38-fullstack-deploy-lecture.md'));
+  const at = src.indexOf(표지);
+  expect(at, `교안에서 「${표지}」 를 못 찾았다`).toBeGreaterThan(-1);
+  return src.slice(at).match(/```[a-z]*\n([\s\S]*?)```/)[1]
+    .split('\n').filter((l) => l.trim() && l.trim() !== '...');
+}
+
+// ── 축 ⑭ — 가드 없는 `prisma.config.js` 는 `.env` 없는 곳에서 에러 «한 줄» 로 멈춘다 ──
+// 🔀 2026-09-23 `p2-38` 낭독 — 교안 초판은 이 에러를 두 줄(`Failed to load …` / `Error: ENOENT …`)로
+//    실었는데, 학생 낭독이 새로 받은 폴더에서 치니 한 줄이었고 `Error: Error:` 가 두 번 붙었다.
+//    오늘 고치기 «전» 판(조건 없이 `process.loadEnvFile()`)을 `.env` 없는 폴더에 놓고 잰다.
+describe('축 ⑭ — 가드가 없으면 `.env` 없는 곳에서 Prisma 가 설정 파일부터 못 읽는다', () => {
+  const RUN = P('.p2-38-noenv');
+  beforeAll(() => {
+    rmSync(RUN, { recursive: true, force: true });
+    mkdirSync(RUN);
+    cpSync(P('prisma'), `${RUN}/prisma`, { recursive: true });
+    writeFileSync(`${RUN}/prisma.config.js`, read(P('prisma.config.js')).replace(
+      /^if \(process\.env\.DATABASE_URL === undefined\) process\.loadEnvFile\(\);$/m,
+      'process.loadEnvFile();'));
+    symlinkSync(P('node_modules'), `${RUN}/node_modules`);
+  });
+  afterAll(() => { rmSync(RUN, { recursive: true, force: true }); });
+
+  it('에러는 한 줄이고, 교안 펜스와 폴더 경로만 다르다', () => {
+    expect(read(`${RUN}/prisma.config.js`)).toMatch(/^process\.loadEnvFile\(\);$/m);
+    const env = { ...process.env };
+    delete env.DATABASE_URL;
+    const run = spawnSync('npx', ['prisma', 'migrate', 'status'], { cwd: RUN, encoding: 'utf8', env });
+    expect(run.status).not.toBe(0);
+    const 에러 = `${run.stdout}${run.stderr}`.split('\n').map((l) => l.trim()).filter((l) => l.includes('ENOENT'));
+    expect(에러, '에러가 한 줄이 아니다').toHaveLength(1);
+    const 교안 = 교안펜스('파일이 없으면 이 함수는 조용히 넘어가지 않고 에러를 던져요.');
+    expect(교안).toHaveLength(1);
+    const 경로빼기 = (l) => l.replace(/"[^"]+"/, '"<DIR>"');
+    expect(경로빼기(교안[0])).toBe(경로빼기(에러[0]));
+  }, 120000);
+});
+
+// ── 축 ⑮ — `.env` 를 저장하면 `--watch` 가 세 줄을 찍는다 ────────────────────
+// 🔀 2026-09-23 `p2-38` 낭독 — 교안 초판은 시작 줄 하나만 실었다. 실제로는 `Change detected in '…/.env'`
+//    · `Restarting 'app.js'` · 시작 줄 세 줄이고, 터미널(TTY)에서는 그 앞에 화면을 지우는 `\x1bc` 가
+//    나가 창 2 에 이 세 줄만 남는다(pty 실측 · 게이트는 파이프라 지우기 문자가 안 나온다).
+describe('축 ⑮ — `.env` 를 저장하면 창 2 에 세 줄이 찍힌다', () => {
+  const RUN = P('.p2-38-watch');
+  const 포트 = 3483;
+  beforeAll(() => {
+    rmSync(RUN, { recursive: true, force: true });
+    mkdirSync(RUN);
+    for (const f of ['app.js', 'db.js', 'errors.js', 'package.json']) cpSync(P(f), `${RUN}/${f}`);
+    for (const d of ['routes', 'services', 'middlewares', 'schemas', 'data']) {
+      if (existsSync(P(d))) cpSync(P(d), `${RUN}/${d}`, { recursive: true });
+    }
+    symlinkSync(P('node_modules'), `${RUN}/node_modules`);
+    writeFileSync(`${RUN}/.env`, `DATABASE_URL="${GATE_URL}"\nPORT=${포트}\nCORS_ORIGIN=${OURS}\n`);
+  });
+  afterAll(() => { rmSync(RUN, { recursive: true, force: true }); });
+
+  it('Change detected · Restarting · 시작 줄 — 교안 펜스와 경로·포트만 다르다', async () => {
+    const env = { ...process.env };
+    for (const k of ['NODE_ENV', 'DATABASE_URL', 'PORT', 'CORS_ORIGIN']) delete env[k];
+    const child = spawn(process.execPath, ['--watch', '--env-file=.env', 'app.js'], { cwd: RUN, env });
+    let out = '';
+    child.stdout.on('data', (b) => { out += b; });
+    child.stderr.on('data', (b) => { out += b; });
+    const 기다리기 = async (조건, ms = 15000) => {
+      const t = Date.now();
+      while (!조건()) {
+        if (Date.now() - t > ms) throw new Error(`기다리다 끝남:\n${out}`);
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    };
+    try {
+      await 기다리기(() => out.includes('기다리고 있어요'));
+      const 앞 = out.length;
+      writeFileSync(`${RUN}/.env`, `${read(`${RUN}/.env`)}# 바꿈\n`);
+      await 기다리기(() => out.slice(앞).includes('기다리고 있어요'));
+      const 줄들 = out.slice(앞).split('\n').map((l) => l.trim()).filter(Boolean);
+      const 교안 = 교안펜스('서버를 다시 띄우면서 세 줄을 찍어요.');
+      const 고르기 = (l) => l.replace(/'[^']*\.env'/, "'<ENV>'").replace(/\d+번 포트/, 'N번 포트');
+      expect(줄들.map(고르기)).toEqual(교안.map(고르기));
+      expect(교안[0]).toBe("Change detected in '/Users/hong/instagram-api/.env'");
+      expect(교안[2]).toBe('서버가 3000번 포트에서 기다리고 있어요.');
+    } finally { child.kill('SIGTERM'); }
   }, 60000);
 });
