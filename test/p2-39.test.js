@@ -11,7 +11,9 @@
 //       p2-36 이 «여섯 군데» 로 겪은 어긋남을 이번엔 만들기 전에 막는 자리다.
 // 🚨 진짜 instagram DB 를 안 건드린다 — 전용 DB 를 만들고 끝나면 지운다.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 
@@ -180,11 +182,52 @@ describe('p2-39 ④ 교안이 코드베이스와 같다', () => {
     expect(missingIn('prisma', SCHEMA)).toEqual([]);
   });
 
+  // Step 6 「초안이 만들 SQL을 확인해요」 — 교안이 「이 네 줄이 다 있는지」로 짚는 줄이 실제 출력에 있다.
+  it('교안 ```sql 네 줄이 초안의 실제 migrate diff 출력에 있다', () => {
+    const out = new Set(diffSql().split('\n').map(squash));
+    const lines = blocksOf('sql').flat().map(squash).filter(Boolean);
+    expect(lines).toHaveLength(4);
+    expect(lines.filter((l) => !out.has(l))).toEqual([]);
+  });
+
   it('교안 계약 표의 요청 칸이 CONTRACT 일곱 줄과 같다', () => {
     const rows = read(LECTURE).split('\n')
       .map((l) => l.match(/^\| `((?:GET|POST|PATCH|PUT|DELETE) \/api\/[^`]*)` \|/))
       .filter(Boolean).map((m) => m[1]);
     expect([...new Set(rows)].sort()).toEqual([...CONTRACT].sort());
+  });
+});
+
+// 🚨 2026-09-23 낭독 retrofit — 학생 에이전트가 틀린 초안을 넣어보니 교안이 시킨 확인만으로는
+//    하나도 안 걸렸다. `migrate diff` 는 규칙을 빠뜨린 초안에도 exit 0 으로 SQL 을 낸다.
+//    그래서 교안이 「명령이 끝났다고 넘어가지 말고 줄을 눈으로 확인해요」라고 적는다 — 그 주장을 잠근다.
+describe('p2-39 ⑨ 틀린 초안도 명령은 조용히 통과한다 — 줄을 봐야 가려진다', () => {
+  const variant = (from, to, name, file = SCHEMA) => {
+    const src = read(P(file));
+    expect(src).toContain(from);
+    const path = join(mkdtempSync(join(tmpdir(), 'p239-')), `${name}.prisma`);
+    writeFileSync(path, src.split(from).join(to));
+    return prismaCli(['migrate', 'diff', '--from-empty', '--to-schema', path, '--script']);
+  };
+
+  it('@@unique 를 빠뜨리면 에러 없이 두 번 신청을 막는 줄만 빠진다', () => {
+    const sql = variant('  @@unique([shareId, neighborId])\n', '', 'no-unique');
+    expect(sql).not.toContain('share_requests_share_id_neighbor_id_key');
+    expect(sql).toContain('neighbors_nickname_key');
+  });
+
+  it('onDelete: Cascade 를 빠뜨리면 에러 없이 신청의 외래 키가 RESTRICT 로 바뀐다', () => {
+    const sql = variant(', onDelete: Cascade', '', 'no-cascade');
+    expect(sql).toContain('share_requests_share_id_neighbor_id_key');
+    expect(sql).toMatch(/"share_requests_share_id_fkey" FOREIGN KEY \("share_id"\) REFERENCES "shares"\("id"\) ON DELETE RESTRICT/);
+    expect(sql).toMatch(/"share_requests_neighbor_id_fkey" FOREIGN KEY \("neighbor_id"\) REFERENCES "neighbors"\("id"\) ON DELETE RESTRICT/);
+    expect(sql).not.toContain('ON DELETE CASCADE');
+  });
+
+  // 과제 [기초] — 교안이 「아직 아무도 안 고른 나눔도 담을 수 있는지」를 SQL 에서 보라고 한다.
+  it('[기초] 받을 사람 칸의 물음표를 빠뜨려도 명령은 통과하고 NOT NULL 과 RESTRICT 로만 드러난다', () => {
+    const sql = variant('Int?           @map("receiver_id")', 'Int            @map("receiver_id")', 'hw1-no-question', 'lab/p2-39/homework1.prisma');
+    expect(sql).toMatch(/"receiver_id" INTEGER NOT NULL,/);
   });
 });
 
@@ -258,6 +301,47 @@ describe('p2-39 ⑥ 과제 [응용] — 인스타그램 프로필', () => {
     expect(sql).toMatch(/CREATE TABLE "follows"/);
     expect(sql).toMatch(/CREATE UNIQUE INDEX "follows_follower_id_following_id_key"/);
     expect(sql).not.toMatch(/DROP/);
+  });
+
+  // 🚨 2026-09-23 낭독 retrofit — 교안이 「[기초]처럼」만 적어 학생은 `--from-empty` 를 쳤고, 그러면
+  //    표 6개를 처음부터 만드는 SQL 이 나와 답안의 「지금에서 초안까지」를 볼 수 없었다. 교안은 이제
+  //    p2-29 가 가르친 `--from-config-datasource` 를 준다 — 학생 DB(지금 스키마대로 선 DB)에서 그 명령이
+  //    답안이 말하는 SQL 을 내는지, 물음표를 빠뜨린 답은 `NOT NULL` 로 드러나는지 잰다.
+  describe('교안이 준 명령 — --from-config-datasource', () => {
+    const BASE = 'p239_hw2_base';
+    const fromDb = (schemaPath) => execFileSync(
+      P('node_modules/.bin/prisma'),
+      ['migrate', 'diff', '--from-config-datasource', '--to-schema', schemaPath, '--script'],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, DATABASE_URL: `postgresql://postgres:postgres@localhost:5432/${BASE}` } },
+    );
+
+    beforeAll(async () => {
+      await admin.query(`DROP DATABASE IF EXISTS ${BASE} WITH (FORCE)`);
+      await admin.query(`CREATE DATABASE ${BASE}`);
+      const base = new pg.Client({ ...ADMIN, database: BASE }); await base.connect();
+      await base.query(prismaCli(['migrate', 'diff', '--from-empty', '--to-schema', P('prisma/schema.prisma'), '--script']));
+      await base.end();
+    });
+
+    afterAll(async () => {
+      await admin?.query(`DROP DATABASE IF EXISTS ${BASE} WITH (FORCE)`);
+    });
+
+    it('지금 데이터베이스에서 과제판으로 가는 SQL 은 --from-schema 판과 같다 — 칸 하나와 follows 표, DROP 없음', () => {
+      const sql = fromDb(P(HW2));
+      expect(sql).toMatch(/ALTER TABLE "users" ADD COLUMN\s+"name" VARCHAR\(50\);/);
+      expect(sql).toMatch(/CREATE TABLE "follows"/);
+      expect(sql).not.toMatch(/DROP/);
+      expect(sql).toBe(prismaCli(['migrate', 'diff', '--from-schema', P('prisma/schema.prisma'), '--to-schema', P(HW2), '--script']));
+    });
+
+    it('name 의 물음표를 빠뜨린 답은 명령이 조용히 통과하고 NOT NULL 로만 드러난다', () => {
+      const path = join(mkdtempSync(join(tmpdir(), 'p239-')), 'hw2-no-question.prisma');
+      const src = read(P(HW2));
+      expect(src).toContain('String?   @db.VarChar(50)');
+      writeFileSync(path, src.replace('String?   @db.VarChar(50)', 'String    @db.VarChar(50)'));
+      expect(fromDb(path)).toMatch(/ALTER TABLE "users" ADD COLUMN\s+"name" VARCHAR\(50\) NOT NULL;/);
+    });
   });
 
   // 답안이 name 에 물음표를 붙인 이유 — 비워둘 수 없는 칸은 줄이 이미 있으면 못 더한다.
