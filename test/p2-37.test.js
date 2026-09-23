@@ -1,7 +1,7 @@
 // p2-37 「문을 좁히고 주소를 코드에서 뺀다」 게이트
 //
 // 🚨 이 회차의 판정 축은 «누가 막는가» 다. `p2-25` 가 이미 *"CORS 는 서버를 지키는
-//    장치가 아니다"* 까지 갔으므로, 이 회차가 새로 주장하는 것은 **좁힌 문이 무엇을
+//    장치가 아니다"* 까지 갔으므로, 이 회차가 새로 주장하는 것은 **좁힌 허락 목록이 무엇을
 //    바꾸고 무엇을 «안» 바꾸는가** 다. 그 둘을 갈라 재지 않으면 교안이 「막힌다」를
 //    과장하게 된다 — 서버는 여전히 200 과 본문을 준다.
 //
@@ -321,7 +321,7 @@ describe('축 ⑩ — 과제 답안이 진짜 서버에서 돈다', () => {
     fetch(`http://localhost:${port}/api/comments?postId=1&limit=2`,
       { headers: origin ? { Origin: origin, ...headers } : headers });
 
-  it('[기초] 댓글 서버에 좁힌 문이 놓여 있고, 우리 것만 허락한다', async () => {
+  it('[기초] 댓글 서버에 허락 목록이 들어가 있고, 우리 것만 허락한다', async () => {
     const src = read(P('lab/p2-37/homework1.js'));
     expect(src).toContain("import cors from 'cors'");
     expect(src).toMatch(/cors\(\{\s*origin:\s*\[/);
@@ -389,6 +389,56 @@ describe('축 ⑩ — 과제 답안이 진짜 서버에서 돈다', () => {
     expect(http.split(/^### /m).length - 1).toBe(3);
     expect(http).toContain('localhost:4001');
     expect(http).toContain('Origin: http://localhost:5173');
+  });
+});
+
+// ── 축 ⑪ · 낭독 retrofit 이 교안·답안에 새로 적은 주장 (2026-09-23) ─────────
+//
+// 🔑 학생 에이전트가 실제로 틀려보며 찾은 자리를 교안이 «증상» 으로 적었다.
+//    증상이 사실이어야 학생이 그 문장으로 자기 실수를 알아챈다.
+describe('축 ⑪ — 틀렸을 때 교안이 말하는 증상이 사실이다', () => {
+  const 작은서버 = (setup, port) =>
+    new Promise((resolve) => {
+      const app = express();
+      setup(app);
+      app.get('/x', (req, res) => res.json({ ok: true }));
+      const s = app.listen(port, () => resolve(s));
+    });
+  const 허락 = async (port, origin) =>
+    (await fetch(`http://localhost:${port}/x`, { headers: { Origin: origin } }))
+      .headers.get('access-control-allow-origin');
+
+  it('🔴 Step 2 — 옛 `cors()` 를 남긴 채 새 줄을 더하면 «어느 순서든» 모르는 출처에 `*` 가 온다', async () => {
+    const 옛위 = await 작은서버((app) => { app.use(cors()); app.use(cors({ origin: [OURS] })); }, 3474);
+    const 새위 = await 작은서버((app) => { app.use(cors({ origin: [OURS] })); app.use(cors()); }, 3475);
+    try {
+      expect(await 허락(3474, 남), '옛 줄이 위').toBe('*');
+      expect(await 허락(3475, 남), '새 줄이 위').toBe('*');
+      // 우리 출처는 순서에 따라 갈린다 — 그래서 교안은 기전이 아니라 이 증상만 적는다.
+      expect(await 허락(3474, OURS)).toBe(OURS);
+      expect(await 허락(3475, OURS)).toBe('*');
+    } finally { 옛위.close(); 새위.close(); }
+  });
+
+  it('🔴 Step 2 — 끝에 `/` 를 붙여 적으면 우리 프론트도 허락을 못 받는다', async () => {
+    const s = await 작은서버((app) => app.use(cors({ origin: [`${OURS}/`] })), 3476);
+    try {
+      expect(await 허락(3476, OURS)).toBeNull();
+    } finally { s.close(); }
+  });
+
+  it('🔴 Step 5 ⚠️ — 프록시가 `/api/api/posts` 로 넘기면 우리 서버는 404 와 「그런 주소는 없어요」', async () => {
+    const res = await 물어보기(null, { path: '/api/api/posts?limit=2' });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ message: '그런 주소는 없어요' });
+  });
+
+  it('🔴 답안 주제 2 — `origin` 배열에는 정규 표현식도 들어간다', async () => {
+    const s = await 작은서버((app) => app.use(cors({ origin: [OURS, /\.example\.com$/] })), 3477);
+    try {
+      expect(await 허락(3477, 'https://a.example.com')).toBe('https://a.example.com');
+      expect(await 허락(3477, 'https://evil-example.com')).toBeNull();
+    } finally { s.close(); }
   });
 });
 
