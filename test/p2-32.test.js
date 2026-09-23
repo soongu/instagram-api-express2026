@@ -492,7 +492,7 @@ describe('lab — 서점(직접 해보기)과 댓글(과제)', () => {
       expect(run()).toBe(fence);
       expect(run()).toBe(fence.replace(/^10번 /gm, '11번 '));
     } finally { copies.forEach(dropCopy); }
-  });
+  }, 30000);   // 시드 한 번 + 과제 두 번 — 기본 5초는 부하에 흔들린다(리뷰)
 });
 
 // ── 인용 — 교안·답안이 코드베이스와 byte 동일한가 ───────────────────────────
