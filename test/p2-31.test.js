@@ -330,8 +330,12 @@ describe('최종판 — 층이 갈렸는데 바깥에서 보면 아무것도 안
     //    (2026-09-23 게이트 Q1 — replay 는 이 블록을 🈳 DB 로 여기 넘긴다). 답안이 그 번호의 전제를 직접
     //    적어둔다 — 「위 출력은 시드를 막 넣은 데이터베이스에서 실행해서 6번이 나왔는데」. 이 파일의 앞 축들이
     //    요청 12개를 보내며 번호를 먹었으니 그 전제를 여기서 다시 세운다.
+    // 🔑 펜스 첫 줄을 글자로도 적는다 — replay 는 «테스트 파일에 출력 글자가 한 조각이라도 있는가» 로
+    //    🈳 DB 와 DB-NONE 을 가르므로, 펜스를 답안에서 읽어 오기만 하면 가장 센 대조가 DB-NONE 으로 보인다.
+    const fence = homework2Fence();
+    expect(fence.split('\n')[0]).toBe('6번 게시물을 만들었어요.');
     seed();
-    expect(runHomework2()).toBe(homework2Fence());
+    expect(runHomework2()).toBe(fence);
     expect(read(ANSWERS)).toContain('위 출력은 시드를 막 넣은 데이터베이스에서 실행해서 6번이 나왔는데');
   });
 

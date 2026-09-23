@@ -475,6 +475,8 @@ describe('lab — 서점(직접 해보기)과 댓글(과제)', () => {
     const at = doc.indexOf('`node --env-file=.env lab/homework2.js`로 실행하면 이렇게 나와요.');
     expect(at, '답안에 과제 2 실행 문장이 없습니다').toBeGreaterThan(-1);
     const fence = doc.slice(at).match(/```bash\n([\s\S]*?)```/)[1].trimEnd();
+    // 🔑 펜스 첫 줄을 글자로도 적는다 — replay 가 이 테스트를 «이 출력을 보는 테스트» 로 알아보는 근거다.
+    expect(fence.split('\n')[0]).toBe('10번 댓글을 만들었어요.');
     expect(fence.match(/^10번 /gm)).toHaveLength(2);
     expect(doc).toContain('여러분 화면의 번호는 이와 다를 수 있어요. 댓글 번호도 게시물처럼 만들 때마다 하나씩 올라가거든요.');
 
