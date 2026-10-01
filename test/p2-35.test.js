@@ -735,7 +735,10 @@ describe('인용이 코드베이스와 맞는가', () => {
     ...['services/postService.js', 'services/likeService.js', 'seed.js', 'check.js',
       'db.js', 'errors.js', 'routes/posts.js', 'schemas/postSchema.js'].map((f) => `${S35}${f}`),
     // 교안이 「지난 시간에 쓴 것」으로 싣는 판 — 그 시점 스냅숏이 출처다.
-    'snapshots/p2-34-final/services/likeService.js',
+    // 🚨 임시(2026-10-01) — p2-34 가 좋아요를 PUT·DELETE 로 나눴는데 이 회차 교안은 아직 토글을 인용한다.
+    //    p2-35 세션이 교안을 고치면서 이 줄을 'snapshots/p2-34-final/services/likeService.js' 로 되돌린다
+    //    (계획 progress/like-split-plan.md).
+    'snapshots/p2-34/likeService.toggle.js',
     'snapshots/p2-34-final/services/postService.js',
     // Step 1 이 «잠깐 넣었다 뺄» 한 줄 · Step 4 시점 판 · Step 6 의 로그 스위치
     'snapshots/p2-35/likeService.crash.js',

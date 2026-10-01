@@ -404,38 +404,93 @@ describe('Step 6·7 — 좋아요는 가운데 표가 받고, 같은 쌍은 한 
     await db.query('delete from post_likes where post_id = 1 and user_id = 2');
   });
 
-  it('🔴 한 주소를 두 번 부르면 켜졌다가 꺼진다', async () => {
-    const press = () => fetch('http://127.0.0.1:3442/api/posts/3/likes', {
-      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 2 }),
-    }).then((r) => r.json());
+  // 🔀 2026-10-01 사용자 결정 — 토글(`POST /likes` 한 주소) 대신 누르기·취소를 나눈다.
+  //    같은 요청을 두 번 보내도(응답을 못 받아 다시 보냄 · 더블클릭 · 탭 둘) 결과가 같아야 한다.
+  const likeUrl = (postId, userId) => `http://127.0.0.1:3442/api/posts/${postId}/likes/${userId}`;
+  const send = (method, postId, userId) =>
+    fetch(likeUrl(postId, userId), { method }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  const rowsOf = async (postId) =>
+    (await db.query('select count(*)::int c from post_likes where post_id = $1', [postId])).rows[0].c;
 
-    const on = await press();
-    expect(on).toEqual({ liked: true, likeCount: 77 });      // 시드가 76 으로 넣는다
+  it('🔴 누르기를 두 번 보내도 결과가 같다 — 줄도 숫자도 한 번만 늘어난다', async () => {
+    const first = await send('PUT', 3, 2);
+    expect(first).toEqual({ status: 200, body: { liked: true, likeCount: 77 } });   // 시드가 76 으로 넣는다
 
-    const off = await press();
-    expect(off).toEqual({ liked: false, likeCount: 76 });
+    const again = await send('PUT', 3, 2);
+    expect(again, '두 번째도 같은 답').toEqual({ status: 200, body: { liked: true, likeCount: 77 } });
+    expect(await rowsOf(3), '줄은 하나뿐').toBe(1);
+  });
 
-    const rows = await db.query('select count(*)::int c from post_likes where post_id = 3');
-    expect(rows.rows[0].c, '꺼지면 줄도 사라진다').toBe(0);
+  // 🚨 누르기·취소는 count 가 0 이어도 post.update 를 부르므로 posts.updated_at(@updatedAt)은 매번 바뀐다
+  //    (2026-10-01 실측 · 옛 토글도 같았다). 교안은 「숫자가 0만큼 내려갔다」로만 말한다 — 「아무것도 안 바뀐다」 금지.
+  it('🔴 취소를 두 번 보내도 결과가 같다 — 숫자가 시작값 아래로 안 내려간다', async () => {
+    const first = await send('DELETE', 3, 2);
+    expect(first).toEqual({ status: 200, body: { liked: false, likeCount: 76 } });
+
+    const again = await send('DELETE', 3, 2);
+    expect(again, '두 번째도 같은 답').toEqual({ status: 200, body: { liked: false, likeCount: 76 } });
+    expect(await rowsOf(3), '줄도 사라진다').toBe(0);
+  });
+
+  it('🚨 같은 누르기가 «동시에» 열 번 와도 줄 하나 · 숫자 +1 — 넣을지 말지를 데이터베이스가 정한다', async () => {
+    // 🚨 응답에 실린 숫자는 요청마다 다를 수 있다 — 넣은 요청이 숫자를 고치기 «전에» 답한 요청이 있을 수
+    //    있어서다(그 틈은 p2-35 트랜잭션의 몫). 여기서는 «끝난 뒤의 테이블» 만 본다.
+    const before = (await db.query('select like_count from posts where id = 5')).rows[0].like_count;
+    const all = await Promise.all(Array.from({ length: 10 }, () => send('PUT', 5, 4)));
+    expect(all.map((r) => r.status)).toEqual(Array(10).fill(200));
+    expect(await rowsOf(5)).toBe(1);
+    const after = (await db.query('select like_count from posts where id = 5')).rows[0].like_count;
+    expect(after, '숫자도 한 번만 오른다').toBe(before + 1);
+    await send('DELETE', 5, 4);
+  });
+
+  it('🚨 p2-35 오프닝 재료 — 행만 들어가고 숫자는 안 오른 채 멈춘 뒤에 다시 누르면, 숫자는 끝내 안 오른다', async () => {
+    // 이 회차 예고는 「행은 들어갔는데 숫자는 안 올라간 상태로 남아요」까지만 말한다 — 「다시 누르면」·「취소하면」은
+    // p2-35 오프닝이 쓸 재료라 일부러 안 팔았다(progress/like-split-plan.md). 두 번의 쓰기 사이에서 멈춘 상태를
+    // 행만 손으로 넣어 만든다 — 다시 누르면 행이 이미 있으니 count 0, 숫자는 그대로다.
+    const before = (await db.query('select like_count from posts where id = 2')).rows[0].like_count;
+    await db.query('insert into post_likes (post_id, user_id) values (2, 1)');
+
+    const retry = await send('PUT', 2, 1);
+    expect(retry).toEqual({ status: 200, body: { liked: true, likeCount: before } });
+    expect(await rowsOf(2)).toBe(1);
+
+    // 그 상태에서 취소하면 시작값보다 하나 «내려간다»
+    const undo = await send('DELETE', 2, 1);
+    expect(undo.body).toEqual({ liked: false, likeCount: before - 1 });
+    await db.query('update posts set like_count = $1 where id = 2', [before]);
   });
 
   it('여러 사람이 같은 게시물에 누르면 줄이 사람 수만큼 쌓인다', async () => {
-    for (const userId of [1, 2, 3]) {
-      await fetch('http://127.0.0.1:3442/api/posts/4/likes', {
-        method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId }),
-      });
-    }
+    for (const userId of [1, 2, 3]) await send('PUT', 4, userId);
 
     const res = await fetch('http://127.0.0.1:3442/api/posts/4/likes');
     expect(await res.json()).toEqual(['dahye', 'jaehoon', 'minji']);
   });
 
-  it('없는 사람 번호로 누르면 400 이다', async () => {
-    const res = await fetch('http://127.0.0.1:3442/api/posts/1/likes', {
-      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 999 }),
-    });
+  it('없는 사람 번호로 누르면 404 이다 — 주소가 가리키는 것이 없다', async () => {
+    const res = await send('PUT', 1, 999);
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('그런 게시물이나 사용자는 없어요');
+  });
 
-    expect(res.status).toBe(400);
+  it('없는 게시물에서 취소하면 404 이다 — 지울 줄이 없어 지나가고, 숫자를 고칠 때 걸린다', async () => {
+    const res = await send('DELETE', 999, 2);
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('그런 게시물은 없어요');
+  });
+
+  it('사람 번호 자리에 숫자가 아닌 것이 오면 404 이다', async () => {
+    const res = await send('PUT', 1, 'abc');
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('그런 사용자는 없어요');
+  });
+
+  it('🚨 옛 토글 주소(`POST /likes`)는 이제 없다', async () => {
+    const res = await fetch('http://127.0.0.1:3442/api/posts/3/likes', {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 2 }),
+    });
+    expect(res.status).toBe(404);
   });
 
   it('🚨 적어둔 like_count 와 표의 줄 수는 «같지 않다» — 생각해볼 주제의 재료다', async () => {
@@ -606,7 +661,8 @@ describe('인용이 코드베이스와 맞는가', () => {
     'snapshots/p2-34-final/services/likeService.js',
     'snapshots/p2-34-final/seed.js',
     'snapshots/p2-34-final/check.js',
-    'schemas/postSchema.js', 'routes/posts.js', 'db.js', 'errors.js',
+    // 🔀 좋아요 주소가 PUT·DELETE 로 갈렸다(2026-10-01) — 라이브는 `p2-35` 세션이 따라 바꿀 때까지 토글 판이다.
+    'snapshots/p2-34-final/schemas/postSchema.js', 'snapshots/p2-34-final/routes/posts.js', 'db.js', 'errors.js',
     'snapshots/p2-34-final/data/posts.js', 'data/comments.js',
     // Step 3 시점 시드 — 그때는 post_likes 가 아직 없어 비우기 목록이 한 칸 짧다.
     'snapshots/p2-34/seed.step3.js',
