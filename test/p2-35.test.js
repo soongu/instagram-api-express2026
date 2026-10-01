@@ -481,14 +481,16 @@ describe('audit 칸 — 시드는 두 시각을 넣고, 고르는 목록은 두 
     expect(post.updatedAt, '시드가 막 넣은 게시물이라 두 시각이 같다').toBe(post.createdAt);
   });
 
-  it('🔴 교안의 postFields 가 코드베이스와 byte 동일하고, 칸 8개가 본문의 「칸 8개」다', () => {
+  it('🔴 교안의 postFields 가 코드베이스와 byte 동일하고, 8개가 본문의 「필드 8개」·「컬럼 8개」다', () => {
     const lec = read(LECTURE);
     const block = blockOf(lec, 'postFields');
 
     expect(block).toBe(blockOf(read(P(`${S35}services/postService.js`)), 'postFields'));
     expect(scalarKeysOf(block)).toEqual(['id', 'authorId', 'postAlt', 'content', 'likeCount',
       'commentCount', 'createdAt', 'updatedAt']);
-    expect(lec.match(/칸 8개/g), 'Step 7 의 두 문장').toHaveLength(2);
+    // 2026-10-01 DB 용어 원어화 — Prisma select 쪽은 «필드», SQL 로그 쪽은 «컬럼» 이다.
+    expect(lec, 'Step 7 — postFields').toContain('게시물의 필드 8개를');
+    expect(lec, 'Step 7 — SQL 로그').toContain('게시물 쿼리는 컬럼 8개를');
   });
 
   it('🔴 답안의 commentFields 가 코드베이스와 byte 동일하고, 교안 요구사항·채점표와 칸 수가 같다', () => {
@@ -502,9 +504,9 @@ describe('audit 칸 — 시드는 두 시각을 넣고, 고르는 목록은 두 
       'createdAt', 'updatedAt', 'parentId']);
 
     // 교안 과제 요구사항 3 이 그 칸들을 «같은 차례로» 나열한다.
-    const req = read(LECTURE).split('\n').find((l) => l.startsWith('3. 댓글에서 필요한 칸은'));
+    const req = read(LECTURE).split('\n').find((l) => l.startsWith('3. 댓글에서 필요한 필드는'));
     expect([...req.matchAll(/`(\w+)`/g)].map((m) => m[1]).slice(0, keys.length)).toEqual(keys);
-    expect(read(ANSWERS), '채점표의 칸 수').toContain(`댓글 칸 ${keys.length}개`);
+    expect(read(ANSWERS), '채점표의 칸 수').toContain(`댓글 필드 ${keys.length}개`);
   });
 
   it('🚨 select 는 «적은 차례대로» 칸을 싣는다 — 과제가 「이 차례를 지켜 적으라」고 하는 근거', () => {
@@ -523,8 +525,8 @@ describe('audit 칸 — 시드는 두 시각을 넣고, 고르는 목록은 두 
       { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
     expect(out.trim().split('\n')).toEqual(['id,parentId,content', 'content,parentId,id']);
-    expect(read(LECTURE)).toContain('`select`에 적은 차례가 그대로 응답의 칸 차례가 되니까');
-    expect(read(ANSWERS)).toContain('`select`는 적은 차례대로 칸을 실어 오거든요');
+    expect(read(LECTURE)).toContain('`select`에 적은 차례가 그대로 응답의 필드 차례가 되니까');
+    expect(read(ANSWERS)).toContain('`select`는 적은 차례대로 필드를 실어 오거든요');
   });
 
   it('🚨 사슬 — 이 회차는 스키마·데이터·`withTimes` 를 안 바꾼다(p2-34 종료 판과 byte 동일)', () => {
@@ -813,7 +815,7 @@ describe('인용이 코드베이스와 맞는가', () => {
     // 🚨 교안 Step 7 이 「게시물 쿼리는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐다」고 한다.
     //    postFields 가 칸 하나라도 빠뜨리면(audit 전 판이 updatedAt 을 몰랐다) 이 줄이 달라진다.
     expect(withSelect[0], '게시물 쿼리는 include 판과 글자 그대로 같다').toBe(withInclude[0]);
-    expect(lec).toContain('게시물 쿼리는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐고');
+    expect(lec).toContain('게시물 쿼리는 컬럼 8개를 그대로 골랐으니 안 바뀌어서 뺐고');
   });
 
   it('🔴 교안이 더하라고 한 `.http` 요청 셋이 코드베이스에도 있다', () => {
