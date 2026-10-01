@@ -321,6 +321,40 @@ describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원�
     expect(out).toContain('4번 "크루아상 색이 좋네요" — 답글 1개');
   });
 
+  it('🚨 답글 시드의 바깥을 map 으로 쓰면 배열 9개가 넘어가 Prisma 가 거절한다 — 그래서 flatMap 이다', async () => {
+    // 🚨 교안 Step 5 의 flatMap 그림이 기대는 사실 — 원댓글 9개 중 답글이 있는 것은 1번·4번뿐이라
+    //    안쪽 map 은 배열 9개(빈 배열 7개)를 돌려주고, 펴면 답글 3개만 남는다.
+    const { comments } = await import(P('snapshots/p2-34-final/data/comments.js'));
+    const inner = comments.map((comment) => comment.replies ?? []);
+    expect(inner.map((replies) => replies.length)).toEqual([2, 0, 0, 1, 0, 0, 0, 0, 0]);
+    expect(inner.flat()).toHaveLength(3);
+
+    // 학생이 바깥을 map 으로 적었을 때 실제로 무엇이 나오나 — 이 회차 끝 시드에서 그 한 곳만 바꾼다.
+    const live = read(P('snapshots/p2-34-final/seed.js'));
+    expect(live).toContain('data: createdComments.flatMap((comment, index) =>');
+    mkdirSync(P('__replay__'), { recursive: true });
+    writeFileSync(P('__replay__/p234-seed-map.mjs'), live
+      .replace('createdComments.flatMap(', 'createdComments.map(')
+      .replace(/from '\.\//g, "from '../snapshots/p2-34-final/"));
+
+    let stderr = '';
+    try {
+      execFileSync(process.execPath, [P('__replay__/p234-seed-map.mjs')],
+        { cwd: P('.'), encoding: 'utf8', stdio: 'pipe', env: { ...process.env, ...ENV } });
+    } catch (e) {
+      stderr = e.stderr;
+    } finally {
+      // 답글만 빠진 채 멈춘 DB 를 이 회차 끝 상태로 되돌린다 — 아래 축이 12줄을 센다.
+      seedLive();
+    }
+
+    expect(stderr, '시드가 답글을 넣는 줄에서 멈춰야 한다').toContain('PrismaClientValidationError');
+    expect(stderr).toContain('Argument `data`: Invalid value provided.');
+    for (const phrase of ['PrismaClientValidationError', 'Invalid value provided', '배열 9개가 든 배열']) {
+      expect(read(LECTURE), `교안에 없다 — ${phrase}`).toContain(phrase);
+    }
+  }, 60000);
+
   it('🔴 없는 댓글에 답글을 달면 막힌다 — 자기 표라고 봐주지 않는다', async () => {
     await expect(db.query(
       'insert into comments (post_id, author_id, content, parent_id) values (1, 1, $1, 999)',
