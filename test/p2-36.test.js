@@ -262,14 +262,13 @@ describe('Step 5·6 — 프론트가 보내는 몸통이 서버가 받는 모양
     expect(res.status).toBe(400);
   });
 
-  // 🚨 임시(2026-10-01) — `p2-34` 가 좋아요를 `PUT`·`DELETE /posts/:id/likes/:userId` 로 나눴고 `p2-35` 가
-  //    라이브 백엔드를 바꿨다. 이 회차 교안과 프론트(`postApi.toggleLike` → `POST`)는 아직 옛 토글이라
-  //    «지금 라이브 프론트로 하트를 누르면 404» 다. `p2-36` 세션이 교안·프론트를 `likePost`·`unlikePost` 로
-  //    고치면서 이 축을 프론트 api.js 의 두 함수로 묶고, 아래 덫(옛 주소가 남아 있다) 줄을 지운다
-  //    (계획 progress/like-split-plan.md).
-  it('🔴 좋아요는 누르기(PUT)와 취소(DELETE)로 나뉘어 있다 — 프론트가 쓰는 사용자 번호로', async () => {
+  // 🔀 2026-10-01 — `p2-34` 가 좋아요를 `PUT`·`DELETE /posts/:id/likes/:userId` 로 나눴다(트랙
+  //    CLAUDE.md 「우리가 바꾼 계약」). 프론트 `api.js` 의 두 함수가 «실제로 만드는» 주소를 뽑아
+  //    그대로 보낸다 — 함수 이름이나 주소 모양이 어긋나면 여기가 빨개진다.
+  it('🔴 좋아요는 누르기(PUT)와 취소(DELETE)로 나뉘어 있다 — 프론트가 만드는 그 주소로', async () => {
     const MY = Number(FRONT('services/api.js').match(/MY_USER_ID = (\d+)/)[1]);
-    const 보내기 = (method) => fetch(`${server.base}/api/posts/1/likes/${MY}`, { method }).then((r) => r.json());
+    const 보내기 = (method) =>
+      fetch(`${server.base}/api${frontLikePath(method, 1, MY)}`, { method }).then((r) => r.json());
 
     const 처음 = (await getJson('/api/posts/1')).body.likeCount;
     expect(await 보내기('PUT')).toEqual({ liked: true, likeCount: 처음 + 1 });
@@ -278,12 +277,75 @@ describe('Step 5·6 — 프론트가 보내는 몸통이 서버가 받는 모양
     const r = await db.query('select count(*)::int c from post_likes where post_id = 1');
     expect(r.rows[0].c, '취소했으면 행도 없어야 한다').toBe(0);
 
-    // 덫 — 프론트가 아직 옛 토글 주소를 부른다. p2-36 세션이 프론트를 고치면 여기가 빨개진다(지울 때).
-    expect(FRONT('services/api.js'), '임시: 프론트는 아직 옛 토글').toContain('api.post(`/posts/${id}/likes`, { userId })');
     const old = await fetch(`${server.base}/api/posts/1/likes`, {
       method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: MY }),
     });
     expect(old.status, '옛 토글 주소는 이제 없다').toBe(404);
+    expect(FRONT('services/api.js'), '프론트에 토글 길이 남으면 하트가 404 를 받는다').not.toContain('toggleLike');
+  });
+});
+
+/**
+ * 프론트 `postApi` 가 좋아요 요청에 쓰는 주소를 그 소스에서 뽑아 번호를 채운다.
+ * `likePost: (id, userId) => api.put(`/posts/${id}/likes/${userId}`)` → `/posts/1/likes/2`
+ */
+function frontLikePath(method, id, userId) {
+  const 이름 = { PUT: 'likePost', DELETE: 'unlikePost' }[method];
+  const 함수 = { PUT: 'put', DELETE: 'delete' }[method];
+  const m = FRONT('services/api.js').match(
+    new RegExp(`${이름}: \\(id, userId\\) => api\\.${함수}\\(\`([^\`]+)\`\\)`));
+  expect(m, `프론트 api.js 에 ${이름} 이 api.${함수} 로 있어야 한다`).toBeTruthy();
+  return m[1].replace('${id}', String(id)).replace('${userId}', String(userId));
+}
+
+// ── Step 7 · 교안이 따라가는 숫자 ────────────────────────────────────────
+// 교안 Step 7 과 직접 해보기 3 이 학생에게 보여주는 숫자를 «그 순서 그대로» 진짜 서버에 보낸다.
+// 화면 쪽 동작(하트가 비었으면 누르기, 채워졌으면 취소)은 react `src/p2-36.test.jsx` 가 잠근다.
+describe('Step 7 — 좋아요 장면의 숫자가 교안 그대로다', () => {
+  afterAll(() => seed());
+
+  it('🔴 PATCH 131 → 누르기 132 → (새로고침 뒤) 또 누르기 132 → 취소 131 → dahye 132 → jaehoon 133', async () => {
+    seed();
+    const MY = Number(FRONT('services/api.js').match(/MY_USER_ID = (\d+)/)[1]);
+    const 보내기 = (method, userId) =>
+      fetch(`${server.base}/api${frontLikePath(method, 1, userId)}`, { method }).then((r) => r.json());
+    const 누른사람 = async () => (await getJson('/api/posts/1/likes')).body;
+
+    expect((await getJson('/api/posts/1')).body.likeCount, '시드 직후').toBe(130);
+
+    // 바꾸기 전 화면 — 숫자를 계산해 적어 보낸다(`p2-21` 판 `updateLikeCount`).
+    expect(FRONT('services/p2-21.final.api.snapshot.js'))
+      .toContain('updateLikeCount: (id, likeCount) => api.patch(`/posts/${id}`, { likeCount }),');
+    const patched = await fetch(`${server.base}/api/posts/1`, {
+      method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ likeCount: 131 }),
+    });
+    expect(patched.status).toBe(200);
+    expect(await 누른사람(), '숫자만 적어서 누가 눌렀는지는 안 남는다').toEqual([]);
+
+    expect(await 보내기('PUT', MY)).toEqual({ liked: true, likeCount: 132 });
+    expect(await 누른사람()).toEqual(['jaehoon']);
+
+    // 새로고침한 화면은 하트가 비어 있어 누르기를 한 번 더 보낸다 — 토글이었다면 131 이었다.
+    expect(await 보내기('PUT', MY)).toEqual({ liked: true, likeCount: 132 });
+    expect(await 보내기('DELETE', MY)).toEqual({ liked: false, likeCount: 131 });
+    expect(await 누른사람()).toEqual([]);
+
+    // 직접 해보기 3 — `.http` 의 그 요청 그대로 보낸 뒤, 화면에서 jaehoon 이 누른다.
+    const http = read(P('requests/posts.http'));
+    const 줄 = http.split('### 1번 게시물에 dahye가 좋아요\n')[1].split('\n')[0];
+    expect(줄).toBe('PUT http://localhost:3000/api/posts/1/likes/1');
+    const dahye = await fetch(줄.replace('PUT http://localhost:3000', server.base), { method: 'PUT' });
+    expect(await dahye.json()).toEqual({ liked: true, likeCount: 132 });
+    expect(await 보내기('PUT', MY)).toEqual({ liked: true, likeCount: 133 });
+    expect(await 누른사람()).toEqual(['dahye', 'jaehoon']);
+    // 직접 해보기 3 의 5 — 새로고침 뒤 꺼져 보이는 하트를 또 눌러도 133 그대로다.
+    expect(await 보내기('PUT', MY)).toEqual({ liked: true, likeCount: 133 });
+
+    const lec = read(P('../../part2/6-fullstack-join/p2-36-connect-front-back-lecture.md'));
+    const step7 = lec.slice(lec.indexOf('## Step 7'), lec.indexOf('## Step 8'));
+    for (const 문구 of ['130에서 131이 되고', '131이 132가 돼요', '숫자가 133이 되고', '숫자는 133 그대로이고 하트만 켜져야', '["dahye","jaehoon"]']) {
+      expect(step7, 문구).toContain(문구);
+    }
   });
 });
 
