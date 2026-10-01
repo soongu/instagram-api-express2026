@@ -421,8 +421,6 @@ describe('Step 6·7 — 좋아요는 가운데 표가 받고, 같은 쌍은 한 
     expect(await rowsOf(3), '줄은 하나뿐').toBe(1);
   });
 
-  // 🚨 누르기·취소는 count 가 0 이어도 post.update 를 부르므로 posts.updated_at(@updatedAt)은 매번 바뀐다
-  //    (2026-10-01 실측 · 옛 토글도 같았다). 교안은 「숫자가 0만큼 내려갔다」로만 말한다 — 「아무것도 안 바뀐다」 금지.
   it('🔴 취소를 두 번 보내도 결과가 같다 — 숫자가 시작값 아래로 안 내려간다', async () => {
     const first = await send('DELETE', 3, 2);
     expect(first).toEqual({ status: 200, body: { liked: false, likeCount: 76 } });
@@ -430,6 +428,20 @@ describe('Step 6·7 — 좋아요는 가운데 표가 받고, 같은 쌍은 한 
     const again = await send('DELETE', 3, 2);
     expect(again, '두 번째도 같은 답').toEqual({ status: 200, body: { liked: false, likeCount: 76 } });
     expect(await rowsOf(3), '줄도 사라진다').toBe(0);
+  });
+
+  it('🔴 좋아요는 게시물을 «고친» 것이 아니다 — 누르고 취소해도 posts.updated_at 이 그대로다', async () => {
+    // 🔀 2026-10-01 사용자 결정 — Prisma 의 post.update 로 숫자를 고치면 @updatedAt 이 「게시물을 고친 시각」을
+    //    바꾼다(p2-29 정의 「마지막으로 고친 시각」 · p2-36 「updatedAt 은 게시물을 고친 시각」과 어긋난다).
+    //    좋아요 수만 $executeRaw 로 고친다 — p2-29 ⚠️ 「SQL UPDATE 로 고치면 updated_at 은 그대로」의 회수.
+    const at = async () => (await db.query('select updated_at from posts where id = 4')).rows[0].updated_at.toISOString();
+    const before = await at();
+    await new Promise((r) => setTimeout(r, 20));
+    await send('PUT', 4, 5);
+    await send('PUT', 4, 5);
+    await send('DELETE', 4, 5);
+    await send('DELETE', 4, 5);
+    expect(await at()).toBe(before);
   });
 
   it('🚨 같은 누르기가 «동시에» 열 번 와도 줄 하나 · 숫자 +1 — 넣을지 말지를 데이터베이스가 정한다', async () => {
