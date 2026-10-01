@@ -1,7 +1,7 @@
 // ~/instagram-api/lab/homework2.js
 import { prisma } from '../db.js';
 
-// ① 탈퇴 처리 — 줄을 지우는 게 아니라 시각을 적는다.
+// ① 탈퇴 처리 — 행을 지우는 게 아니라 시각을 적는다.
 const left = await prisma.user.update({
   where: { username: 'minji' },
   data: { deactivatedAt: new Date() },

@@ -4,14 +4,14 @@ import { posts } from './data/posts.js';
 import { comments } from './data/comments.js';
 
 // 데이터 파일은 «몇 분 전» 을 적어둔다 — 언제 실행해도 방금 올라온 글처럼 들어가게.
-// 표에는 그 칸이 없으니 빼내고 작성 시각으로 바꾼다. 한 번도 안 고친 줄이라 고친 시각도 같다.
+// 테이블에는 그 컬럼이 없으니 빼내고 작성 시각으로 바꾼다. 한 번도 안 고친 행이라 고친 시각도 같다.
 function withTimes({ minutesAgo, ...row }) {
   const createdAt = new Date(Date.now() - minutesAgo * 60 * 1000);
   return { ...row, createdAt, updatedAt: createdAt };
 }
 
-// 표를 하나 만들 때마다 이 목록에 넣어야 한다.
-// 빠뜨리면 「외래 키가 걸린 표는 못 비운다」며 막힌다.
+// 테이블을 하나 만들 때마다 이 목록에 넣어야 한다.
+// 빠뜨리면 「외래 키가 걸린 테이블은 못 비운다」며 막힌다.
 await prisma.$executeRaw`
   TRUNCATE TABLE post_likes, post_images, comments, posts, users RESTART IDENTITY`;
 
@@ -57,7 +57,7 @@ await prisma.comment.createMany({
   })),
 });
 
-// 답글도 같은 comments 표에 들어간다. 다만 가리킬 원댓글이 먼저 있어야 하니 원댓글을 넣은 «뒤에» 넣는다.
+// 답글도 같은 comments 테이블에 들어간다. 다만 가리킬 원댓글이 먼저 있어야 하니 원댓글을 넣은 «뒤에» 넣는다.
 // 여기는 일부러 두 박자로 둔다 — 중첩해서 적으면 답글이 원댓글 바로 뒤에 들어가
 // 댓글 번호가 통째로 밀린다. 지금 번호를 그대로 두려고 이 차례를 지킨다.
 const createdComments = await prisma.comment.findMany({ orderBy: { id: 'asc' } });

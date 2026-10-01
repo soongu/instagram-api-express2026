@@ -18,9 +18,9 @@ for (const post of withComments) {
   console.log(`${post.id}번 ${post.postAlt} — 댓글 ${post.comments.length}개`);
 }
 
-// 답글은 원댓글과 «같은 표» 에 있다. 그래서 그냥 읽으면 둘이 섞여 나온다.
+// 답글은 원댓글과 «같은 테이블» 에 있다. 그래서 그냥 읽으면 둘이 섞여 나온다.
 const all = await prisma.comment.findMany();
-console.log(`\ncomments 표의 줄은 모두 ${all.length}개예요.`);
+console.log(`\ncomments 테이블의 행은 모두 ${all.length}개예요.`);
 
 // 원댓글만 고르려면 「가리키는 원댓글이 없는 줄」을 찾는다.
 const roots = await prisma.comment.findMany({

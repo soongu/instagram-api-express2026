@@ -3,7 +3,7 @@ import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
-// 표는 글쓴이를 번호로, 사진을 딴 표의 줄로 갖고 있지만,
+// 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
 // 화면에 필요한 것은 이름 한 줄과 사진 주소 목록이다.
 function flatten({ author, images, ...post }) {
   return {
@@ -46,7 +46,7 @@ export async function createPost({ imageUrls, ...data }) {
   try {
     const post = await prisma.post.create({ data });
 
-    // 사진은 게시물의 칸이 아니라 딴 표의 줄이라, 게시물이 생겨 번호를 받은 «뒤에» 넣는다.
+    // 사진은 게시물의 컬럼이 아니라 딴 테이블의 행이라, 게시물이 생겨 번호를 받은 «뒤에» 넣는다.
     await prisma.postImage.createMany({
       data: imageUrls.map((imageUrl, order) => ({
         postId: post.id,

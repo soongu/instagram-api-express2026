@@ -1,7 +1,7 @@
 // ~/instagram-api/lab/practice3.js
 import { bookstore } from './bookstore.js';
 
-// 책도 태그도 여럿을 갖는다. 그래서 가운데 표가 「어느 책에 어느 태그」 한 쌍을 받는다.
+// 책도 태그도 여럿을 갖는다. 그래서 가운데 테이블이 「어느 책에 어느 태그」 한 쌍을 받는다.
 await bookstore.tag.createMany({
   data: [{ name: '실무' }, { name: '고전' }, { name: '설계' }],
 });

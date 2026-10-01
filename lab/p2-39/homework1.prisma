@@ -4,7 +4,7 @@ datasource db {
 }
 
 // 동네에 사는 사람 — 로그인이 없으니 닉네임이 곧 그 사람을 가리키는 이름이다.
-// 나눔 표를 «올린 사람» 과 «받을 사람» 두 번 가리키므로 관계마다 이름을 붙인다.
+// 나눔 테이블을 «올린 사람» 과 «받을 사람» 두 번 가리키므로 관계마다 이름을 붙인다.
 model Neighbor {
   id       Int            @id @default(autoincrement())
   nickname String         @unique @db.VarChar(20)
@@ -42,7 +42,7 @@ model Share {
   @@map("shares")
 }
 
-// 「받고 싶어요」 한 줄 — 누가 어느 글에 신청했는가.
+// 「받고 싶어요」 한 행 — 누가 어느 글에 신청했는가.
 // 같은 쌍은 한 번만 들어가고, 글이 사라지면 신청도 함께 사라진다.
 model ShareRequest {
   id         Int      @id @default(autoincrement())

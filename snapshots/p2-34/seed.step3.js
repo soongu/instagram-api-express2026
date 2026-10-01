@@ -8,8 +8,8 @@ function withTimes({ minutesAgo, ...row }) {
   return { ...row, createdAt, updatedAt: createdAt };
 }
 
-// 표를 하나 만들 때마다 이 목록에 넣어야 한다.
-// 빠뜨리면 「외래 키가 걸린 표는 못 비운다」며 막힌다.
+// 테이블을 하나 만들 때마다 이 목록에 넣어야 한다.
+// 빠뜨리면 「외래 키가 걸린 테이블은 못 비운다」며 막힌다.
 await prisma.$executeRaw`
   TRUNCATE TABLE post_images, comments, posts, users RESTART IDENTITY`;
 
@@ -40,7 +40,7 @@ await prisma.post.createMany({
   })),
 });
 
-// 사진은 이제 게시물의 칸이 아니라 따로 있는 표라, 게시물을 넣은 «뒤에» 번호를 보고 넣는다.
+// 사진은 이제 게시물의 컬럼이 아니라 따로 있는 테이블이라, 게시물을 넣은 «뒤에» 번호를 보고 넣는다.
 // 넣은 차례대로 번호가 매겨지니 목록 순서가 그대로 게시물 순서다.
 const createdPosts = await prisma.post.findMany({ orderBy: { id: 'asc' } });
 

@@ -8,8 +8,8 @@ function withTimes({ minutesAgo, ...row }) {
   return { ...row, createdAt, updatedAt: createdAt };
 }
 
-// 표를 하나 만들 때마다 이 목록에 넣어야 한다.
-// 빠뜨리면 「외래 키가 걸린 표는 못 비운다」며 막힌다.
+// 테이블을 하나 만들 때마다 이 목록에 넣어야 한다.
+// 빠뜨리면 「외래 키가 걸린 테이블은 못 비운다」며 막힌다.
 await prisma.$executeRaw`
   TRUNCATE TABLE post_likes, post_images, comments, posts, users RESTART IDENTITY`;
 
@@ -55,7 +55,7 @@ await prisma.comment.createMany({
   })),
 });
 
-// 답글도 같은 comments 표에 들어간다. 다만 가리킬 원댓글이 먼저 있어야 하니 원댓글을 넣은 «뒤에» 넣는다.
+// 답글도 같은 comments 테이블에 들어간다. 다만 가리킬 원댓글이 먼저 있어야 하니 원댓글을 넣은 «뒤에» 넣는다.
 // 여기는 일부러 두 박자로 둔다 — 중첩해서 적으면 답글이 원댓글 바로 뒤에 들어가
 // 댓글 번호가 통째로 밀린다. 지금 번호를 그대로 두려고 이 차례를 지킨다.
 const createdComments = await prisma.comment.findMany({ orderBy: { id: 'asc' } });

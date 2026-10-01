@@ -431,7 +431,7 @@ describe('인용이 코드베이스와 맞는가', () => {
     expect(lec, '그 한 겹이 교안에도 있어야 한다').toContain('"properties": {');
   });
 
-  it('🔴 몸통이 100KB 를 넘으면 413 과 「보낸 내용을 읽을 수 없어요」 — Step 6 머리의 ⚠️', async () => {
+  it('🔴 요청 본문이 100KB 를 넘으면 413 과 「보낸 내용을 읽을 수 없어요」 — Step 6 머리의 ⚠️', async () => {
     const 올리기 = (kb) => fetch(`${server.base}/api/posts`, {
       method: 'POST',
       headers: JSON_HEADERS,
@@ -450,7 +450,7 @@ describe('인용이 코드베이스와 맞는가', () => {
     expect(await 큰것.json()).toEqual({ message: '보낸 내용을 읽을 수 없어요' });
 
     const lec = read(LECTURE);
-    expect(lec).toContain('100KB가 넘는 몸통은 받지 않는데');
+    expect(lec).toContain('100KB가 넘는 요청 본문은 받지 않는데');
     expect(lec).toContain('413과 함께 「보낸 내용을 읽을 수 없어요」가 오는데');
     // ⚠️ 가 Step 6 의 «첫 업로드보다 앞» 에 있어야 한다 — 큰 사진이면 첫 장면(400)부터 413 으로 바뀐다.
     const step6 = lec.slice(lec.indexOf('## Step 6'));

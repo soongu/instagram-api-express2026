@@ -9,7 +9,7 @@ const heavy = await bookstore.book.findMany({
 
 console.log(`통째로 받기 — ${Buffer.byteLength(JSON.stringify(heavy))}바이트`);
 
-// ② 개수만 세어 달라고 한다. 리뷰 줄은 한 개도 안 실려 온다.
+// ② 개수만 세어 달라고 한다. 리뷰 행은 한 개도 안 실려 온다.
 const light = await bookstore.book.findMany({
   select: { id: true, title: true, _count: { select: { reviews: true } } },
   orderBy: { id: 'asc' },

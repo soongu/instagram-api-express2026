@@ -8,7 +8,7 @@ const commentCount = await prisma.comment.count();
 
 console.log(`게시물 ${postCount}개`);
 console.log(`사진 ${imageCount}장`);
-console.log(`좋아요 줄 ${likeCount}개`);
+console.log(`좋아요 ${likeCount}개`);
 console.log(`댓글 ${commentCount}개`);
 
 await prisma.$disconnect();

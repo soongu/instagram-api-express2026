@@ -3,7 +3,7 @@ import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
-// 표에는 글쓴이가 번호로 적혀 있지만, 화면에 필요한 것은 이름과 사진이다.
+// 테이블에는 글쓴이가 번호로 적혀 있지만, 화면에 필요한 것은 이름과 사진이다.
 function withAuthor({ author, ...post }) {
   return { ...post, username: author.username, profileImage: author.profileImage };
 }

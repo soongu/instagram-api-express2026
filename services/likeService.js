@@ -6,7 +6,7 @@ import { BadRequestError, NotFoundError } from '../errors.js';
 // 「지금 눌린 상태인가」는 post_likes 에 그 쌍이 있는지로 정해진다.
 export async function toggleLike(postId, userId) {
   try {
-    // 줄을 넣고 빼는 일과 숫자를 고치는 일은 «함께» 끝나야 한다.
+    // 행을 넣고 빼는 일과 숫자를 고치는 일은 «함께» 끝나야 한다.
     // 하나라도 실패하면 둘 다 없던 일이 된다 — 무엇을 할지 정하는 읽기도 같은 트랜잭션 안에 둔다.
     return await prisma.$transaction(async (tx) => {
       const existing = await tx.postLike.findUnique({
@@ -19,7 +19,7 @@ export async function toggleLike(postId, userId) {
         await tx.postLike.create({ data: { postId, userId } });
       }
 
-      // 화면이 읽는 숫자는 따로 적어둔 칸이라, 켜고 끌 때마다 우리가 맞춰준다.
+      // 화면이 읽는 숫자는 따로 적어둔 컬럼이라, 켜고 끌 때마다 우리가 맞춰준다.
       const post = await tx.post.update({
         where: { id: postId },
         data: { likeCount: { increment: existing ? -1 : 1 } },

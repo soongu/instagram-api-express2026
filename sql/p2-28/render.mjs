@@ -48,7 +48,7 @@ for (const step of parse(readFileSync(process.env.BLOCKS ?? 'sql/p2-28/blocks.sq
     if (step.fails) { console.log(`\n<<<${n}>>> ${head}\n  ❌ 막혀야 하는데 «성공»했다 (기대 ${step.fails})`); continue; }
     if (last.rows?.length) {
       console.log(`\n<<<${n}>>> ${head}   [${last.rows.length}줄 · 칸 ${last.fields.length}개]`);
-      console.log('  칸이름: ' + last.fields.map((f) => f.name).join(', '));
+      console.log('  컬럼이름: ' + last.fields.map((f) => f.name).join(', '));
       try { console.log(fence(last.rows, last.fields)); }
       catch (e) { console.log('  ⚠️ ' + e.message + ' — 교안에는 칸 이름만 쓴다'); }
     } else {

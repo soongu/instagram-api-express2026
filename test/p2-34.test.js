@@ -140,7 +140,7 @@ describe('Step 1·2 — 사진을 표로 빼면서 다섯 장을 살려 보낸�
 describe('Step 3 — 응답에 imageUrls 가 배열로 실린다', () => {
   beforeAll(async () => {
     // 🚨 여기부터는 «고친» 시드다 — post_images 를 비우는 목록에 넣고 사진을 여러 장 넣는다.
-    //    안 고치면 TRUNCATE 가 「외래 키가 걸린 표는 못 비운다」로 막힌다.
+    //    안 고치면 TRUNCATE 가 「외래 키가 걸린 테이블은 못 비운다」로 막힌다.
     // Step 3 시점 시드 사본을 만들어 둔다(학생과 같은 깊이에서 돌게).
     mkdirSync(P('__replay__'), { recursive: true });
     writeFileSync(P('__replay__/p234-seed-step3.mjs'),
@@ -270,7 +270,7 @@ describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원�
       { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
     for (const line of [
-      'comments 표의 줄은 모두 12개예요.',
+      'comments 테이블의 행은 모두 12개예요.',
       '그중 원댓글은 9개고, 나머지는 어딘가에 달린 답글이에요.',
       '1번 "저도 가봤어요" — 답글 2개',
       '    └ 10번 "다음엔 같이 가요"',
@@ -315,7 +315,7 @@ describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원�
     const out = execFileSync(process.execPath, [P('snapshots/p2-34-final/check.js')],
       { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
 
-    expect(out).toContain('comments 표의 줄은 모두 12개예요.');
+    expect(out).toContain('comments 테이블의 행은 모두 12개예요.');
     expect(out).toContain('그중 원댓글은 9개고');
     expect(out).toContain('1번 "저도 가봤어요" — 답글 2개');
     expect(out).toContain('4번 "크루아상 색이 좋네요" — 답글 1개');
@@ -536,7 +536,7 @@ describe('직접 해보기 1~3 — 서점에도 같은 셋이 있다', () => {
   it('🔴 2 — 리뷰에 답글이 달리고 원글만 걸러 읽힌다', () => {
     const out = runPractice(2);
 
-    expect(out).toContain('리뷰 표의 줄은 모두 7개고, 원글은 6개예요.');
+    expect(out).toContain('리뷰 테이블의 행은 모두 7개고, 원글은 6개예요.');
     expect(out).toContain('1번 jaehoon — 답글 1개');
     expect(out).toContain('2번 minji — 답글 0개');
   });

@@ -3,7 +3,7 @@ import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
-// 표는 글쓴이를 번호로, 사진을 딴 표의 줄로 갖고 있지만,
+// 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
 // 화면에 필요한 것은 이름 한 줄과 사진 주소 목록이다.
 function flatten({ author, images, ...post }) {
   return {
@@ -14,7 +14,7 @@ function flatten({ author, images, ...post }) {
   };
 }
 
-// 쓸 칸만 골라서 받는다 — 안 쓰는 칸은 아예 안 실어 온다.
+// 쓸 필드만 골라서 받는다 — 안 쓰는 필드는 아예 안 실어 온다.
 // 사진은 언제나 차례대로 읽는다 — 캐러셀이 넘기는 순서가 이 차례다.
 const postFields = {
   id: true,
@@ -30,13 +30,13 @@ const postFields = {
 };
 
 export async function getPosts({ username, limit = 5, cursor }) {
-  // 한 장 더 달라고 한다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
+  // 하나 더 달라고 한다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
   const posts = await prisma.post.findMany({
     where: { author: { username } },
     select: postFields,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
-    // 커서가 오면 «그 게시물 다음»부터다. 커서가 가리키는 줄 자신은 건너뛴다.
+    // 커서가 오면 «그 게시물 다음»부터다. 커서가 가리키는 게시물은 건너뛴다.
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
 

@@ -3,7 +3,7 @@ import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
-// 표는 글쓴이를 번호로, 사진을 딴 표의 줄로 갖고 있지만,
+// 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
 // 화면에 필요한 것은 이름 한 줄과 사진 주소 목록이다.
 function flatten({ author, images, ...post }) {
   return {
@@ -14,7 +14,7 @@ function flatten({ author, images, ...post }) {
   };
 }
 
-// 쓸 칸만 골라서 받는다 — 안 쓰는 칸은 아예 안 실어 온다.
+// 쓸 필드만 골라서 받는다 — 안 쓰는 필드는 아예 안 실어 온다.
 // 사진은 언제나 차례대로 읽는다 — 캐러셀이 넘기는 순서가 이 차례다.
 const postFields = {
   id: true,

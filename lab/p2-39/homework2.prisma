@@ -13,7 +13,7 @@ model User {
   posts        Post[]
   comments     Comment[]
   likes        PostLike[]
-  // 같은 표를 두 방향으로 가리킨다 — 내가 팔로우하는 줄 / 나를 팔로우하는 줄.
+  // 같은 테이블을 두 방향으로 가리킨다 — 내가 팔로우하는 행 / 나를 팔로우하는 행.
   following    Follow[]  @relation("Following")
   followers    Follow[]  @relation("Followers")
 

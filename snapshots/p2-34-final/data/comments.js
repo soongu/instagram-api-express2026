@@ -6,7 +6,7 @@ export const comments = [
     content: '저도 가봤어요',
     likeCount: 7,
     minutesAgo: 8,
-    // 이 댓글에 달린 답글 — 같은 comments 표에 들어가고 parent_id 가 이 댓글을 가리킨다.
+    // 이 댓글에 달린 답글 — 같은 comments 테이블에 들어가고 parent_id 가 이 댓글을 가리킨다.
     replies: [
       { username: 'jaehoon', content: '다음엔 같이 가요', likeCount: 1, minutesAgo: 3 },
       { username: 'dahye', content: '저도 껴주세요', likeCount: 0, minutesAgo: 2 },

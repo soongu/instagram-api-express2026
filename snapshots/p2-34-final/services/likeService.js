@@ -20,7 +20,7 @@ export async function toggleLike(postId, userId) {
     throw error;
   }
 
-  // 화면이 읽는 숫자는 따로 적어둔 칸이라, 켜고 끌 때마다 우리가 맞춰준다.
+  // 화면이 읽는 숫자는 따로 적어둔 컬럼이라, 켜고 끌 때마다 우리가 맞춰준다.
   try {
     const post = await prisma.post.update({
       where: { id: postId },

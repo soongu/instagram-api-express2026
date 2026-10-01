@@ -94,7 +94,7 @@ function crashApp() {
 function transactionCrashApp() {
   const dir = P('__replay__/p235');
   mkdirSync(dir, { recursive: true });
-  const MARK = '      // 화면이 읽는 숫자는 따로 적어둔 칸이라, 켜고 끌 때마다 우리가 맞춰준다.';
+  const MARK = '      // 화면이 읽는 숫자는 따로 적어둔 컬럼이라, 켜고 끌 때마다 우리가 맞춰준다.';
   const src = read(P(`${S35}services/likeService.js`))
     .replace(MARK, "      throw new Error('서버가 갑자기 멈췄어요');\n\n" + MARK);
   if (!src.includes('서버가 갑자기 멈췄어요')) throw new Error('throw 를 끼울 자리를 못 찾았다');

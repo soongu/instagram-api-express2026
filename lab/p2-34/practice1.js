@@ -1,7 +1,7 @@
 // ~/instagram-api/lab/practice1.js
 import { bookstore } from './bookstore.js';
 
-// 책 하나에 사진이 여럿이니, 사진은 책의 칸이 아니라 딸린 표의 줄이다.
+// 책 하나에 사진이 여럿이니, 사진은 책의 컬럼이 아니라 딸린 테이블의 행이다.
 await bookstore.bookImage.createMany({
   data: [
     { bookId: 1, imageUrl: '/covers/clean-code-front.jpg', imgOrder: 1 },

@@ -7,7 +7,7 @@ function withAuthor({ author, ...comment }) {
   return { ...comment, username: author.username };
 }
 
-// 쓸 칸만 골라 받는다. 글쓴이에게서 필요한 것도 이름 하나뿐이다.
+// 쓸 필드만 골라 받는다. 글쓴이에게서 필요한 것도 이름 하나뿐이다.
 const commentFields = {
   id: true,
   postId: true,

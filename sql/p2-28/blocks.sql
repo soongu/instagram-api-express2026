@@ -135,9 +135,9 @@ ORDER BY b.id, r.id;
 -- @@
 SELECT count(*) AS 개수 FROM comments;
 -- @@
-SELECT count(*) AS 전체, count(content) AS 내용있는줄 FROM posts;
+SELECT count(*) AS 전체, count(content) AS 내용있는행 FROM posts;
 -- @@
-SELECT count(*) AS 별표, count(c.id) AS 칸이름
+SELECT count(*) AS 별표, count(c.id) AS 컬럼이름
 FROM posts p LEFT JOIN comments c ON c.post_id = p.id;
 
 -- ── Step 6: 묶어서 세기 ────────────────────────────────
@@ -146,7 +146,7 @@ SELECT post_id, count(*) AS 개수 FROM comments GROUP BY post_id ORDER BY post_
 -- @@fails 42803
 SELECT post_id, username, count(*) FROM comments GROUP BY post_id;
 -- @@
-SELECT p.id, p.post_alt, count(*) AS 별표, count(c.id) AS 칸이름
+SELECT p.id, p.post_alt, count(*) AS 별표, count(c.id) AS 컬럼이름
 FROM posts p LEFT JOIN comments c ON c.post_id = p.id
 GROUP BY p.id, p.post_alt
 ORDER BY p.id;
