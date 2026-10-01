@@ -67,13 +67,11 @@ Content-Type: application/json
 {
   "authorId": 3
 
-### 좋아요 켜고 끄기
-POST http://localhost:3000/api/posts/3/likes
-Content-Type: application/json
+### 좋아요 누르기
+PUT http://localhost:3000/api/posts/3/likes/2
 
-{
-  "userId": 2
-}
+### 좋아요 취소
+DELETE http://localhost:3000/api/posts/3/likes/2
 
 ### 좋아요 누른 사람들
 GET http://localhost:3000/api/posts/3/likes
@@ -82,12 +80,10 @@ GET http://localhost:3000/api/posts/3/likes
 GET http://localhost:3000/api/posts/1
 
 ### 1번 게시물에 dahye가 좋아요
-POST http://localhost:3000/api/posts/1/likes
-Content-Type: application/json
+PUT http://localhost:3000/api/posts/1/likes/1
 
-{
-  "userId": 1
-}
+### 1번 게시물에 dahye가 누른 좋아요 취소
+DELETE http://localhost:3000/api/posts/1/likes/1
 
 ### 1번 게시물 좋아요 누른 사람들
 GET http://localhost:3000/api/posts/1/likes

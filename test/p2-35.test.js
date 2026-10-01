@@ -90,26 +90,54 @@ function crashApp() {
   return '__replay__/p235/app.crash.js';
 }
 
-/** 교안 Step 2 의 코드 그대로 — 묶은 판에 `throw` 가 «묶음 안» 에 들어 있다. */
-function transactionCrashApp() {
-  const dir = P('__replay__/p235');
+/**
+ * 이 회차 최종판 `likeService.js` 를 한 군데만 바꿔 끼운 앱을 짓는다 — 라우터·앱은 최종판 그대로.
+ * 🚨 학생 파일은 안 건드린다. `__replay__` 에 사본을 짓고 그것을 띄운다.
+ */
+function variantApp(name, likeSource) {
+  const dir = P(`__replay__/p235-${name}`);
   mkdirSync(dir, { recursive: true });
-  const MARK = '      // 화면이 읽는 숫자는 따로 적어둔 컬럼이라, 켜고 끌 때마다 우리가 맞춰준다.';
-  const src = read(P(`${S35}services/likeService.js`))
-    .replace(MARK, "      throw new Error('서버가 갑자기 멈췄어요');\n\n" + MARK);
-  if (!src.includes('서버가 갑자기 멈췄어요')) throw new Error('throw 를 끼울 자리를 못 찾았다');
   const up = (t) => t
     .replace(/'\.\.\/db\.js'/g, "'../../db.js'")
-    .replace(/'\.\.\/errors\.js'/g, "'../../errors.js'");
-  writeFileSync(`${dir}/likeService.js`, up(src));
+    .replace(/'\.\.\/errors\.js'/g, "'../../errors.js'")
+    .replace(/'\.\.\/middlewares\//g, "'../../middlewares/")
+    .replace(/'\.\.\/schemas\//g, "'../../schemas/");
+  writeFileSync(`${dir}/likeService.js`, up(likeSource));
   writeFileSync(`${dir}/postService.js`, up(read(P(`${S35}services/postService.js`))));
   writeFileSync(`${dir}/posts.js`, up(read(P(`${S35}routes/posts.js`)))
-    .replace(/'\.\.\/services\//g, "'./")
-    .replace("'../middlewares/", "'../../middlewares/")
-    .replace("'../schemas/", "'../../schemas/"));
-  writeFileSync(`${dir}/app.tx.js`, read(P(APP35))
+    .replace(/'\.\.\/services\//g, "'./"));
+  writeFileSync(`${dir}/app.js`, read(P(APP35))
     .replace("'./routes/posts.js'", "'./posts.js'").replace("'./errors.js'", "'../../errors.js'"));
-  return '__replay__/p235/app.tx.js';
+  return `__replay__/p235-${name}/app.js`;
+}
+
+const CRASH = "      // 여기서 서버가 죽었다고 쳐요 — 잠깐 넣었다 뺄 한 줄이에요.\n" +
+  "      throw new Error('서버가 갑자기 멈췄어요');\n\n";
+const RETURN_LIKE = '      return changeLikeCount(tx, postId, count, true);';
+
+/** 교안 Step 2 의 코드 그대로 — 묶은 판에 `throw` 가 «묶음 안» 에 들어 있다. */
+function transactionCrashApp() {
+  const src = read(P(`${S35}services/likeService.js`));
+  if (!src.includes(RETURN_LIKE)) throw new Error('throw 를 끼울 자리를 못 찾았다');
+  return variantApp('tx', src.replace(RETURN_LIKE, CRASH + RETURN_LIKE));
+}
+
+/**
+ * 교안 Step 2 「둘째」가 말로만 하는 판 — `changeLikeCount` 가 `tx` 대신 `prisma` 로 숫자를 고친다.
+ * 그 뒤에 무언가 실패하면 행은 되돌아가고 숫자만 오른 채 남는다(Step 1 과 반대 방향).
+ */
+function leakApp() {
+  const src = read(P(`${S35}services/likeService.js`));
+  const leaked = src
+    .replace('  await tx.$executeRaw`', '  await prisma.$executeRaw`')
+    .replace(RETURN_LIKE,
+      '      const status = await changeLikeCount(tx, postId, count, true);\n' +
+      "      throw new Error('서버가 갑자기 멈췄어요');\n" +
+      '      return status;');
+  if (leaked.includes('await tx.$executeRaw') || !leaked.includes('return status;')) {
+    throw new Error('새는 판을 못 지었다');
+  }
+  return variantApp('leak', leaked);
 }
 
 beforeAll(async () => {
@@ -147,89 +175,159 @@ const stateOfPost1 = async () => {
 // ── 축 ① 두 번 쓰는 자리가 묶였는가 ──────────────────────────────────────────
 
 describe('Step 1·2 — 묶기 전에는 어긋나고, 묶은 뒤에는 안 어긋난다', () => {
+  const send = async (method, postId, userId) => {
+    const res = await fetch(`${server.base}/api/posts/${postId}/likes/${userId}`, { method });
+    return { status: res.status, body: await res.json() };
+  };
+  const updatedAtOf1 = async () =>
+    (await db.query('select updated_at from posts where id = 1')).rows[0].updated_at.getTime();
+
   it('🔴 묶기 «전» 판은 사이에서 죽으면 어긋난 채로 남는다 (교안 Step 1 의 장면)', async () => {
     await db.query('delete from post_likes');
     await db.query('update posts set like_count = 130 where id = 1');
     await bootApp(crashApp(), 3451);
 
-    const res = await fetch(`${server.base}/api/posts/1/likes`,
-      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) });
+    const res = await send('PUT', 1, 1);
 
     expect(res.status, '서버가 터진다').toBe(500);
-    // 🔴 이것이 이 회차가 고치려는 그 상태다 — 줄은 들어갔는데 숫자는 그대로.
+    expect(res.body).toEqual({ message: '서버에서 문제가 생겼어요' });
+    // 🔴 이것이 이 회차가 고치려는 그 상태다 — 행은 들어갔는데 숫자는 그대로.
     expect(await stateOfPost1()).toEqual({ likeCount: 130, likes: 1 });
 
     const likers = await fetch(`${server.base}/api/posts/1/likes`).then((r) => r.json());
     expect(likers, '누른 사람 목록에는 이미 이름이 있다').toEqual(['dahye']);
+    expect(server.tail(), '터미널에 우리가 넣은 그 메시지가 찍힌다').toContain('Error: 서버가 갑자기 멈췄어요');
   });
 
-  it('🔴 그 상태에서 «한 번 더» 누르면 숫자가 시작값보다 내려간다 (오프닝의 장면)', async () => {
-    // 앞 검사가 남긴 어긋난 상태를 그대로 이어받는다 — 죽는 줄만 뺀 판으로 띄운다.
-    await bootApp(APP35, 3452);
+  it('🔴 그 상태에서 다시 누르면 하트는 켜지는데 숫자는 그대로이고, 취소하면 시작값 아래로 내려간다 (오프닝의 장면)', async () => {
+    // 앞 검사가 남긴 어긋난 상태를 그대로 이어받는다 — 죽는 줄만 뺀 판, 곧 지난 시간 끝의 코드다.
+    await bootApp('snapshots/p2-34-final/app.js', 3452);
 
-    const again = await fetch(`${server.base}/api/posts/1/likes`,
-      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) }).then((r) => r.json());
+    const again = await send('PUT', 1, 1);
+    expect(again, '멱등한 주소라 하트는 켜진다 — 그런데 숫자는 130 그대로')
+      .toEqual({ status: 200, body: { liked: true, likeCount: 130 } });
+    expect(await stateOfPost1()).toEqual({ likeCount: 130, likes: 1 });
 
-    expect(again, '켰다고 눌렀는데 꺼지고, 숫자는 130 에서 129 로 내려간다')
-      .toEqual({ liked: false, likeCount: 129 });
+    const undo = await send('DELETE', 1, 1);
+    expect(undo, '한 번 누르고 한 번 취소했는데 130 에서 129 로')
+      .toEqual({ status: 200, body: { liked: false, likeCount: 129 } });
     expect(await stateOfPost1()).toEqual({ likeCount: 129, likes: 0 });
+
+    const lec = read(LECTURE);
+    const opening = lec.slice(0, lec.indexOf('## 🎯 학습 목표'));
+    expect(opening, '오프닝이 다시 누른 응답을 그대로 싣는다').toContain('{\n  "liked": true,\n  "likeCount": 130\n}');
+    expect(opening, '오프닝의 취소 결과').toContain('`likeCount`가 129로 와요');
+    const step1 = lec.slice(lec.indexOf('## Step 1'), lec.indexOf('## Step 2'));
+    expect(step1).toContain('`"liked": true`, `"likeCount": 130`이 와요');
+    expect(step1).toContain('`"likeCount": 129`가 와요');
   });
 
-  it('🔴 묶은 뒤에는 «같은 실패» 에도 아무것도 안 남는다', async () => {
-    await db.query('delete from post_likes');
-    await db.query('update posts set like_count = 130 where id = 1');
-
+  it('🔴 묶은 판의 모양 — 두 함수가 각각 묶여 있고, 숫자를 고치는 함수도 tx 로 쓴다', () => {
     const src = read(P(`${S35}services/likeService.js`));
-    expect(src, '$transaction 으로 묶여 있어야 한다').toContain('prisma.$transaction(async (tx) =>');
-    expect(src, '읽기도 같은 묶음 안에 있어야 한다').toMatch(/tx\.postLike\.findUnique/);
-    expect(src, '쓰기 둘 다 tx 로 가야 한다').toMatch(/tx\.post\.update/);
+    expect(src.match(/prisma\.\$transaction\(async \(tx\) =>/g), '누르기와 취소가 각각 묶인다').toHaveLength(2);
+    for (const call of ['tx.postLike.createMany', 'tx.postLike.deleteMany', 'tx.$executeRaw', 'tx.post.findUnique',
+      'changeLikeCount(tx, postId, count, true)', 'changeLikeCount(tx, postId, -count, false)']) {
+      expect(src, call).toContain(call);
+    }
+    expect(src, 'async function changeLikeCount(tx,').toContain('async function changeLikeCount(tx, postId, amount, liked)');
     expect(src, 'prisma. 로 새는 쓰기가 있으면 안 묶인 것이다')
-      .not.toMatch(/await prisma\.(postLike|post)\.(create|delete|update)/);
+      .not.toMatch(/prisma\.\$executeRaw|await prisma\.postLike\.(createMany|deleteMany)/);
   });
 
-  it('🔴 켜고 끄기가 숫자와 줄을 «함께» 움직인다', async () => {
+  it('🔴 누르기·취소가 숫자와 행을 «함께» 움직이고, 몇 번을 보내도 한 번만 움직인다', async () => {
     await db.query('delete from post_likes');
     await db.query('update posts set like_count = 130 where id = 1');
+    const before = await updatedAtOf1();
     await bootApp(APP35, 3452);
 
-    const press = (userId) => fetch(`${server.base}/api/posts/1/likes`,
-      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId }) }).then((r) => r.json());
-
-    expect(await press(1)).toEqual({ liked: true, likeCount: 131 });
+    expect(await send('PUT', 1, 1)).toEqual({ status: 200, body: { liked: true, likeCount: 131 } });
+    expect(await send('PUT', 1, 1)).toEqual({ status: 200, body: { liked: true, likeCount: 131 } });
     expect(await stateOfPost1()).toEqual({ likeCount: 131, likes: 1 });
 
-    expect(await press(1)).toEqual({ liked: false, likeCount: 130 });
+    expect(await send('DELETE', 1, 1)).toEqual({ status: 200, body: { liked: false, likeCount: 130 } });
+    expect(await send('DELETE', 1, 1)).toEqual({ status: 200, body: { liked: false, likeCount: 130 } });
     expect(await stateOfPost1()).toEqual({ likeCount: 130, likes: 0 });
+
+    // 🚨 p2-34 가 지킨 성질 — 트랜잭션 안에서도 좋아요는 게시물을 «고친» 것이 아니다.
+    expect(await updatedAtOf1(), 'tx.$executeRaw 라 updated_at 이 그대로다').toBe(before);
   });
 
-  it('🔴 없는 게시물·없는 사람은 400 이고 아무것도 안 남는다', async () => {
+  it('🔴 없는 게시물·없는 사람은 404 이고 아무것도 안 남는다 — 트랜잭션 밖으로 다시 던져진 P2003 을 받는다', async () => {
     await db.query('delete from post_likes');
     await db.query('update posts set like_count = 130 where id = 1');
 
-    for (const [path, body] of [['999', { userId: 1 }], ['1', { userId: 999 }]]) {
-      const res = await fetch(`${server.base}/api/posts/${path}/likes`,
-        { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
-      expect(res.status, `${path} / ${JSON.stringify(body)}`).toBe(400);
-    }
-
+    expect(await send('PUT', 999, 1)).toEqual({ status: 404, body: { message: '그런 게시물이나 사용자는 없어요' } });
+    expect(await send('PUT', 1, 999)).toEqual({ status: 404, body: { message: '그런 게시물이나 사용자는 없어요' } });
+    expect(await send('DELETE', 999, 1)).toEqual({ status: 404, body: { message: '그런 게시물은 없어요' } });
     expect(await stateOfPost1()).toEqual({ likeCount: 130, likes: 0 });
+
+    expect(read(LECTURE)).toContain('없는 사람 번호로 누를 때 나는 `P2003`도 전과 똑같이 받아 404로 바꿀 수 있어요');
+  });
+
+  it('🔴 「둘째」 — 숫자를 고치는 함수가 tx 대신 prisma 를 쓰면, 뒤에서 실패할 때 숫자만 오른 채 남는다', async () => {
+    await db.query('delete from post_likes');
+    await db.query('update posts set like_count = 130 where id = 1');
+    await bootApp(leakApp(), 3462);
+
+    const res = await send('PUT', 1, 1);
+    expect(res.status).toBe(500);
+    expect(await stateOfPost1(), '행은 되돌아가고 숫자만 131 — Step 1 과 반대 방향').toEqual({ likeCount: 131, likes: 0 });
+    expect(read(LECTURE)).toContain('행은 되돌아가고 숫자만 오른 채 남아서, Step 1과 반대 방향으로 어긋나요');
+  });
+
+  it('🔴 같은 누르기가 동시에 열 번 와도 행 하나 · 숫자 +1 — 취소 열 번도 −1 한 번', async () => {
+    await db.query('delete from post_likes');
+    await db.query('update posts set like_count = 130 where id = 1');
+    await bootApp(APP35, 3452);
+
+    const puts = await Promise.all(Array.from({ length: 10 }, () => send('PUT', 1, 1)));
+    for (const r of puts) expect(r).toEqual({ status: 200, body: { liked: true, likeCount: 131 } });
+    expect(await stateOfPost1()).toEqual({ likeCount: 131, likes: 1 });
+
+    const dels = await Promise.all(Array.from({ length: 10 }, () => send('DELETE', 1, 1)));
+    for (const r of dels) expect(r).toEqual({ status: 200, body: { liked: false, likeCount: 130 } });
+    expect(await stateOfPost1()).toEqual({ likeCount: 130, likes: 0 });
+  });
+
+  it('🔴 늦게 온 누르기는 먼저 온 트랜잭션이 끝날 때까지 «기다렸다가» 건너뛴다 (직접 해보기 1 ⚠️)', async () => {
+    await db.query('delete from post_likes');
+    await db.query('update posts set like_count = 130 where id = 1');
+
+    // 먼저 온 쪽 — 행을 넣고 숫자를 올렸는데 아직 커밋 전이다.
+    const first = new pg.Client({ ...ADMIN, database: 'p235_gate' });
+    await first.connect();
+    await first.query('BEGIN');
+    await first.query('insert into post_likes (post_id, user_id) values (1, 1)');
+    await first.query('update posts set like_count = like_count + 1 where id = 1');
+
+    let settled = false;
+    const late = send('PUT', 1, 1).then((r) => { settled = true; return r; });
+    await new Promise((r) => setTimeout(r, 1000));
+    expect(settled, '먼저 온 쪽이 안 끝났으니 늦게 온 쪽은 기다린다').toBe(false);
+
+    await first.query('COMMIT');
+    await first.end();
+    expect(await late, '행이 이미 있으니 count 0 — 숫자를 한 번 더 안 올린다')
+      .toEqual({ status: 200, body: { liked: true, likeCount: 131 } });
+    expect(await stateOfPost1()).toEqual({ likeCount: 131, likes: 1 });
+
+    expect(read(LECTURE)).toContain('늦게 온 쪽은 먼저 온 쪽의 트랜잭션이 끝날 때까지 기다렸다가 행이 이미 있는 것을 보고 건너뛰어요');
+    expect(read(LECTURE), '옛 판의 거짓 — skipDuplicates 는 P2002 를 안 낸다').not.toContain('P2002`로 막히고');
   });
 });
 
 // ── 🚨 교안이 «시킨 차례대로» 따라가면 적힌 결과가 나오는가 ──────────────────
 //
 // 🚨 이 축이 없어서 진짜 결함이 통과했다. 위 축 ① 은 검사마다 DB 를 되돌려놓고 재는데,
-//    «학생은 안 되돌린다». Step 1 이 남긴 좋아요 줄을 그대로 두고 Step 2 를 하면
-//    `existing` 이 «있는» 것으로 읽혀 delete 로 가고, 교안이 적어둔 세 수치가 전부
-//    어긋난다(130·[] → 130·["dahye"] · liked:true/131 → liked:false/129).
+//    «학생은 안 되돌린다». Step 1 이 남긴 상태(취소까지 따라가면 129 · 행 0)를 그대로 두고
+//    Step 2 를 하면 교안이 적어둔 수치가 전부 하나씩 어긋난다(130 → 129 · 131 → 130).
 //    「각 Step 이 도는가」와 「Step 을 이어서 하면 도는가」는 다른 질문이다.
 
 describe('Step 1 → Step 2 를 «이어서» 하면 교안의 수치가 그대로 나온다', () => {
-  it('🔴 Step 1 이 어긋난 줄을 남기고, 교안이 그것을 치우라고 말한다', async () => {
+  it('🔴 Step 1 이 어긋난 상태를 남기고, 교안이 그것을 치우라고 말한다', async () => {
     seedLive();
     await bootApp(crashApp(), 3458);
-    await fetch(`${server.base}/api/posts/1/likes`,
-      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) });
+    await fetch(`${server.base}/api/posts/1/likes/1`, { method: 'PUT' });
     expect(await stateOfPost1()).toEqual({ likeCount: 130, likes: 1 });
 
     // 교안이 이 자리에서 «치우라»고 말해야 한다 — 안 말하면 다음 Step 이 통째로 어긋난다.
@@ -244,21 +342,23 @@ describe('Step 1 → Step 2 를 «이어서» 하면 교안의 수치가 그대�
 
     // ① throw 가 살아 있는 묶은 판 — 롤백되어 아무것도 안 남는다
     await bootApp(transactionCrashApp(), 3459);
-    const res = await fetch(`${server.base}/api/posts/1/likes`,
-      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) });
+    const res = await fetch(`${server.base}/api/posts/1/likes/1`, { method: 'PUT' });
     expect(res.status).toBe(500);
-    expect(await stateOfPost1(), '묶었으니 줄도 숫자도 안 남는다').toEqual({ likeCount: 130, likes: 0 });
+    expect(await stateOfPost1(), '묶었으니 행도 숫자도 안 남는다').toEqual({ likeCount: 130, likes: 0 });
     expect(lec, '롤백 뒤 남은 것').toContain('`likeCount`는 130 그대로이고, 누른 사람 목록은 빈 목록(`[]`)이에요');
 
     // ② throw 를 지운 판 — 교안이 적은 값 그대로
     await bootApp(APP35, 3460);
-    const ok = await fetch(`${server.base}/api/posts/1/likes`,
-      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: 1 }) }).then((r) => r.json());
+    const ok = await fetch(`${server.base}/api/posts/1/likes/1`, { method: 'PUT' }).then((r) => r.json());
     expect(ok).toEqual({ liked: true, likeCount: 131 });
     expect(lec, '교안이 적어둔 값과 같아야 한다').toContain('{\n  "liked": true,\n  "likeCount": 131\n}');
 
     const likers = await fetch(`${server.base}/api/posts/1/likes`).then((r) => r.json());
     expect(likers).toEqual(['dahye']);
+
+    const undo = await fetch(`${server.base}/api/posts/1/likes/1`, { method: 'DELETE' }).then((r) => r.json());
+    expect(undo).toEqual({ liked: false, likeCount: 130 });
+    expect(lec).toContain('행과 숫자가 함께 원래대로 돌아와서 `likeCount`가 130으로 와요');
   });
 });
 
@@ -398,6 +498,25 @@ describe('Step 5·8 — 하나씩 읽기와 함께 읽기, 그리고 개수만 �
       expect(out).toContain('쿼리 11번');
       expect(out).toContain('쿼리 3번');
     }
+  });
+
+  it('🔴 따로 읽는 관계가 글쓴이 하나면 1 + 5 = 6번이다 — 교안이 N+1 의 N 을 풀어 준 그 셈', () => {
+    seedLive();
+    mkdirSync(P('__replay__'), { recursive: true });
+    writeFileSync(P('__replay__/p235-n-author-only.js'), read(P(`${S35}check.js`))
+      .replace('  await prisma.postImage.findMany({ where: { postId: post.id } });\n', ''));
+    const out = execFileSync(process.execPath, [P('__replay__/p235-n-author-only.js')],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+    expect(out).toContain('하나씩 읽기 — 게시물 5개에 쿼리 6번');
+    expect(read(LECTURE)).toContain('따로 읽는 관계가 글쓴이 하나였다면 1 + 5 = 6번이었을 거예요');
+  });
+
+  it('🔴 Step 3 배열 꼴 — 두 사진의 차례가 함께 바뀐다(교안 코드 그대로)', () => {
+    seedLive();
+    const out = execFileSync(process.execPath, [P('snapshots/p2-35/array-form.js')],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+    expect(out.trim().split('\n')).toEqual(['1. 2번 사진', '2. 1번 사진', '3. 3번 사진']);
+    seedLive();
   });
 
   it('🔴 include 의 쿼리 수는 «줄 수» 가 아니라 «관계 가지 수» 를 따라간다', async () => {
@@ -600,17 +719,49 @@ describe('직접 해보기 — 서점에도 같은 셋을', () => {
     expect(r.rows[0], '재고와 품절 표시가 «함께» 움직인다').toEqual({ stock: 0, is_sold_out: true });
   });
 
-  it('🔴 2 — 책과 표지가 함께 생기고, 막히면 책도 안 남는다', async () => {
+  it('🔴 2 — 책과 표지가 함께 생기고, 태그에서 막히면 «먼저 들어간» 책과 표지까지 되돌아간다', async () => {
+    const seqBefore = (await book.query('select last_value::int v, is_called from books_id_seq')).rows[0];
     const out = runPractice(2);
 
     expect(out).toContain('실용주의 프로그래머 — 사진 2장');
     expect(out).toContain('1. /covers/pragmatic-front.jpg');
     expect(out).toContain('2. /covers/pragmatic-back.jpg');
     expect(out).toContain('막혔어요: P2003');
-    expect(out).toContain('책도 사진도 안 남았어요');
+    expect(out).toContain('남은 책 0권, 남은 표지 0장');
 
     const r = await book.query("select count(*)::int c from books where title = '안 만들어질 책'");
     expect(r.rows[0].c).toBe(0);
+    // 🚨 「책이 정말로 먼저 들어갔다가 되돌아갔다」의 근거 — 책 번호를 «둘» 받았다(실용주의 하나 + 되돌아간 책 하나).
+    //    지은이 999 판(옛 실습)은 책 INSERT 자체가 막혀 되돌릴 것이 없었다(두 낭독이 함께 짚었다).
+    const seqAfter = (await book.query('select last_value::int v from books_id_seq')).rows[0].v;
+    expect(seqAfter - (seqBefore.is_called ? seqBefore.v : seqBefore.v - 1), '번호를 둘 받았다').toBe(2);
+
+    const lec = read(LECTURE);
+    expect(lec).toContain('남은 책 0권, 남은 표지 0장');
+    expect(lec).toContain('「남은 책 1권, 남은 표지 1장」이 찍혔을 거예요');
+  });
+
+  it('🔴 2 — 중첩 쓰기 없이 나눠 쓴 판은 같은 P2003 에도 책과 표지가 남는다 (해설이 말하는 그 판)', async () => {
+    mkdirSync(P('__replay__'), { recursive: true });
+    writeFileSync(P('__replay__/p235-practice2-split.js'), [
+      "import { bookstore } from './p235-bookstore.js';",
+      'try {',
+      "  const made = await bookstore.book.create({ data: { title: '안 만들어질 책', price: 10000, authorId: 1,",
+      "    images: { create: [{ imageUrl: '/covers/nope.jpg', imgOrder: 1 }] } } });",
+      '  await bookstore.bookTag.create({ data: { bookId: made.id, tagId: 999 } });',
+      "} catch (error) { console.log(`막혔어요: ${error.code}`); }",
+      "const leftBooks = await bookstore.book.count({ where: { title: '안 만들어질 책' } });",
+      "const leftCovers = await bookstore.bookImage.count({ where: { imageUrl: '/covers/nope.jpg' } });",
+      'console.log(`남은 책 ${leftBooks}권, 남은 표지 ${leftCovers}장`);',
+      'await bookstore.$disconnect();',
+    ].join('\n'));
+    const out = execFileSync(process.execPath, [P('__replay__/p235-practice2-split.js')],
+      { cwd: P('.'), encoding: 'utf8', env: { ...process.env, BOOKSTORE_URL: BOOK_GATE_URL } });
+    expect(out).toContain('막혔어요: P2003');
+    expect(out).toContain('남은 책 1권, 남은 표지 1장');
+
+    // 다음 실습(바이트 수)을 위해 남은 것을 치운다 — 해설 숫자는 «실습 2 를 한 번» 한 상태다.
+    await book.query("delete from books where title = '안 만들어질 책'");
   });
 
   it('🔴 3 — 개수만 받으면 훨씬 가볍다', () => {
@@ -713,6 +864,131 @@ describe('과제 [기초]·[응용] — 답안이 실제로 돈다', () => {
     expect(src, '숫자 고치기도 같은 묶음 안이어야 한다').toMatch(/tx\.post\.update/);
   });
 
+  // ── 요구사항 6·7 — 「묶였는지」 확인이 틀린 판을 가려내는가 ─────────────────
+  // 🚨 2026-10-01 학생 낭독 FAIL — 옛 요구사항은 `throw` 를 «트랜잭션 함수의 마지막 return 앞» 에 두게 했다.
+  //    숫자를 고치는 코드를 트랜잭션 «뒤» 에 둔 판은 그 throw 에 막혀 숫자 고치는 데까지 못 가서 3·3 으로 통과했다.
+  //    지금 요구사항은 «숫자를 고치는 if 블록 다음 줄» 이다 — 맞는 판에서는 같은 자리(return 앞)이고,
+  //    트랜잭션 뒤에 둔 판에서는 커밋 뒤라 두 숫자가 4 로 바뀌어 걸린다.
+  const THROW = "      throw new Error('서버가 갑자기 멈췄어요');\n";
+  const CREATE_UPDATE = [
+    '      if (!parentId) {',
+    '        await tx.post.update({',
+    '          where: { id: created.postId },',
+    '          data: { commentCount: { increment: 1 } },',
+    '        });',
+    '      }',
+    '',
+    '      return created;',
+    '    });',
+  ].join('\n');
+  const REMOVE_UPDATE = [
+    '      if (!deleted.parentId) {',
+    '        await tx.post.update({',
+    '          where: { id: deleted.postId },',
+    '          data: { commentCount: { decrement: 1 } },',
+    '        });',
+    '      }',
+    '',
+    '      return deleted;',
+    '    });',
+  ].join('\n');
+  const outsideCreate = (tail) => [
+    '      return created;', '    });', '',
+    '    if (!parentId) {', '      await prisma.post.update({', '        where: { id: comment.postId },',
+    '        data: { commentCount: { increment: 1 } },', '      });', '    }', tail,
+  ].join('\n');
+  const outsideRemove = (tail) => [
+    '      return deleted;', '    });', '',
+    '    if (!comment.parentId) {', '      await prisma.post.update({', '        where: { id: comment.postId },',
+    '        data: { commentCount: { decrement: 1 } },', '      });', '    }', tail,
+  ].join('\n');
+
+  const variant = (name, transform) => {
+    const src = read(P('lab/p2-35/commentService.js'));
+    for (const block of [CREATE_UPDATE, REMOVE_UPDATE]) {
+      if (!src.includes(block)) throw new Error(`${name} — 바꿀 자리를 못 찾았다`);
+    }
+    const out = transform(src);
+    if (out === src) throw new Error(`${name} — 바뀐 것이 없다`);
+    mkdirSync(P('__replay__/p235-variants'), { recursive: true });
+    writeFileSync(P(`__replay__/p235-variants/${name}.js`), out);
+    return `__replay__/p235-variants/${name}.js`;
+  };
+  // 교안 요구사항 6·7 대로 — 숫자를 고치는 if 블록이 끝난 바로 다음 줄에 throw.
+  const throwAfterIf = (src) => src
+    .replace(CREATE_UPDATE, CREATE_UPDATE.replace('      return created;', THROW + '      return created;'))
+    .replace(REMOVE_UPDATE, REMOVE_UPDATE.replace('      return deleted;', THROW + '      return deleted;'));
+
+  const runRound = async (servicePath, port) => {
+    seedLive();
+    labCopy(servicePath, port);
+    await bootApp('__replay__/p235-homework1.js', port, { PORT: undefined });
+    const made = await fetch(`http://127.0.0.1:${port}/api/comments`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ postId: 1, authorId: 1, content: '새 원댓글' }),
+    });
+    const afterCreate = { status: made.status, ...(await countOf(1)) };
+    seedLive();
+    const gone = await fetch(`http://127.0.0.1:${port}/api/comments/1`, { method: 'DELETE' });
+    const one = (await db.query('select count(*)::int c from comments where id = 1')).rows[0].c;
+    return { afterCreate, afterRemove: { status: gone.status, ...(await countOf(1)), 원댓글1번: one } };
+  };
+
+  it('🔴 [응용] 요구사항 6·7 — 맞게 묶은 판은 500 에 3·3 그대로, 1번 원댓글도 남는다', async () => {
+    const r = await runRound(variant('correct', throwAfterIf), 4022);
+    expect(r.afterCreate).toEqual({ status: 500, 적힌값: 3, 실제원댓글: 3 });
+    expect(r.afterRemove).toEqual({ status: 500, 적힌값: 3, 실제원댓글: 3, 원댓글1번: 1 });
+  });
+
+  it('🔴 [응용] 요구사항 6·7 — tx 대신 prisma 로 고친 판은 4·3 / 2·3 으로 걸린다', async () => {
+    const r = await runRound(variant('prisma-inside', (s) => throwAfterIf(s)
+      .replaceAll('await tx.post.update({', 'await prisma.post.update({')), 4023);
+    expect(r.afterCreate).toEqual({ status: 500, 적힌값: 4, 실제원댓글: 3 });
+    expect(r.afterRemove).toEqual({ status: 500, 적힌값: 2, 실제원댓글: 3, 원댓글1번: 1 });
+    const ans = read(ANSWERS);
+    expect(ans).toContain('`comment_count`는 4이고 실제 원댓글은 3으로 어긋나요');
+    expect(ans).toContain('`comment_count`만 2로 내려가서 어긋나고');
+  });
+
+  it('🔴 [응용] 요구사항 6·7 — 숫자 고치기를 트랜잭션 «뒤» 에 둔 판은 4·4 / 2·2 로 걸린다', async () => {
+    const r = await runRound(variant('outside', (s) => s
+      .replace(CREATE_UPDATE, outsideCreate("    throw new Error('서버가 갑자기 멈췄어요');"))
+      .replace(REMOVE_UPDATE, outsideRemove("    throw new Error('서버가 갑자기 멈췄어요');"))), 4024);
+    expect(r.afterCreate).toEqual({ status: 500, 적힌값: 4, 실제원댓글: 4 });
+    expect(r.afterRemove).toEqual({ status: 500, 적힌값: 2, 실제원댓글: 2, 원댓글1번: 0 });
+    const ans = read(ANSWERS);
+    expect(ans).toContain('500 에러가 나는데도 두 숫자가 4로 바뀌어 있어요');
+    expect(ans).toContain('댓글이 지워지고 두 숫자가 2로 바뀌어 있어요');
+  });
+
+  it('🚨 [응용] 옛 요구사항(트랜잭션 함수 맨 끝의 throw)은 그 «뒤에 둔» 판을 못 가려냈다 — 답안이 그 이유를 말한다', async () => {
+    const r = await runRound(variant('outside-old-check', (s) => s
+      .replace(CREATE_UPDATE, outsideCreate('').replace('      return created;', THROW + '      return created;'))
+      .replace(REMOVE_UPDATE, outsideRemove('').replace('      return deleted;', THROW + '      return deleted;'))), 4025);
+    expect(r.afterCreate, '숫자 고치는 데까지 못 가서 맞는 판처럼 보인다').toEqual({ status: 500, 적힌값: 3, 실제원댓글: 3 });
+    expect(read(ANSWERS)).toContain('두 번째 경우는 `throw`를 트랜잭션 함수의 맨 끝에 넣으면 못 잡아요');
+    expect(read(LECTURE)).toContain('숫자를 고치는 `if` 블록이 끝난 바로 다음 줄에 Step 2에서 쓴 `throw` 한 줄을 넣고');
+  });
+
+  it('🔴 [기초] 만들기 쪽 select 에서 author 를 빠뜨리면 목록·상세는 같아도 만들기가 500 이다', async () => {
+    seedLive();
+    const src = read(P('snapshots/p2-35/commentService.select-only.js'));
+    // commentFields 는 목록에도 쓰이니, 만들기 쪽만 «따로» 틀린 판을 짓는다.
+    const createOnly = src.replace(
+      /(prisma\.comment\.create\(\{\n\s+data: \{ \.\.\.data, parentId \},\n\s+)select: commentFields,/,
+      '$1select: { id: true, postId: true, content: true, parentId: true },');
+    expect(createOnly, '만들기의 select 를 못 바꿨다').not.toBe(src);
+    mkdirSync(P('__replay__/p235-variants'), { recursive: true });
+    writeFileSync(P('__replay__/p235-variants/create-no-author.js'), createOnly);
+    labCopy('__replay__/p235-variants/create-no-author.js', 4026);
+    await bootApp('__replay__/p235-homework1.js', 4026, { PORT: undefined });
+    const res = await fetch('http://127.0.0.1:4026/api/comments', {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ postId: 1, authorId: 1, content: '새 원댓글' }),
+    });
+    expect(res.status).toBe(500);
+    expect(read(ANSWERS)).toContain('`withAuthor`가 `username`을 못 꺼내서 500 에러가 나요');
+  });
+
   it('🔴 homework2 의 보고표가 두 숫자를 나란히 찍는다', () => {
     seedLive();
     const out = execFileSync(process.execPath, [P('__replay__/p235-homework2.js')],
@@ -721,6 +997,10 @@ describe('과제 [기초]·[응용] — 답안이 실제로 돈다', () => {
     expect(out).toContain('id   comment_count   실제 원댓글');
     expect(out).toContain('    1               3             3');
     expect(out).toContain('    4               0             0');
+    // 🚨 답안이 싣는 출력과 «글자 그대로» — 옛 판은 제목 앞에 빈 줄을 찍었는데 답안은 그 줄을 안 실었다(정독).
+    const ans = read(ANSWERS);
+    const block = ans.slice(ans.indexOf('```bash\n지금 상태') + 8, ans.indexOf('```', ans.indexOf('```bash\n지금 상태') + 8));
+    expect(out).toBe(block);
   });
 });
 
@@ -735,10 +1015,7 @@ describe('인용이 코드베이스와 맞는가', () => {
     ...['services/postService.js', 'services/likeService.js', 'seed.js', 'check.js',
       'db.js', 'errors.js', 'routes/posts.js', 'schemas/postSchema.js'].map((f) => `${S35}${f}`),
     // 교안이 「지난 시간에 쓴 것」으로 싣는 판 — 그 시점 스냅숏이 출처다.
-    // 🚨 임시(2026-10-01) — p2-34 가 좋아요를 PUT·DELETE 로 나눴는데 이 회차 교안은 아직 토글을 인용한다.
-    //    p2-35 세션이 교안을 고치면서 이 줄을 'snapshots/p2-34-final/services/likeService.js' 로 되돌린다
-    //    (계획 progress/like-split-plan.md).
-    'snapshots/p2-34/likeService.toggle.js',
+    'snapshots/p2-34-final/services/likeService.js',
     'snapshots/p2-34-final/services/postService.js',
     // Step 1 이 «잠깐 넣었다 뺄» 한 줄 · Step 4 시점 판 · Step 6 의 로그 스위치
     'snapshots/p2-35/likeService.crash.js',
@@ -756,6 +1033,18 @@ describe('인용이 코드베이스와 맞는가', () => {
     'lab/p2-35/practice1.js', 'lab/p2-35/practice2.js', 'lab/p2-35/practice3.js',
     'lab/p2-35/bookstore.js',
   ].map((f) => read(P(f)));
+
+  /** 언어 없는 펜스의 내용 — 여는 줄과 닫는 줄을 짝지어 센다(정규식으로 짝지으면 닫는 줄을 여는 줄로 읽는다). */
+  const bareFences = (text) => {
+    const out = [];
+    let open = null; let buf = [];
+    for (const line of text.split('\n')) {
+      if (line.startsWith('```')) {
+        if (open === null) { open = line.slice(3); buf = []; } else { if (open === '') out.push(buf.join('\n')); open = null; }
+      } else if (open !== null) buf.push(line);
+    }
+    return out;
+  };
 
   const squash = (t) => t.split('\n').map((l) => l.trim().replace(/\s+/g, ' ')).join('\n');
 
@@ -815,26 +1104,34 @@ describe('인용이 코드베이스와 맞는가', () => {
     // 그리고 select 판에서 사라진 칸이 실제로 사라졌는지.
     expect(withInclude[1]).toContain('deactivated_at');
     expect(withSelect[1], 'select 로 바꾸면 안 쓰는 칸이 빠진다').not.toContain('deactivated_at');
-    // 🚨 교안 Step 7 이 「게시물 쿼리는 칸 8개를 그대로 골랐으니 안 바뀌어서 뺐다」고 한다.
+    // 🚨 교안 Step 7 이 「게시물 쿼리는 컬럼 8개를 그대로 골라서 전과 같으니 달라진 SQL 2개만 실었다」고 한다.
     //    postFields 가 칸 하나라도 빠뜨리면(audit 전 판이 updatedAt 을 몰랐다) 이 줄이 달라진다.
     expect(withSelect[0], '게시물 쿼리는 include 판과 글자 그대로 같다').toBe(withInclude[0]);
-    expect(lec).toContain('게시물 쿼리는 컬럼 8개를 그대로 골랐으니 안 바뀌어서 뺐고');
+    expect(lec).toContain('게시물 쿼리는 컬럼 8개를 그대로 골라서 전과 같으니');
   });
 
-  it('🔴 교안이 더하라고 한 `.http` 요청 셋이 코드베이스에도 있다', () => {
+  it('🔴 교안이 더하라고 한 `.http` 요청 4개가 코드베이스에도 있다', () => {
     // 🚨 이 축이 없어서 교안이 「posts.http 에서 좋아요를 눌러봐요」라고 했는데
     //    그 파일에는 «3번 게시물 · userId 2» 만 있었다. 그대로 누르면 이 회차 장면이
     //    한 줄도 재현되지 않는다(3번은 like_count 76 이고 누르는 사람도 다르다).
-    const http = read(P('requests/posts.http'));
-    for (const line of [
-      'GET http://localhost:3000/api/posts/1',
-      'POST http://localhost:3000/api/posts/1/likes',
-      'GET http://localhost:3000/api/posts/1/likes',
-    ]) expect(http, line).toContain(line);
-    expect(http, '누르는 사람은 dahye(1) 여야 한다').toMatch(/posts\/1\/likes[\s\S]{0,80}"userId": 1/);
+    // 🔀 2026-10-01 — 좋아요가 PUT·DELETE 로 나뉘어(p2-34) 요청이 넷이 됐다. 주소 끝의 1 이 dahye.
+    const lec = read(LECTURE);
+    for (const http of [read(P('requests/posts.http')), read(P('snapshots/p2-35.posts.http'))]) {
+      for (const q of bareFences(lec).filter((f) => f.startsWith('### 1번 게시물'))) {
+        expect(http, q.split('\n')[0]).toContain(q);
+      }
+      for (const line of [
+        'GET http://localhost:3000/api/posts/1',
+        'PUT http://localhost:3000/api/posts/1/likes/1',
+        'DELETE http://localhost:3000/api/posts/1/likes/1',
+        'GET http://localhost:3000/api/posts/1/likes',
+      ]) expect(http, line).toContain(line);
+      expect(http, '옛 토글 요청이 남으면 404 다').not.toMatch(/POST http:\/\/localhost:3000\/api\/posts\/\d+\/likes/);
+    }
+    expect(lec, '주소 끝의 1 이 누구인지 말한다').toContain('주소 끝의 1은 `dahye`의 번호예요');
 
-    // 교안이 그 셋을 «더하라고» 말하는지도 함께 본다.
-    expect(read(LECTURE), '더하라는 안내').toMatch(/`requests\/posts\.http` 맨 아래에 요청 셋을 더해/);
+    // 교안이 그 넷을 «더하라고» 말하는지도 함께 본다.
+    expect(lec, '더하라는 안내').toMatch(/`requests\/posts\.http` 맨 아래에 요청 4개를 더해/);
   });
 
   it('🔴 Step 8 이 `$disconnect` 를 남기라고 말한다 — 안 그러면 10초 멈춘다', () => {

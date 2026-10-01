@@ -21,7 +21,7 @@ for (const post of posts) {
 
 console.log(`하나씩 읽기 — 게시물 ${posts.length}개에 쿼리 ${sent}번`);
 
-// ② 함께 읽기 — 똑같은 것을 한 번의 부탁으로.
+// ② 함께 읽기 — 똑같은 것을 Prisma 호출 한 번으로.
 sent = 0;
 await prisma.post.findMany({ include: { author: true, images: true } });
 

@@ -18,8 +18,3 @@ export const postCreateSchema = z.object({
 export const postUpdateSchema = z
   .object({ ...postFields, likeCount: z.number().int().nonnegative() })
   .partial();
-
-// 좋아요는 「누가」 눌렀는지만 있으면 된다 — 그 「누가」는 로그인을 배우면 토큰에서 온다.
-export const likeSchema = z.object({
-  userId: z.number().int().positive(),
-});

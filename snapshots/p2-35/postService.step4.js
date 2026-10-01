@@ -44,7 +44,7 @@ export async function getPost(id) {
 
 export async function createPost({ imageUrls, ...data }) {
   try {
-    // 게시물과 사진을 «한 번의 부탁» 으로 만든다.
+    // 게시물과 사진을 `create` 한 번으로 만든다.
     // 사진이 없는 게시물이 잠깐이라도 남는 일이 아예 안 생긴다.
     const post = await prisma.post.create({
       data: {

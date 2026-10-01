@@ -1,7 +1,7 @@
 // ~/instagram-api/lab/practice2.js
 import { bookstore } from './bookstore.js';
 
-// 책과 표지 사진을 «한 번의 부탁» 으로 만든다.
+// 책과 표지 사진을 `create` 한 번으로 만든다.
 const book = await bookstore.book.create({
   data: {
     title: '실용주의 프로그래머',
@@ -24,22 +24,24 @@ for (const image of book.images) {
   console.log(`    ${image.imgOrder}. ${image.imageUrl}`);
 }
 
-// 없는 지은이 번호를 적어 일부러 막아본다. 사진은 멀쩡한데도 책이 안 만들어진다.
+// 없는 태그 번호를 적어 일부러 막아본다. 책과 표지가 먼저 들어간 다음 태그에서 막힌다.
 try {
   await bookstore.book.create({
     data: {
       title: '안 만들어질 책',
       price: 10000,
-      authorId: 999,
+      authorId: 1,
       images: { create: [{ imageUrl: '/covers/nope.jpg', imgOrder: 1 }] },
+      tags: { create: [{ tagId: 999 }] },
     },
   });
 } catch (error) {
   console.log(`막혔어요: ${error.code}`);
 }
 
-const left = await bookstore.book.findFirst({ where: { title: '안 만들어질 책' } });
+const leftBooks = await bookstore.book.count({ where: { title: '안 만들어질 책' } });
+const leftCovers = await bookstore.bookImage.count({ where: { imageUrl: '/covers/nope.jpg' } });
 
-console.log(left ? '책이 남았어요' : '책도 사진도 안 남았어요');
+console.log(`남은 책 ${leftBooks}권, 남은 표지 ${leftCovers}장`);
 
 await bookstore.$disconnect();

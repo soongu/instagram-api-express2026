@@ -262,20 +262,28 @@ describe('Step 5·6 — 프론트가 보내는 몸통이 서버가 받는 모양
     expect(res.status).toBe(400);
   });
 
-  it('🔴 좋아요는 `userId` 하나로 켜지고 꺼진다', async () => {
+  // 🚨 임시(2026-10-01) — `p2-34` 가 좋아요를 `PUT`·`DELETE /posts/:id/likes/:userId` 로 나눴고 `p2-35` 가
+  //    라이브 백엔드를 바꿨다. 이 회차 교안과 프론트(`postApi.toggleLike` → `POST`)는 아직 옛 토글이라
+  //    «지금 라이브 프론트로 하트를 누르면 404» 다. `p2-36` 세션이 교안·프론트를 `likePost`·`unlikePost` 로
+  //    고치면서 이 축을 프론트 api.js 의 두 함수로 묶고, 아래 덫(옛 주소가 남아 있다) 줄을 지운다
+  //    (계획 progress/like-split-plan.md).
+  it('🔴 좋아요는 누르기(PUT)와 취소(DELETE)로 나뉘어 있다 — 프론트가 쓰는 사용자 번호로', async () => {
     const MY = Number(FRONT('services/api.js').match(/MY_USER_ID = (\d+)/)[1]);
-    const 누르기 = () => fetch(`${server.base}/api/posts/1/likes`, {
-      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: MY }),
-    }).then((r) => r.json());
+    const 보내기 = (method) => fetch(`${server.base}/api/posts/1/likes/${MY}`, { method }).then((r) => r.json());
 
     const 처음 = (await getJson('/api/posts/1')).body.likeCount;
-    const 켠뒤 = await 누르기();
-    expect(켠뒤).toEqual({ liked: true, likeCount: 처음 + 1 });
-    const 끈뒤 = await 누르기();
-    expect(끈뒤).toEqual({ liked: false, likeCount: 처음 });
+    expect(await 보내기('PUT')).toEqual({ liked: true, likeCount: 처음 + 1 });
+    expect(await 보내기('DELETE')).toEqual({ liked: false, likeCount: 처음 });
 
     const r = await db.query('select count(*)::int c from post_likes where post_id = 1');
-    expect(r.rows[0].c, '껐으면 줄도 없어야 한다').toBe(0);
+    expect(r.rows[0].c, '취소했으면 행도 없어야 한다').toBe(0);
+
+    // 덫 — 프론트가 아직 옛 토글 주소를 부른다. p2-36 세션이 프론트를 고치면 여기가 빨개진다(지울 때).
+    expect(FRONT('services/api.js'), '임시: 프론트는 아직 옛 토글').toContain('api.post(`/posts/${id}/likes`, { userId })');
+    const old = await fetch(`${server.base}/api/posts/1/likes`, {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: MY }),
+    });
+    expect(old.status, '옛 토글 주소는 이제 없다').toBe(404);
   });
 });
 

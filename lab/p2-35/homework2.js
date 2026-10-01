@@ -8,7 +8,7 @@ async function report(title) {
     orderBy: { id: 'asc' },
   });
 
-  console.log(`\n${title}`);
+  console.log(title);
   console.log('   id   comment_count   실제 원댓글');
   for (const post of posts) {
     const id = String(post.id).padStart(2);
