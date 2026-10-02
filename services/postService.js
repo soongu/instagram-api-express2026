@@ -29,15 +29,20 @@ const postFields = {
   images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' } },
 };
 
-export async function getPosts({ username, limit }) {
+export async function getPosts({ username, limit = 5, cursor }) {
+  // 한 장 더 달라고 한다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
   const posts = await prisma.post.findMany({
     where: { author: { username } },
     select: postFields,
-    orderBy: { createdAt: 'desc' },
-    take: limit,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    // 커서가 오면 «그 게시물 다음» 부터다. 커서가 가리키는 줄 자신은 건너뛴다.
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
 
-  return posts.map(flatten);
+  const hasNext = posts.length > limit;
+
+  return { items: posts.slice(0, limit).map(flatten), hasNext };
 }
 
 export async function getPost(id) {

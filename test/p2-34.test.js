@@ -147,7 +147,7 @@ describe('Step 3 — 응답에 imageUrls 가 배열로 실린다', () => {
       read(P('snapshots/p2-34/seed.step3.js')).replace(/from '\.\//g, "from '../"));
 
     seedLive();
-    await bootApp('app.js', 3441);
+    await bootApp('snapshots/p2-35-final/app.js', 3441);
   }, 60000);
 
   it('🚨 Step 3 시점 시드가 실제로 돌고, 교안이 인용한 그 줄을 찍는다', async () => {
@@ -315,7 +315,7 @@ describe('Step 4·5 — 답글은 같은 표에 들어가고 parent_id 로 원�
 describe('Step 6·7 — 좋아요는 가운데 표가 받고, 같은 쌍은 한 번만 들어간다', () => {
   beforeAll(async () => {
     seedLive();
-    await bootApp('app.js', 3442);
+    await bootApp('snapshots/p2-35-final/app.js', 3442);
   }, 60000);
 
   it('🔴 암묵적 N:M 으로 적으면 칸 이름이 A·B 가 된다 — 그래서 안 쓴다', () => {
@@ -479,7 +479,7 @@ describe('인용이 코드베이스와 맞는가', () => {
     'snapshots/p2-34-final/seed.js',
     'snapshots/p2-34-final/check.js',
     'schemas/postSchema.js', 'routes/posts.js', 'db.js', 'errors.js',
-    'data/posts.js', 'data/comments.js',
+    'snapshots/p2-34-final/data/posts.js', 'data/comments.js',
     // Step 3 시점 시드 — 그때는 post_likes 가 아직 없어 비우기 목록이 한 칸 짧다.
     'snapshots/p2-34/seed.step3.js',
     'lab/p2-34/practice1.js', 'lab/p2-34/practice2.js', 'lab/p2-34/practice3.js',

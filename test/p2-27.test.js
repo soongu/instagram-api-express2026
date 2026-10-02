@@ -13,7 +13,31 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 
-const PG = { host: 'localhost', port: 5432, database: 'instagram', user: 'postgres', password: 'postgres' };
+// 🚨 전용 DB 에서 돈다 — 이 회차는 `posts`·`comments` 를 통째로 DROP 하고 다시 만드는데,
+//    그것을 수업 DB(`instagram`)에 대고 하면 «학생이 지금까지 쌓은 것» 이 사라진다.
+//    2026-09-12 실측 — 앞 세션의 전수 실행이 실제로 수업 DB 를 p2-33 이전 모양으로 되돌려놨고,
+//    그 망가진 상태에서만 이 회차가 통과하고 있었다(복구하니 DROP 이 외래 키에 막혔다).
+const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
+const PG = { ...ADMIN, database: 'p227_gate' };
+
+async function 전용DB만들기() {
+  const admin = new pg.Client(ADMIN);
+  await admin.connect();
+  await admin.query(
+    "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p227_gate' and pid <> pg_backend_pid()");
+  await admin.query('DROP DATABASE IF EXISTS p227_gate');
+  await admin.query('CREATE DATABASE p227_gate');
+  await admin.end();
+}
+
+async function 전용DB지우기() {
+  const admin = new pg.Client(ADMIN);
+  await admin.connect();
+  await admin.query(
+    "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'p227_gate' and pid <> pg_backend_pid()");
+  await admin.query('DROP DATABASE IF EXISTS p227_gate');
+  await admin.end();
+}
 // 🚨 실습은 서점(5433) 에서 한다 — 위험한 명령을 게시물 셋에 대고 시키지 않는다.
 //    이 연결이 없으면 실습 블록 13개가 게이트 밖으로 샌다.
 const BOOKSTORE = { ...PG, port: 5433, database: 'bookstore' };
@@ -57,6 +81,7 @@ async function resetBookstore() {
   await bk.query("INSERT INTO books (title, author, price) VALUES ('객체지향의 사실과 오해','조영호',15000)");
 }
 beforeAll(async () => {
+  await 전용DB만들기();
   db = new pg.Client(PG);
   bk = new pg.Client(BOOKSTORE);
   await db.connect();
@@ -64,7 +89,9 @@ beforeAll(async () => {
   await reset();
   await resetBookstore();
 }, 30000);
-afterAll(async () => { await db?.end(); await bk?.end(); });
+afterAll(async () => { await db?.end(); await bk?.end(); 
+  await 전용DB지우기();
+});
 
 describe('교안 ↔ 코퍼스 — 인용한 SQL 이 «전량·순서까지» 같다', () => {
   const md = readFileSync(LECTURE, 'utf8');
