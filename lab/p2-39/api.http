@@ -1,0 +1,46 @@
+# ~/nanum/api.http
+# 동네 나눔 — API 계약 예시
+# 서버는 아직 없어요. 화면을 만드는 쪽과 서버를 만드는 쪽이 이 파일 하나를 같이 봐요.
+
+### 분류 목록
+GET http://localhost:3000/api/categories
+
+### 이웃 목록 — 로그인이 없어서 글을 올릴 때 자기 닉네임을 여기서 고른다
+GET http://localhost:3000/api/neighbors
+
+### 나눔 목록 — 한 분류만, 한 번에 10개씩
+GET http://localhost:3000/api/shares?categoryId=1&limit=10
+
+### 다음 목록 — 앞 응답의 마지막 나눔 번호를 커서로
+GET http://localhost:3000/api/shares?categoryId=1&limit=10&cursor=11
+
+### 나눔 상세
+GET http://localhost:3000/api/shares/3
+
+### 나눔 올리기
+POST http://localhost:3000/api/shares
+Content-Type: application/json
+
+{
+  "ownerId": 1,
+  "categoryId": 1,
+  "title": "다 읽은 소설 세 권",
+  "content": "상태 좋아요. 망원역 앞에서 드려요."
+}
+
+### 나눔 완료로 바꾸기
+PATCH http://localhost:3000/api/shares/3
+Content-Type: application/json
+
+{
+  "isGivenAway": true
+}
+
+### 받고 싶어요
+POST http://localhost:3000/api/shares/3/requests
+Content-Type: application/json
+
+{
+  "neighborId": 2,
+  "message": "주말에 받으러 갈게요"
+}

@@ -1,0 +1,5 @@
+# ~/instagram-api/lab/homework2.http
+# 프로필 계약 한 줄 — 가짜 서버가 주던 값을 우리 서버가 준다
+
+### minji 의 프로필
+GET http://localhost:3000/api/profiles/minji

@@ -1,0 +1,89 @@
+// ~/instagram-api/lab/homework2.prisma
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique @db.VarChar(50)
+  // 이미 들어 있는 회원에게는 이름이 없으니 비워둘 수 있게 연다.
+  name         String?   @db.VarChar(50)
+  profileImage String?   @map("profile_image")
+  deactivatedAt DateTime? @map("deactivated_at")
+  posts        Post[]
+  comments     Comment[]
+  likes        PostLike[]
+  // 같은 표를 두 방향으로 가리킨다 — 내가 팔로우하는 줄 / 나를 팔로우하는 줄.
+  following    Follow[]  @relation("Following")
+  followers    Follow[]  @relation("Followers")
+
+  @@map("users")
+}
+
+// 누가 누구를 팔로우하는가 한 쌍 — 같은 쌍은 한 번만 들어간다.
+model Follow {
+  id          Int  @id @default(autoincrement())
+  followerId  Int  @map("follower_id")
+  follower    User @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId Int  @map("following_id")
+  following   User @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+model Post {
+  id           Int       @id @default(autoincrement())
+  authorId     Int       @map("author_id")
+  author       User      @relation(fields: [authorId], references: [id])
+  postAlt      String?   @map("post_alt")
+  content      String?
+  likeCount    Int       @default(0) @map("like_count")
+  commentCount Int       @default(0) @map("comment_count")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+  comments     Comment[]
+  images       PostImage[]
+  likes        PostLike[]
+
+  @@map("posts")
+}
+
+model PostLike {
+  id     Int  @id @default(autoincrement())
+  postId Int  @map("post_id")
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId Int  @map("user_id")
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("post_likes")
+}
+
+model PostImage {
+  id       Int    @id @default(autoincrement())
+  postId   Int    @map("post_id")
+  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  imageUrl String @map("image_url")
+  imgOrder Int    @map("img_order")
+
+  @@map("post_images")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  Int      @map("author_id")
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  likeCount Int      @default(0) @map("like_count")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  parentId Int?      @map("parent_id")
+  parent   Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("Replies")
+
+  @@map("comments")
+}

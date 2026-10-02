@@ -1,0 +1,56 @@
+// ~/nanum/lab/homework1-strict.prisma
+// 「받을 사람은 그 나눔에 신청한 이웃이어야 한다」를 표에서 막는 판.
+// 받을 사람 칸이 이웃 표가 아니라 «신청 표의 한 줄» 을 가리킨다.
+datasource db {
+  provider = "postgresql"
+}
+
+model Neighbor {
+  id       Int            @id @default(autoincrement())
+  nickname String         @unique @db.VarChar(20)
+  town     String         @db.VarChar(30)
+  shares   Share[]
+  requests ShareRequest[]
+
+  @@map("neighbors")
+}
+
+model Category {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique @db.VarChar(20)
+  shares Share[]
+
+  @@map("categories")
+}
+
+model Share {
+  id              Int            @id @default(autoincrement())
+  title           String         @db.VarChar(100)
+  content         String
+  ownerId         Int            @map("owner_id")
+  owner           Neighbor       @relation(fields: [ownerId], references: [id])
+  receiverId      Int?           @map("receiver_id")
+  receiverRequest ShareRequest?  @relation("Receiver", fields: [id, receiverId], references: [shareId, neighborId])
+  categoryId      Int            @map("category_id")
+  category        Category       @relation(fields: [categoryId], references: [id])
+  isGivenAway     Boolean        @default(false) @map("is_given_away")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  requests        ShareRequest[]
+
+  @@unique([id, receiverId])
+  @@map("shares")
+}
+
+model ShareRequest {
+  id         Int      @id @default(autoincrement())
+  shareId    Int      @map("share_id")
+  share      Share    @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  neighborId Int      @map("neighbor_id")
+  neighbor   Neighbor @relation(fields: [neighborId], references: [id], onDelete: Cascade)
+  message    String?  @db.VarChar(200)
+  createdAt  DateTime @default(now()) @map("created_at")
+  receivedBy Share?   @relation("Receiver")
+
+  @@unique([shareId, neighborId])
+  @@map("share_requests")
+}
