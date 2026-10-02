@@ -21,7 +21,9 @@ const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'post
 const GATE_URL = 'postgresql://postgres:postgres@localhost:5432/p235_gate';
 const BOOK_ADMIN = { ...ADMIN, port: 5433 };
 const BOOK_GATE_URL = 'postgresql://postgres:postgres@localhost:5433/p235_book_gate';
-const ENV = { DATABASE_URL: GATE_URL };
+// `p2-38` 부터 `app.js` 가 허락 목록을 환경에서 받는다 — 학생이 `--env-file`
+// 로 넣어주는 그 자리에 게이트가 자기 값을 넣는다(`boot.js` 가 정한 방식).
+const ENV = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:5173' };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 const LECTURE = P('../../part2/5-db-prisma/p2-35-transactions-lecture.md');

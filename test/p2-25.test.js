@@ -718,10 +718,15 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
 
   // 그리고 «지금» 파일이 그 스냅숏에서 어떻게 자랐는지도 함께 잠근다 — 얼린 축이
   // 조용히 낡지 않게, 자란 줄이 무엇인지까지 못박아 둔다.
-  it('지금 `.env.example` 은 그 시점 것에 이름만 더해져 있다', () => {
+  // 🚨 이 축은 한때 «이름만 더해진다» 를 전제했는데, `p2-38` 에서 그 전제가 깨졌다.
+  //    그 회차가 이 파일을 «배포 화면에 넣을 이름 목록» 으로 쓰기 때문이다 —
+  //    MongoDB 는 `p2-26` 에서 떠났는데 이름만 남아 있어서, 그대로 두면 학생이
+  //    배포 설정에 죽은 이름을 넣는다. 그래서 더해지기만 하는 것이 아니라 «갈린다».
+  //    머리 두 줄은 그대로이고, 그 아래 이름이 무엇인지를 여기서 못박는다.
+  it('지금 `.env.example` 은 그 시점에서 «어떻게» 갈렸는지까지 잠긴다', () => {
     const then = real('snapshots/p2-25.env.example').trimEnd().split('\n');
     const now = real('.env.example').trimEnd().split('\n');
-    expect(now.slice(0, then.length)).toEqual(then);
-    expect(now.slice(then.length)).toEqual(['DATABASE_URL=']);
+    expect(now.slice(0, 2)).toEqual(then.slice(0, 2));
+    expect(now.slice(2)).toEqual(['DATABASE_URL=', 'CORS_ORIGIN=']);
   });
 });
