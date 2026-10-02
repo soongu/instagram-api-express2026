@@ -120,7 +120,9 @@ describe('착수 상태 — 「지난 시간 그대로」에서 출발한다', (
     expect(app.match(/'\/api\/posts\/:id'/g)).toHaveLength(3);
     expect(app.match(/Number\(req\.params\.id\)/g)).toHaveLength(3);
     expect(app.match(/Number\.isInteger/g)).toHaveLength(3);
-    expect(read(LECTURE)).toContain('숫자로 바꿔주는 줄');
+    // 🔀 2026-09-14 「숫자로 바꿔주는 줄」이 들어 있던 「오늘의 숫자」 절이 트랙 캐논으로 전량 삭제됐다(`b8faf61`).
+    //    같은 뜻은 마무리 「핵심 세 가지」 둘째 줄에 남아 있어 그 문장을 본다 — 절을 되살리지 않는다.
+    expect(read(LECTURE)).toContain('숫자로 바꿔주는 것만으로는 모자라서');
   });
 });
 
