@@ -61,6 +61,10 @@ async function runSql(client, sql) {
 }
 
 beforeAll(async () => {
+  // 🚨 이 회차 «종료 시점» 클라이언트를 먼저 낸다 (gitignore 된 생성물이라 매번 만든다).
+  //    output 이 회차 폴더라 수업 클라이언트를 안 덮는다 — p2-29·p2-33 이 겪은 그 사고.
+  prismaCli(['generate', '--config', 'snapshots/p2-33-final/generate.config.js']);
+
   const admin = new pg.Client(ADMIN);
   await admin.connect();
   for (const name of ['p233_gate', 'p233_shadow']) {
@@ -301,7 +305,9 @@ describe('Step 7 — onDelete', () => {
 
 describe('Step 6·8 — 계약은 그대로, P2003 에는 이름이 붙는다', () => {
   beforeAll(() => {
-    execFileSync(process.execPath, [P('seed.js')], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
+    // 🚨 얼린 시드다 — live seed.js 는 p2-34 가 사진·좋아요·답글까지 넣게 키우므로
+    //    이 회차 게이트 DB(그 표들이 없는 판)에서는 안 돈다.
+    execFileSync(process.execPath, [P('snapshots/p2-33-final/seed.js')], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
   }, 30000);
 
   it('시드가 사람 5명·게시물 5개·댓글 9개를 넣는다', async () => {
@@ -311,7 +317,8 @@ describe('Step 6·8 — 계약은 그대로, P2003 에는 이름이 붙는다', 
   });
 
   it('🔴 목록 응답이 «평평한» username·profileImage 를 싣는다 — author 객체가 아니다', async () => {
-    await bootApp('app.js', 3700);
+    // 🚨 얼린 앱이다 — live app.js 는 p2-34 가 사진을 표로 빼서 이 게이트 DB 에선 안 돈다.
+    await bootApp('snapshots/p2-33-final/app.js', 3700);
     const list = await (await fetch(`${server.base}/api/posts`)).json();
     expect(list).toHaveLength(5);
     for (const post of list) {
@@ -365,7 +372,11 @@ describe('Step 6·8 — 계약은 그대로, P2003 에는 이름이 붙는다', 
     //    학생 파일이 ReferenceError 로 죽는다(선언 전 사용). 그 중간 판을 띄워 잠근다.
     mkdirSync(P('__replay__'), { recursive: true });
     writeFileSync(P('__replay__/p233-step6-service.js'),
-      read(P('snapshots/p2-33/step6.postService.js')).replaceAll("from '../", "from '../"));
+      // 🚨 얼린 클라이언트로 돌린다 — live db.js 의 클라이언트는 p2-34 스키마를 알아서
+      //    이 회차의 postImage 를 「모르는 인자」로 거부한다.
+      read(P('snapshots/p2-33/step6.postService.js'))
+        .replaceAll("from '../db.js'", "from '../snapshots/p2-33-final/db.js'")
+        .replaceAll("from '../errors.js'", "from '../snapshots/p2-33-final/errors.js'"));
     const probe = P('__replay__/p233-step6.mjs');
     writeFileSync(probe, `
 import * as svc from './p233-step6-service.js';
@@ -373,7 +384,7 @@ try { await svc.createPost({ authorId: 999, postImage: '/x.jpg' }); console.log(
 catch (e) { console.log(e.status, e.message); }
 const list = await svc.getPosts({});
 console.log('list', list.length, 'username' in list[0]);
-const { prisma } = await import('../db.js');
+const { prisma } = await import('../snapshots/p2-33-final/db.js');
 await prisma.$disconnect();`);
     const out = execFileSync(process.execPath, [probe], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...ENV } });
     expect(out).toContain('400 그런 사용자는 없어요');
@@ -468,9 +479,14 @@ describe('직접 해보기 — 서점', () => {
 // ── 교안 ↔ 코드베이스 — 인용한 것이 실재한다 ───────────────────────────────
 
 describe('교안 ↔ 코드베이스', () => {
+  // 🚨 live 가 아니라 «이 회차 종료 시점» 스냅숏을 본다 (2026-09-11 `p2-34` 착수 시 얼림).
+  //    다음 회차가 postService·seed·schema 를 계속 키우므로 live 를 보면 이 회차 인용이
+  //    전건 「불일치」로 뜨고, 그러면 사람이 멀쩡한 교안을 고치게 된다.
   const jsSources = () => [
-    'services/postService.js', 'schemas/postSchema.js', 'seed.js', 'db.js', 'errors.js',
-    'routes/posts.js', 'app.js', 'middlewares/validate.js',
+    'snapshots/p2-33-final/services/postService.js', 'snapshots/p2-33-final/schemas/postSchema.js',
+    'snapshots/p2-33-final/seed.js', 'snapshots/p2-33-final/db.js', 'snapshots/p2-33-final/errors.js',
+    'snapshots/p2-33-final/routes/posts.js', 'snapshots/p2-33-final/app.js',
+    'snapshots/p2-33-final/middlewares/validate.js',
     'snapshots/p2-33/step6.postService.js',
     'lab/p2-33/practice1.js', 'lab/p2-33/commentService.js', 'lab/p2-33/commentSchema.js',
     'lab/p2-33/commentRoutes.js', 'lab/p2-33/homework2.js', 'lab/p2-33/bookstore.js',
@@ -483,7 +499,7 @@ describe('교안 ↔ 코드베이스', () => {
         .map((d) => read(P(`lab/p2-33/migrations/${d}/migration.sql`))));
 
   const prismaSources = () => [
-    'prisma/schema.prisma', 'snapshots/p2-33/schema-after-normalize.prisma',
+    'snapshots/p2-33-final/prisma/schema.prisma', 'snapshots/p2-33/schema-after-normalize.prisma',
     // 직접 해보기 2 가 보여주는 「지금 모습」 — p2-29 과제까지 끝낸 서점 스키마
     'snapshots/p2-33/lab-schema-before.prisma', 'lab/p2-33/schema.prisma',
   ].map((f) => read(P(f)));
@@ -529,7 +545,7 @@ describe('교안 ↔ 코드베이스', () => {
       .filter((b) => b.startsWith('// ~/instagram-api/services/postService.js'));
     expect(quoted.length).toBeGreaterThanOrEqual(1);
     const fullest = quoted.reduce((a, b) => (b.length > a.length ? b : a));
-    expect(fullest).toBe(read(P('services/postService.js')).trimEnd());
+    expect(fullest).toBe(read(P('snapshots/p2-33-final/services/postService.js')).trimEnd());
   });
 
   it('🚨 교안이 인용한 CLI 경고가 실제 출력과 같다', () => {

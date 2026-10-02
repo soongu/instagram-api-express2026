@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique @db.VarChar(50)
+  profileImage String?   @map("profile_image")
+  deactivatedAt DateTime? @map("deactivated_at")
+  posts        Post[]
+  comments     Comment[]
+
+  @@map("users")
+}
+
+model Post {
+  id           Int       @id @default(autoincrement())
+  authorId     Int       @map("author_id")
+  author       User      @relation(fields: [authorId], references: [id])
+  postImage    String    @map("post_image")
+  postAlt      String?   @map("post_alt")
+  content      String?
+  minutesAgo   Int       @default(0) @map("minutes_ago")
+  likeCount    Int       @default(0) @map("like_count")
+  commentCount Int       @default(0) @map("comment_count")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  comments     Comment[]
+
+  @@map("posts")
+}
+
+model Comment {
+  id         Int    @id @default(autoincrement())
+  postId     Int    @map("post_id")
+  post       Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId   Int    @map("author_id")
+  author     User   @relation(fields: [authorId], references: [id])
+  content    String
+  likeCount  Int    @default(0) @map("like_count")
+  minutesAgo Int    @default(0) @map("minutes_ago")
+
+  @@map("comments")
+}

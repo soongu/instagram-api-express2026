@@ -44,7 +44,9 @@ function labCopy(rel) {
   const local = rel.replace(/\.js$/, '.local.js');
   writeFileSync(P(local), read(P(rel))
     .replace(/from '\.\.\/(db|services|routes)\//g, "from '../../snapshots/p2-32-final/$1/")
-    .replace(/from '\.\.\/db\.js'/g, "from '../../snapshots/p2-32-final/db.js'"));
+    .replace(/from '\.\.\/db\.js'/g, "from '../../snapshots/p2-32-final/db.js'")
+    // 🚨 회차마다 게이트 포트를 가른다 — vitest 가 파일을 병렬로 돌려 4001 을 공유하면 부딪힌다.
+    .replaceAll('4001', '4031'));
   return local;
 }
 const dropCopy = (local) => { try { unlinkSync(P(local)); } catch { /* 이미 없음 */ } };
@@ -338,7 +340,7 @@ describe('lab — 서점과 댓글도 같은 모양으로 선다', () => {
     writeFileSync(P(copies[1]), read(P(copies[1])).replace("'./commentService.js'", "'./commentService.local.js'"));
     writeFileSync(P(copies[2]), read(P(copies[2])).replace("'./commentRoutes.js'", "'./commentRoutes.local.js'"));
     try {
-      await bootApp(copies[2], 4001);
+      await bootApp(copies[2], 4031);
       expect((await (await fetch(`${server.base}/api/comments`)).json())).toHaveLength(9);
       expect((await (await fetch(`${server.base}/api/comments?postId=1`)).json())).toHaveLength(3);
       expect((await fetch(`${server.base}/api/comments/1`)).status).toBe(200);

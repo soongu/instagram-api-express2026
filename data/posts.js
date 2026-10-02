@@ -3,7 +3,7 @@ export const posts = [
   {
     username: 'jaehoon',
     profileImage: '/images/jaehoon.jpg',
-    postImage: '/images/post-1.jpg',
+    images: ['/images/post-1.jpg', '/images/post-1b.jpg', '/images/post-1c.jpg'],
     postAlt: '노을 진 한강',
     content: '퇴근길에 한강이 너무 예뻤어요',
     minutesAgo: 12,
@@ -13,7 +13,7 @@ export const posts = [
   {
     username: 'minji',
     profileImage: '/images/minji.jpg',
-    postImage: '/images/post-2.jpg',
+    images: ['/images/post-2.jpg', '/images/post-2b.jpg'],
     postAlt: '갓 구운 크루아상',
     content: '오늘 아침에 구운 크루아상',
     minutesAgo: 45,
@@ -23,7 +23,7 @@ export const posts = [
   {
     username: 'seungwoo',
     profileImage: '/images/seungwoo.jpg',
-    postImage: '/images/post-3.jpg',
+    images: ['/images/post-3.jpg'],
     postAlt: '농구 코트',
     content: '주말마다 여기 옵니다',
     minutesAgo: 180,
@@ -33,7 +33,7 @@ export const posts = [
   {
     username: 'minji',
     profileImage: '/images/minji.jpg',
-    postImage: '/images/post-6.jpg',
+    images: ['/images/post-6.jpg'],
     postAlt: '새 렌즈',
     content: '새로 산 렌즈로 찍어봤어요',
     minutesAgo: 300,
@@ -43,7 +43,7 @@ export const posts = [
   {
     username: 'dahye',
     profileImage: '/images/dahye.jpg',
-    postImage: '/images/post-7.jpg',
+    images: ['/images/post-7.jpg'],
     postAlt: '저녁 산책',
     content: '동네 한 바퀴',
     minutesAgo: 420,

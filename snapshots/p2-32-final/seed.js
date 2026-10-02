@@ -1,7 +1,7 @@
 // ~/instagram-api/seed.js
 import { prisma } from './db.js';
-import { posts } from '../../data/posts.js';
-import { comments } from '../../data/comments.js';
+import { posts } from '../p2-33-final/data/posts.js';
+import { comments } from '../p2-33-final/data/comments.js';
 
 await prisma.$executeRaw`TRUNCATE TABLE comments, posts RESTART IDENTITY`;
 
