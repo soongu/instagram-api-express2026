@@ -93,3 +93,6 @@ GET http://localhost:3000/api/posts?limit=2&cursor=2
 
 ### 4번 다음부터
 GET http://localhost:3000/api/posts?limit=2&cursor=4
+
+### jaehoon(2번)이 보는 최신 두 개
+GET http://localhost:3000/api/posts?userId=2&limit=2
