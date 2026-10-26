@@ -25,9 +25,20 @@ router.post('/login', validateBody(loginSchema), async (req, res) => {
   res.json(user);
 });
 
-router.get('/me', async (req, res) => {
+// 누가 보냈는지 — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
+function readUserId(req) {
+  const header = req.headers.authorization;
+
+  if (header && header.startsWith('Bearer ')) {
+    return Number(header.slice('Bearer '.length));
+  }
+
   // 브라우저가 다시 실어 보낸 쿠키 — cookie-parser 가 `userId=2` 를 { userId: '2' } 로 바꿔 둔다.
-  const userId = Number(req.cookies.userId);
+  return Number(req.cookies.userId);
+}
+
+router.get('/me', async (req, res) => {
+  const userId = readUserId(req);
 
   if (!Number.isInteger(userId)) throw new UnauthorizedError('로그인이 필요해요');
 
