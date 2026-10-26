@@ -1,0 +1,14 @@
+### 아무것도 안 싣고
+GET http://localhost:4012/api/secret
+
+### 틀린 키로
+GET http://localhost:4012/api/secret
+Authorization: Bearer wrong-key
+
+### 맞는 키로
+GET http://localhost:4012/api/secret
+Authorization: Bearer lab-key-123
+
+### 쿠키에 실어 보내면
+GET http://localhost:4012/api/secret
+Cookie: key=lab-key-123
