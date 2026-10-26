@@ -18,6 +18,7 @@ router.post('/login', validateBody(loginSchema), async (req, res) => {
   // 비밀번호 확인은 아직 없다 — 이름만 맞으면 그 사람의 번호를 쿠키에 담아 준다.
   res.cookie('userId', String(user.id), {
     httpOnly: true,
+    sameSite: 'lax',
     maxAge: SEVEN_DAYS,
   });
 
