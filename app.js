@@ -1,6 +1,7 @@
 // ~/instagram-api/app.js
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import postsRouter from './routes/posts.js';
 import authRouter from './routes/auth.js';
 import { HttpError } from './errors.js';
@@ -11,6 +12,7 @@ const allowedOrigins = process.env.CORS_ORIGIN.split(',').map((one) => one.trim(
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
+app.use(cookieParser());
 
 app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');

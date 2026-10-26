@@ -7,3 +7,7 @@ const userFields = { id: true, username: true, profileImage: true };
 export function findUserByUsername(username) {
   return prisma.user.findUnique({ where: { username }, select: userFields });
 }
+
+export function findUserById(id) {
+  return prisma.user.findUnique({ where: { id }, select: userFields });
+}
