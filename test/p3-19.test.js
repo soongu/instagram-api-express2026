@@ -476,3 +476,86 @@ describe('과제 [응용] — Authorization 헤더로만 받는 API 키', () => 
     }
   }, 60000);
 });
+
+// ── 교안·답안의 코드 블록이 코드베이스에 «실재» 한다 ──
+// 교안 Step N 의 `// ~/instagram-api/<경로>` 블록은 «그 Step 커밋»(제목이 `feat(p3-19)` 이고 `(Step N)` 으로 끝난다)의
+// 그 파일 안에 줄 그대로 이어져 있어야 한다. Step 커밋이 없는 Step(1·5 의 `.http` · 실습)은 끝 판·실습 파일과 대조한다.
+// 임시 실험 블록 둘(Step 3 첫 판 `/me` · Step 6 의 `secure: true`)은 축 ⑤ 가 변형 판으로 띄워서 잠갔다.
+const LECTURE = P('../../part3/3-auth-principles/p3-19-cookie-auth-lecture.md');
+const ANSWERS = P('../../part3/3-auth-principles/p3-19-cookie-auth-answers.md');
+const git = (...args) => execFileSync('git', args, { cwd: P('.'), encoding: 'utf8' });
+const stepCommit = (n) => {
+  const line = git('log', '--format=%H %s', 'HEAD').split('\n')
+    .find((l) => l.includes(' feat(p3-19): ') && l.endsWith(`(Step ${n})`));
+  return line ? line.split(' ')[0] : null;
+};
+const fileAt = (commit, path) => (commit ? git('show', `${commit}:${path}`) : read(P(path)));
+const blocksOf = (file) => {
+  const out = [];
+  let step = 0;
+  let zone = 'body';
+  let cur = null;
+  for (const line of read(file).split('\n')) {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.lines.push(line);
+      continue;
+    }
+    const m = line.match(/^## Step (\d+)/);
+    if (m) { step = Number(m[1]); zone = 'body'; }
+    if (/^### 직접 해보기/.test(line)) zone = 'lab';
+    if (/^## (과제|생각해볼|마무리)/.test(line)) zone = 'rest';
+    const f = line.match(/^```(\w*)$/);
+    if (f) cur = { lang: f[1], step, zone, lines: [] };
+  }
+  return out;
+};
+const contains = (hay, block) => hay.includes(block.join('\n'));
+const EXPERIMENTS = ['console.log(req.headers.cookie);', 'secure: true,'];
+
+describe('교안·답안 블록이 코드베이스에 실재한다', () => {
+  it('🔴 교안의 `~/instagram-api/` 자바스크립트 블록 — Step 커밋 · 끝 판 · 실습 파일 · 시작 판 스냅숏', () => {
+    const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\//.test(b.lines[0] ?? ''));
+    expect(blocks.length).toBeGreaterThanOrEqual(15);
+    const misses = [];
+    for (const b of blocks) {
+      if (b.lines.some((l) => EXPERIMENTS.includes(l.trim()))) continue;
+      const rel = b.lines[0].replace('// ~/instagram-api/', '');
+      const body = b.lines.slice(1);
+      if (rel.startsWith('lab/')) {
+        const name = rel.replace('lab/', '');
+        const labFile = read(P(`lab/p3-19/${name}`));
+        const start = name === 'practice2.js' ? read(P('snapshots/p3-19.practice2-start.js')) : '';
+        if (!(contains(labFile.split('\n').slice(1).join('\n'), body) || contains(start.split('\n').slice(1).join('\n'), body))) misses.push(`Step ${b.step} ${rel}`);
+        continue;
+      }
+      const text = fileAt(stepCommit(b.step), rel);
+      if (!contains(text, body)) misses.push(`Step ${b.step} ${rel}`);
+    }
+    expect(misses).toEqual([]);
+  });
+
+  it('🔴 교안의 `.http` 블록 — Step 1 은 posts.http · 나머지는 그 Step 커밋(없으면 끝 판)의 auth.http', () => {
+    const blocks = blocksOf(LECTURE).filter((b) => b.lang === '' && b.lines[0]?.startsWith('### '));
+    expect(blocks.length).toBeGreaterThanOrEqual(5);
+    const misses = [];
+    for (const b of blocks) {
+      if (b.zone === 'lab') continue;
+      const file = b.step === 1 ? 'requests/posts.http' : 'requests/auth.http';
+      const text = fileAt(b.step === 1 ? null : (stepCommit(b.step) ?? null), file);
+      if (!contains(text, b.lines)) misses.push(`Step ${b.step} ${b.lines[0]}`);
+    }
+    expect(misses).toEqual([]);
+  });
+
+  it('🔴 답안의 해설 블록 — 과제 두 서버 · homework2.http', () => {
+    const blocks = blocksOf(ANSWERS);
+    const js = blocks.filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\/lab\//.test(b.lines[0] ?? ''));
+    expect(js.map((b) => b.lines[0])).toEqual(['// ~/instagram-api/lab/homework1.js', '// ~/instagram-api/lab/homework2.js']);
+    for (const b of js) {
+      const name = b.lines[0].replace('// ~/instagram-api/lab/', '');
+      expect(b.lines.join('\n') + '\n').toBe(read(P(`lab/p3-19/${name}`)));
+    }
+    const http = blocks.find((b) => b.lang === '' && b.lines[0] === '### 아무것도 안 싣고');
+    expect(http.lines.join('\n') + '\n').toBe(read(P('lab/p3-19/homework2.http')));
+  });
+});
