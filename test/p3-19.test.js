@@ -370,22 +370,39 @@ describe('직접 해보기 1 — 방문 횟수 쿠키', () => {
     }
   });
 
-  it('🔴 `|| 0` 을 빠뜨린 판은 abc 에서 「NaN번째」 — 요구사항 7 이 그 판을 가른다', async () => {
+  const labVariant = async (from, to, fn) => {
     const dir = mkdtempSync(join(tmpdir(), 'p319-lab1-'));
     try {
-      writeFileSync(join(dir, 'practice1.js'),
-        read(P('lab/p3-19/practice1.js')).replace('Number(req.cookies.visits) || 0', 'Number(req.cookies.visits)'));
+      const src = read(P('lab/p3-19/practice1.js'));
+      if (!src.includes(from)) throw new Error('바꿀 곳을 못 찾았다');
+      writeFileSync(join(dir, 'practice1.js'), src.replace(from, to));
       symlinkSync(P('node_modules'), join(dir, 'node_modules'));
       writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
       const lab = await boot(join(dir, 'practice1.js'), { port: 4001, ready: '4001번 포트에서' });
       try {
-        expect(await (await fetch(`${lab.base}/`, { headers: { Cookie: 'visits=abc' } })).text()).toBe('NaN번째 방문이에요');
+        await fn(lab);
       } finally {
         await lab.stop();
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  };
+
+  it('🔴 `|| 0` 을 빠뜨린 판은 처음부터 「NaN번째」 · NaN 이 쿠키에 담겨 계속 NaN', async () => {
+    await labVariant('Number(req.cookies.visits) || 0', 'Number(req.cookies.visits)', async (lab) => {
+      const first = await fetch(`${lab.base}/`);
+      expect(await first.text()).toBe('NaN번째 방문이에요');
+      expect(first.headers.getSetCookie()).toEqual(['visits=NaN; Path=/']);
+      expect(await (await fetch(`${lab.base}/`, { headers: { Cookie: 'visits=NaN' } })).text()).toBe('NaN번째 방문이에요');
+    });
+  });
+
+  it('🔴 `?? 0` 으로 쓴 판은 첫 방문은 1 이지만 abc 에서 「NaN번째」 — 요구사항 7 이 그 판을 가른다', async () => {
+    await labVariant('Number(req.cookies.visits) || 0', 'Number(req.cookies.visits ?? 0)', async (lab) => {
+      expect(await (await fetch(`${lab.base}/`)).text()).toBe('1번째 방문이에요');
+      expect(await (await fetch(`${lab.base}/`, { headers: { Cookie: 'visits=abc' } })).text()).toBe('NaN번째 방문이에요');
+    });
   });
 });
 
@@ -469,7 +486,9 @@ describe('과제 [응용] — Authorization 헤더로만 받는 API 키', () => 
       expect(out.map((r) => JSON.parse(r.response.body).message)).toEqual([
         'API 키가 필요해요', 'API 키가 맞지 않아요', '비밀 내용이에요', 'API 키가 필요해요']);
       expect(out[0].response.headers['www-authenticate']).toBe('Bearer');
-      expect(out[1].response.headers['www-authenticate']).toBeUndefined();
+      expect(out[1].response.headers['www-authenticate']).toBe('Bearer error="invalid_token"');
+      expect(out[2].response.headers['www-authenticate']).toBeUndefined();
+      expect(out[3].response.request.headers.cookie).toBe('key=lab-key-123');
       expect(out[3].response.headers['www-authenticate']).toBe('Bearer');
     } finally {
       await lab.stop();

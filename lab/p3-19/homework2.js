@@ -16,6 +16,8 @@ app.get('/api/secret', (req, res) => {
   }
 
   if (header.slice('Bearer '.length) !== API_KEY) {
+    // 키가 틀렸다는 것까지 알려 준다.
+    res.set('WWW-Authenticate', 'Bearer error="invalid_token"');
     res.status(401).json({ message: 'API 키가 맞지 않아요' });
     return;
   }
