@@ -14,3 +14,7 @@ export function createSession(userId) {
 export function getUserId(sessionId) {
   return sessions.get(sessionId);
 }
+
+export function deleteSession(sessionId) {
+  sessions.delete(sessionId);
+}

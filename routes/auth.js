@@ -52,4 +52,12 @@ router.get('/me', async (req, res) => {
   res.json(user);
 });
 
+router.post('/logout', (req, res) => {
+  // 서버가 세션을 지운다 — 누가 이 세션 ID를 복사해 뒀어도 이제는 통하지 않는다.
+  sessionService.deleteSession(readSessionId(req));
+
+  res.clearCookie('sessionId');
+  res.json({ message: '로그아웃했어요' });
+});
+
 export default router;

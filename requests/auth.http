@@ -26,3 +26,6 @@ Cookie: sessionId=1
 # @no-cookie-jar
 GET http://localhost:3000/api/auth/me
 Authorization: Bearer 3
+
+### 로그아웃
+POST http://localhost:3000/api/auth/logout
