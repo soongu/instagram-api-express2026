@@ -1,6 +1,7 @@
 // ~/instagram-api/routes/auth.js
 import express from 'express';
 import * as userService from '../services/userService.js';
+import * as sessionService from '../services/sessionService.js';
 import { validateBody } from '../middlewares/validate.js';
 import { loginSchema } from '../schemas/authSchema.js';
 import { UnauthorizedError } from '../errors.js';
@@ -15,8 +16,10 @@ router.post('/login', validateBody(loginSchema), async (req, res) => {
 
   if (!user) throw new UnauthorizedError('그런 사용자는 없어요');
 
-  // 비밀번호 확인은 아직 없다 — 이름만 맞으면 그 사람의 번호를 쿠키에 담아 준다.
-  res.cookie('userId', String(user.id), {
+  // 비밀번호 확인은 아직 없다 — 이름만 맞으면 세션을 만들고, 쿠키에는 그 세션 ID만 담아 준다.
+  const sessionId = sessionService.createSession(user.id);
+
+  res.cookie('sessionId', sessionId, {
     httpOnly: true,
     sameSite: 'lax',
     maxAge: SEVEN_DAYS,
