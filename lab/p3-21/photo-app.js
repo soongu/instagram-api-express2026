@@ -1,7 +1,7 @@
 // ~/instagram-api/lab/photo-app.js
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 const AUTH_SERVER = 'http://127.0.0.1:4001';
 const CLIENT_ID = 'photo-app';
@@ -22,7 +22,11 @@ app.get('/', (req, res) => {
 // 인가 서버의 동의 화면으로 보낸다 — 무엇을 허락받고 싶은지 주소에 담아서
 app.get('/login', (req, res) => {
   const state = randomUUID();
+  const codeVerifier = randomBytes(32).toString('base64url');
+  const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
+
   res.cookie('oauth_state', state, TEMP_COOKIE);
+  res.cookie('oauth_verifier', codeVerifier, TEMP_COOKIE);
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -30,6 +34,8 @@ app.get('/login', (req, res) => {
     redirect_uri: REDIRECT_URI,
     scope: 'photos',
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   });
   res.redirect(`${AUTH_SERVER}/authorize?${params}`);
 });
@@ -55,6 +61,7 @@ app.get('/callback', async (req, res) => {
       redirect_uri: REDIRECT_URI,
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
+      code_verifier: req.cookies.oauth_verifier,
     }),
   });
   const tokens = await tokenRes.json();
