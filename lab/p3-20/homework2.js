@@ -21,3 +21,13 @@ const otherToken = jwt.sign({ sub: '2' }, 'another-secret');
 console.log(checkSignature(token, SECRET));
 console.log(checkSignature(fakeToken, SECRET));
 console.log(checkSignature(otherToken, SECRET));
+
+// 같은 셋을 jwt.verify 에 넣어 비교한다 — 서명이 틀리면 false 를 돌려주지 않고 에러를 던진다.
+for (const one of [token, fakeToken, otherToken]) {
+  try {
+    jwt.verify(one, SECRET);
+    console.log('verify 통과');
+  } catch (error) {
+    console.log('verify', error.message);
+  }
+}

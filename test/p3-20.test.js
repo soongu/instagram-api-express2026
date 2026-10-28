@@ -258,8 +258,14 @@ describe('축 ④ — 서버가 다시 뜨면 세션이 사라진다(메모리 M
       const cookie = sessionCookie(await login(base, 'jaehoon'));
       expect((await me(base, { Cookie: cookie })).status).toBe(200);
       const before = log.split('3593번 포트에서').length;
-      appendFileSync(join(dir, 'routes/auth.js'), '\n');
-      await waitFor(() => log.split('3593번 포트에서').length > before);
+      // 🚨 서버가 뜬 «직후»에 저장하면 --watch 가 아직 그 파일을 지켜보기 전일 수 있다(2026-10-28 한 번 놓침) —
+      //    학생은 뜬 뒤 한참 있다 저장하니, 조금 기다렸다 저장하고 안 뜨면 한 번 더 저장한다.
+      await new Promise((r) => setTimeout(r, 1000));
+      for (let tries = 0; tries < 3 && log.split('3593번 포트에서').length === before; tries++) {
+        appendFileSync(join(dir, 'routes/auth.js'), '\n');
+        await waitFor(() => log.split('3593번 포트에서').length > before, 4000).catch(() => {});
+      }
+      expect(log.split('3593번 포트에서').length).toBeGreaterThan(before);
       expect(log).toMatch(/Restarting 'app\.js'/);
       expect((await me(base, { Cookie: cookie })).status).toBe(401);
     } finally {
@@ -450,7 +456,7 @@ describe('직접 해보기 2 — 받은 토큰 읽어 보기', () => {
   it('🔴 헤더 · 페이로드(이메일·역할까지) · 만료 시각을 찍는다', () => {
     expect(runLab('practice2.js')).toBe([
       '{"alg":"HS256","typ":"JWT"}',
-      '{"sub":"7","username":"hana","email":"hana@example.com","role":"admin","iat":1793145600,"exp":1793146500}',
+      '{"sub":"7","username":"hana","email":"hana@example.com","role":"user","iat":1793145600,"exp":1793146500}',
       '2026-10-28T00:15:00.000Z',
       '',
     ].join('\n'));
@@ -630,7 +636,7 @@ describe('과제 [기초] — 확인 절차가 가려내는 틀린 판', () => {
 
 describe('과제 [응용] — 라이브러리 없이 서명 확인', () => {
   it('🔴 진짜 true · 페이로드를 고친 가짜 false · 다른 비밀키로 만든 토큰 false · jwt.verify 와 같은 판정', () => {
-    expect(runLab('homework2.js')).toBe(['true', 'false', 'false', ''].join('\n'));
+    expect(runLab('homework2.js')).toBe(['true', 'false', 'false', 'verify 통과', 'verify invalid signature', 'verify invalid signature', ''].join('\n'));
   });
 });
 
@@ -695,6 +701,19 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
       if (!contains(text, b.lines)) misses.push(`Step ${b.step} ${b.lines[0]}`);
     }
     expect(misses).toEqual([]);
+  });
+
+  it('🔴 교안에 찍힌 토큰과 그림의 서명은 실습 비밀키로 계산한 값이다(Step 5) · 실습 2 토큰은 그 출력과 짝', () => {
+    const text = read(LECTURE);
+    const shown = text.match(/^(eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJzdWIiOiIy[\w-]+\.[\w-]{43})$/m)[1];
+    const [h, p, sig] = shown.split('.');
+    expect(createHmac('sha256', LAB_SECRET).update(`${h}.${p}`).digest('base64url')).toBe(sig);
+    expect(text).toContain(`{"sub":"2","iat":${b64(p).iat}}`);
+    expect(text).toContain(` 서명       ${sig}  `);
+    expect(text).toContain(` 페이로드   ${p}  `);
+    const labToken = read(P('lab/p3-20/practice2.js')).match(/const token = '([^']+)'/)[1];
+    expect(text.split(labToken).length - 1).toBe(2);
+    expect(b64(labToken.split('.')[1]).role).toBe('user');
   });
 
   it('🔴 답안의 해설 블록 — 과제 두 파일', () => {
