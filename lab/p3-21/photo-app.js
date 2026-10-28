@@ -22,6 +22,14 @@ app.get('/login', (req, res) => {
   res.redirect(`${AUTH_SERVER}/authorize?${params}`);
 });
 
+app.get('/callback', (req, res) => {
+  if (req.query.error) {
+    res.status(400).json({ message: `허락을 받지 못했어요 (${req.query.error})` });
+    return;
+  }
+  res.json({ code: req.query.code });
+});
+
 app.listen(4002, () => {
   console.log('우리 서비스가 4002번 포트에서 기다리고 있어요.');
 });
