@@ -681,7 +681,16 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
       '{"message":"ID 토큰을 믿을 수 없어요","reason":"jwt audience invalid. expected: photo-app"}',
       'http://127.0.0.1:4001/authorize?response_type=code&client_id=photo-app&redirect_uri=http%3A%2F%2Flocalhost%3A4002%2Fcallback&scope=photos',
       '인가 서버가 4001번 포트에서 기다리고 있어요.',
+      '`GET /photos 200`',
+      '「code_challenge 없이 받은 인가 코드예요」',
     ]) expect(text).toContain(line);
+  });
+
+  it('🔴 교안 Step 7 토큰 헤더의 kid 와 Step 8 JWKS 출력의 kid 가 같다 — 같은 인가 서버 실행에서 떴다', () => {
+    const text = read(LECTURE);
+    const idt = text.match(/id_token: '([\w.-]+)'/)[1];
+    const jwks = JSON.parse(text.match(/^(\{"keys":\[.+\]\})$/m)[1]);
+    expect(b64(idt.split('.')[0]).kid).toBe(jwks.keys[0].kid);
   });
 
   it('🔴 교안 Step 4·7 의 터미널 출력은 실제 출력과 값만 다르다(줄 · 키 · 차례가 같다)', async () => {
