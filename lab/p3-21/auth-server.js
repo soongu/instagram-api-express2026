@@ -156,6 +156,9 @@ app.post('/token', (req, res) => {
   if (grant.codeChallenge) {
     const challenge = createHash('sha256').update(code_verifier ?? '').digest('base64url');
     if (challenge !== grant.codeChallenge) return fail(res, 400, 'invalid_grant', 'code_verifier가 맞지 않아요');
+  } else if (code_verifier) {
+    // challenge 없이 받은 인가 코드에 verifier 가 오면 거절한다(RFC 9700 — PKCE 를 피해 가는 공격을 막는다).
+    return fail(res, 400, 'invalid_grant', 'code_challenge 없이 받은 인가 코드예요');
   }
 
   const accessToken = randomBytes(24).toString('base64url');
@@ -168,6 +171,7 @@ app.post('/token', (req, res) => {
 
 // 리소스 서버 역할 — Access 토큰을 받고, 허락받은 범위(scope)만 내준다.
 app.get('/photos', (req, res) => {
+  res.on('finish', () => console.log(`GET /photos ${res.statusCode}`)); // 사진 요청이 올 때마다 한 줄
   const header = req.headers.authorization ?? '';
   const grant = header.startsWith('Bearer ') ? tokens.get(header.slice('Bearer '.length)) : undefined;
   if (!grant || grant.expiresAt < Date.now()) {

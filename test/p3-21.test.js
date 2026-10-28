@@ -267,11 +267,15 @@ describe('축 ① — 나눠 주는 인가 서버', () => {
       expect(wrong.status).toBe(400);
       expect((await tokenFor(code, { code_verifier: RFC_VERIFIER })).status).toBe(400);
       expect((await tokenFor(await codeFor('jaehoon', pkce), { code_verifier: RFC_VERIFIER })).status).toBe(200);
+      // PKCE 다운그레이드 — challenge 없이 받은 인가 코드에 verifier 가 오면 거절(RFC 9700 §4.8.2)
+      const downgrade = await tokenFor(await codeFor('jaehoon'), { code_verifier: RFC_VERIFIER });
+      expect(downgrade.status).toBe(400);
+      expect(await downgrade.json()).toEqual({ error: 'invalid_grant', error_description: 'code_challenge 없이 받은 인가 코드예요' });
     });
   });
 
-  it('🔴 리소스 — 토큰 없으면 401 invalid_token · scope 밖이면 403 insufficient_scope · 사진', async () => {
-    await withServers([() => bootAuth()], async () => {
+  it('🔴 리소스 — 토큰 없으면 401 invalid_token · scope 밖이면 403 insufficient_scope · 사진 · 창 1 에 요청마다 한 줄', async () => {
+    await withServers([() => bootAuth()], async (auth) => {
       const none = await fetch(`${AUTH}/photos`);
       expect(none.status).toBe(401);
       expect(none.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
@@ -283,6 +287,8 @@ describe('축 ① — 나눠 주는 인가 서버', () => {
       const { access_token } = await (await tokenFor(await codeFor('dahye'))).json();
       const ok = await fetch(`${AUTH}/photos`, { headers: { Authorization: `Bearer ${access_token}` } });
       expect(await ok.json()).toEqual({ photos: ['등산 정상', '야경'] });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(auth.tail().split('\n').filter((l) => l.startsWith('GET /photos'))).toEqual(['GET /photos 401', 'GET /photos 403', 'GET /photos 200']);
     });
   });
 });
@@ -367,6 +373,9 @@ describe('축 ② — Step 별 판', () => {
       const out = await inject(leaked);
       expect(out.status).toBe(400);
       expect(out.json()).toEqual({ error: 'invalid_grant', error_description: 'code_verifier가 맞지 않아요' });
+      // challenge 없이 받은 jaehoon 의 code 를 PKCE 판에 끼워도 거절 — 이유가 다르다
+      const plain = await inject(await codeFor('jaehoon'));
+      expect(plain.json()).toEqual({ error: 'invalid_grant', error_description: 'code_challenge 없이 받은 인가 코드예요' });
       // 내 흐름은 그대로 — 주소에 challenge · 쿠키에 verifier
       const b = browser();
       const { consent, after } = await signIn(b);
@@ -386,7 +395,7 @@ describe('축 ② — Step 별 판', () => {
       expect(q.get('scope')).toBe('openid email photos');
       expect(consent.body).toContain('<ul><li>누구인지 알려 주기</li><li>이메일 주소</li><li>사진 목록 보기</li></ul>');
       expect(after.json()).toEqual({ sub: '10001', email: 'jaehoon@example.com', photos: ['한강 노을', '제주 바다', '강아지 산책'] });
-      expect(app.tail()).toMatch(/id_token: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ij[\w-]+\.[\w-]+\.[\w-]+'/);
+      expect(app.tail()).toMatch(/id_token: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6[\w-]+\.[\w-]+\.[\w-]+'/);
       expect(b.cookie('localhost', 'oauth_nonce')).toBe(q.get('nonce'));
     });
   });
@@ -565,14 +574,22 @@ describe('실습 `.http` 를 httpYac 으로', () => {
   }, 60000);
 });
 
-describe('과제 [기초] — 확인 절차가 못 가리는 판(답안 «흔한 실수» 의 주장)', () => {
-  it('🔴 scope 를 안 보고 늘 /photos 를 부르는 판도 브라우저 응답은 같다 — 403 본문에 photos 가 없어 undefined 키가 JSON 에서 빠진다', async () => {
+describe('과제 [기초] — 화면으로는 못 가리고 창 1 로 가리는 판(답안 «흔한 실수»)', () => {
+  it('🔴 scope 를 안 보고 늘 /photos 를 부르는 판도 브라우저 응답은 같다(undefined 키는 JSON 에서 빠진다) — 창 1 의 GET /photos 403 줄로 가려진다', async () => {
     const src = read(LAB('homework1.js'));
     const guard = "  // 사진을 허락받지 않았으면 누구인지만 보여 준다.\n  if (!tokens.scope.split(' ').includes('photos')) {\n    res.json({ sub: user.sub, email: user.email });\n    return;\n  }\n\n";
     expect(src).toContain(guard);
-    await withServers([() => bootAuth(), () => bootApp(src.replace(guard, ''))], async () => {
+    await withServers([() => bootAuth(), () => bootApp(src.replace(guard, ''))], async (auth) => {
       const { after } = await signIn(browser(), { start: `${APP}/signin` });
       expect(after.body).toBe('{"sub":"10001","email":"jaehoon@example.com"}');
+      await new Promise((r) => setTimeout(r, 100));
+      expect(auth.tail()).toContain('GET /photos 403');
+    });
+    // 맞는 판은 로그인만 하면 창 1 에 사진 요청 줄이 없다
+    await withServers([() => bootAuth(), () => bootApp(src)], async (auth) => {
+      await signIn(browser(), { start: `${APP}/signin` });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(auth.tail()).not.toContain('GET /photos');
     });
   });
 });
