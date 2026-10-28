@@ -1,18 +1,18 @@
-### dahye의 code 받기
+### dahye의 인가 코드 받기
 # @no-redirect
 POST http://127.0.0.1:4001/authorize
 Content-Type: application/x-www-form-urlencoded
 
 response_type=code&client_id=photo-app&redirect_uri=http://localhost:4002/callback&scope=photos&username=dahye&password=dahye1234&decision=allow
 
-### jaehoon의 code 받기
+### jaehoon의 인가 코드 받기
 # @no-redirect
 POST http://127.0.0.1:4001/authorize
 Content-Type: application/x-www-form-urlencoded
 
 response_type=code&client_id=photo-app&redirect_uri=http://localhost:4002/callback&scope=photos&username=jaehoon&password=jaehoon1234&decision=allow
 
-### jaehoon의 code 받기 (challenge를 담아)
+### jaehoon의 인가 코드 받기 (code_challenge를 담아)
 # @no-redirect
 POST http://127.0.0.1:4001/authorize
 Content-Type: application/x-www-form-urlencoded

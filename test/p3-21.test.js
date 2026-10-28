@@ -406,6 +406,14 @@ describe('축 ② — Step 별 판', () => {
       expect(after.json()).toEqual({ sub: '10001', email: 'jaehoon@example.com', photos: ['한강 노을', '제주 바다', '강아지 산책'] });
       const minji = (await signIn(browser(), { username: 'minji' })).after;
       expect(minji.json()).toEqual({ sub: '10002', email: 'minji@example.com', photos: ['벚꽃길', '카페 라테'] });
+      // 교안 Step 8 — 동의 화면이 떠 있을 때 Application 탭에서 oauth_nonce 를 한 글자 고치면 «nonce가 달라요»
+      const b = browser();
+      const consent = await b.go(`${APP}/login`);
+      const nonce = b.cookie('localhost', 'oauth_nonce');
+      b.jar.get('localhost').set('oauth_nonce', nonce.slice(0, -1) + (nonce.endsWith('0') ? '1' : '0'));
+      const tampered = await b.go(`${AUTH}/authorize`, { method: 'POST', body: new URLSearchParams({ ...hiddenFields(consent.body), username: 'jaehoon', password: 'jaehoon1234', decision: 'allow' }) });
+      expect(tampered.status).toBe(401);
+      expect(tampered.json()).toEqual({ message: 'ID 토큰을 믿을 수 없어요', reason: 'nonce가 달라요' });
     });
   });
 });
@@ -562,7 +570,7 @@ describe('실습 `.http` 를 httpYac 으로', () => {
         cpSync(LAB('oauth.http'), join(dir, 'oauth.http'));
         const out = JSON.parse(execFileSync(P('node_modules/.bin/httpyac'), ['send', 'oauth.http', '--all', '--json'],
           { encoding: 'utf-8', cwd: dir })).requests;
-        expect(out.map((r) => r.title)).toEqual(['dahye의 code 받기', 'jaehoon의 code 받기', 'jaehoon의 code 받기 (challenge를 담아)']);
+        expect(out.map((r) => r.title)).toEqual(['dahye의 인가 코드 받기', 'jaehoon의 인가 코드 받기', 'jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
         for (const r of out) {
           expect(r.response.statusCode).toBe(302);
           expect(r.response.headers.location).toMatch(/^http:\/\/localhost:4002\/callback\?code=[\w-]{22}$/);
@@ -653,7 +661,7 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
 
   it('🔴 교안의 .http 블록 — lab/p3-21/oauth.http 의 요청 셋 그대로', () => {
     const blocks = blocksOf(LECTURE).filter((b) => b.lang === '' && b.lines[0]?.startsWith('### '));
-    expect(blocks.map((b) => b.lines[0])).toEqual(['### dahye의 code 받기', '### jaehoon의 code 받기', '### jaehoon의 code 받기 (challenge를 담아)']);
+    expect(blocks.map((b) => b.lines[0])).toEqual(['### dahye의 인가 코드 받기', '### jaehoon의 인가 코드 받기', '### jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
     const http = read(LAB('oauth.http'));
     expect(blocks.filter((b) => !contains(http, b.lines)).map((b) => b.lines[0])).toEqual([]);
   });
@@ -679,6 +687,7 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
       '{"error":"invalid_grant","error_description":"code_verifier가 맞지 않아요"}',
       '{"sub":"10001","email":"jaehoon@example.com","photos":["한강 노을","제주 바다","강아지 산책"]}',
       '{"message":"ID 토큰을 믿을 수 없어요","reason":"jwt audience invalid. expected: photo-app"}',
+      '{"message":"ID 토큰을 믿을 수 없어요","reason":"nonce가 달라요"}',
       'http://127.0.0.1:4001/authorize?response_type=code&client_id=photo-app&redirect_uri=http%3A%2F%2Flocalhost%3A4002%2Fcallback&scope=photos',
       '인가 서버가 4001번 포트에서 기다리고 있어요.',
       '`GET /photos 200`',
