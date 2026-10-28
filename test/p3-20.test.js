@@ -583,6 +583,51 @@ describe('실습·과제 `.http` 를 httpYac 으로', () => {
   }, 60000);
 });
 
+describe('과제 [기초] — 확인 절차가 가려내는 틀린 판', () => {
+  const post = (base, path, body, headers = {}) =>
+    fetch(`${base}${path}`, { method: 'POST', headers: { ...JSON_HEADERS, ...headers }, body: JSON.stringify(body ?? {}) });
+  const run = async (lab) => {
+    const local = sessionCookie(await post(lab.base, '/login', { username: 'jaehoon' }));
+    const other = sessionCookie(await post(lab.base, '/login', { username: 'minji' }));
+    const http = sessionCookie(await post(lab.base, '/login', { username: 'jaehoon' }));
+    const message = (await (await post(lab.base, '/logout-all', {}, { Cookie: http })).json()).message;
+    const me = async (cookie) => (await fetch(`${lab.base}/me`, { headers: { Cookie: cookie } })).status;
+    return { message, local: await me(local), other: await me(other) };
+  };
+
+  it('🔴 맞는 판 — 「세션 2개」 · jaehoon 의 다른 기기 401 · minji 그대로', async () => {
+    const lab = await bootLab('homework1.js', 4011);
+    try {
+      expect(await run(lab)).toEqual({ message: '세션 2개를 지웠어요', local: 401, other: 200 });
+    } finally {
+      await lab.stop();
+    }
+  });
+
+  it('🔴 반복문 변수를 userId 로 지은 판 — 「세션 3개」 · minji 까지 401(요구사항 5 의 minji 가 가려낸다)', async () => {
+    await labVariant('homework1.js', 4011,
+      'for (const [sessionId, owner] of sessions) {\n    if (owner === userId) {',
+      'for (const [sessionId, userId] of sessions) {\n    if (userId === userId) {', async (lab) => {
+        expect(await run(lab)).toEqual({ message: '세션 3개를 지웠어요', local: 401, other: 401 });
+      });
+  });
+
+  it('🔴 지금 기기의 세션만 지우는 판 — 「세션 1개」 · 다른 기기 그대로', async () => {
+    await labVariant('homework1.js', 4011,
+      `  let count = 0;
+  for (const [sessionId, owner] of sessions) {
+    if (owner === userId) {
+      sessions.delete(sessionId);
+      count += 1;
+    }
+  }`,
+      `  sessions.delete(req.cookies.labSession);
+  const count = 1;`, async (lab) => {
+        expect(await run(lab)).toEqual({ message: '세션 1개를 지웠어요', local: 200, other: 200 });
+      });
+  });
+});
+
 describe('과제 [응용] — 라이브러리 없이 서명 확인', () => {
   it('🔴 진짜 true · 페이로드를 고친 가짜 false · 다른 비밀키로 만든 토큰 false · jwt.verify 와 같은 판정', () => {
     expect(runLab('homework2.js')).toBe(['true', 'false', 'false', ''].join('\n'));
