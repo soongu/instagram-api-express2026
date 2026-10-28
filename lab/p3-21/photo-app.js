@@ -1,12 +1,19 @@
 // ~/instagram-api/lab/photo-app.js
 import express from 'express';
+import cookieParser from 'cookie-parser';
+import { randomUUID } from 'node:crypto';
 
 const AUTH_SERVER = 'http://127.0.0.1:4001';
 const CLIENT_ID = 'photo-app';
 const CLIENT_SECRET = 'photo-app-secret';
 const REDIRECT_URI = 'http://localhost:4002/callback';
 
+// 로그인을 시작한 브라우저에만 잠깐 남겨 두는 값 — 10분 뒤 사라진다.
+const TEMP_COOKIE = { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000 };
+
 const app = express();
+
+app.use(cookieParser());
 
 app.get('/', (req, res) => {
   res.send('<a href="/login">사진 불러오기</a>');
@@ -14,16 +21,26 @@ app.get('/', (req, res) => {
 
 // 인가 서버의 동의 화면으로 보낸다 — 무엇을 허락받고 싶은지 주소에 담아서
 app.get('/login', (req, res) => {
+  const state = randomUUID();
+  res.cookie('oauth_state', state, TEMP_COOKIE);
+
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     scope: 'photos',
+    state,
   });
   res.redirect(`${AUTH_SERVER}/authorize?${params}`);
 });
 
 app.get('/callback', async (req, res) => {
+  if (!req.query.state || req.query.state !== req.cookies.oauth_state) {
+    res.status(403).json({ message: '이 브라우저에서 시작한 로그인이 아니에요' });
+    return;
+  }
+  res.clearCookie('oauth_state');
+
   if (req.query.error) {
     res.status(400).json({ message: `허락을 받지 못했어요 (${req.query.error})` });
     return;

@@ -1,0 +1,6 @@
+### dahye의 code 받기
+# @no-redirect
+POST http://127.0.0.1:4001/authorize
+Content-Type: application/x-www-form-urlencoded
+
+response_type=code&client_id=photo-app&redirect_uri=http://localhost:4002/callback&scope=photos&username=dahye&password=dahye1234&decision=allow
