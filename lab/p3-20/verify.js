@@ -1,7 +1,7 @@
 // ~/instagram-api/lab/verify.js
 import jwt from 'jsonwebtoken';
 
-const SECRET = 'p3-20-lab-secret';
+const SECRET = 'my-lab-secret';
 
 const token = jwt.sign({ sub: '2' }, SECRET);
 

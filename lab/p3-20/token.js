@@ -2,7 +2,7 @@
 import jwt from 'jsonwebtoken';
 
 // 실습용 비밀키 — 실제 서버에서는 코드에 적지 않고 환경 변수에 둔다.
-const SECRET = 'p3-20-lab-secret';
+const SECRET = 'my-lab-secret';
 
 const token = jwt.sign({ sub: '2' }, SECRET);
 console.log(token);

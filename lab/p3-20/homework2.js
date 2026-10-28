@@ -2,7 +2,7 @@
 import { createHmac } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 
-const SECRET = 'p3-20-lab-secret';
+const SECRET = 'my-lab-secret';
 
 // jsonwebtoken 없이 서명이 맞는지 확인한다 — 헤더.페이로드 로 서명을 다시 계산해 비교한다.
 function checkSignature(token, secret) {

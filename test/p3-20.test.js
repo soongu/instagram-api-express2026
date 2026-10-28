@@ -338,7 +338,7 @@ describe('축 ⑥ — Step 별 판', () => {
 // ── 토큰 스크립트 — 학생 폴더 `~/instagram-api/lab/` (코드베이스는 `lab/p3-20/`) ──
 const runLab = (file) => execFileSync(process.execPath, [P(`lab/p3-20/${file}`)], { cwd: P('.'), encoding: 'utf8' });
 const b64 = (part) => JSON.parse(Buffer.from(part, 'base64url').toString());
-const LAB_SECRET = 'p3-20-lab-secret';
+const LAB_SECRET = 'my-lab-secret';
 
 describe('축 ⑦ — 토큰 스크립트 넷', () => {
   it('🔴 base64.js — 헤더 글자가 JWT 맨 앞 조각과 같다 · base64 와 base64url 의 차이(= · / · _)', () => {
@@ -500,7 +500,7 @@ describe('직접 해보기 3 — 토큰으로 알아보는 서버', () => {
     let lab = await bootLab('practice3.js', 4003);
     const { accessToken } = await (await tokenLogin(lab.base, 'dahye')).json();
     await lab.stop();
-    await labVariant('practice3.js', 4003, "const SECRET = 'p3-20-lab-secret';", "const SECRET = 'p3-20-new-secret';", async (v) => {
+    await labVariant('practice3.js', 4003, "const SECRET = 'my-lab-secret';", "const SECRET = 'my-new-secret';", async (v) => {
       const res = await fetch(`${v.base}/me`, { headers: { Authorization: `Bearer ${accessToken}` } });
       expect(res.status).toBe(401);
     });

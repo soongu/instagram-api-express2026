@@ -1,7 +1,7 @@
 // ~/instagram-api/lab/expire.js
 import jwt from 'jsonwebtoken';
 
-const SECRET = 'p3-20-lab-secret';
+const SECRET = 'my-lab-secret';
 
 // 1초 뒤에 끝나는 토큰
 const token = jwt.sign({ sub: '2' }, SECRET, { expiresIn: '1s' });

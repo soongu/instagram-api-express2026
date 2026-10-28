@@ -2,7 +2,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 
-const SECRET = 'p3-20-lab-secret';
+const SECRET = 'my-lab-secret';
 const users = { dahye: 1, jaehoon: 2, minji: 3 };
 
 const app = express();
