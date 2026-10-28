@@ -28,6 +28,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
+import { roundDir } from './helpers/round.js';
 import { setupP236 } from '../sql/p2-36/setup.mjs';
 
 const ROOT = new URL('../', import.meta.url);
@@ -39,6 +40,11 @@ const ENV = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:5173' };
 const PORT = 3491;
 
 const read = (p) => readFileSync(p, 'utf8');
+
+// 🚨 학생 파일은 이 회차 북마크 `code/p3-19` 를 풀어서 읽는다 — `p3-20` 이 `routes/auth.js`·`auth.http` 를
+//    세션 판으로 갈아 끼워도 이 회차 판정은 그때의 파일을 잰다(`helpers/round.js`).
+const ROUND = roundDir('code/p3-19');
+const R = (rel) => join(ROUND.dir, rel);
 
 let db = null;
 let server = null;
@@ -66,7 +72,7 @@ beforeAll(async () => {
   await setupP236(db);
   seed();
 
-  server = await boot('app.js', {
+  server = await boot(R('app.js'), {
     port: PORT, env: { ...ENV, PORT: String(PORT) }, ready: `${PORT}번 포트에서`,
   });
 }, 120000);
@@ -76,6 +82,7 @@ afterAll(async () => {
   if (db) await db.end();
   const admin = await dropGate();
   await admin.end();
+  ROUND.cleanup();
 }, 60000);
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -91,7 +98,7 @@ const withVariant = async (port, replace, fn) => {
   const dir = mkdtempSync(join(tmpdir(), 'p319-variant-'));
   try {
     for (const name of ['app.js', 'db.js', 'errors.js', 'routes', 'services', 'middlewares', 'schemas', 'requests', 'package.json']) {
-      cpSync(P(name), join(dir, name), { recursive: true });
+      cpSync(R(name), join(dir, name), { recursive: true });
     }
     symlinkSync(P('node_modules'), join(dir, 'node_modules'));
     for (const [rel, edit] of Object.entries(replace)) {
@@ -300,7 +307,7 @@ describe('축 ⑤ — Step 별 판', () => {
 
 describe('축 ⑥ — `requests/auth.http` 를 httpYac 으로', () => {
   it('🔴 다섯 요청 — 로그인 200 · 나는 누구 jaehoon(쿠키를 기억) · 없는 이름 401 · 고친 쿠키 dahye · 헤더 minji', async () => {
-    const out = sendHttp(P('requests/auth.http'), PORT);
+    const out = sendHttp(R('requests/auth.http'), PORT);
     expect(out.map((r) => r.title)).toEqual(['로그인', '나는 누구', '없는 이름으로 로그인', '쿠키를 고쳐서 보내면', '헤더로 보내면']);
     expect(out.map((r) => r.response.statusCode)).toEqual([200, 200, 401, 200, 200]);
     expect(out[0].response.headers['set-cookie']).toEqual([expect.stringMatching(/^userId=2; Max-Age=604800; Path=\//)]);
@@ -508,7 +515,7 @@ const stepCommit = (n) => {
     .find((l) => l.includes(' feat(p3-19): ') && l.endsWith(`(Step ${n})`));
   return line ? line.split(' ')[0] : null;
 };
-const fileAt = (commit, path) => (commit ? git('show', `${commit}:${path}`) : read(P(path)));
+const fileAt = (commit, path) => (commit ? git('show', `${commit}:${path}`) : read(R(path)));
 const blocksOf = (file) => {
   const out = [];
   let step = 0;
