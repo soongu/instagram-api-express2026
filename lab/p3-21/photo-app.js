@@ -22,18 +22,21 @@ app.get('/', (req, res) => {
 // 인가 서버의 동의 화면으로 보낸다 — 무엇을 허락받고 싶은지 주소에 담아서
 app.get('/login', (req, res) => {
   const state = randomUUID();
+  const nonce = randomUUID();
   const codeVerifier = randomBytes(32).toString('base64url');
   const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
 
   res.cookie('oauth_state', state, TEMP_COOKIE);
+  res.cookie('oauth_nonce', nonce, TEMP_COOKIE);
   res.cookie('oauth_verifier', codeVerifier, TEMP_COOKIE);
 
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
-    scope: 'photos',
+    scope: 'openid email photos',
     state,
+    nonce,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
   });
@@ -72,13 +75,18 @@ app.get('/callback', async (req, res) => {
     return;
   }
 
+  // ID 토큰의 페이로드를 읽는다 — 아직 서명은 확인하지 않았다.
+  const payload = tokens.id_token.split('.')[1];
+  const user = JSON.parse(Buffer.from(payload, 'base64url'));
+  console.log(user);
+
   // Access 토큰으로 사진 목록을 받는다.
   const photosRes = await fetch(`${AUTH_SERVER}/photos`, {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
   const { photos } = await photosRes.json();
 
-  res.json({ photos });
+  res.json({ sub: user.sub, email: user.email, photos });
 });
 
 app.listen(4002, () => {
