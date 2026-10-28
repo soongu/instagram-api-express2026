@@ -440,7 +440,7 @@ describe('직접 해보기 1 — 우리 앱을 인가 서버에 등록하기', (
   });
 
   it('🔴 등록한 뒤 — 동의 화면에 앱 이름 · 허용하면 code', async () => {
-    expect(read(P('../../part3/3-auth-principles/p3-21-oauth-oidc-answers.md'))
+    expect(read(P('../../part3/3-auth-principles/p3-21-oauth-oidc-lecture.md'))
       .includes(REGISTER[1].split('\n').slice(2, 7).join('\n'))).toBe(true);
     await withServers([() => bootAuth([REGISTER]), () => bootApp(read(LAB('practice1.js')), 4003)], async () => {
       const { consent, after } = await signIn(browser(), { start: 'http://localhost:4003/login' });
