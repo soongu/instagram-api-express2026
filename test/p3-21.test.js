@@ -564,3 +564,129 @@ describe('실습 `.http` 를 httpYac 으로', () => {
     });
   }, 60000);
 });
+
+describe('과제 [기초] — 확인 절차가 못 가리는 판(답안 «흔한 실수» 의 주장)', () => {
+  it('🔴 scope 를 안 보고 늘 /photos 를 부르는 판도 브라우저 응답은 같다 — 403 본문에 photos 가 없어 undefined 키가 JSON 에서 빠진다', async () => {
+    const src = read(LAB('homework1.js'));
+    const guard = "  // 사진을 허락받지 않았으면 누구인지만 보여 준다.\n  if (!tokens.scope.split(' ').includes('photos')) {\n    res.json({ sub: user.sub, email: user.email });\n    return;\n  }\n\n";
+    expect(src).toContain(guard);
+    await withServers([() => bootAuth(), () => bootApp(src.replace(guard, ''))], async () => {
+      const { after } = await signIn(browser(), { start: `${APP}/signin` });
+      expect(after.body).toBe('{"sub":"10001","email":"jaehoon@example.com"}');
+    });
+  });
+});
+
+// ── 교안·답안의 코드 블록이 코드베이스에 «실재» 한다 ──
+// 교안 Step N 의 `// ~/instagram-api/lab/photo-app.js` 블록은 «그 Step 커밋» 의 photo-app.js 안에 줄 그대로 있어야 한다.
+const LECTURE = P('../../part3/3-auth-principles/p3-21-oauth-oidc-lecture.md');
+const ANSWERS = P('../../part3/3-auth-principles/p3-21-oauth-oidc-answers.md');
+const blocksOf = (file) => {
+  const out = [];
+  let step = 0;
+  let zone = 'body';
+  let cur = null;
+  for (const line of read(file).split('\n')) {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.lines.push(line);
+      continue;
+    }
+    const m = line.match(/^## Step (\d+)/);
+    if (m) { step = Number(m[1]); zone = 'body'; }
+    if (/^### 직접 해보기/.test(line)) zone = 'lab';
+    if (/^## (과제|생각해볼|마무리)/.test(line)) zone = 'rest';
+    const f = line.match(/^```(\w*)$/);
+    if (f) cur = { lang: f[1], step, zone, lines: [] };
+  }
+  return out;
+};
+const contains = (hay, body) => hay.includes(body.join('\n'));
+const stepFiles = (n) => stepCommits(n).map((c) => git('show', `${c}:lab/p3-21/photo-app.js`));
+
+describe('교안·답안 블록이 코드베이스에 실재한다', () => {
+  it('🔴 교안 본문의 photo-app.js 블록 — 그 Step 커밋의 photo-app.js 안에 줄 그대로', () => {
+    const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && b.lines[0] === '// ~/instagram-api/lab/photo-app.js');
+    expect(blocks.length).toBe(15);
+    const misses = blocks.filter((b) => !stepFiles(b.step).some((t) => contains(t, b.lines.slice(1))));
+    expect(misses.map((b) => `Step ${b.step} ${b.lines[1]}`)).toEqual([]);
+  });
+
+  it('🔴 교안의 나머지 lab 블록 — 실습 파일 · 인가 서버(직접 해보기 1 은 등록을 더한 판)', () => {
+    const REGISTERED = read(LAB('auth-server.js')).replace(
+      "    redirectUris: ['http://localhost:4002/callback'],\n  },\n};",
+      "    redirectUris: ['http://localhost:4002/callback'],\n  },\n  'story-app': {\n    name: '스토리 만들기',\n    secret: 'story-app-secret',\n    redirectUris: ['http://localhost:4003/callback'],\n  },\n};");
+    const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\/lab\//.test(b.lines[0])
+      && b.lines[0] !== '// ~/instagram-api/lab/photo-app.js');
+    expect(blocks.map((b) => b.lines[0])).toEqual([
+      '// ~/instagram-api/lab/practice1.js', '// ~/instagram-api/lab/auth-server.js', '// ~/instagram-api/lab/practice2.js',
+      '// ~/instagram-api/lab/auth-server.js', '// ~/instagram-api/lab/practice3.js',
+    ]);
+    const misses = blocks.filter((b) => {
+      const name = b.lines[0].replace('// ~/instagram-api/lab/', '');
+      const hay = name === 'auth-server.js' ? REGISTERED : read(LAB(name));
+      return !contains(hay, b.lines.slice(1));
+    });
+    expect(misses.map((b) => `Step ${b.step} ${b.lines[0]}`)).toEqual([]);
+    // 실습 1·2 의 해설은 파일 전체다
+    for (const name of ['practice1.js', 'practice2.js']) {
+      const b = blocks.find((x) => x.lines[0] === `// ~/instagram-api/lab/${name}`);
+      expect(b.lines.join('\n') + '\n').toBe(read(LAB(name)));
+    }
+  });
+
+  it('🔴 교안의 .http 블록 — lab/p3-21/oauth.http 의 요청 셋 그대로', () => {
+    const blocks = blocksOf(LECTURE).filter((b) => b.lang === '' && b.lines[0]?.startsWith('### '));
+    expect(blocks.map((b) => b.lines[0])).toEqual(['### dahye의 code 받기', '### jaehoon의 code 받기', '### jaehoon의 code 받기 (challenge를 담아)']);
+    const http = read(LAB('oauth.http'));
+    expect(blocks.filter((b) => !contains(http, b.lines)).map((b) => b.lines[0])).toEqual([]);
+  });
+
+  it('🔴 답안의 해설 블록 — homework1·homework2 안에 줄 그대로', () => {
+    const blocks = blocksOf(ANSWERS).filter((b) => b.lang === 'javascript');
+    expect(blocks.map((b) => b.lines[0])).toEqual([
+      '// ~/instagram-api/lab/homework1.js', '// ~/instagram-api/lab/homework1.js',
+      '// ~/instagram-api/lab/homework2.js', '// ~/instagram-api/lab/homework2.js',
+    ]);
+    const misses = blocks.filter((b) => !contains(read(LAB(b.lines[0].replace('// ~/instagram-api/lab/', ''))), b.lines.slice(1)));
+    expect(misses.map((b) => b.lines[1])).toEqual([]);
+  });
+
+  it('🔴 교안이 인용한 응답 글자 — 판정이 받은 그대로', () => {
+    const text = read(LECTURE);
+    for (const line of [
+      '{"message":"허락을 받지 못했어요 (access_denied)"}',
+      '{"photos":["한강 노을","제주 바다","강아지 산책"]}',
+      '{"error":"invalid_grant","error_description":"쓸 수 없는 인가 코드예요"}',
+      '{"photos":["등산 정상","야경"]}',
+      '{"message":"이 브라우저에서 시작한 로그인이 아니에요"}',
+      '{"error":"invalid_grant","error_description":"code_verifier가 맞지 않아요"}',
+      '{"sub":"10001","email":"jaehoon@example.com","photos":["한강 노을","제주 바다","강아지 산책"]}',
+      '{"message":"ID 토큰을 믿을 수 없어요","reason":"jwt audience invalid. expected: photo-app"}',
+      'http://127.0.0.1:4001/authorize?response_type=code&client_id=photo-app&redirect_uri=http%3A%2F%2Flocalhost%3A4002%2Fcallback&scope=photos',
+      '인가 서버가 4001번 포트에서 기다리고 있어요.',
+    ]) expect(text).toContain(line);
+  });
+
+  it('🔴 교안 Step 4·7 의 터미널 출력은 실제 출력과 값만 다르다(줄 · 키 · 차례가 같다)', async () => {
+    const mask = (t) => t
+      .replace(/(access_token: ')[\w-]+'/g, "$1A'")
+      .replace(/(id_token: ')[\w.-]+'/g, "$1I'")
+      .replace(/(nonce: ')[\w-]+'/g, "$1N'")
+      .replace(/(iat|exp): \d+/g, '$1: T');
+    const textBlocks = blocksOf(LECTURE).filter((b) => b.lang === 'text' && b.lines[0] === '{');
+    const shown = Object.fromEntries(textBlocks.map((b) => [b.step, b.lines.join('\n')]));
+    for (const n of [4, 7]) {
+      await withServers([() => bootAuth(), () => bootApp(appAt(n))], async (auth, app) => {
+        await signIn(browser());
+        const printed = app.tail().split('\n').slice(1).join('\n').trimEnd();
+        expect(mask(shown[n])).toBe(mask(printed));
+      });
+    }
+    // 교안 Step 7 출력의 페이로드는 그 위 id_token 의 페이로드와 같다
+    const s7 = shown[7];
+    const idt = s7.match(/id_token: '([\w.-]+)'/)[1];
+    const p = b64(idt.split('.')[1]);
+    expect(s7).toContain(`nonce: '${p.nonce}'`);
+    expect(s7).toContain(`iat: ${p.iat},\n  exp: ${p.exp}`);
+  });
+});
