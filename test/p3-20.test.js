@@ -532,6 +532,57 @@ describe('과제 [기초] — 모든 기기에서 로그아웃', () => {
   });
 });
 
+describe('실습·과제 `.http` 를 httpYac 으로', () => {
+  const sendLab = (name, port) => {
+    const dir = mkdtempSync(join(tmpdir(), 'p320-labhttp-'));
+    try {
+      writeFileSync(join(dir, name), read(P(`lab/p3-20/${name}`)));
+      return JSON.parse(execFileSync(P('node_modules/.bin/httpyac'), ['send', name, '--all', '--json'],
+        { encoding: 'utf-8', cwd: dir })).requests;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('🔴 practice1.http — 로그인하면 labSession 쿠키를 기억해 나는 누구에 싣는다 · 남은 30초', async () => {
+    const lab = await bootLab('practice1.js', 4001);
+    try {
+      const out = sendLab('practice1.http', 4001);
+      expect(out.map((r) => r.title)).toEqual(['실습 로그인', '실습 나는 누구']);
+      expect(out[1].response.request.headers.cookie).toMatch(/^labSession=[0-9a-f-]{36}$/);
+      expect(JSON.parse(out[1].response.body)).toEqual({ userId: 2, leftSeconds: 30 });
+    } finally {
+      await lab.stop();
+    }
+  }, 60000);
+
+  it('🔴 practice3.http — `# @name` 으로 받은 accessToken 을 헤더에 싣는다 · 쿠키는 없다', async () => {
+    const lab = await bootLab('practice3.js', 4003);
+    try {
+      const out = sendLab('practice3.http', 4003);
+      expect(out.map((r) => r.title)).toEqual(['토큰 받기', '토큰으로 나는 누구']);
+      expect(out[0].response.headers['set-cookie']).toBeUndefined();
+      expect(out[1].response.request.headers.authorization).toMatch(/^Bearer eyJ[\w-]+\.[\w-]+\.[\w-]+$/);
+      expect(JSON.parse(out[1].response.body)).toEqual({ userId: 2 });
+    } finally {
+      await lab.stop();
+    }
+  }, 60000);
+
+  it('🔴 homework1.http — 로그인 · 나는 누구 · 모든 기기에서 로그아웃(세션 1개)', async () => {
+    const lab = await bootLab('homework1.js', 4011);
+    try {
+      const out = sendLab('homework1.http', 4011);
+      expect(out.map((r) => r.title)).toEqual(['과제 로그인', '과제 나는 누구', '모든 기기에서 로그아웃']);
+      expect(out.map((r) => r.response.statusCode)).toEqual([200, 200, 200]);
+      expect(JSON.parse(out[1].response.body)).toEqual({ userId: 2 });
+      expect(JSON.parse(out[2].response.body)).toEqual({ message: '세션 1개를 지웠어요' });
+    } finally {
+      await lab.stop();
+    }
+  }, 60000);
+});
+
 describe('과제 [응용] — 라이브러리 없이 서명 확인', () => {
   it('🔴 진짜 true · 페이로드를 고친 가짜 false · 다른 비밀키로 만든 토큰 false · jwt.verify 와 같은 판정', () => {
     expect(runLab('homework2.js')).toBe(['true', 'false', 'false', ''].join('\n'));
@@ -588,12 +639,14 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     expect(misses).toEqual([]);
   });
 
-  it('🔴 교안의 `.http` 블록 — 그 Step 커밋(없으면 끝 판)의 auth.http', () => {
-    const blocks = blocksOf(LECTURE).filter((b) => b.lang === '' && b.lines[0]?.startsWith('### ') && b.zone === 'body');
-    expect(blocks.length).toBeGreaterThanOrEqual(2);
+  it('🔴 교안의 `.http` 블록 — 본문은 그 Step 커밋(없으면 끝 판)의 auth.http · 직접 해보기는 lab/p3-20 의 .http', () => {
+    const blocks = blocksOf(LECTURE).filter((b) => b.lang === '' && b.lines[0]?.startsWith('### '));
+    expect(blocks.filter((b) => b.zone === 'body').length).toBeGreaterThanOrEqual(2);
+    expect(blocks.filter((b) => b.zone === 'lab').length).toBe(2);
+    const labHttp = ['practice1.http', 'practice3.http'].map((n) => read(P(`lab/p3-20/${n}`))).join('\n');
     const misses = [];
     for (const b of blocks) {
-      const text = fileAt(stepCommit(b.step), 'requests/auth.http');
+      const text = b.zone === 'lab' ? labHttp : fileAt(stepCommit(b.step), 'requests/auth.http');
       if (!contains(text, b.lines)) misses.push(`Step ${b.step} ${b.lines[0]}`);
     }
     expect(misses).toEqual([]);

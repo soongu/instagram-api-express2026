@@ -1,0 +1,13 @@
+### 과제 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### 과제 나는 누구
+GET http://localhost:4011/me
+
+### 모든 기기에서 로그아웃
+POST http://localhost:4011/logout-all

@@ -1,0 +1,10 @@
+### 실습 로그인
+POST http://localhost:4001/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### 실습 나는 누구
+GET http://localhost:4001/me

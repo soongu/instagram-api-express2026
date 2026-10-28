@@ -1,0 +1,12 @@
+### 토큰 받기
+# @name tokenLogin
+POST http://localhost:4003/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### 토큰으로 나는 누구
+GET http://localhost:4003/me
+Authorization: Bearer {{tokenLogin.accessToken}}
