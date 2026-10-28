@@ -9,3 +9,8 @@ export function createSession(userId) {
   sessions.set(sessionId, userId);
   return sessionId;
 }
+
+// 서버가 기억해 둔 세션이 없으면 undefined 가 나온다.
+export function getUserId(sessionId) {
+  return sessions.get(sessionId);
+}

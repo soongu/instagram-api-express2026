@@ -28,22 +28,22 @@ router.post('/login', validateBody(loginSchema), async (req, res) => {
   res.json(user);
 });
 
-// 누가 보냈는지 — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
-function readUserId(req) {
+// 요청에 실려 온 세션 ID — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
+function readSessionId(req) {
   const header = req.headers.authorization;
 
   if (header && header.startsWith('Bearer ')) {
-    return Number(header.slice('Bearer '.length));
+    return header.slice('Bearer '.length);
   }
 
-  // 브라우저가 다시 실어 보낸 쿠키 — cookie-parser 가 `userId=2` 를 { userId: '2' } 로 바꿔 둔다.
-  return Number(req.cookies.userId);
+  return req.cookies.sessionId;
 }
 
 router.get('/me', async (req, res) => {
-  const userId = readUserId(req);
+  // 서버가 기억해 둔 세션에서 사람의 번호를 찾는다 — 모르는 세션 ID면 undefined.
+  const userId = sessionService.getUserId(readSessionId(req));
 
-  if (!Number.isInteger(userId)) throw new UnauthorizedError('로그인이 필요해요');
+  if (!userId) throw new UnauthorizedError('로그인이 필요해요');
 
   const user = await userService.findUserById(userId);
 
