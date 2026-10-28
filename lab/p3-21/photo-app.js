@@ -1,7 +1,8 @@
 // ~/instagram-api/lab/photo-app.js
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import { createHash, createPublicKey, randomBytes, randomUUID } from 'node:crypto';
 
 const AUTH_SERVER = 'http://127.0.0.1:4001';
 const CLIENT_ID = 'photo-app';
@@ -43,6 +44,25 @@ app.get('/login', (req, res) => {
   res.redirect(`${AUTH_SERVER}/authorize?${params}`);
 });
 
+const verifyIdToken = async (idToken, nonce) => {
+  // ① 토큰 헤더의 kid로 인가 서버의 공개키를 고른다.
+  const { header } = jwt.decode(idToken, { complete: true });
+  const { keys } = await (await fetch(`${AUTH_SERVER}/jwks`)).json();
+  const jwk = keys.find((key) => key.kid === header.kid);
+  const publicKey = createPublicKey({ key: jwk, format: 'jwk' });
+
+  // ② 서명 · 누가 만들었나(iss) · 누구에게 준 것인가(aud) · 끝나는 시각(exp)
+  const payload = jwt.verify(idToken, publicKey, {
+    algorithms: ['RS256'],
+    issuer: AUTH_SERVER,
+    audience: CLIENT_ID,
+  });
+
+  // ③ 이 브라우저가 시작한 로그인에서 나온 토큰인가
+  if (payload.nonce !== nonce) throw new Error('nonce가 달라요');
+  return payload;
+};
+
 app.get('/callback', async (req, res) => {
   if (!req.query.state || req.query.state !== req.cookies.oauth_state) {
     res.status(403).json({ message: '이 브라우저에서 시작한 로그인이 아니에요' });
@@ -75,10 +95,13 @@ app.get('/callback', async (req, res) => {
     return;
   }
 
-  // ID 토큰의 페이로드를 읽는다 — 아직 서명은 확인하지 않았다.
-  const payload = tokens.id_token.split('.')[1];
-  const user = JSON.parse(Buffer.from(payload, 'base64url'));
-  console.log(user);
+  let user;
+  try {
+    user = await verifyIdToken(tokens.id_token, req.cookies.oauth_nonce);
+  } catch (error) {
+    res.status(401).json({ message: 'ID 토큰을 믿을 수 없어요', reason: error.message });
+    return;
+  }
 
   // Access 토큰으로 사진 목록을 받는다.
   const photosRes = await fetch(`${AUTH_SERVER}/photos`, {
