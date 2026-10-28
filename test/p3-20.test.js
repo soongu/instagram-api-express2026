@@ -413,7 +413,7 @@ describe('직접 해보기 1 — 30초 뒤 끝나는 세션', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ userId: 2 });
       const cookie = sessionCookie(res);
-      expect(cookie).toMatch(/^sessionId=[0-9a-f-]{36}$/);
+      expect(cookie).toMatch(/^labSession=[0-9a-f-]{36}$/);
       const meRes = await fetch(`${lab2.base}/me`, { headers: { Cookie: cookie } });
       expect(await meRes.json()).toEqual({ userId: 2, leftSeconds: 30 });
       const none = await fetch(`${lab2.base}/me`);
@@ -451,7 +451,7 @@ describe('직접 해보기 2 — 받은 토큰 읽어 보기', () => {
     expect(runLab('practice2.js')).toBe([
       '{"alg":"HS256","typ":"JWT"}',
       '{"sub":"7","username":"hana","email":"hana@example.com","role":"admin","iat":1793145600,"exp":1793146500}',
-      '2026-10-27T23:15:00.000Z',
+      '2026-10-28T00:15:00.000Z',
       '',
     ].join('\n'));
   });
