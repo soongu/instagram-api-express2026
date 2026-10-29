@@ -21,6 +21,15 @@ const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (p) => readFileSync(p, 'utf8');
 
+// «지금 스키마» 는 이 회차 북마크 `code/p2-39` 의 것이다 — 작업트리는 뒤 회차가 키운 판이다.
+// 🚨 2026-10-29 `p3-22` 가 `users` 에 `name` 을 더하자, 작업트리를 읽던 과제 [응용] 판정이 «칸 하나를 더한다» 대신
+//    `DROP INDEX "users_email_key"` 를 받아 빨개졌다(앞 회차 판정이 작업트리를 읽으면 다음 회차가 빨갛게 만든다).
+const ROUND_SCHEMA = (() => {
+  const path = join(mkdtempSync(join(tmpdir(), 'p239-round-')), 'schema.prisma');
+  writeFileSync(path, execFileSync('git', ['show', 'code/p2-39:prisma/schema.prisma'], { cwd: P('.'), encoding: 'utf8' }));
+  return path;
+})();
+
 const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
 const GATE_DB = 'p239_gate';
 
@@ -296,7 +305,7 @@ describe('p2-39 ⑥ 과제 [응용] — 인스타그램 프로필', () => {
   });
 
   it('지금 스키마에서 과제판으로 가는 SQL 은 users 에 칸 하나를 더하고 follows 표를 만든다 — 지우는 것은 없다', () => {
-    const sql = prismaCli(['migrate', 'diff', '--from-schema', P('prisma/schema.prisma'), '--to-schema', P(HW2), '--script']);
+    const sql = prismaCli(['migrate', 'diff', '--from-schema', ROUND_SCHEMA, '--to-schema', P(HW2), '--script']);
     expect(sql).toMatch(/ALTER TABLE "users" ADD COLUMN\s+"name" VARCHAR\(50\)/);
     expect(sql).toMatch(/CREATE TABLE "follows"/);
     expect(sql).toMatch(/CREATE UNIQUE INDEX "follows_follower_id_following_id_key"/);
@@ -319,7 +328,7 @@ describe('p2-39 ⑥ 과제 [응용] — 인스타그램 프로필', () => {
       await admin.query(`DROP DATABASE IF EXISTS ${BASE} WITH (FORCE)`);
       await admin.query(`CREATE DATABASE ${BASE}`);
       const base = new pg.Client({ ...ADMIN, database: BASE }); await base.connect();
-      await base.query(prismaCli(['migrate', 'diff', '--from-empty', '--to-schema', P('prisma/schema.prisma'), '--script']));
+      await base.query(prismaCli(['migrate', 'diff', '--from-empty', '--to-schema', ROUND_SCHEMA, '--script']));
       await base.end();
     });
 
@@ -332,7 +341,7 @@ describe('p2-39 ⑥ 과제 [응용] — 인스타그램 프로필', () => {
       expect(sql).toMatch(/ALTER TABLE "users" ADD COLUMN\s+"name" VARCHAR\(50\);/);
       expect(sql).toMatch(/CREATE TABLE "follows"/);
       expect(sql).not.toMatch(/DROP/);
-      expect(sql).toBe(prismaCli(['migrate', 'diff', '--from-schema', P('prisma/schema.prisma'), '--to-schema', P(HW2), '--script']));
+      expect(sql).toBe(prismaCli(['migrate', 'diff', '--from-schema', ROUND_SCHEMA, '--to-schema', P(HW2), '--script']));
     });
 
     it('name 의 물음표를 빠뜨린 답은 명령이 조용히 통과하고 NOT NULL 로만 드러난다', () => {
@@ -462,7 +471,7 @@ describe('p2-39 ⑧ 답안이 코드베이스와 같다', () => {
   });
 
   it('[응용] 「지우는 줄은 하나도 없다」 — 지금 스키마에서 과제판까지의 SQL 에 DROP 이 없다', () => {
-    const sql = prismaCli(['migrate', 'diff', '--from-schema', P('prisma/schema.prisma'), '--to-schema', P('lab/p2-39/homework2.prisma'), '--script']);
+    const sql = prismaCli(['migrate', 'diff', '--from-schema', ROUND_SCHEMA, '--to-schema', P('lab/p2-39/homework2.prisma'), '--script']);
     expect(sql).not.toMatch(/DROP/);
   });
 

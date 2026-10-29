@@ -28,6 +28,7 @@ import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { setupP236 } from '../sql/p2-36/setup.mjs';
+import { applyMigrationsAfter, P234_LAST } from './helpers/tip-schema.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -71,6 +72,8 @@ beforeAll(async () => {
   db = new pg.Client({ ...ADMIN, database: GATE_DB });
   await db.connect();
   await setupP236(db);
+  // 공유 Prisma 클라이언트가 tip 스키마로 만들어져 있다 — 시드가 새 컬럼을 고르니 DB 도 맞춘다(`helpers/tip-schema.js`).
+  await applyMigrationsAfter(db, P234_LAST);
   seed();
 
   server = await bootApp(ROUND.dir, PORT);

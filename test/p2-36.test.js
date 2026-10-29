@@ -17,6 +17,7 @@ import { execFileSync } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { setupP236 } from '../sql/p2-36/setup.mjs';
+import { applyMigrationsAfter, P234_LAST } from './helpers/tip-schema.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -32,6 +33,7 @@ const read = (p) => readFileSync(p, 'utf8');
 const FRONT = (rel) => read(P(`../instagram-react/src/${rel}`));
 
 let db = null;
+let usersColumnsAtRound = [];
 let server = null;
 
 const seed = () =>
@@ -50,6 +52,11 @@ beforeAll(async () => {
   db = new pg.Client({ ...ADMIN, database: 'p236_gate' });
   await db.connect();
   await setupP236(db);
+  // 이 회차 «당시» 의 사람 테이블 컬럼 — 아래 tip 따라잡기가 뒤 회차 컬럼(`name` 등)을 더하기 전에 잡아 둔다.
+  usersColumnsAtRound = (await db.query(
+    "select column_name from information_schema.columns where table_name = 'users'")).rows.map((x) => x.column_name);
+  // 공유 Prisma 클라이언트가 tip 스키마로 만들어져 있다 — 시드가 새 컬럼을 고르니 DB 도 맞춘다(`helpers/tip-schema.js`).
+  await applyMigrationsAfter(db, P234_LAST);
   seed();
 
   server = await boot('app.js', {
@@ -386,9 +393,8 @@ describe('Step 7 — 프로필과 스토리는 우리 서버에 «정말로» �
   });
 
   it('🔴 사람 표에 프로필 화면이 요구하는 칸이 «없다» — 그래서 못 준다', async () => {
-    const r = await db.query(
-      "select column_name from information_schema.columns where table_name = 'users'");
-    const 칸 = r.rows.map((x) => x.column_name);
+    const 칸 = usersColumnsAtRound;
+    expect(칸).toContain('username');
     expect(칸).not.toContain('name');
     expect(칸).not.toContain('follower_count');
     const t = await db.query(
