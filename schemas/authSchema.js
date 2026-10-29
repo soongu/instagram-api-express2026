@@ -27,3 +27,9 @@ export const signupSchema = z.object({
     }),
   password: z.string().min(8, { error: '비밀번호는 8자 이상이어야 해요' }),
 });
+
+// 중복 확인은 쿼리 문자열로 받는다 — 무엇을(type) 어떤 값으로(value) 찾을지.
+export const checkDuplicateSchema = z.object({
+  type: z.enum(['email', 'phone', 'username']),
+  value: z.string().trim().min(1),
+});

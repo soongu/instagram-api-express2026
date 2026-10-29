@@ -22,3 +22,10 @@ export async function createUser(data) {
     throw error;
   }
 }
+
+// type 은 email·phone·username 가운데 하나다 — 셋 다 UNIQUE 라 findUnique 로 찾을 수 있다.
+export async function isTaken(type, value) {
+  const user = await prisma.user.findUnique({ where: { [type]: value }, select: { id: true } });
+
+  return user !== null;
+}

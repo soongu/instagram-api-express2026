@@ -219,6 +219,8 @@ describe('축 ④ — 중복 확인: GET /api/auth/check-duplicate', () => {
       .toEqual({ available: false, message: '이미 가입한 휴대폰 번호예요' });
     expect((await check(server.base, 'type=phone&value=01012345678')).body.available).toBe(false);
     expect((await check(server.base, 'type=phone&value=010-9999-0000')).body.available).toBe(true);
+    // 가입은 앞뒤 공백을 지우고 저장하니(signupSchema 의 trim) 중복 확인도 지운 값으로 찾는다.
+    expect((await check(server.base, 'type=email&value=%20sora@example.com%20')).body.available).toBe(false);
   });
 
   it('🔴 type 이 셋 밖이거나 value 가 비면 400', async () => {
@@ -253,8 +255,8 @@ describe('축 ⑥ — requests/auth.http 를 httpYac 으로', () => {
       const requests = JSON.parse(out).requests;
       const names = requests.map((r) => r.name);
       expect(names).toEqual([
-        '로그인', '나는_누구', '없는_이름으로_로그인', '쿠키를_고쳐서_보내면', '헤더로_보내면', '로그아웃',
-        '회원가입', '이미_있는_사용자_이름으로_가입', '사용자_이름_중복_확인', '휴대폰_번호_중복_확인',
+        '로그인', '나는 누구', '없는 이름으로 로그인', '쿠키를 고쳐서 보내면', '헤더로 보내면', '로그아웃',
+        '회원가입', '이미 있는 사용자 이름으로 가입', '사용자 이름 중복 확인', '휴대폰 번호 중복 확인',
       ]);
       const status = requests.map((r) => r.response.statusCode);
       expect(status.slice(6)).toEqual([201, 409, 200, 200]);
