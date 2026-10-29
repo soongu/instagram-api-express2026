@@ -3,13 +3,27 @@ import express from 'express';
 import * as userService from '../services/userService.js';
 import * as sessionService from '../services/sessionService.js';
 import { validateBody } from '../middlewares/validate.js';
-import { loginSchema } from '../schemas/authSchema.js';
+import { loginSchema, signupSchema, PHONE } from '../schemas/authSchema.js';
 import { UnauthorizedError } from '../errors.js';
 
 const router = express.Router();
 
 // 로그인 쿠키를 남겨 둘 기간 — 7일(밀리초)
 const SEVEN_DAYS = 1000 * 60 * 60 * 24 * 7;
+
+router.post('/signup', validateBody(signupSchema), async (req, res) => {
+  const { emailOrPhone, name, username } = req.body;
+
+  // 휴대폰 번호는 하이픈을 빼고 숫자만 저장한다 — 010-1234-5678 과 01012345678 은 같은 번호다.
+  const contact = PHONE.test(emailOrPhone)
+    ? { phone: emailOrPhone.replaceAll('-', '') }
+    : { email: emailOrPhone };
+
+  // 비밀번호는 아직 저장하지 않는다 — 안전하게 저장하는 법은 서버에서 인증을 구현하는 구간에서 배운다.
+  const user = await userService.createUser({ username, name, ...contact });
+
+  res.status(201).json({ message: '가입했어요', username: user.username });
+});
 
 router.post('/login', validateBody(loginSchema), async (req, res) => {
   const user = await userService.findUserByUsername(req.body.username);

@@ -29,3 +29,25 @@ Authorization: Bearer 3
 
 ### 로그아웃
 POST http://localhost:3000/api/auth/logout
+
+### 회원가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "sora@example.com",
+  "name": "한소라",
+  "username": "sora",
+  "password": "sora1234"
+}
+
+### 이미 있는 사용자 이름으로 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "jaehoon@example.com",
+  "name": "김재훈",
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
