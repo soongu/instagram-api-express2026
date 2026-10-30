@@ -12,6 +12,9 @@
 // 축 ④ 중복 확인 — `GET /api/auth/check-duplicate?type=&value=` `{ available, message }` · type 이 셋 밖이면 400.
 // 축 ⑤ 가입한 사람은 지금 로그인(이름만)으로 바로 들어온다.
 // 축 ⑥ `requests/auth.http` 를 httpYac 으로 — 앞 여섯 요청 뒤에 가입·중복 확인 넷.
+// 축 ⑦ 🔀 2026-10-30 학생 낭독 집중 검수 — Step 6 이 화면이 막은 네 값을 `.http` 로 «화면을 거치지 않고» 보내 400 을 받는다.
+//      그 요청은 회차를 닫은 «뒤» 에 더했다 — 북마크 `code/p3-22` 가 아니라 선의 tip(`main`)의 `requests/auth.http` 끝에 있다
+//      (트랙 캐논 「지나간 회차의 결함은 선 위에서 고친다」). 교안의 `### 규칙에 안 맞는 값으로 가입` 블록 · 400 블록과 대조한다.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, writeFileSync, cpSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -33,6 +36,21 @@ const SNAP_PORT = 3623;
 const MIGRATION = '20261029031804_add_user_signup_fields';
 
 const read = (p) => readFileSync(p, 'utf8');
+
+// 교안 — 분리 worktree 에서도 찾게 git 공통 디렉터리(…/code/instagram-api/.git)에서 트랙으로 올라간다.
+const COMMON = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: P('.'), encoding: 'utf8' }).trim();
+const LECTURE = join(COMMON, '..', '..', '..', 'part3/4-react-auth/p3-22-signup-lecture.md');
+/** 교안에서 첫 줄이 `first` 인 `tag` 펜스의 줄들(펜스 줄 제외). */
+const lectureFence = (tag, first) => {
+  const lines = read(LECTURE).split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] === '```' + tag && lines[i + 1] === first) {
+      const end = lines.indexOf('```', i + 1);
+      return lines.slice(i + 1, end);
+    }
+  }
+  return null;
+};
 
 // 학생 파일은 이 회차 북마크 `code/p3-22` 를 풀어서 읽는다(없으면 작업트리 — 이 회차를 짓는 동안).
 const ROUND = roundDir('code/p3-22');
@@ -266,5 +284,35 @@ describe('축 ⑥ — requests/auth.http 를 httpYac 으로', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('축 ⑦ — Step 6: 화면이 막은 값을 `.http` 로 보내면 서버가 400 으로 막는다(main 의 auth.http 끝)', () => {
+  const NAME = '### 규칙에 안 맞는 값으로 가입';
+
+  it('🔴 교안의 요청 블록이 main 의 `requests/auth.http` 맨 끝 요청과 글자까지 같다', () => {
+    const block = lectureFence('http', NAME);
+    expect(block, '교안 Step 6 에 그 요청 블록이 없다').not.toBeNull();
+    const file = read(P('requests/auth.http'));
+    expect(file.endsWith(`${block.join('\n')}\n`)).toBe(true);
+  });
+
+  it('🔴 httpYac 으로 보내면 400 · 본문이 교안의 400 블록과 같다 · 행은 안 생긴다', async () => {
+    const text = read(P('requests/auth.http')).replaceAll('http://localhost:3000', `http://localhost:${PORT}`);
+    const dir = mkdtempSync(join(tmpdir(), 'p322-http7-'));
+    try {
+      writeFileSync(join(dir, 'auth.http'), text);
+      const out = execFileSync(P('node_modules/.bin/httpyac'), ['send', 'auth.http', '--name', '규칙에 안 맞는 값으로 가입', '--json'],
+        { encoding: 'utf-8', cwd: dir });
+      const [res] = JSON.parse(out).requests;
+      expect(res.response.statusCode).toBe(400);
+      const quoted = lectureFence('bash', 'HTTP/1.1 400 Bad Request');
+      expect(quoted, '교안에 400 블록이 없다').not.toBeNull();
+      expect(quoted[1]).toBe('');
+      expect(JSON.parse(res.response.body)).toEqual(JSON.parse(quoted.slice(2).join('\n')));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    expect((await db.query(`SELECT count(*)::int AS n FROM users WHERE username = 'so ra'`)).rows[0].n).toBe(0);
   });
 });

@@ -57,3 +57,14 @@ GET http://localhost:3000/api/auth/check-duplicate?type=username&value=sora
 
 ### 휴대폰 번호 중복 확인
 GET http://localhost:3000/api/auth/check-duplicate?type=phone&value=010-1234-5678
+
+### 규칙에 안 맞는 값으로 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "010-1234-5678",
+  "name": "한소라",
+  "username": "so ra",
+  "password": "1234"
+}
