@@ -511,8 +511,8 @@ describe('직접 해보기 1 — 30초 뒤 끝나는 세션', () => {
       expect(await meOf(lab, cookie)).toEqual({ status: 200, body: { userId: 3, leftSeconds: 0 } });
     });
     const text = read(LECTURE);
-    expect(text).toContain('남은 초는 `Math.ceil`로 올려서 0.5초가 남았을 때도 0이 아니라 1로 답해요.');
-    expect(text).toContain('남은 초를 `Math.floor`로 내리면 로그인 직후에도 29가 나오고, 끝나기 직전에는 세션이 살아 있는데도 0이 나와요.');
+    expect(text).toContain('남은 초는 `Math.ceil`로 올림해서 0.5초가 남았을 때도 0이 아니라 1이 되게 해요.');
+    expect(text).toContain('남은 초를 `Math.floor`로 내림하면 로그인 직후에도 29가 나오고, 끝나기 직전에는 세션이 살아 있는데도 0이 나와요.');
   }, 30000);
 
   it('🔴 시작 판은 만료가 없는 세션 서버다 — 30초가 지나도 그대로', async () => {
