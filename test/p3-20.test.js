@@ -13,7 +13,8 @@
 // 축 ④ 서버가 다시 뜨면 세션이 사라진다 — 끄고 켜도, `node --watch` 가 파일 저장으로 다시 띄워도.
 // 축 ⑤ `requests/auth.http` 를 httpYac 으로 — 여섯 요청 · 로그아웃의 `Set-Cookie` 가 기억한 쿠키를 지운다.
 // 축 ⑥ Step 별 판 — Step 1 판은 로그인만 세션(`/me` 는 아직 옛 판).
-// 축 ⑦ 토큰 스크립트 넷(`lab/p3-20/base64.js`·`token.js`·`verify.js`·`expire.js`)의 출력.
+// 축 ⑦ 토큰 스크립트 다섯(`lab/p3-20/base64.js`·`token.js`·`verify.js`·`old-token.js`·`expire.js`)의 출력.
+//      `verify.js` 는 가짜 토큰을 `jwt.decode` 로 먼저 연다 · `old-token.js` 는 교안 Step 5 에 실린 토큰(만료 없음)을 지금 확인한다.
 // 실습·과제 — `lab/p3-20/`(학생 쪽 경로 주석은 `~/instagram-api/lab/…`).
 //
 // 🔎 크롬에서만 보이는 주장(Application 탭에서 쿠키 줄 더하기·지우기 · 로그아웃 뒤 쿠키 표)은
@@ -325,6 +326,29 @@ const extractAt = (commit, prefix) => {
 };
 
 describe('축 ⑥ — Step 별 판', () => {
+  it('🔴 Step 2 판 — 쿠키만 지우는 로그아웃: 쿠키 없이 401 · 복사해 둔 세션 ID 를 다시 실으면 그대로 jaehoon · 로그아웃 주소는 아직 없다', async () => {
+    const commit = stepCommit(2);
+    expect(commit).not.toBeNull();
+    const dir = extractAt(commit, 'p320-step2-');
+    try {
+      const s = await bootApp(dir, 3595);
+      try {
+        const res = await login(s.base, 'jaehoon');
+        const cookie = sessionCookie(res);
+        expect((await me(s.base, { Cookie: cookie })).body.username).toBe('jaehoon');
+        expect((await me(s.base)).status).toBe(401);
+        const again = await me(s.base, { Cookie: cookie });
+        expect(again.status).toBe(200);
+        expect(again.body.username).toBe('jaehoon');
+        expect((await logout(s.base, { Cookie: cookie })).status).toBe(404);
+      } finally {
+        await s.stop();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('🔴 Step 1 판 — 로그인은 세션 ID 쿠키를 주고, 나는 누구는 아직 옛 판이라 그 쿠키로는 401', async () => {
     const commit = stepCommit(1);
     expect(commit).not.toBeNull();
@@ -349,7 +373,7 @@ const runLab = (file) => execFileSync(process.execPath, [P(`lab/p3-20/${file}`)]
 const b64 = (part) => JSON.parse(Buffer.from(part, 'base64url').toString());
 const LAB_SECRET = 'my-lab-secret';
 
-describe('축 ⑦ — 토큰 스크립트 넷', () => {
+describe('축 ⑦ — 토큰 스크립트 다섯', () => {
   it('🔴 base64.js — 헤더 글자가 JWT 맨 앞 조각과 같다 · base64 와 base64url 의 차이(= · / · _)', () => {
     expect(runLab('base64.js')).toBe([
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
@@ -378,10 +402,16 @@ describe('축 ⑦ — 토큰 스크립트 넷', () => {
     expect(createHmac('sha256', LAB_SECRET).update(`${h}.${p}`).digest('base64url')).toBe(signature);
   });
 
-  it('🔴 verify.js — 진짜 토큰은 페이로드 객체 · 페이로드를 고친 가짜와 다른 비밀키는 둘 다 invalid signature', () => {
+  it('🔴 verify.js — 진짜 토큰은 페이로드 객체 · 가짜를 jwt.decode 로 열면 { sub: \'1\' } 그대로 · 같은 가짜와 다른 비밀키는 jwt.verify 에서 invalid signature', () => {
     const lines = runLab('verify.js').split('\n');
     expect(lines[0]).toMatch(/^\{ sub: '2', iat: \d{10} \}$/);
-    expect(lines.slice(1)).toEqual(['invalid signature', 'invalid signature', '']);
+    expect(lines.slice(1)).toEqual(["{ sub: '1' }", 'invalid signature', 'invalid signature', '']);
+  });
+
+  it('🔴 old-token.js — 교안 Step 5 에 실린 토큰(만료 없음 · 다른 컴퓨터에서 며칠 전에 만든 것)이 지금도 통과한다', () => {
+    expect(runLab('old-token.js')).toBe("{ sub: '2', iat: 1793170051 }\n");
+    // iat 는 2026-10-28 (한국 시각 오후 3시 47분) — 교안이 «2026년 10월 28일» 이라고 쓴다
+    expect(new Date(1793170051 * 1000).toISOString()).toBe('2026-10-28T06:47:31.000Z');
   });
 
   it('🔴 expire.js — 처음엔 exp 가 iat + 1 인 페이로드 · 2초 뒤엔 TokenExpiredError jwt expired', () => {
@@ -714,6 +744,7 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     expect(text).toContain(`{"sub":"2","iat":${b64(p).iat}}`);
     expect(text).toContain(` 서명       ${sig}  `);
     expect(text).toContain(` 페이로드   ${p}  `);
+    expect(read(P('lab/p3-20/old-token.js'))).toContain(`const oldToken = '${shown}';`);
     const labToken = read(P('lab/p3-20/practice2.js')).match(/const token = '([^']+)'/)[1];
     expect(text.split(labToken).length - 1).toBe(2);
     expect(b64(labToken.split('.')[1]).role).toBe('user');

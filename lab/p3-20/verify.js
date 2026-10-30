@@ -13,6 +13,10 @@ const [header, payload, signature] = token.split('.');
 const fakePayload = Buffer.from('{"sub":"1"}').toString('base64url');
 const fakeToken = `${header}.${fakePayload}.${signature}`;
 
+// 서명을 확인하지 않고 페이로드만 꺼내면
+console.log(jwt.decode(fakeToken));
+
+// 서명을 확인하면
 try {
   jwt.verify(fakeToken, SECRET);
 } catch (error) {
