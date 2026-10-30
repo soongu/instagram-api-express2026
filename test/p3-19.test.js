@@ -145,17 +145,25 @@ const STEP6_SECURE = optionsAs(`{
     maxAge: SEVEN_DAYS,
     secure: true,
   }`);
-// Step 3 첫 판 — 들어온 쿠키를 그대로 보여 주기만 하는 /me (교안 블록 그대로).
+// Step 3 첫 판 — 들어온 쿠키를 그대로 보여 주기만 하는 /me. `req.cookies` 도 함께 찍는다 —
+// `cookie-parser` 를 붙이기 전에는 `undefined`, 붙인 뒤에는 객체(2026-10-30 「이해를 먼저」 소급 — p2-23 의
+// `req.body` 가 `undefined` 였던 장면과 잇는다). 교안 블록과 글자 그대로인지는 맨 아래 블록 대조가 본다.
 const ME_FINAL_START = "router.get('/me', async (req, res) => {";
+const ME_RAW = `router.get('/me', (req, res) => {
+  console.log(req.headers.cookie);
+  console.log(req.cookies);
+  res.json({ cookie: req.headers.cookie });
+});`;
 const STEP3_RAW = (src) => {
   const start = src.indexOf(ME_FINAL_START);
   if (start < 0) return src;
   const end = src.indexOf('});', start) + '});'.length;
-  return `${src.slice(0, start)}router.get('/me', (req, res) => {
-  console.log(req.headers.cookie);
-  res.json({ cookie: req.headers.cookie });
-});${src.slice(end)}`;
+  return `${src.slice(0, start)}${ME_RAW}${src.slice(end)}`;
 };
+// Step 3 의 `npm install cookie-parser` 전 — `app.js` 에 그 두 줄이 아직 없다.
+const NO_COOKIE_PARSER = (src) => src
+  .replace("import cookieParser from 'cookie-parser';\n", '')
+  .replace('app.use(cookieParser());\n', '');
 
 // httpYac CLI 로 `.http` 를 위에서부터 보낸다 — 학생이 VS Code 에서 차례로 누르는 것과 같다.
 // 🚨 httpYac 은 실행 폴더 밖의 파일을 거부한다(`Path … is not in cwd`) — 그 폴더에서 돌린다.
@@ -274,12 +282,28 @@ describe('축 ⑤ — Step 별 판', () => {
     });
   });
 
-  it('🔴 Step 3 첫 판 — 들어온 쿠키 글자 한 줄을 그대로 돌려주고 터미널에도 찍는다', async () => {
-    await withVariant(3497, { 'routes/auth.js': STEP3_RAW }, async (v) => {
+  it('🔴 Step 3 첫 판(cookie-parser 전) — 쿠키 글자 한 줄을 돌려주고, 터미널에는 그 글자와 그 아래 `undefined`', async () => {
+    await withVariant(3497, { 'routes/auth.js': STEP3_RAW, 'app.js': NO_COOKIE_PARSER }, async (v) => {
       const res = await fetch(`${v.base}/api/auth/me`, { headers: { Cookie: 'userId=2' } });
       expect(await res.json()).toEqual({ cookie: 'userId=2' });
       await new Promise((r) => setTimeout(r, 200));
-      expect(v.tail().split('\n')).toContain('userId=2');
+      const lines = v.tail().split('\n');
+      const at = lines.indexOf('userId=2');
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(lines[at + 1]).toBe('undefined');
+    });
+  });
+
+  it("🔴 Step 3 첫 판(cookie-parser 뒤) — 둘째 줄이 `{ userId: '2' }` · 쿠키 둘이면 `{ theme: 'dark', userId: '2' }`", async () => {
+    await withVariant(3498, { 'routes/auth.js': STEP3_RAW }, async (v) => {
+      await fetch(`${v.base}/api/auth/me`, { headers: { Cookie: 'userId=2' } });
+      await fetch(`${v.base}/api/auth/me`, { headers: { Cookie: 'theme=dark; userId=2' } });
+      await new Promise((r) => setTimeout(r, 200));
+      const lines = v.tail().split('\n');
+      const one = lines.indexOf('userId=2');
+      expect(lines[one + 1]).toBe("{ userId: '2' }");
+      const two = lines.indexOf('theme=dark; userId=2');
+      expect(lines[two + 1]).toBe("{ theme: 'dark', userId: '2' }");
     });
   });
 
@@ -437,14 +461,18 @@ describe('직접 해보기 2 — 스크립트가 읽어도 되는 쿠키', () =>
   });
 });
 
-describe('직접 해보기 3 — SameSite 세 가지', () => {
-  it('🔴 /set 은 세 쿠키 · /check 는 받은 쿠키를 터미널에 찍는다 · /other-site 는 링크·폼·이미지', async () => {
+describe('직접 해보기 3 — SameSite 세 가지와 안 적은 쿠키', () => {
+  it('🔴 /set 은 네 쿠키 · /check 는 받은 쿠키를 터미널에 찍는다 · /other-site 는 링크·폼·이미지', async () => {
     const lab = await bootLab('practice3.js', 4003);
     try {
       const set = await fetch(`${lab.base}/set`);
       expect(set.headers.getSetCookie()).toEqual([
         'strict=1; Path=/; SameSite=Strict', 'lax=1; Path=/; SameSite=Lax', 'none=1; Path=/; Secure; SameSite=None',
+        // SameSite 를 안 적은 쿠키 — 크롬은 Lax 로 다루되 만든 지 2분 안이면 다른 사이트의 폼 POST 에도 싣는다
+        // (2026-10-30 실측 — 다른 사이트에서 이미지 none · 링크 lax, none, plain · 폼 2분 안 none, plain / 125초 뒤 none).
+        'plain=1; Path=/',
       ]);
+      expect(await set.text()).toBe('쿠키 네 개를 줬어요');
       const check = await fetch(`${lab.base}/check?from=link`, { headers: { Cookie: 'lax=1; none=1' } });
       expect(await check.text()).toBe('받은 쿠키: lax=1; none=1');
       await fetch(`${lab.base}/check?from=form`, { method: 'POST' });
@@ -547,7 +575,13 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     expect(blocks.length).toBeGreaterThanOrEqual(15);
     const misses = [];
     for (const b of blocks) {
-      if (b.lines.some((l) => EXPERIMENTS.includes(l.trim()))) continue;
+      if (b.lines.some((l) => EXPERIMENTS.includes(l.trim()))) {
+        // Step 3 첫 판은 축 ⑤ 가 띄우는 판(`ME_RAW`)과 글자 그대로여야 한다.
+        if (b.lines.some((l) => l.trim() === 'console.log(req.headers.cookie);') && b.lines.slice(1).join('\n') !== ME_RAW) {
+          misses.push(`Step ${b.step} 첫 판 /me`);
+        }
+        continue;
+      }
       const rel = b.lines[0].replace('// ~/instagram-api/', '');
       const body = b.lines.slice(1);
       if (rel.startsWith('lab/')) {

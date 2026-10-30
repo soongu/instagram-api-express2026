@@ -7,7 +7,9 @@ app.get('/set', (req, res) => {
   res.cookie('strict', '1', { sameSite: 'strict' });
   res.cookie('lax', '1', { sameSite: 'lax' });
   res.cookie('none', '1', { sameSite: 'none', secure: true });
-  res.send('쿠키 세 개를 줬어요');
+  // SameSite 를 안 적은 쿠키 — 브라우저의 기본값에 맡긴다.
+  res.cookie('plain', '1');
+  res.send('쿠키 네 개를 줬어요');
 });
 
 // 어디서 보낸 요청에 어떤 쿠키가 실려 왔는지 터미널에 찍는다.
