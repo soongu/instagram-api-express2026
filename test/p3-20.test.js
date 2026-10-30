@@ -185,6 +185,9 @@ describe('축 ② — 나는 누구: 서버가 기억한 세션에서 사람을 
     expect((await me(server.base, { Authorization: `Bearer ${id}` })).body.username).toBe('nayeon');
     expect((await me(server.base, { Authorization: `Bearer ${id}`, Cookie: other })).body.username).toBe('nayeon');
     expect((await me(server.base, { Authorization: 'Bearer 3' })).status).toBe(401);
+    // 교안 Step 2 «그 세션 ID를 한 글자만 바꿔 적으면 쿠키로 보내든 헤더로 보내든 401» — 헤더 쪽(2026-10-30 소급 뒤 낭독)
+    const flipped = id.slice(0, -1) + (id.endsWith('a') ? 'b' : 'a');
+    expect((await me(server.base, { Authorization: `Bearer ${flipped}` })).status).toBe(401);
     expect((await me(server.base, { Authorization: 'Basic x', Cookie: other })).body.username).toBe('dahye');
   });
 });
@@ -427,9 +430,12 @@ const bootLab = (file, port) => boot(`lab/p3-20/${file}`, { port, ready: `${port
 const labVariant = async (file, port, from, to, fn) => {
   const dir = mkdtempSync(join(tmpdir(), 'p320-lab-'));
   try {
-    const src = read(P(`lab/p3-20/${file}`));
-    if (!src.includes(from)) throw new Error(`${file} 에서 바꿀 곳을 못 찾았다`);
-    writeFileSync(join(dir, file), src.replace(from, to));
+    let src = read(P(`lab/p3-20/${file}`));
+    for (const [a, b] of Array.isArray(from) ? from : [[from, to]]) {
+      if (!src.includes(a)) throw new Error(`${file} 에서 바꿀 곳을 못 찾았다`);
+      src = src.replace(a, b);
+    }
+    writeFileSync(join(dir, file), src);
     symlinkSync(P('node_modules'), join(dir, 'node_modules'));
     writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
     const lab = await boot(join(dir, file), { port, ready: `${port}번 포트에서` });
@@ -477,6 +483,37 @@ describe('직접 해보기 1 — 30초 뒤 끝나는 세션', () => {
       expect(await second.json()).toEqual({ message: '로그인이 필요해요' });
     });
   });
+
+  // 2026-10-30 소급 뒤 학생 낭독 FAIL — 요구사항 6 «(29나 28이 나오기도 해요)» 는 floor 판을 못 가린다.
+  // 확인 시점을 1초 안으로 좁히면 VS Code 로 누르는 학생 다수가 29 를 받아 맞는 판도 틀려 보여서, 교안은
+  // 요구사항 5 에 «왜 ceil 인가» 를, 해설에 floor 판의 차이를 적었다 — 그 두 주장을 여기서 잰다.
+  it('🔴 남은 초를 Math.floor 로 내린 판 — 로그인 직후 29(맞는 판 30) · 끝나기 직전엔 세션이 살아 있는데 0(맞는 판 1)', async () => {
+    const loginMinji = async (lab) => sessionCookie(await fetch(`${lab.base}/login`,
+      { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ username: 'minji' }) }));
+    const meOf = async (lab, cookie) => {
+      const res = await fetch(`${lab.base}/me`, { headers: { Cookie: cookie } });
+      return { status: res.status, body: await res.json() };
+    };
+    await labVariant('practice1.js', 4001, 'Math.ceil(', 'Math.floor(', async (lab) => {
+      const cookie = await loginMinji(lab);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(await meOf(lab, cookie)).toEqual({ status: 200, body: { userId: 3, leftSeconds: 29 } });
+    });
+    const ONE = ['const SESSION_TIME = 30 * 1000;', 'const SESSION_TIME = 1 * 1000;'];
+    await labVariant('practice1.js', 4001, [ONE], null, async (lab) => {
+      const cookie = await loginMinji(lab);
+      await new Promise((r) => setTimeout(r, 600));
+      expect(await meOf(lab, cookie)).toEqual({ status: 200, body: { userId: 3, leftSeconds: 1 } });
+    });
+    await labVariant('practice1.js', 4001, [ONE, ['Math.ceil(', 'Math.floor(']], null, async (lab) => {
+      const cookie = await loginMinji(lab);
+      await new Promise((r) => setTimeout(r, 600));
+      expect(await meOf(lab, cookie)).toEqual({ status: 200, body: { userId: 3, leftSeconds: 0 } });
+    });
+    const text = read(LECTURE);
+    expect(text).toContain('남은 초는 `Math.ceil`로 올려서 0.5초가 남았을 때도 0이 아니라 1로 답해요.');
+    expect(text).toContain('남은 초를 `Math.floor`로 내리면 로그인 직후에도 29가 나오고, 끝나기 직전에는 세션이 살아 있는데도 0이 나와요.');
+  }, 30000);
 
   it('🔴 시작 판은 만료가 없는 세션 서버다 — 30초가 지나도 그대로', async () => {
     const start = read(P('snapshots/p3-20.practice1-start.js'));
@@ -623,21 +660,24 @@ describe('실습·과제 `.http` 를 httpYac 으로', () => {
 });
 
 describe('과제 [기초] — 확인 절차가 가려내는 틀린 판', () => {
+  const CLEARED = 'labSession=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
   const post = (base, path, body, headers = {}) =>
     fetch(`${base}${path}`, { method: 'POST', headers: { ...JSON_HEADERS, ...headers }, body: JSON.stringify(body ?? {}) });
   const run = async (lab) => {
     const local = sessionCookie(await post(lab.base, '/login', { username: 'jaehoon' }));
     const other = sessionCookie(await post(lab.base, '/login', { username: 'minji' }));
     const http = sessionCookie(await post(lab.base, '/login', { username: 'jaehoon' }));
-    const message = (await (await post(lab.base, '/logout-all', {}, { Cookie: http })).json()).message;
+    const res = await post(lab.base, '/logout-all', {}, { Cookie: http });
+    const setCookie = res.headers.getSetCookie();
+    const message = (await res.json()).message;
     const me = async (cookie) => (await fetch(`${lab.base}/me`, { headers: { Cookie: cookie } })).status;
-    return { message, local: await me(local), other: await me(other) };
+    return { message, setCookie, local: await me(local), other: await me(other) };
   };
 
   it('🔴 맞는 판 — 「세션 2개」 · jaehoon 의 다른 기기 401 · minji 그대로', async () => {
     const lab = await bootLab('homework1.js', 4011);
     try {
-      expect(await run(lab)).toEqual({ message: '세션 2개를 지웠어요', local: 401, other: 200 });
+      expect(await run(lab)).toEqual({ message: '세션 2개를 지웠어요', setCookie: [CLEARED], local: 401, other: 200 });
     } finally {
       await lab.stop();
     }
@@ -647,7 +687,7 @@ describe('과제 [기초] — 확인 절차가 가려내는 틀린 판', () => {
     await labVariant('homework1.js', 4011,
       'for (const [sessionId, owner] of sessions) {\n    if (owner === userId) {',
       'for (const [sessionId, userId] of sessions) {\n    if (userId === userId) {', async (lab) => {
-        expect(await run(lab)).toEqual({ message: '세션 3개를 지웠어요', local: 401, other: 401 });
+        expect(await run(lab)).toEqual({ message: '세션 3개를 지웠어요', setCookie: [CLEARED], local: 401, other: 401 });
       });
   });
 
@@ -662,8 +702,18 @@ describe('과제 [기초] — 확인 절차가 가려내는 틀린 판', () => {
   }`,
       `  sessions.delete(req.cookies.labSession);
   const count = 1;`, async (lab) => {
-        expect(await run(lab)).toEqual({ message: '세션 1개를 지웠어요', local: 200, other: 200 });
+        expect(await run(lab)).toEqual({ message: '세션 1개를 지웠어요', setCookie: [CLEARED], local: 200, other: 200 });
       });
+  });
+
+  // 2026-10-30 소급 뒤 학생 낭독 FAIL — 이 판은 세션 개수와 두 탭이 맞는 판과 같아서, 요구사항 8 에
+  // «응답 헤더의 `set-cookie` 줄» 을 더했다. 답안은 그 줄의 값을 적는다.
+  it('🔴 `res.clearCookie` 를 빠뜨린 판 — 세션 수·두 탭은 맞는 판과 같고 `set-cookie` 줄만 없다(요구사항 8 의 `set-cookie` 줄이 가려낸다)', async () => {
+    await labVariant('homework1.js', 4011, "  res.clearCookie('labSession');\n", '', async (lab) => {
+      expect(await run(lab)).toEqual({ message: '세션 2개를 지웠어요', setCookie: [], local: 401, other: 200 });
+    });
+    expect(read(LECTURE)).toContain('응답에 적힌 세션 개수와 응답 헤더의 `set-cookie` 줄, 크롬의 두 탭을 다시 새로고침한 결과를 적어요.');
+    expect(read(ANSWERS).split(`set-cookie: ${CLEARED}`).length - 1).toBe(2);
   });
 });
 
