@@ -846,7 +846,7 @@ describe('소급 뒤 낭독 — 확인 절차와 새로 쓴 사실', () => {
   });
 
   it('🔴 Step 6 — state 를 확인한 바로 다음에 oauth_verifier 를 지워도 토큰 교환은 된다(clearCookie 는 응답에 싣는 일)', async () => {
-    expect(read(LECTURE)).toContain('**`res.clearCookie`는 «이 쿠키를 지우라»는 줄을 응답에 싣는 일이고, 지금 처리하는 요청의 `req.cookies`는 바꾸지 않아요.**');
+    expect(read(LECTURE)).toContain('**`res.clearCookie`는 «이 쿠키를 지우라»는 줄을 응답에 싣기만 하고, 지금 처리하는 요청의 `req.cookies`는 바꾸지 않아요.**');
     const step6 = appAt(6);
     const at = "  res.clearCookie('oauth_state');\n";
     expect(step6).toContain(at);
@@ -861,7 +861,7 @@ describe('소급 뒤 낭독 — 확인 절차와 새로 쓴 사실', () => {
   });
 
   it('🔴 같은 브라우저에서 흐름을 둘 시작하면 앞 동의 화면의 「허용」은 403 — state 쿠키는 마지막 것 하나', async () => {
-    expect(read(LECTURE)).toContain('⚠️ **새 탭에서는 「사진 불러오기」를 누르지 않아요.**');
+    expect(read(LECTURE)).toContain('⚠️ **새 탭에서는 「사진 불러오기」를 누르지 마세요.**');
     await withServers([() => bootAuth(), () => bootApp(read(LAB('photo-app.js')))], async () => {
       const b = browser();
       const first = await b.go(`${APP}/login`);
