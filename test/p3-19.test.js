@@ -357,6 +357,26 @@ describe('축 ⑥ — `requests/auth.http` 를 httpYac 으로', () => {
       });
   }, 60000);
 
+  // Step 5 — 이 줄을 «왜» 붙이는지(2026-10-30 소급 뒤 낭독 · 전문가가 «결과가 같으면 왜 붙이나» 를 물었다).
+  // 줄 없이 보내면 httpYac 이 손으로 적은 `userId=1`(Path `/api/auth`)까지 기억해, 다시 로그인해도
+  // 그다음 «나는 누구» 에 `userId=1; userId=2` 가 실려 dahye 다. 줄을 둔 판은 같은 순서로 보내도 jaehoon.
+  it('🔴 `# @no-cookie-jar` 를 빼고 보내면 손으로 적은 `userId=1` 이 남아, 다시 로그인해도 나는 누구가 dahye(줄을 둔 판은 jaehoon)', async () => {
+    const AGAIN = '\n### 다시 로그인\nPOST http://localhost:3000/api/auth/login\nContent-Type: application/json\n\n{\n  "username": "jaehoon"\n}\n\n### 다시 나는 누구\nGET http://localhost:3000/api/auth/me\n';
+    await withVariant(3495, { 'requests/auth.http': (s) => s.replace('### 쿠키를 고쳐서 보내면\n# @no-cookie-jar\n', '### 쿠키를 고쳐서 보내면\n') + AGAIN },
+      async (v, dir) => {
+        const out = sendHttp(join(dir, 'requests/auth.http'), 3495);
+        expect(out.map((r) => r.title).slice(-2)).toEqual(['다시 로그인', '다시 나는 누구']);
+        expect(out[5].response.statusCode).toBe(200);
+        expect(out[6].response.request.headers.cookie).toBe('userId=1; userId=2');
+        expect(JSON.parse(out[6].response.body).username).toBe('dahye');
+      });
+    await withVariant(3494, { 'requests/auth.http': (s) => s + AGAIN }, async (v, dir) => {
+      const out = sendHttp(join(dir, 'requests/auth.http'), 3494);
+      expect(out[6].response.request.headers.cookie).toBe('userId=2');
+      expect(JSON.parse(out[6].response.body).username).toBe('jaehoon');
+    });
+  }, 90000);
+
   it('🔴 secure 판이면 httpYac 은 그 쿠키를 http://localhost 로 안 보내 나는 누구가 401', async () => {
     await withVariant(3496, { 'routes/auth.js': STEP6_SECURE }, async (v, dir) => {
       const out = sendHttp(join(dir, 'requests/auth.http'), 3496);
