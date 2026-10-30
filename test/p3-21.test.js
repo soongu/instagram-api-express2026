@@ -800,3 +800,103 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     expect(s7).toContain(`iat: ${p.iat},\n  exp: ${p.exp}`);
   });
 });
+
+// ── 소급 뒤 두 페르소나 낭독(2026-10-30) — 학생이 따라 쳐서 찾은 것을 잠근다 ──
+// 교안 글자는 «원고가 그 장면을 말하는가» 만 본다(1차 반영 전 원고로 Red 를 확인했다). 동작은 판을 바꿔 띄워 잰다.
+describe('소급 뒤 낭독 — 확인 절차와 새로 쓴 사실', () => {
+  const hw1Guard = "  if (!tokens.scope.split(' ').includes('photos')) {";
+
+  it('🔴 과제 [기초] — ID 토큰에서 scope 를 찾는 판은 「로그인만 하기」로는 맞는 판과 같고 「사진 불러오기」에서 photos 가 빠진다 · 요구사항 5 가 그 로그인을 시킨다', async () => {
+    const text = read(LECTURE);
+    expect(text).toContain('이어서 「사진 불러오기」로 다시 로그인해 응답에 `photos`가 오는지도 적어요.');
+    expect(text).toContain('6. 「로그인만 하기」로 로그인했을 때 창 2 터미널에 찍힌 `access_token`을 복사해');
+    expect(read(ANSWERS)).toContain('### 흔한 실수 — ID 토큰에서 `scope`를 찾으면');
+    const src = read(LAB('homework1.js'));
+    expect(src).toContain(hw1Guard);
+    const quiet = src.replace(hw1Guard, "  if (!(user.scope ?? '').split(' ').includes('photos')) {");
+    await withServers([() => bootAuth(), () => bootApp(quiet)], async (auth) => {
+      const only = (await signIn(browser(), { start: `${APP}/signin` })).after;
+      expect(only.body).toBe('{"sub":"10001","email":"jaehoon@example.com"}');
+      await new Promise((r) => setTimeout(r, 100));
+      expect(auth.tail()).not.toContain('GET /photos');
+      const full = (await signIn(browser())).after;
+      expect(full.json()).toEqual({ sub: '10001', email: 'jaehoon@example.com' }); // 사진이 안 온다
+    });
+    // `?? ''` 없이 쓰면 undefined 에서 split — 500
+    const loud = src.replace(hw1Guard, "  if (!user.scope.split(' ').includes('photos')) {");
+    await withServers([() => bootAuth(), () => bootApp(loud)], async () => {
+      expect((await signIn(browser(), { start: `${APP}/signin` })).after.status).toBe(500);
+    });
+  });
+
+  it('🔴 Step 5 — `!req.query.state ||` 를 뺀 판은 주소에도 쿠키에도 state 가 없는 dahye 장면을 통과시킨다 · 맞는 판은 403', async () => {
+    expect(read(LECTURE)).toContain('**조건 맨 앞의 `!req.query.state`도 바로 이 장면을 막아요.**');
+    const full = "if (!req.query.state || req.query.state !== req.cookies.oauth_state) {";
+    const loose = "if (req.query.state !== req.cookies.oauth_state) {";
+    const scene = async (src) => withServers([() => bootAuth(), () => bootApp(src)], async () => {
+      const code = await codeFor('dahye');
+      return browser().go(`${APP}/callback?code=${code}`);
+    });
+    const step5 = appAt(5);
+    expect(step5).toContain(full);
+    const ok = await scene(step5);
+    expect([ok.status, ok.json()]).toEqual([403, { message: '이 브라우저에서 시작한 로그인이 아니에요' }]);
+    const bad = await scene(step5.replace(full, loose));
+    expect([bad.status, bad.json()]).toEqual([200, { photos: ['등산 정상', '야경'] }]);
+  });
+
+  it('🔴 Step 6 — state 를 확인한 바로 다음에 oauth_verifier 를 지워도 토큰 교환은 된다(clearCookie 는 응답에 싣는 일)', async () => {
+    expect(read(LECTURE)).toContain('**`res.clearCookie`는 «이 쿠키를 지우라»는 줄을 응답에 싣는 일이고, 지금 처리하는 요청의 `req.cookies`는 바꾸지 않아요.**');
+    const step6 = appAt(6);
+    const at = "  res.clearCookie('oauth_state');\n";
+    expect(step6).toContain(at);
+    for (const [src, verifierLeft] of [[step6, true], [step6.replace(at, `${at}  res.clearCookie('oauth_verifier');\n`), false]]) {
+      await withServers([() => bootAuth(), () => bootApp(src)], async () => {
+        const b = browser();
+        const { after } = await signIn(b);
+        expect([after.status, after.json()]).toEqual([200, { photos: ['한강 노을', '제주 바다', '강아지 산책'] }]);
+        expect(b.cookie('localhost', 'oauth_verifier') !== undefined).toBe(verifierLeft);
+      });
+    }
+  });
+
+  it('🔴 같은 브라우저에서 흐름을 둘 시작하면 앞 동의 화면의 「허용」은 403 — state 쿠키는 마지막 것 하나', async () => {
+    expect(read(LECTURE)).toContain('⚠️ **새 탭에서는 「사진 불러오기」를 누르지 않아요.**');
+    await withServers([() => bootAuth(), () => bootApp(read(LAB('photo-app.js')))], async () => {
+      const b = browser();
+      const first = await b.go(`${APP}/login`);
+      const second = await b.go(`${APP}/login`);
+      const [s1, s2] = [first, second].map((c) => hiddenFields(c.body).state);
+      expect(s1).not.toBe(s2);
+      expect(b.cookie('localhost', 'oauth_state')).toBe(s2);
+      const after = await b.go(`${AUTH}/authorize`, {
+        method: 'POST',
+        body: new URLSearchParams({ ...hiddenFields(first.body), username: 'jaehoon', password: 'jaehoon1234', decision: 'allow' }),
+      });
+      expect([after.status, after.json()]).toEqual([403, { message: '이 브라우저에서 시작한 로그인이 아니에요' }]);
+    });
+  });
+
+  it('🔴 실습용 인가 서버의 동의 화면은 프레임을 막는 헤더를 보내지 않는다(그래서 <iframe> 안에 그려진다)', async () => {
+    expect(read(LECTURE)).toContain('오늘의 실습용 인가 서버는 이 헤더를 보내지 않아서 `<iframe>` 안에도 그대로 그려져요.');
+    await withServers([() => bootAuth()], async () => {
+      const q = new URLSearchParams({ response_type: 'code', client_id: 'photo-app', redirect_uri: `${APP}/callback`, scope: 'photos' });
+      const res = await fetch(`${AUTH}/authorize?${q}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-frame-options')).toBeNull();
+      expect(res.headers.get('content-security-policy') ?? '').not.toMatch(/frame-ancestors/);
+    });
+  });
+
+  it('🔴 직접 해보기 1 — redirectUris 를 문자열로 적으면 글자 일부만 맞는 주소에도 동의 화면이 열린다 · 배열이면 400', async () => {
+    expect(read(LECTURE)).toContain('돌아올 주소는 `photo-app`처럼 배열에 담되 `http://localhost:4003/callback` 하나만 넣어요.');
+    const base = "    redirectUris: ['http://localhost:4002/callback'],\n  },\n};";
+    const reg = (uris) => [base, `    redirectUris: ['http://localhost:4002/callback'],\n  },\n  'story-app': {\n    name: '스토리 만들기',\n    secret: 'story-app-secret',\n    redirectUris: ${uris},\n  },\n};`];
+    const open = async (edit) => withServers([() => bootAuth([edit])], async () => {
+      const q = new URLSearchParams({ response_type: 'code', client_id: 'story-app', redirect_uri: 'http://localhost:4003/', scope: 'photos' });
+      return (await fetch(`${AUTH}/authorize?${q}`)).status;
+    });
+    expect(await open(reg("['http://localhost:4003/callback']"))).toBe(400);
+    expect(await open(reg("'http://localhost:4003/callback'"))).toBe(200);
+  });
+});
