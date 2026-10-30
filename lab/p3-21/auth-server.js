@@ -127,7 +127,8 @@ app.post('/authorize', (req, res) => {
     back.searchParams.set('code', code);
   }
   if (req.body.state) back.searchParams.set('state', req.body.state);
-  res.redirect(back.href);
+  // 비밀번호가 든 폼을 받은 뒤라 303으로 돌려보낸다 — 브라우저가 반드시 GET으로 바꿔서 간다.
+  res.redirect(303, back.href);
 });
 
 const idTokenFor = (grant) => {

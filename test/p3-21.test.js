@@ -6,33 +6,34 @@
 //     학생이 짜지 않는 준비물이라 이 판정이 그 동작을 잠근다.
 //   - `lab/p3-21/photo-app.js` — 학생이 Step 마다 키우는 «우리 서비스»(4002 · `http://localhost:4002`).
 // 판정은 학생이 치는 `node lab/…` 를 그대로 띄워 진짜 포트로 왕복한다(`boot.js`). 브라우저는 아래 `browser()` 가
-// 대신한다 — 호스트마다 쿠키를 따로 기억하고 302 를 따라간다(크롬과 같은 판인지는 기록 「브라우저 실측」 이 헤드리스
-// 크롬으로 쟀다 — `127.0.0.1` → `localhost` 로 돌아오는 302 에도 `SameSite=Lax` 쿠키가 실린다).
+// 대신한다 — 호스트마다 쿠키를 따로 기억하고 리다이렉트를 GET 으로 따라간다(크롬과 같은 판인지는 기록 「브라우저 실측」 이
+// 헤드리스 크롬으로 쟀다 — `127.0.0.1` → `localhost` 로 돌아오는 리다이렉트에도 `SameSite=Lax` 쿠키가 실린다).
+// 🔀 2026-10-30 「이해를 먼저」 소급 — 동의 화면 POST 뒤의 리다이렉트를 302 에서 303 으로(RFC 9700 §4.12 — 307 MUST NOT ·
+//    303 SHOULD · 307 판이면 크롬이 비밀번호가 든 본문을 `/callback` 에 POST 한다 — 기록 `progress/understanding-first-retrofit.md`).
 //
 // 축 ① 인가 서버 — 디스커버리 문서 · JWKS · 인가 요청 검사(등록 안 한 클라이언트·redirect_uri 는 돌려보내지 않는다) ·
-//      동의 화면 · 허용/거부 · 토큰 엔드포인트(invalid_client · 한 번만 · PKCE) · 리소스(401 · 403 insufficient_scope).
+//      동의 화면 · 허용/거부(303 · 307 판이면 본문이 따라간다) · 토큰 엔드포인트(invalid_client · 한 번만 · PKCE) ·
+//      리소스(401 · 403 insufficient_scope · 인가 서버가 다시 뜨면 받아 둔 Access 토큰도 401).
 // 축 ② Step 별 판 — Step 2(동의 화면까지) · 3(code) · 4(토큰 · 사진 · 토큰은 터미널에만) · 5(state — 남의 code 를
 //      끼우면 403) · 6(PKCE — state 를 통과한 가로챈 code 도 invalid_grant) · 7(ID 토큰 읽기) · 8(ID 토큰 확인).
 // 축 ③ ID 토큰 확인 — aud · iss · nonce · 다른 키로 만든 서명을 Step 8 은 막고, Step 7 은 그대로 믿는다.
 // 실습·과제 — `lab/p3-21/`(학생 쪽 경로 주석은 `~/instagram-api/lab/…`).
-import { describe, it, expect, afterAll } from 'vitest';
-import { readFileSync, mkdtempSync, rmSync, writeFileSync, symlinkSync, cpSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
+import { readFileSync, mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { boot } from './helpers/boot.js';
-import { roundDir } from './helpers/round.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (p) => readFileSync(p, 'utf8');
 
-// 이 회차의 학생 파일은 북마크 `code/p3-21` 을 풀어서 읽는다(없으면 작업트리 — 이 회차를 짓는 동안).
-const ROUND = roundDir('code/p3-21');
-const LAB = (file) => join(ROUND.dir, 'lab/p3-21', file);
-
-afterAll(() => ROUND.cleanup());
+// 실습 파일은 작업트리(`main`)에서 읽는다 — `lab/p3-21/` 은 이 회차만 쓰고, 「이해를 먼저」 소급(2026-10-30)이 나눠 주는
+// `auth-server.js`(303)와 `oauth.http`(요청 둘)를 `main` 에서 고쳤다. 북마크 `code/p3-21` 은 그대로다(p3-19·p3-20 과 같다).
+// Step 판의 `photo-app.js` 는 아래 `appAt()` 이 그 Step 커밋에서 꺼낸다.
+const LAB = (file) => P(`lab/p3-21/${file}`);
 
 const AUTH = 'http://127.0.0.1:4001';
 const APP = 'http://localhost:4002';
@@ -67,7 +68,7 @@ const withServers = async (servers, fn) => {
   }
 };
 
-// ── 브라우저 흉내 — 호스트마다 쿠키를 따로 기억하고 302 를 따라간다 ──
+// ── 브라우저 흉내 — 호스트마다 쿠키를 따로 기억하고 리다이렉트를 GET 으로 따라간다 ──
 const browser = () => {
   const jar = new Map();
   const cookiesOf = (host) => {
@@ -96,7 +97,7 @@ const browser = () => {
       const body = await res.text();
       return { status: res.status, url: current.href, body, json: () => JSON.parse(body) };
     }
-    throw new Error('302 가 너무 많다');
+    throw new Error('리다이렉트가 너무 많다');
   };
   return { go, jar, cookie: (host, name) => cookiesOf(host).get(name) };
 };
@@ -105,7 +106,7 @@ const unescapeHtml = (text) => text.replace(/&#(\d+);/g, (_, n) => String.fromCh
 const hiddenFields = (html) =>
   Object.fromEntries([...html.matchAll(/<input type="hidden" name="(\w+)" value="([^"]*)">/g)].map(([, n, v]) => [n, unescapeHtml(v)]));
 
-// 동의 화면에서 아이디·비밀번호를 넣고 허용(또는 거부)을 누른다 — 그 뒤 302 를 따라간 결과를 돌려준다.
+// 동의 화면에서 아이디·비밀번호를 넣고 허용(또는 거부)을 누른다 — 그 뒤 리다이렉트를 따라간 결과를 돌려준다.
 const signIn = async (b, { username = 'jaehoon', password, decision = 'allow', start = `${APP}/login` } = {}) => {
   const consent = await b.go(start);
   expect(consent.status).toBe(200);
@@ -117,7 +118,7 @@ const signIn = async (b, { username = 'jaehoon', password, decision = 'allow', s
   return { consent, after };
 };
 
-// `.http` 의 `# @no-redirect` 처럼 — 인가 서버에 바로 허용을 보내 302 의 Location 에서 code 를 꺼낸다.
+// `.http` 의 `# @no-redirect` 처럼 — 인가 서버에 바로 허용을 보내 303 의 Location 에서 code 를 꺼낸다.
 const codeFor = async (username, extra = {}) => {
   const res = await fetch(`${AUTH}/authorize`, {
     method: 'POST',
@@ -127,7 +128,7 @@ const codeFor = async (username, extra = {}) => {
       username, password: `${username}1234`, decision: 'allow', ...extra,
     }),
   });
-  expect(res.status).toBe(302);
+  expect(res.status).toBe(303);
   return new URL(res.headers.get('location')).searchParams.get('code');
 };
 const tokenFor = (code, extra = {}) => fetch(`${AUTH}/token`, {
@@ -206,7 +207,7 @@ describe('축 ① — 나눠 주는 인가 서버', () => {
     });
   });
 
-  it('🔴 허용·거부 — 거부는 error=access_denied · 틀린 비밀번호는 동의 화면 401 · 허용은 code (state 는 뒤에)', async () => {
+  it('🔴 허용·거부 — 303 · 거부는 error=access_denied · 틀린 비밀번호는 동의 화면 401 · 허용은 code (state 는 뒤에)', async () => {
     await withServers([() => bootAuth()], async () => {
       const post = (extra) => fetch(`${AUTH}/authorize`, {
         method: 'POST',
@@ -216,13 +217,13 @@ describe('축 ① — 나눠 주는 인가 서버', () => {
         }),
       });
       const deny = await post({ decision: 'deny' });
-      expect(deny.status).toBe(302);
+      expect(deny.status).toBe(303);
       expect(deny.headers.get('location')).toBe(`${APP}/callback?error=access_denied&state=s1`);
       const wrong = await post({ decision: 'allow', username: 'jaehoon', password: 'nope' });
       expect(wrong.status).toBe(401);
       expect(await wrong.text()).toContain('<p>아이디나 비밀번호가 맞지 않아요</p>');
       const allow = await post({ decision: 'allow', username: 'jaehoon', password: 'jaehoon1234' });
-      expect(allow.status).toBe(302);
+      expect(allow.status).toBe(303);
       expect(allow.headers.get('location')).toMatch(/^http:\/\/localhost:4002\/callback\?code=[\w-]{22}&state=s1$/);
     });
   });
@@ -289,6 +290,52 @@ describe('축 ① — 나눠 주는 인가 서버', () => {
       expect(await ok.json()).toEqual({ photos: ['등산 정상', '야경'] });
       await new Promise((r) => setTimeout(r, 100));
       expect(auth.tail().split('\n').filter((l) => l.startsWith('GET /photos'))).toEqual(['GET /photos 401', 'GET /photos 403', 'GET /photos 200']);
+    });
+  });
+
+  // 교안 Step 4 ⚠️ 뒤 — 오늘의 Access 토큰은 인가 서버가 메모리(`tokens` Map)에 적어 둔 기록을 가리키는 무작위 문자열이다
+  // (지난 시간 비교표의 «세션» 칸). 그래서 인가 서버가 다시 뜨면 받아 둔 토큰도 통하지 않는다.
+  it('🔴 인가 서버가 다시 뜨면 받아 둔 Access 토큰은 401 invalid_token', async () => {
+    const bearer = (token) => ({ headers: { Authorization: `Bearer ${token}` } });
+    const token = await withServers([() => bootAuth()], async () => {
+      const { access_token } = await (await tokenFor(await codeFor('jaehoon'))).json();
+      expect(await (await fetch(`${AUTH}/photos`, bearer(access_token))).json()).toEqual({ photos: ['한강 노을', '제주 바다', '강아지 산책'] });
+      return access_token;
+    });
+    await withServers([() => bootAuth()], async () => {
+      const res = await fetch(`${AUTH}/photos`, bearer(token));
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'invalid_token', error_description: 'Access 토큰을 확인하지 못했어요' });
+    });
+  });
+
+  // 교안 Step 2 🙋 — 동의 화면 폼(POST)의 결과를 307 로 돌려보내면 브라우저는 같은 HTTP 메서드·본문으로 다시 보낸다.
+  // fetch 도 리다이렉트를 브라우저와 같은 규칙으로 따라가서, 우리 서비스 자리에 «무엇이 왔나» 를 돌려주는 서버를 두고 잰다.
+  // (크롬은 헤드리스로 따로 쟀다 — 307 판 Network 탭의 `/callback` 이 POST 이고 Payload 에 `password=jaehoon1234`.)
+  it('🔴 303 이면 /callback 은 본문 없는 GET · 307 판이면 비밀번호가 든 본문이 POST 로 따라간다', async () => {
+    const ECHO = "import express from 'express';\nconst app = express();\napp.use(express.urlencoded({ extended: false }));\n"
+      + "app.all('/callback', (req, res) => res.json({ method: req.method, body: req.body }));\n"
+      + "app.listen(4002, () => console.log('4002번 포트에서 기다리고 있어요.'));\n";
+    const form = () => new URLSearchParams({
+      response_type: 'code', client_id: 'photo-app', redirect_uri: `${APP}/callback`, scope: 'photos',
+      username: 'jaehoon', password: 'jaehoon1234', decision: 'allow',
+    });
+    const TO_307 = ['  res.redirect(303, back.href);', '  res.redirect(307, back.href);'];
+    expect(read(LAB('auth-server.js'))).toContain(TO_307[0]);
+    await withServers([() => bootAuth(), () => bootApp(ECHO)], async () => {
+      const got = await (await fetch(`${AUTH}/authorize`, { method: 'POST', body: form() })).json();
+      expect(got).toEqual({ method: 'GET' }); // 본문이 없으면 Express 5 의 req.body 는 undefined 라 JSON 에서 빠진다
+    });
+    await withServers([() => bootAuth([TO_307]), () => bootApp(ECHO)], async () => {
+      const got = await (await fetch(`${AUTH}/authorize`, { method: 'POST', body: form() })).json();
+      expect(got.method).toBe('POST');
+      expect(got.body).toMatchObject({ username: 'jaehoon', password: 'jaehoon1234', decision: 'allow' });
+    });
+    // 🙋 가 놓인 Step 2 판의 우리 서비스(Step 3 판도 같다)는 POST /callback 이 없어서 «Cannot POST /callback»
+    for (const n of [2, 3]) await withServers([() => bootAuth([TO_307]), () => bootApp(appAt(n))], async () => {
+      const res = await fetch(`${AUTH}/authorize`, { method: 'POST', body: form() });
+      expect(res.status).toBe(404);
+      expect(await res.text()).toContain('Cannot POST /callback');
     });
   });
 });
@@ -432,10 +479,15 @@ describe('축 ③ — ID 토큰 확인: Step 8 은 막고 Step 7 은 그대로 �
         expect(after.status).toBe(401);
         expect(after.json()).toEqual({ message: 'ID 토큰을 믿을 수 없어요', reason });
       });
-      await withServers([() => bootAuth([edit]), () => bootApp(appAt(7))], async () => {
+      await withServers([() => bootAuth([edit]), () => bootApp(appAt(7))], async (auth, app) => {
         const { after } = await signIn(browser());
         expect(after.status).toBe(200);
         expect(after.json().email).toBe('jaehoon@example.com');
+        // 교안 Step 7 ⚠️ 뒤 — 응답은 평소와 똑같고, 창 2 의 페이로드에만 aud: 'story-app'
+        if (label.includes('(aud)')) {
+          expect(after.json()).toEqual({ sub: '10001', email: 'jaehoon@example.com', photos: ['한강 노을', '제주 바다', '강아지 산책'] });
+          expect(app.tail()).toContain("aud: 'story-app',");
+        }
       });
     });
   }
@@ -563,16 +615,25 @@ describe('과제 [응용] — sub 로 우리 회원을 찾고 세션을 준다',
 });
 
 describe('실습 `.http` 를 httpYac 으로', () => {
-  it('🔴 oauth.http — `# @no-redirect` 로 302 에서 멈춘다 · Location 에 code(state 없음)', async () => {
+  it('🔴 oauth.http — 앞 둘(Step 4)은 인가 코드만으로 401 둘 · 뒤 셋은 `# @no-redirect` 로 303 에서 멈춘다 · Location 에 code(state 없음)', async () => {
     await withServers([() => bootAuth()], async () => {
       const dir = mkdtempSync(join(tmpdir(), 'p321-http-'));
       try {
-        cpSync(LAB('oauth.http'), join(dir, 'oauth.http'));
+        // 교안 Step 4 — 「화면에 보인 인가 코드」 두 곳에 Step 3 화면의 code 를 붙여 넣는다.
+        const text = read(LAB('oauth.http'));
+        expect(text.split('화면에 보인 인가 코드').length - 1).toBe(2);
+        writeFileSync(join(dir, 'oauth.http'), text.replaceAll('화면에 보인 인가 코드', await codeFor('jaehoon')));
         const out = JSON.parse(execFileSync(P('node_modules/.bin/httpyac'), ['send', 'oauth.http', '--all', '--json'],
           { encoding: 'utf-8', cwd: dir })).requests;
-        expect(out.map((r) => r.title)).toEqual(['dahye의 인가 코드 받기', 'jaehoon의 인가 코드 받기', 'jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
-        for (const r of out) {
-          expect(r.response.statusCode).toBe(302);
+        expect(out.map((r) => r.title)).toEqual(['인가 코드로 사진 달라고 해 보기', '비밀값 없이 인가 코드를 토큰으로 바꿔 보기',
+          'dahye의 인가 코드 받기', 'jaehoon의 인가 코드 받기', 'jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
+        const [photos, token, ...codes] = out;
+        expect([photos.response.statusCode, JSON.parse(photos.response.body)])
+          .toEqual([401, { error: 'invalid_token', error_description: 'Access 토큰을 확인하지 못했어요' }]);
+        expect([token.response.statusCode, JSON.parse(token.response.body)])
+          .toEqual([401, { error: 'invalid_client', error_description: '클라이언트를 확인하지 못했어요' }]);
+        for (const r of codes) {
+          expect(r.response.statusCode).toBe(303);
           expect(r.response.headers.location).toMatch(/^http:\/\/localhost:4002\/callback\?code=[\w-]{22}$/);
         }
       } finally {
@@ -642,10 +703,13 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
       "    redirectUris: ['http://localhost:4002/callback'],\n  },\n  'story-app': {\n    name: '스토리 만들기',\n    secret: 'story-app-secret',\n    redirectUris: ['http://localhost:4003/callback'],\n  },\n};");
     const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\/lab\//.test(b.lines[0])
       && b.lines[0] !== '// ~/instagram-api/lab/photo-app.js');
+    // 인가 서버 블록 넷 — Step 2 🙋 의 303 줄 · 직접 해보기 1 의 등록 · Step 4 의 `tokens` Map · Step 7 의 `aud` 줄
     expect(blocks.map((b) => b.lines[0])).toEqual([
-      '// ~/instagram-api/lab/practice1.js', '// ~/instagram-api/lab/auth-server.js', '// ~/instagram-api/lab/practice2.js',
-      '// ~/instagram-api/lab/auth-server.js', '// ~/instagram-api/lab/practice3.js',
+      '// ~/instagram-api/lab/auth-server.js', '// ~/instagram-api/lab/practice1.js', '// ~/instagram-api/lab/auth-server.js',
+      '// ~/instagram-api/lab/auth-server.js', '// ~/instagram-api/lab/practice2.js', '// ~/instagram-api/lab/auth-server.js',
+      '// ~/instagram-api/lab/practice3.js',
     ]);
+    expect(blocks.filter((b) => b.lines[0].endsWith('auth-server.js')).map((b) => b.step)).toEqual([2, 3, 4, 7]);
     const misses = blocks.filter((b) => {
       const name = b.lines[0].replace('// ~/instagram-api/lab/', '');
       const hay = name === 'auth-server.js' ? REGISTERED : read(LAB(name));
@@ -659,9 +723,12 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     }
   });
 
-  it('🔴 교안의 .http 블록 — lab/p3-21/oauth.http 의 요청 셋 그대로', () => {
+  it('🔴 교안의 .http 블록 — lab/p3-21/oauth.http 의 요청 다섯 그대로(Step 4 블록 하나에 요청 둘)', () => {
     const blocks = blocksOf(LECTURE).filter((b) => b.lang === '' && b.lines[0]?.startsWith('### '));
-    expect(blocks.map((b) => b.lines[0])).toEqual(['### dahye의 인가 코드 받기', '### jaehoon의 인가 코드 받기', '### jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
+    expect(blocks.map((b) => b.lines[0])).toEqual(['### 인가 코드로 사진 달라고 해 보기', '### dahye의 인가 코드 받기',
+      '### jaehoon의 인가 코드 받기', '### jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
+    expect(blocks.map((b) => b.step)).toEqual([4, 5, 6, 6]);
+    expect(blocks[0].lines).toContain('### 비밀값 없이 인가 코드를 토큰으로 바꿔 보기');
     const http = read(LAB('oauth.http'));
     expect(blocks.filter((b) => !contains(http, b.lines)).map((b) => b.lines[0])).toEqual([]);
   });
@@ -692,6 +759,14 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
       '인가 서버가 4001번 포트에서 기다리고 있어요.',
       '`GET /photos 200`',
       '「code_challenge 없이 받은 인가 코드예요」',
+      // 「이해를 먼저」 소급(2026-10-30) — 위 판정들이 받은 그대로
+      'HTTP/1.1 303  - See Other',
+      'HTTP/1.1 401  - Unauthorized',
+      '  "error_description": "Access 토큰을 확인하지 못했어요"',
+      '  "error_description": "클라이언트를 확인하지 못했어요"',
+      '`Cannot POST /callback`',
+      'scope=photos&username=jaehoon&password=jaehoon1234&decision=allow',
+      "`aud`가 `'story-app'`이에요",
     ]) expect(text).toContain(line);
   });
 

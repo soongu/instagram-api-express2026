@@ -1,3 +1,13 @@
+### 인가 코드로 사진 달라고 해 보기
+GET http://127.0.0.1:4001/photos
+Authorization: Bearer 화면에 보인 인가 코드
+
+### 비밀값 없이 인가 코드를 토큰으로 바꿔 보기
+POST http://127.0.0.1:4001/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&code=화면에 보인 인가 코드&redirect_uri=http://localhost:4002/callback&client_id=photo-app
+
 ### dahye의 인가 코드 받기
 # @no-redirect
 POST http://127.0.0.1:4001/authorize
