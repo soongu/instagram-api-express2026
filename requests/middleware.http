@@ -6,3 +6,14 @@ Content-Type: text/plain
   "authorId": 3,
   "content": "글자 형식으로 보냈어요"
 }
+
+### 번호도 본문도 틀린 수정
+PATCH http://localhost:3000/api/posts/abc
+Content-Type: application/json
+
+{
+  "likeCount": -1
+}
+
+### 앞뒤에 빈칸이 든 이메일로 중복 확인
+GET http://localhost:3000/api/auth/check-duplicate?type=email&value=%20yuna@example.com%20

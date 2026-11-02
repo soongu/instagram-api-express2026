@@ -1,0 +1,8 @@
+### 공지 목록
+GET http://localhost:4012/api/notices
+
+### 일부러 에러 내기
+GET http://localhost:4012/api/boom
+
+### 없는 주소
+GET http://localhost:4012/api/nope

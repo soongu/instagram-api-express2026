@@ -1,0 +1,9 @@
+### 공지 목록
+GET http://localhost:4011/api/notices
+
+### 역할 없이 1번 공지 지우기
+DELETE http://localhost:4011/api/notices/1
+
+### 관리자로 1번 공지 지우기
+DELETE http://localhost:4011/api/notices/1
+X-Role: admin
