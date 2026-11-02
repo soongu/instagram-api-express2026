@@ -33,7 +33,7 @@ function findNotice(req, res, next) {
 app.use(logger);
 
 app.get('/api/notices/:id', findNotice, (req, res) => {
-  res.json(req.notice);
+  res.json({ notice: req.notice });
 });
 
 app.use((err, req, res, next) => {

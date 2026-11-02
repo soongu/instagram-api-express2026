@@ -383,7 +383,7 @@ describe('축 ⑨ — 직접 해보기 · 과제 (lab/p3-27/)', () => {
   it('🔴 직접 해보기 1 (4001) — 1번 200 · abc 400 · 9번 404 · 줄마다 로거 한 줄', async () => {
     await withLab('practice1.js', LAB('practice1.js'), 4001, async (lab) => {
       const one = await newLines(lab, () => getJson(`${lab.base}/api/notices/1`));
-      expect(one.res).toMatchObject({ status: 200, body: { id: 1, title: '서버 점검 안내' } });
+      expect(one.res).toMatchObject({ status: 200, body: { notice: { id: 1, title: '서버 점검 안내' } } });
       expect(one.lines).toEqual(['GET /api/notices/1 200']);
       const abc = await newLines(lab, () => getJson(`${lab.base}/api/notices/abc`));
       expect(abc.res).toMatchObject({ status: 400, body: { message: '공지 번호는 숫자로 보내 주세요' } });
@@ -404,6 +404,17 @@ describe('축 ⑨ — 직접 해보기 · 과제 (lab/p3-27/)', () => {
       expect((await newLines(lab, () => fetch(`${lab.base}/api/notices/9`))).lines).toEqual(['GET /api/notices/9 404']);
     });
   }, 15000);
+
+  it('🔴 직접 해보기 1 — 404 분기의 return; 을 빠뜨린 판: 브라우저엔 404, 창 3엔 ERR_HTTP_HEADERS_SENT · 로거 줄은 500', async () => {
+    const file = labVariantFile('practice1.js', [["    res.status(404).json({ message: '그런 공지는 없어요' });\n    return;\n", "    res.status(404).json({ message: '그런 공지는 없어요' });\n"]]);
+    await withLab('practice1.js', file, 4001, async (lab) => {
+      const res = await getJson(`${lab.base}/api/notices/9`);
+      expect(res).toMatchObject({ status: 404, body: { message: '그런 공지는 없어요' } });
+      await sleep(200);
+      expect(lab.tail()).toContain('Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client');
+      expect(lab.tail()).toContain('GET /api/notices/9 500');
+    });
+  });
 
   it('🔴 직접 해보기 2 (4002) — requireJson 이 없는 판은 글자 형식 메모가 500(TypeError) · 있는 판은 415', async () => {
     const body = '{\n  "text": "우유 사기"\n}';
@@ -601,6 +612,31 @@ describe('축 ⑩ — 교안의 다른 주장들', () => {
       expect(out).toContain("Failed running 'lab/homework2.js'. Waiting for file changes before restarting...");
     } finally {
       child.kill();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('🔴 과제 [응용] 요구사항 6 — 매개변수 다섯 판은 «지금은 5개» 로 멈춘다 · `< 4` 로 비교한 판은 그대로 떠서 가려진다', async () => {
+    const five = read(P('lab/p3-27/homework2.js'))
+      .replace('app.use(assertErrorHandler((err, req, res, next) => {', 'app.use(assertErrorHandler((err, req, res, next, extra) => {');
+    const dir = studentLab({});
+    writeFileSync(join(dir, 'lab/homework2.js'), five);
+    let out = '';
+    try {
+      execFileSync(process.execPath, [join(dir, 'lab/homework2.js')], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
+    } catch (error) {
+      out = error.stderr;
+    }
+    expect(out).toContain('Error: 에러 미들웨어는 매개변수가 4개여야 해요 (지금은 5개)');
+    const lessThan = five.replace('if (handler.length !== 4) {', 'if (handler.length < 4) {');
+    writeFileSync(join(dir, 'lab/homework2.js'), lessThan);
+    const lab = await boot(join(dir, 'lab/homework2.js'), { port: 4012, ready: '4012번 포트에서' });
+    try {
+      const res = await getJson(`${lab.base}/api/echo`, { method: 'POST', headers: JSON_HEADERS, body: BROKEN });
+      expect(res.status).toBe(400);
+      expect(res.type).toBe('text/html; charset=utf-8');
+    } finally {
+      await lab.stop();
       rmSync(dir, { recursive: true, force: true });
     }
   });
