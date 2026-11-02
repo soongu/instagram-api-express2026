@@ -609,3 +609,187 @@ describe('축 ⑪ — 이 회차 학생 파일', () => {
     expect(out.sort()).toEqual(['app.js', 'package-lock.json', 'package.json']);
   });
 });
+
+describe('축 ⑫ — 교안·답안 코드 블록', () => {
+  const LECTURE = P('../../part3/5-express-core/p3-29-error-builtin-thirdparty-lecture.md');
+  const ANSWERS = P('../../part3/5-express-core/p3-29-error-builtin-thirdparty-answers.md');
+  const blocks = (file) => {
+    const out = [];
+    const re = /^```(javascript|http|bash|)\n([\s\S]*?)^```$/gm;
+    let m;
+    const text = read(file);
+    while ((m = re.exec(text))) out.push({ lang: m[1], lines: m[2].replace(/\n$/, '').split('\n') });
+    return out;
+  };
+  const snapshotsFor = (name) => {
+    const all = execFileSync('ls', [P('snapshots')], { encoding: 'utf8' }).split('\n');
+    return all.filter((f) => f.startsWith('p3-29.') && (f.endsWith(`.${name}`) || f.startsWith(`p3-29.${name.replace('.js', '')}`)))
+      .map((f) => P(`snapshots/${f}`));
+  };
+  const candidates = (path) => {
+    if (path.startsWith('~/instagram-api/node_modules/')) return [P(path.slice('~/instagram-api/'.length))];
+    const rel = path.slice('~/instagram-api/'.length);
+    if (rel.startsWith('lab/')) {
+      const name = rel.slice('lab/'.length);
+      return [LAB(name), P(`lab/p3-21/${name}`), ...snapshotsFor(name)];
+    }
+    return [R(rel), join(BEFORE.dir, rel)];
+  };
+  // `...` 줄은 생략, `____` 줄은 빈칸 — 나머지 줄은 그 파일 안에 «차례대로» 있어야 한다.
+  const inOrder = (lines, file) => {
+    if (!existsSync(file)) return '(파일 없음)';
+    const src = read(file).split('\n');
+    let at = 0;
+    for (const line of lines) {
+      if (line.trim() === '...') continue;
+      const found = src.indexOf(line, at);
+      if (found === -1) return line;
+      at = found + 1;
+    }
+    return null;
+  };
+
+  for (const [label, file] of [['교안', LECTURE], ['답안', ANSWERS]]) {
+    it(`🔴 ${label}의 javascript 블록 — 경로 주석 파일(또는 중간 판·빈칸 판)에 줄이 차례대로 있다`, () => {
+      const misses = [];
+      let checked = 0;
+      for (const { lang, lines } of blocks(file)) {
+        if (lang !== 'javascript') continue;
+        const m = /^\/\/ (~\/instagram-api\/\S+)$/.exec(lines[0]);
+        if (!m) continue;
+        checked += 1;
+        const miss = candidates(m[1]).map((f) => inOrder(lines.slice(1), f));
+        if (miss.every((x) => x !== null)) misses.push(`${m[1]}: ${miss[0]}`);
+      }
+      expect(checked).toBeGreaterThan(0);
+      expect(misses).toEqual([]);
+    });
+  }
+
+  it('🔴 경로 주석 없는 javascript 블록 — Express 4 예제 · Promise.all · 흔한 실수 skip 은 스냅숏·실습 파일에 있다', () => {
+    const pool = [SNAP('step5-async-handler.board.js'), SNAP('practice2-all.js'), LAB('homework1.js')].map(read).join('\n');
+    const noPath = [...blocks(LECTURE), ...blocks(ANSWERS)].filter((b) => b.lang === 'javascript' && !b.lines[0].startsWith('// ~/'));
+    expect(noPath).toHaveLength(3);
+    for (const { lines } of noPath) {
+      const body = lines.map((l) => l.replace('skip: res.statusCode < 400,', 'skip: (req, res) => res.statusCode < 400,'));
+      expect(body.every((l) => pool.includes(l)), lines[0]).toBe(true);
+    }
+  });
+
+  it('🔴 교안·답안의 http 블록 — 실습 요청 파일에 그대로 있다 · 교안 Step 1 + Step 4 블록을 이으면 board.http', () => {
+    const pool = ['board.http', 'parsers.http', 'practice1.http', 'practice2.http', 'homework1.http', 'homework2.http'].map((n) => read(LAB(n))).join('\n');
+    const http = [...blocks(LECTURE), ...blocks(ANSWERS)].filter((b) => b.lang === 'http');
+    for (const { lines } of http) expect(pool.includes(lines.join('\n')), lines[0]).toBe(true);
+    const board = blocks(LECTURE).filter((b) => b.lang === 'http' && b.lines.some((l) => l.includes(':4006/')));
+    expect(`${board.map((b) => b.lines.join('\n')).join('\n\n')}\n`).toBe(read(LAB('board.http')));
+  });
+
+  it('🔴 Step 8 — 교안의 응답 헤더 블록 둘은 httpYac 이 보여 주는 헤더 이름 · 차례와 같다(date 값만 다르다)', () => {
+    const heads = blocks(LECTURE).filter((b) => b.lang === '' && b.lines[0] === 'HTTP/1.1 200 OK');
+    expect(heads).toHaveLength(2);
+    const names = (b) => b.lines.slice(1).map((l) => l.split(':')[0]);
+    const before = ['connection', 'content-length', 'content-type', 'date', 'etag', 'keep-alive', 'x-powered-by'];
+    expect(names(heads[0])).toEqual(before);
+    const helmetNames = ['content-security-policy', 'cross-origin-opener-policy', 'cross-origin-resource-policy', 'origin-agent-cluster',
+      'referrer-policy', 'strict-transport-security', 'x-content-type-options', 'x-dns-prefetch-control', 'x-download-options',
+      'x-frame-options', 'x-permitted-cross-domain-policies', 'x-xss-protection'];
+    expect(names(heads[1])).toEqual([...before.filter((n) => n !== 'x-powered-by'), ...helmetNames].sort());
+  });
+
+  it('🔴 Step 1 · 3 · 4 · 6 — 교안이 인용한 로거 줄의 «메서드 주소 상태» 가 판정이 본 줄과 같다', () => {
+    const text = read(LECTURE);
+    for (const line of ['GET /api/notices/9 500 1.1ms', 'GET /api/notices/9 500 0.288 ms - 40', 'GET /api/notices/9 404 1.071 ms - 40',
+      'POST /api/notices/3/views 500 102.5ms', 'POST /api/notices/3/views 200 0.5ms', '[에러] POST /api/notices/3/views',
+      'at saveView (file:///Users/hong/instagram-api/lab/board.js:35:11)', 'at async file:///Users/hong/instagram-api/lab/board.js:44:3',
+      "Failed running 'lab/board.js'. Waiting for file changes before restarting...", 'at file:///Users/hong/instagram-api/lab/board.js:29:7',
+      'at file:///Users/hong/instagram-api/lab/board.js:43:19']) {
+      expect(text, line).toContain(line);
+    }
+  });
+});
+
+describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
+  it('🔴 Step 4 🙋 — 기다리지 않을 Promise 에 .catch 를 붙이면 3번도 200 · 창에 에러 · 서버는 산다', async () => {
+    expect(read(SNAP('step4-catch.board.js'))).toBe(read(SNAP('step4.board.js'))
+      .replace('  await saveView(req.notice.id);\n', '  saveView(req.notice.id).catch((err) => {\n    console.error(err);\n  });\n'));
+    await withLab('board.js', SNAP('step4-catch.board.js'), 4006, async (lab) => {
+      expect(await post(`${lab.base}/api/notices/3/views`)).toMatchObject({ status: 200, body: { message: '조회 수를 남겼어요' } });
+      await sleep(300);
+      expect(lab.tail()).toContain('Error: 3번 공지의 조회 수를 저장하지 못했어요');
+      expect((await getJson(`${lab.base}/api/notices/1`)).status).toBe(200);
+    });
+  });
+
+  it('🔴 Step 8 🤔 — helmet 의 crossOriginResourcePolicy 옵션으로 그 헤더만 cross-origin', async () => {
+    const src = read(LAB('board.js')).replace('app.use(helmet());', "app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));");
+    await withLab('board.js', src, 4006, async (lab) => {
+      const res = await fetch(`${lab.base}/api/notices/1`);
+      expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    });
+  });
+
+  it('🔴 과제 [기초] — 기준을 뒤집으면(>= 400) 1번만 morgan 줄 · 에러 줄은 그대로', async () => {
+    const src = read(LAB('homework1.js')).replace('res.statusCode < 400,', 'res.statusCode >= 400,');
+    await withLab('homework1.js', src, 4011, async (lab) => {
+      const one = await newLines(lab, () => getJson(`${lab.base}/api/notices/1`));
+      expect(one.lines.map(noMs)).toEqual(['GET /api/notices/1 200 ms - 39']);
+      expect((await newLines(lab, () => getJson(`${lab.base}/api/notices/9`))).lines).toEqual([]);
+      expect((await newLines(lab, () => getJson(`${lab.base}/api/boom`))).lines).toEqual(['Error: 일부러 낸 에러예요']);
+    });
+  });
+
+  it('🔴 과제 [기초] 흔한 실수 — skip 에 조건식을 적으면 뜨자마자 ReferenceError: res is not defined', () => {
+    const dir = studentLab({ 'homework1.js': read(LAB('homework1.js')).replace('  skip: (req, res) => res.statusCode < 400,', '  skip: res.statusCode < 400,') });
+    try {
+      let out = '';
+      try {
+        execFileSync(process.execPath, ['lab/homework1.js'], { cwd: dir, encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
+      } catch (e) {
+        out = `${e.stdout}${e.stderr}`;
+      }
+      expect(out).toContain("  skip: res.statusCode < 400,\n        ^\n\nReferenceError: res is not defined");
+      expect(out).toContain('lab/homework1.js:9');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('🔴 과제 [기초] — 에러 줄의 위치는 homework1.js:29:9', async () => {
+    await withLab('homework1.js', LAB('homework1.js'), 4011, async (lab) => {
+      await fetch(`${lab.base}/api/boom`);
+      await sleep(150);
+      expect(lab.tail()).toMatch(/at file:\/\/\/\S+\/lab\/homework1\.js:29:9/);
+    });
+  });
+
+  it('🔴 과제 [응용] 흔한 실수 — 기록하는 쪽에서 next(err) 를 빠뜨리면 기록은 남고 요청은 매달린다 · 로거 줄도 없다', async () => {
+    const src = read(LAB('homework2.js')).replace('  if (errorLog.length > 5) {\n    errorLog.shift();\n  }\n\n  next(err);\n', '  if (errorLog.length > 5) {\n    errorLog.shift();\n  }\n');
+    expect(src).not.toBe(read(LAB('homework2.js')));
+    await withLab('homework2.js', src, 4012, async (lab) => {
+      const hung = await fetch(`${lab.base}/api/boom`, { signal: AbortSignal.timeout(1500) }).then(() => 'answered', () => 'no answer');
+      expect(hung).toBe('no answer');
+      expect((await getJson(`${lab.base}/api/errors`)).body).toEqual([{ method: 'GET', url: '/api/boom', message: '일부러 낸 에러예요' }]);
+      expect(lab.tail()).not.toContain('GET /api/boom');
+    });
+  });
+
+  it('🔴 과제 [응용] 🙋 — httpYac 으로 네 요청을 한꺼번에 보내면 /api/late 뒤 요청이 socket hang up(Express 가 그 연결을 끊는다)', async () => {
+    await withLab('homework2.js', LAB('homework2.js'), 4012, async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'p329-http-'));
+      try {
+        cpSync(LAB('homework2.http'), join(dir, 'homework2.http'));
+        let out = '';
+        try {
+          out = execFileSync(P('node_modules/.bin/httpyac'), ['send', 'homework2.http', '--all'], { encoding: 'utf-8', cwd: dir });
+        } catch (e) {
+          out = `${e.stdout}${e.stderr}`;
+        }
+        expect(out).toContain('socket hang up');
+        expect(out).toContain('먼저 답했어요');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+});
