@@ -474,6 +474,18 @@ describe('축 ⑨ — 수업 백엔드', () => {
 });
 
 describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
+  it('🔴 직접 해보기 1 (4001) — :response-time 판은 헤더를 먼저 보낸 slow 에서 1ms 아래 · 손 로거는 500ms 남짓(확인 절차가 틀린 판을 가려낸다)', async () => {
+    const wrong = read(LAB('practice1.js')).replace(':total-time[1]ms', ':response-time[1]ms');
+    await withLab('practice1.js', wrong, 4001, async (lab) => {
+      const slow = await newLines(lab, () => getJson(`${lab.base}/api/slow`));
+      const ms = slow.lines.map((l) => Number(/ (\d+\.\d)ms$/.exec(l)[1]));
+      expect(ms[0]).toBeGreaterThanOrEqual(500);
+      expect(ms[1]).toBeLessThan(10);
+    });
+    expect(read(SNAP('practice1-blank.js'))).toBe(read(LAB('practice1.js')).replace("app.use(morgan(':method :url :status :total-time[1]ms'));", 'app.use(morgan(____));'));
+    execFileSync(process.execPath, ['--check', SNAP('practice1-blank.js')]);
+  });
+
   it('🔴 직접 해보기 1 (4001) — morgan 형식 문자열로 손 로거와 같은 모양 · slow 는 둘 다 500ms 남짓', async () => {
     await withLab('practice1.js', LAB('practice1.js'), 4001, async (lab) => {
       const fast = await newLines(lab, () => getJson(`${lab.base}/api/fast`));
@@ -488,14 +500,14 @@ describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
     });
   });
 
-  it('🔴 직접 해보기 2 (4002) — 처음 판: 둘 다 «읽음으로 표시했어요» · 바로 물으면 readIds 는 [] · 그 뒤 서버가 꺼진다', async () => {
+  it('🔴 직접 해보기 2 (4002) — 처음 판을 하나씩: [1,2] 200 · [4,3] 200(거짓) · 0.1초 뒤 서버가 꺼져 «읽은 공지 번호» 는 연결 거부', async () => {
     const dir = studentLab({ 'practice2.js': SNAP('practice2-start.js') });
     const lab = await boot(join(dir, 'lab', 'practice2.js'), { port: 4002, ready: '4002번 포트에서' });
     const send = (ids) => getJson(`${lab.base}/api/notices/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
     try {
       expect(await send([1, 2])).toMatchObject({ status: 200, body: { message: '읽음으로 표시했어요' } });
-      expect(await send([1, 3])).toMatchObject({ status: 200, body: { message: '읽음으로 표시했어요' } });
-      expect((await getJson(`${lab.base}/api/notices/read`)).body).toEqual({ readIds: [] });
+      await sleep(300);
+      expect(await send([4, 3])).toMatchObject({ status: 200, body: { message: '읽음으로 표시했어요' } });
       await sleep(400);
       expect(lab.tail()).toContain('Error: 3번 공지를 읽음으로 표시하지 못했어요');
       expect(await fetch(`${lab.base}/api/notices/read`).then(() => 'answered', () => 'refused')).toBe('refused');
@@ -506,7 +518,7 @@ describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
   });
 
   for (const [label, from, minMs, maxMs] of [['for…of(해설)', LAB('practice2.js'), 200, 300], ['Promise.all(더 좋아요)', SNAP('practice2-all.js'), 100, 180]]) {
-    it(`🔴 직접 해보기 2 — ${label}: [1,2] 200 · [1,3] 500 · 서버가 산다 · readIds [1, 2] · 걸린 시간 ${minMs}ms 대`, async () => {
+    it(`🔴 직접 해보기 2 — ${label}: [1,2] 200 · [4,3] 500 · 서버가 산다 · readIds [1, 2, 4](4번만 표시된 채) · 걸린 시간 ${minMs}ms 대`, async () => {
       await withLab('practice2.js', from, 4002, async (lab) => {
         const send = (ids) => newLines(lab, () => getJson(`${lab.base}/api/notices/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) }));
         const ok = await send([1, 2]);
@@ -514,10 +526,10 @@ describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
         const ms = Number(/ (\d+\.\d)ms$/.exec(ok.lines.at(-1))[1]);
         expect(ms).toBeGreaterThanOrEqual(minMs);
         expect(ms).toBeLessThan(maxMs);
-        const bad = await send([1, 3]);
+        const bad = await send([4, 3]);
         expect(bad.res).toMatchObject({ status: 500, body: { message: '서버에서 문제가 생겼어요' } });
         expect(bad.lines.map(noMs)).toEqual(['Error: 3번 공지를 읽음으로 표시하지 못했어요', 'POST /api/notices/read 500']);
-        expect((await getJson(`${lab.base}/api/notices/read`)).body).toEqual({ readIds: [1, 2] });
+        expect((await getJson(`${lab.base}/api/notices/read`)).body).toEqual({ readIds: [1, 2, 4] });
       });
     });
   }
@@ -549,15 +561,21 @@ describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
       .replace("res.redirect(____, '/api/notices');", "res.redirect(303, '/api/notices');")).toBe(read(LAB('practice3.js')));
   });
 
-  it('🔴 과제 [기초] (4011) — 1번(200)은 줄이 없고 9번(404) · boom(500)만 morgan 줄', async () => {
+  it('🔴 과제 [기초] (4011) — 1번(200)은 줄이 없고 abc(400) · 9번(404) · boom(500)만 morgan 줄 · <= 400 판은 abc 줄이 빠진다', async () => {
     await withLab('homework1.js', LAB('homework1.js'), 4011, async (lab) => {
       const one = await newLines(lab, () => getJson(`${lab.base}/api/notices/1`));
       expect(one.res.body).toEqual({ id: 1, title: '서버 점검 안내' });
       expect(one.lines).toEqual([]);
+      const abc = await newLines(lab, () => getJson(`${lab.base}/api/notices/abc`));
+      expect(abc.res).toMatchObject({ status: 400, body: { message: '공지 번호는 숫자로 보내 주세요' } });
+      expect(abc.lines.map(noMs)).toEqual(['GET /api/notices/abc 400 ms - 57']);
       const nine = await newLines(lab, () => getJson(`${lab.base}/api/notices/9`));
       expect(nine.lines.map(noMs)).toEqual(['GET /api/notices/9 404 ms - 40']);
       const boom = await newLines(lab, () => getJson(`${lab.base}/api/boom`));
       expect(boom.lines.map(noMs)).toEqual(['Error: 일부러 낸 에러예요', 'GET /api/boom 500 ms - 49']);
+    });
+    await withLab('homework1.js', read(LAB('homework1.js')).replace('res.statusCode < 400,', 'res.statusCode <= 400,'), 4011, async (lab) => {
+      expect((await newLines(lab, () => getJson(`${lab.base}/api/notices/abc`))).lines).toEqual([]);
     });
     const blank = read(SNAP('homework1-blank.js'));
     expect(count(blank, '____')).toBe(1);
@@ -565,24 +583,36 @@ describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
     expect(blank.replace('  skip: ____,', '  skip: (req, res) => res.statusCode < 400,')).toBe(read(LAB('homework1.js')));
   });
 
-  it('🔴 과제 [응용] (4012) — 세 에러가 차례로 기록 · late 는 200 + 로거 200 · 차례를 바꾸면 late 하나만', async () => {
-    for (const [from, urls] of [[LAB('homework2.js'), ['/api/boom', '/api/slow-boom', '/api/late']], [SNAP('homework2-swapped.js'), ['/api/late']]]) {
+  it('🔴 과제 [응용] (4012) — 하나씩: 에러 넷이 기록(쿼리 문자열까지) · 404 는 기록 안 됨 · late 는 200 + 로거 200 · 차례를 바꾸면 late 하나만 · req.path 판은 쿼리가 빠진다', async () => {
+    const urls = ['/api/boom', '/api/slow-boom', '/api/late', '/api/boom?from=homework', '/api/nope'];
+    const run = async (from, expected) => {
       await withLab('homework2.js', from, 4012, async (lab) => {
-        expect((await getJson(`${lab.base}/api/boom`)).status).toBe(500);
-        expect((await getJson(`${lab.base}/api/slow-boom`)).status).toBe(500);
-        await sleep(150);
-        const late = await newLines(lab, () => getJson(`${lab.base}/api/late`));
-        expect(late.res).toMatchObject({ status: 200, body: { message: '먼저 답했어요' } });
-        expect(late.lines.map(noMs).sort()).toEqual(['Error: 답한 뒤에 낸 에러예요', 'GET /api/late 200']);
-        expect((await getJson(`${lab.base}/api/errors`)).body.map((e) => e.url)).toEqual(urls);
+        const got = [];
+        for (const u of urls) {
+          const r = await newLines(lab, () => getJson(`${lab.base}${u}`));
+          got.push(r.res.status);
+          if (u === '/api/late') {
+            expect(r.res.body).toEqual({ message: '먼저 답했어요' });
+            expect(r.lines.map(noMs).sort()).toEqual(['Error: 답한 뒤에 낸 에러예요', 'GET /api/late 200']);
+          }
+        }
+        expect(got).toEqual([500, 500, 200, 500, 404]);
+        expect((await getJson(`${lab.base}/api/errors`)).body.map((e) => e.url)).toEqual(expected);
       });
-    }
+    };
+    await run(LAB('homework2.js'), ['/api/boom', '/api/slow-boom', '/api/late', '/api/boom?from=homework']);
+    await run(SNAP('homework2-swapped.js'), ['/api/late']);
+    await run(read(LAB('homework2.js')).replace('url: req.originalUrl', 'url: req.path'), ['/api/boom', '/api/slow-boom', '/api/late', '/api/boom']);
   });
 
-  it('🔴 과제 [응용] — 기록은 최근 5개만', async () => {
+  it('🔴 과제 [응용] 요구사항 8 — 다섯 요청 뒤 바로 던지는 에러를 세 번 더 보내면 가장 오래된 둘(boom · slow-boom)이 빠진다', async () => {
     await withLab('homework2.js', LAB('homework2.js'), 4012, async (lab) => {
-      for (let i = 0; i < 7; i += 1) await fetch(`${lab.base}/api/boom?n=${i}`);
-      expect((await getJson(`${lab.base}/api/errors`)).body.map((e) => e.url)).toEqual([2, 3, 4, 5, 6].map((n) => `/api/boom?n=${n}`));
+      for (const u of ['/api/boom', '/api/slow-boom', '/api/late', '/api/boom?from=homework', '/api/nope', '/api/boom', '/api/boom', '/api/boom']) {
+        await fetch(`${lab.base}${u}`);
+        await sleep(150);
+      }
+      expect((await getJson(`${lab.base}/api/errors`)).body.map((e) => e.url))
+        .toEqual(['/api/late', '/api/boom?from=homework', '/api/boom', '/api/boom', '/api/boom']);
     });
   });
 
@@ -615,7 +645,7 @@ describe('축 ⑫ — 교안·답안 코드 블록', () => {
   const ANSWERS = P('../../part3/5-express-core/p3-29-error-builtin-thirdparty-answers.md');
   const blocks = (file) => {
     const out = [];
-    const re = /^```(javascript|http|bash|)\n([\s\S]*?)^```$/gm;
+    const re = /^```(\w*)\n([\s\S]*?)^```$/gm;
     let m;
     const text = read(file);
     while ((m = re.exec(text))) out.push({ lang: m[1], lines: m[2].replace(/\n$/, '').split('\n') });
@@ -666,10 +696,10 @@ describe('축 ⑫ — 교안·답안 코드 블록', () => {
     });
   }
 
-  it('🔴 경로 주석 없는 javascript 블록 — Express 4 예제 · Promise.all · 흔한 실수 skip 은 스냅숏·실습 파일에 있다', () => {
-    const pool = [SNAP('step5-async-handler.board.js'), SNAP('practice2-all.js'), LAB('homework1.js')].map(read).join('\n');
+  it('🔴 경로 주석 없는 javascript 블록 — Express 4 예제 · Promise.all · 흔한 실수 둘(skip · setTimeout)은 스냅숏·실습 파일에 있다', () => {
+    const pool = [SNAP('step5-async-handler.board.js'), SNAP('practice2-all.js'), LAB('homework1.js'), SNAP('homework2-settimeout.js')].map(read).join('\n');
     const noPath = [...blocks(LECTURE), ...blocks(ANSWERS)].filter((b) => b.lang === 'javascript' && !b.lines[0].startsWith('// ~/'));
-    expect(noPath).toHaveLength(3);
+    expect(noPath).toHaveLength(4);
     for (const { lines } of noPath) {
       const body = lines.map((l) => l.replace('skip: res.statusCode < 400,', 'skip: (req, res) => res.statusCode < 400,'));
       expect(body.every((l) => pool.includes(l)), lines[0]).toBe(true);
@@ -720,6 +750,26 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
     });
   });
 
+  it('🔴 Step 7 🙋 — 라우트에 붙인 express.raw 는 app.use(express.json()) 보다 «위» 에 등록해야 Buffer · 아래면 이미 객체', async () => {
+    const make = (rawFirst) => [
+      '// ~/instagram-api/lab/hook.js',
+      "import express from 'express';",
+      'const app = express();',
+      "const hook = (req, res) => { res.json({ isBuffer: Buffer.isBuffer(req.body) }); };",
+      rawFirst ? "app.post('/api/hook', express.raw({ type: 'application/json' }), hook);" : '',
+      'app.use(express.json());',
+      rawFirst ? '' : "app.post('/api/hook', express.raw({ type: 'application/json' }), hook);",
+      "app.listen(4007, () => { console.log('실습 서버가 4007번 포트에서 기다리고 있어요.'); });",
+      '',
+    ].join('\n');
+    for (const [rawFirst, expected] of [[true, true], [false, false]]) {
+      await withLab('hook.js', make(rawFirst), 4007, async (lab) => {
+        const r = await getJson(`${lab.base}/api/hook`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":1}' });
+        expect(r.body).toEqual({ isBuffer: expected });
+      });
+    }
+  });
+
   it('🔴 Step 8 🤔 — helmet 의 crossOriginResourcePolicy 옵션으로 그 헤더만 cross-origin', async () => {
     const src = read(LAB('board.js')).replace('app.use(helmet());', "app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));");
     await withLab('board.js', src, 4006, async (lab) => {
@@ -729,11 +779,12 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
     });
   });
 
-  it('🔴 과제 [기초] — 기준을 뒤집으면(>= 400) 1번만 morgan 줄 · 에러 줄은 그대로', async () => {
+  it('🔴 과제 [기초] — 기준을 뒤집으면(>= 400) 1번만 morgan 줄 · abc · 9번은 줄 없음 · 에러 줄은 그대로', async () => {
     const src = read(LAB('homework1.js')).replace('res.statusCode < 400,', 'res.statusCode >= 400,');
     await withLab('homework1.js', src, 4011, async (lab) => {
       const one = await newLines(lab, () => getJson(`${lab.base}/api/notices/1`));
       expect(one.lines.map(noMs)).toEqual(['GET /api/notices/1 200 ms - 39']);
+      expect((await newLines(lab, () => getJson(`${lab.base}/api/notices/abc`))).lines).toEqual([]);
       expect((await newLines(lab, () => getJson(`${lab.base}/api/notices/9`))).lines).toEqual([]);
       expect((await newLines(lab, () => getJson(`${lab.base}/api/boom`))).lines).toEqual(['Error: 일부러 낸 에러예요']);
     });
@@ -755,11 +806,11 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
     }
   });
 
-  it('🔴 과제 [기초] — 에러 줄의 위치는 homework1.js:29:9', async () => {
+  it('🔴 과제 [기초] — 에러 줄의 위치는 homework1.js:36:9', async () => {
     await withLab('homework1.js', LAB('homework1.js'), 4011, async (lab) => {
       await fetch(`${lab.base}/api/boom`);
       await sleep(150);
-      expect(lab.tail()).toMatch(/at file:\/\/\/\S+\/lab\/homework1\.js:29:9/);
+      expect(lab.tail()).toMatch(/at file:\/\/\/\S+\/lab\/homework1\.js:36:9/);
     });
   });
 
@@ -772,6 +823,24 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
       expect((await getJson(`${lab.base}/api/errors`)).body).toEqual([{ method: 'GET', url: '/api/boom', message: '일부러 낸 에러예요' }]);
       expect(lab.tail()).not.toContain('GET /api/boom');
     });
+  });
+
+  it('🔴 과제 [응용] 흔한 실수 — setTimeout 안에서 던지면 응답 없이 서버가 꺼진다', async () => {
+    const src = read(SNAP('homework2-settimeout.js'));
+    expect(src).toBe(read(LAB('homework2.js')).replace(
+      "app.get('/api/slow-boom', async (req, res) => {\n  await new Promise((resolve) => setTimeout(resolve, 100));\n  throw new Error('기다렸다가 낸 에러예요');\n});",
+      "app.get('/api/slow-boom', (req, res) => {\n  setTimeout(() => {\n    throw new Error('기다렸다가 낸 에러예요');\n  }, 100);\n});"));
+    const dir = studentLab({ 'homework2.js': src });
+    const lab = await boot(join(dir, 'lab', 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
+    try {
+      expect(await fetch(`${lab.base}/api/slow-boom`).then((r) => r.status, () => 'no answer')).toBe('no answer');
+      await sleep(200);
+      expect(lab.tail()).toContain("    throw new Error('기다렸다가 낸 에러예요');\n    ^\n\nError: 기다렸다가 낸 에러예요");
+      expect(await fetch(`${lab.base}/api/errors`).then(() => 'answered', () => 'refused')).toBe('refused');
+    } finally {
+      await Promise.race([lab.stop(), sleep(500)]);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('🔴 과제 [응용] 🙋 — httpYac 으로 네 요청을 한꺼번에 보내면 /api/late 뒤 요청이 socket hang up(Express 가 그 연결을 끊는다)', async () => {

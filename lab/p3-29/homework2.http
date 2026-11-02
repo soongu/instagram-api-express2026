@@ -7,5 +7,11 @@ GET http://localhost:4012/api/slow-boom
 ### 답한 뒤에 던지는 에러
 GET http://localhost:4012/api/late
 
+### 쿼리 문자열이 붙은 에러
+GET http://localhost:4012/api/boom?from=homework
+
+### 없는 주소
+GET http://localhost:4012/api/nope
+
 ### 기록한 에러
 GET http://localhost:4012/api/errors

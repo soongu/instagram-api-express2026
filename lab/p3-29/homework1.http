@@ -1,6 +1,9 @@
 ### 1번 공지
 GET http://localhost:4011/api/notices/1
 
+### 번호 대신 글자로
+GET http://localhost:4011/api/notices/abc
+
 ### 없는 9번 공지
 GET http://localhost:4011/api/notices/9
 

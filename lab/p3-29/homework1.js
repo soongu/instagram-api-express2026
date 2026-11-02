@@ -15,7 +15,14 @@ const notices = [
 ];
 
 app.get('/api/notices/:id', (req, res) => {
-  const notice = notices.find((one) => one.id === Number(req.params.id));
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ message: '공지 번호는 숫자로 보내 주세요' });
+    return;
+  }
+
+  const notice = notices.find((one) => one.id === id);
 
   if (!notice) {
     res.status(404).json({ message: '그런 공지는 없어요' });

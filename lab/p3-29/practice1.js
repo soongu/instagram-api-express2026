@@ -12,9 +12,13 @@ app.get('/api/fast', (req, res) => {
   res.json({ message: '바로 답했어요' });
 });
 
+// 상태 줄과 헤더는 바로 보내고, 본문은 0.5초 뒤에 보낸다
 app.get('/api/slow', (req, res) => {
+  res.type('json');
+  res.flushHeaders();
+
   setTimeout(() => {
-    res.json({ message: '0.5초 기다렸다가 답했어요' });
+    res.end(JSON.stringify({ message: '본문은 0.5초 뒤에 보냈어요' }));
   }, 500);
 });
 

@@ -1,5 +1,5 @@
 ### 바로 답하는 요청
 GET http://localhost:4001/api/fast
 
-### 0.5초 뒤에 답하는 요청
+### 본문을 0.5초 뒤에 보내는 요청
 GET http://localhost:4001/api/slow
