@@ -97,7 +97,8 @@ const newLines = async (app, send) => {
 };
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-const BROKEN = '{\n  "authorId": 3\n';
+// requests/posts.http 의 중괄호를 닫지 않은 요청 — httpYac 은 본문 끝 줄바꿈을 떼고 보낸다(17바이트).
+const BROKEN = '{\n  "authorId": 3';
 // requests/cors.http 의 「올리기 전에 미리 물어보는 요청 — 우리 프론트」
 const preflight = (base) => fetch(`${base}/api/posts`, {
   method: 'OPTIONS',
@@ -139,6 +140,7 @@ describe('축 ① — Step 2: 요청 기록 미들웨어', () => {
     expect((await newLines(server, () => fetch(`${server.base}/api/posts/1`))).lines).toEqual(['GET /api/posts/1 200']);
     expect((await newLines(server, () => fetch(`${server.base}/api/posts/999`))).lines).toEqual(['GET /api/posts/999 404']);
     expect((await newLines(server, () => fetch(`${server.base}/api/nope`))).lines).toEqual(['GET /api/nope 404']);
+    expect((await newLines(server, () => fetch(`${server.base}/api/comments`))).lines).toEqual(['GET /api/comments 404']);
   });
 
   it('🔴 로그인 · 나는 누구(401)도 찍힌다', async () => {
@@ -168,12 +170,17 @@ describe('축 ② — Step 2 의 반례: req.url 로 적으면', () => {
     expect(diff[0][1]).toBe(diff[0][0].replace('req.originalUrl', 'req.url'));
   });
 
-  it('🔴 그 판은 라우터 안 요청을 «GET /1 200» 으로 잘라 적고, app.js 에 바로 있는 주소는 그대로', async () => {
+  it('🔴 그 판은 라우터 «안에서» 답한 요청만 «GET /1 200»·«GET / 200» 으로 잘라 적고, 에러 미들웨어가 답한 404 와 app.js 에 바로 있는 주소는 그대로', async () => {
     const dir = copyStudent(ROUND.dir, 'p327-url-');
     cpSync(P('snapshots/p3-27.step2-url.logger.js'), join(dir, 'middlewares/logger.js'));
     const app = await bootApp(dir, SNAP_PORT);
     try {
       expect((await newLines(app, () => fetch(`${app.base}/api/posts/1`))).lines).toEqual(['GET /1 200']);
+      // requests/posts.http «게시물 목록» — 라우터 안에서 답하니 잘린 주소
+      expect((await newLines(app, () => fetch(`${app.base}/api/posts`))).lines).toEqual(['GET / 200']);
+      // 라우터 밖 에러 미들웨어가 답한 요청은 Express 가 req.url 을 되돌려 놓은 뒤라 제대로 찍힌다
+      expect((await newLines(app, () => fetch(`${app.base}/api/posts/999`))).lines).toEqual(['GET /api/posts/999 404']);
+      expect((await newLines(app, () => fetch(`${app.base}/api/posts/abc`))).lines).toEqual(['GET /api/posts/abc 404']);
       expect((await newLines(app, () => fetch(`${app.base}/api/posts?limit=2`))).lines).toEqual(['GET /?limit=2 200']);
       expect((await newLines(app, () => fetch(`${app.base}/api/nope`))).lines).toEqual(['GET /api/nope 404']);
     } finally {
@@ -264,11 +271,11 @@ describe('축 ④ — Step 4: 잠깐 끼운 함수의 자리', () => {
 
   for (const [snap, expected] of [
     ['p3-27.step4-probe-above.app.js', 'undefined'],
-    ['p3-27.step4-probe-below.app.js', "{ sessionId: 'abc' }"],
+    ['p3-27.step4-probe-below.app.js', "{ sessionId: '1' }"],
   ]) {
     it(`🔴 ${snap} — 쿠키를 실어 «나는 누구» → «쿠키: ${expected}» 다음 로거 줄`, async () => {
       await withSnapshot(snap, async (app) => {
-        const { lines } = await newLines(app, () => fetch(`${app.base}/api/auth/me`, { headers: { Cookie: 'sessionId=abc' } }));
+        const { lines } = await newLines(app, () => fetch(`${app.base}/api/auth/me`, { headers: { Cookie: 'sessionId=1' } }));
         expect(lines).toEqual([`쿠키: ${expected}`, 'GET /api/auth/me 401']);
       });
     });
@@ -338,7 +345,7 @@ describe('축 ⑦ — Step 8: 에러 미들웨어의 next 에 기본값을 주�
       expect(res.type).toBe('text/html; charset=utf-8');
       expect(res.body).toContain('<pre>SyntaxError: ');
       await sleep(150);
-      expect(app.tail()).toMatch(/\nSyntaxError: Expected ',' or '}' after property value in JSON/);
+      expect(app.tail()).toContain("POST /api/posts 400\nSyntaxError: Expected ',' or '}' after property value in JSON at position 17 (line 2 column 16)\n");
       expect((await newLines(app, () => fetch(`${app.base}/api/posts?limit=2`))).lines).toEqual(['GET /api/posts?limit=2 200']);
     });
   });
@@ -500,5 +507,183 @@ describe('축 ⑨ — 직접 해보기 · 과제 (lab/p3-27/)', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('축 ⑩ — 교안의 다른 주장들', () => {
+  it('🔴 Step 1 — 404 미들웨어를 지운 판은 Express 가 «Cannot GET /api/comments» HTML 404 로 답한다', async () => {
+    const dir = copyStudent(ROUND.dir, 'p327-no404-');
+    const app = read(R('app.js'));
+    const block = "app.use((req, res) => {\n  res.status(404).json({ message: '그런 주소는 없어요' });\n});\n";
+    expect(app).toContain(block);
+    writeFileSync(join(dir, 'app.js'), app.replace(block, ''));
+    const s = await bootApp(dir, SNAP_PORT);
+    try {
+      const res = await getJson(`${s.base}/api/comments`);
+      expect(res.status).toBe(404);
+      expect(res.type).toBe('text/html; charset=utf-8');
+      expect(res.body).toContain('<pre>Cannot GET /api/comments</pre>');
+    } finally {
+      await s.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('🔴 Step 5 — requests/cors.http 의 세 요청: 우리 프론트 GET 은 줄이 남고, 모르는 곳 GET 도 200 + 게시물 + 줄(허락 헤더만 없다)', async () => {
+    const cors = read(R('requests/cors.http'));
+    expect(cors).toContain('### 우리 프론트에서 온 것처럼 물어보기\nGET http://localhost:3000/api/posts?limit=1\nOrigin: http://localhost:5173\n');
+    expect(cors).toContain('### 우리가 모르는 곳에서 온 것처럼 물어보기\nGET http://localhost:3000/api/posts?limit=1\nOrigin: http://not-ours.example.com\n');
+    const ours = await newLines(server, () => fetch(`${server.base}/api/posts?limit=1`, { headers: { Origin: STUDENT_ORIGIN } }));
+    expect(ours.lines).toEqual(['GET /api/posts?limit=1 200']);
+    const other = await newLines(server, () => getJson(`${server.base}/api/posts?limit=1`, { headers: { Origin: 'http://not-ours.example.com' } }));
+    expect(other.res.status).toBe(200);
+    expect(other.res.body.items).toHaveLength(1);
+    expect(other.lines).toEqual(['GET /api/posts?limit=1 200']);
+    const raw = await fetch(`${server.base}/api/posts?limit=1`, { headers: { Origin: 'http://not-ours.example.com' } });
+    expect(raw.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('🔴 Step 5 — 로거를 cors 뒤로 옮긴 판에서도 우리 프론트 GET(limit=1)은 찍힌다', async () => {
+    await withSnapshot('p3-27.step5-logger-after-cors.app.js', async (app) => {
+      const { lines } = await newLines(app, () => fetch(`${app.base}/api/posts?limit=1`, { headers: { Origin: STUDENT_ORIGIN } }));
+      expect(lines).toEqual(['GET /api/posts?limit=1 200']);
+    });
+  });
+
+  it('🔴 Step 7 — 에러 미들웨어의 이름을 err→error · next→_next 로 바꿔도 우리 JSON 400', async () => {
+    const dir = copyStudent(ROUND.dir, 'p327-names-');
+    const app = read(R('app.js'));
+    const head = 'app.use((err, req, res, next) => {\n  if (err instanceof HttpError) {\n    const body = { message: err.message };\n    if (err.details) body.details = err.details;\n    res.status(err.status).json(body);\n    return;\n  }\n\n  if (err.status) {\n    res.status(err.status).json';
+    expect(app).toContain(head);
+    writeFileSync(join(dir, 'app.js'), app.replace(head, head
+      .replace('(err, req, res, next)', '(error, req, res, _next)')
+      .replaceAll('err instanceof', 'error instanceof').replaceAll('err.', 'error.')));
+    const s = await bootApp(dir, SNAP_PORT);
+    try {
+      const res = await getJson(`${s.base}/api/posts`, { method: 'POST', headers: JSON_HEADERS, body: BROKEN });
+      expect(res).toMatchObject({ status: 400, body: { message: '보낸 내용을 읽을 수 없어요' } });
+    } finally {
+      await s.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('🔴 직접 해보기 2 — requireJson 없는 판의 터미널 첫 에러 줄 · 넣은 판의 목록 줄', async () => {
+    const without = (() => {
+      const src = read(P('lab/p3-27/practice2.js')).replace("app.use(requireJson('JSON 형식으로 보내 주세요'));\n", '');
+      const dir = mkdtempSync(join(tmpdir(), 'p327-variant-'));
+      writeFileSync(join(dir, 'practice2.js'), src);
+      return join(dir, 'practice2.js');
+    })();
+    await withLab('practice2.js', without, 4002, async (lab) => {
+      await fetch(`${lab.base}/api/notes`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{\n  "text": "우유 사기"\n}' });
+      await sleep(150);
+      expect(lab.tail()).toContain("POST /api/notes 500\nTypeError: Cannot read properties of undefined (reading 'text')\n");
+    });
+    await withLab('practice2.js', P('lab/p3-27/practice2.js'), 4002, async (lab) => {
+      expect((await newLines(lab, () => fetch(`${lab.base}/api/notes`))).lines).toEqual(['GET /api/notes 200']);
+    });
+  });
+
+  it('🔴 과제 [응용] — 기본값을 준 판을 node --watch 로 띄우면 그 문장 + «Failed running … Waiting for file changes»', async () => {
+    const src = read(P('lab/p3-27/homework2.js'))
+      .replace('app.use(assertErrorHandler((err, req, res, next) => {', 'app.use(assertErrorHandler((err, req, res, next = () => {}) => {');
+    const dir = studentLab({});
+    writeFileSync(join(dir, 'lab/homework2.js'), src);
+    const { spawn } = await import('node:child_process');
+    const child = spawn(process.execPath, ['--watch', 'lab/homework2.js'], { cwd: dir });
+    let out = '';
+    child.stdout.on('data', (b) => { out += b; });
+    child.stderr.on('data', (b) => { out += b; });
+    try {
+      for (let i = 0; i < 40 && !out.includes('Waiting for file changes'); i++) await sleep(100);
+      expect(out).toContain('Error: 에러 미들웨어는 매개변수가 4개여야 해요 (지금은 3개)');
+      expect(out).toContain("Failed running 'lab/homework2.js'. Waiting for file changes before restarting...");
+    } finally {
+      child.kill();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('축 ⑪ — 교안 코드 블록의 줄이 실재한다', () => {
+  const LECTURE = P('../../part3/5-express-core/p3-27-middleware-structure-lecture.md');
+  const ANSWERS = P('../../part3/5-express-core/p3-27-middleware-structure-answers.md');
+  const blocks = (file) => {
+    const out = [];
+    const re = /^```(javascript|http)\n([\s\S]*?)^```$/gm;
+    let m;
+    const text = read(file);
+    while ((m = re.exec(text))) out.push({ lang: m[1], lines: m[2].replace(/\n$/, '').split('\n') });
+    return out;
+  };
+  // 교안 경로 → 코드베이스에서 그 블록이 나올 수 있는 파일들(이 회차 끝 판 + 중간 판 스냅숏)
+  const candidates = (path) => {
+    if (path.startsWith('~/instagram-api/node_modules/')) return [P(path.slice('~/instagram-api/'.length))];
+    const rel = path.slice('~/instagram-api/'.length);
+    if (rel.startsWith('lab/')) {
+      const name = rel.slice('lab/'.length);
+      return [P(`lab/p3-27/${name}`), ...snapshotsFor(name)];
+    }
+    return [R(rel), ...snapshotsFor(rel.split('/').pop())];
+  };
+  const snapshotsFor = (name) => {
+    const base = name.replace(/\.js$/, '');
+    const all = execFileSync('ls', [P('snapshots')], { encoding: 'utf8' }).split('\n');
+    return all.filter((f) => f.startsWith('p3-27.') && (f.endsWith(`.${name}`) || f === `p3-27.${base}-start.js`))
+      .map((f) => P(`snapshots/${f}`));
+  };
+  // `...` 줄은 생략, `____` 줄은 빈칸 — 나머지 줄은 그 파일 안에 «차례대로» 있어야 한다.
+  const inOrder = (lines, file) => {
+    const src = read(file).split('\n');
+    let at = 0;
+    for (const line of lines) {
+      if (line.trim() === '...' || line.includes('____')) continue;
+      const found = src.indexOf(line, at);
+      if (found === -1) return line;
+      at = found + 1;
+    }
+    return null;
+  };
+
+  for (const [label, file] of [['교안', LECTURE], ['답안', ANSWERS]]) {
+    it(`🔴 ${label}의 javascript 블록 — 경로 주석 파일(또는 그 중간 판)에 줄이 차례대로 있다`, () => {
+      const misses = [];
+      let checked = 0;
+      for (const { lang, lines } of blocks(file)) {
+        if (lang !== 'javascript') continue;
+        const m = /^\/\/ (~\/instagram-api\/\S+)$/.exec(lines[0]);
+        if (!m) continue;
+        checked += 1;
+        const body = lines.slice(1);
+        const files = candidates(m[1]);
+        const miss = files.map((f) => inOrder(body, f));
+        if (miss.every((x) => x !== null)) misses.push(`${m[1]}: ${miss[0]}`);
+      }
+      expect(checked).toBeGreaterThan(0);
+      expect(misses).toEqual([]);
+    });
+  }
+
+  it('🔴 교안의 middleware.http 블록 = requests/middleware.http · 답안 해설의 practice2/3.http = lab', () => {
+    const http = blocks(LECTURE).filter((b) => b.lang === 'http').map((b) => b.lines.join('\n') + '\n');
+    expect(http).toContain(read(R('requests/middleware.http')));
+    expect(http).toContain(read(P('lab/p3-27/practice2.http')));
+    expect(http).toContain(read(P('lab/p3-27/practice3.http')));
+  });
+});
+
+describe('축 ⑫ — 답안의 주장', () => {
+  it('🔴 과제 [기초] 흔한 실수 — return 을 빠뜨린 판: 브라우저엔 503, 창엔 ERR_HTTP_HEADERS_SENT', async () => {
+    const src = read(P('lab/p3-27/homework1.js')).replace("      res.status(503).json({ message: '지금은 점검 중이에요. 잠시 뒤에 다시 와 주세요' });\n      return;\n", "      res.status(503).json({ message: '지금은 점검 중이에요. 잠시 뒤에 다시 와 주세요' });\n");
+    expect(src).not.toBe(read(P('lab/p3-27/homework1.js')));
+    const dir = mkdtempSync(join(tmpdir(), 'p327-variant-'));
+    writeFileSync(join(dir, 'homework1.js'), src);
+    await withLab('homework1.js', join(dir, 'homework1.js'), 4011, async (lab) => {
+      const res = await getJson(`${lab.base}/api/notices`);
+      expect(res).toMatchObject({ status: 503, body: { message: '지금은 점검 중이에요. 잠시 뒤에 다시 와 주세요' } });
+      await sleep(150);
+      expect(lab.tail()).toContain('Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client');
+    });
   });
 });
