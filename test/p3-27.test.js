@@ -152,7 +152,8 @@ describe('축 ① — Step 2: 요청 기록 미들웨어', () => {
   });
 
   it('🔴 logger.js 는 경로 주석 + 함수 하나 · app.js 맨 위 app.use', () => {
-    expect(read(R('middlewares/logger.js'))).toBe(read(P('middlewares/logger.js')));
+    // 🚨 작업트리(P)와 비교하지 않는다 — `p3-28` 이 로거에 걸린 시간을 더해 작업트리 판이 바뀐다. 이 회차 판(북마크)만 본다.
+    expect(read(R('middlewares/logger.js'))).toBe(read(P('snapshots/p3-27.logger.js')));
     const app = read(R('app.js')).split('\n');
     const uses = app.filter((line) => line.startsWith('app.use('));
     expect(uses[0]).toBe('app.use(logger);');
