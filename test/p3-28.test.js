@@ -129,6 +129,8 @@ beforeAll(async () => {
   seed();
   // 학생 DB 처럼 가입 화면에서 가입한 yuna 가 있다(`p3-22` Step 8 — yuna@example.com).
   await db.query(`INSERT INTO users (username, name, email) VALUES ('yuna', '김유나', 'yuna@example.com')`);
+  // 회원가입 회차의 requests/auth.http 「회원가입」 으로 가입한 sora 도 있다 — 「사용자 이름 중복 확인」 이 묻는 이름.
+  await db.query(`INSERT INTO users (username, name, email) VALUES ('sora', '한소라', 'sora@example.com')`);
 
   server = await bootApp(ROUND.dir, PORT);
 }, 120000);
@@ -612,5 +614,170 @@ describe('축 ⑪ — 이 회차 학생 파일', () => {
     expect(existsSync(LAB('practice1.http'))).toBe(true);
     expect(read(LAB('practice1.http'))).not.toMatch(/localhost:(?!4001)\d+/);
     expect(read(LAB('homework1.http'))).not.toMatch(/localhost:(?!4011)\d+/);
+  });
+});
+
+describe('축 ⑫ — 교안·답안 코드 블록과 응답 블록', () => {
+  const LECTURE = P('../../part3/5-express-core/p3-28-middleware-chain-lecture.md');
+  const ANSWERS = P('../../part3/5-express-core/p3-28-middleware-chain-answers.md');
+  const blocks = (file) => {
+    const out = [];
+    const re = /^```(javascript|http|bash)\n([\s\S]*?)^```$/gm;
+    let m;
+    const text = read(file);
+    while ((m = re.exec(text))) out.push({ lang: m[1], lines: m[2].replace(/\n$/, '').split('\n') });
+    return out;
+  };
+  // 교안 경로 → 그 블록이 나올 수 있는 파일들(이 회차 끝 판 · 앞 회차 판 · 중간 판 스냅숏)
+  const candidates = (path) => {
+    if (path.startsWith('~/instagram-api/node_modules/')) return [P(path.slice('~/instagram-api/'.length))];
+    const rel = path.slice('~/instagram-api/'.length);
+    if (rel.startsWith('lab/')) {
+      const name = rel.slice('lab/'.length);
+      return [LAB(name), ...snapshotsFor(name)];
+    }
+    return [R(rel), join(BEFORE.dir, rel), ...snapshotsFor(rel.split('/').pop())];
+  };
+  const snapshotsFor = (name) => {
+    const all = execFileSync('ls', [P('snapshots')], { encoding: 'utf8' }).split('\n');
+    return all.filter((f) => f.startsWith('p3-28.') && f.endsWith(`.${name}`)).map((f) => P(`snapshots/${f}`))
+      .concat(name === 'db.js' ? [P('snapshots/p3-28.step8-warm.db-tail.js')] : []);
+  };
+  // `...` 줄은 생략, `____` 줄은 빈칸 — 나머지 줄은 그 파일 안에 «차례대로» 있어야 한다.
+  const inOrder = (lines, file) => {
+    if (!existsSync(file)) return '(파일 없음)';
+    const src = read(file).split('\n');
+    let at = 0;
+    for (const line of lines) {
+      if (line.trim() === '...' || line.includes('____')) continue;
+      const found = src.indexOf(line, at);
+      if (found === -1) return line;
+      at = found + 1;
+    }
+    return null;
+  };
+
+  for (const [label, file] of [['교안', LECTURE], ['답안', ANSWERS]]) {
+    it(`🔴 ${label}의 javascript 블록 — 경로 주석 파일(또는 앞 회차 판·중간 판)에 줄이 차례대로 있다`, () => {
+      const misses = [];
+      let checked = 0;
+      for (const { lang, lines } of blocks(file)) {
+        if (lang !== 'javascript') continue;
+        const m = /^\/\/ (~\/instagram-api\/\S+)$/.exec(lines[0]);
+        if (!m) continue;
+        checked += 1;
+        const body = lines.slice(1);
+        const miss = candidates(m[1]).map((f) => inOrder(body, f));
+        if (miss.every((x) => x !== null)) misses.push(`${m[1]}: ${miss[0]}`);
+      }
+      expect(checked).toBeGreaterThan(0);
+      expect(misses).toEqual([]);
+    });
+  }
+
+  it('🔴 교안·답안의 http 블록 — 요청 파일(requests/middleware.http · lab/*.http)에 그대로 있다', () => {
+    const files = [R('requests/middleware.http'), ...['practice1.http', 'practice2.http', 'homework1.http', 'homework2.http'].map(LAB)];
+    const pool = files.map(read).join('\n');
+    const authHttp = read(R('requests/auth.http'));
+    for (const file of [LECTURE, ANSWERS]) {
+      for (const { lang, lines } of blocks(file)) {
+        if (lang !== 'http') continue;
+        const text = lines.join('\n');
+        expect(pool.includes(text) || authHttp.includes(text), text.split('\n')[0]).toBe(true);
+      }
+    }
+    expect(read(LAB('practice1.http'))).toBe(`${blocks(LECTURE).find((b) => b.lang === 'http' && b.lines[0] === '### 1번 공지 제목 고치기').lines.join('\n')}\n`);
+  });
+
+  it('🔴 교안의 «HTTP/1.1 …» 응답 블록 다섯 — 실제 응답과 상태 · 본문이 같다', async () => {
+    const quoted = blocks(LECTURE).filter((b) => b.lang === 'bash' && b.lines[0].startsWith('HTTP/1.1 '))
+      .map((b) => ({ status: Number(b.lines[0].split(' ')[1]), body: JSON.parse(b.lines.slice(2).join('\n')) }));
+    expect(quoted.map((q) => q.status)).toEqual([404, 400, 500, 200, 200]);
+    const real = [];
+    real.push(await patch(server.base, '/api/posts/abc', { likeCount: -1 }));
+    await withVariant({ 'routes/posts.js': read(P('snapshots/p3-28.step1-body-first.posts.js')) }, async (app) => {
+      real.push(await patch(app.base, '/api/posts/abc', { likeCount: -1 }));
+    });
+    await withVariant({
+      'middlewares/validate.js': read(P('snapshots/p3-28.step3-set-query.validate.js')),
+      'routes/auth.js': read(P('snapshots/p3-28.step3-read-query.auth.js')),
+    }, async (app) => { real.push(await getJson(`${app.base}/api/auth/check-duplicate?type=username&value=sora`)); });
+    await withVariant({
+      'middlewares/validate.js': read(P('snapshots/p3-28.step4-object-assign.validate.js')),
+      'routes/auth.js': read(P('snapshots/p3-28.step3-read-query.auth.js')),
+    }, async (app) => { real.push(await getJson(`${app.base}${SPACED_EMAIL}`)); });
+    real.push(await getJson(`${server.base}${SPACED_EMAIL}`));
+    expect(real.map((r) => ({ status: r.status, body: r.body }))).toEqual(quoted);
+  }, 60000);
+
+  it('🔴 Step 6 — 교안의 응답 헤더 블록은 실제 응답 헤더의 이름 · 차례와 같다(date 값 · etag 는 본문이 같으면 같다)', async () => {
+    const text = read(LECTURE);
+    const at = text.indexOf('```\nHTTP/1.1 200 OK\nconnection:');
+    const block = text.slice(at + 4, text.indexOf('```', at + 4)).trim().split('\n');
+    const res = await fetch(`${server.base}/api/auth/check-duplicate?type=username&value=sora`);
+    const names = [...res.headers.keys()].sort();
+    expect(block.slice(1).map((l) => l.split(':')[0])).toEqual(names);
+    expect(block).toContain(`content-length: ${res.headers.get('content-length')}`);
+    expect(block).toContain(`etag: ${res.headers.get('etag')}`);
+  });
+});
+
+describe('축 ⑬ — 답안의 주장', () => {
+  it('🔴 과제 [기초] 흔한 실수 — requireAdmin 에서 return 을 빠뜨리면 403 인데 1번 공지가 지워지고 창에 ERR_HTTP_HEADERS_SENT', async () => {
+    const src = read(LAB('homework1.js')).replace("    res.status(403).json({ message: '관리자만 할 수 있어요' });\n    return;\n", "    res.status(403).json({ message: '관리자만 할 수 있어요' });\n");
+    expect(src).not.toBe(read(LAB('homework1.js')));
+    await withLab('homework1.js', src, 4011, async (lab) => {
+      expect(await getJson(`${lab.base}/api/notices/1`, { method: 'DELETE' })).toMatchObject({ status: 403, body: { message: '관리자만 할 수 있어요' } });
+      expect((await getJson(`${lab.base}/api/notices`)).body.map((n) => n.id)).toEqual([2, 3]);
+      await sleep(150);
+      expect(lab.tail()).toContain('Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client');
+    });
+  });
+
+  it('🔴 과제 [응용] 요구사항 7 — 옮긴 판의 500 본문에는 requestId 가 없다 · 에러 줄도 [undefined]', async () => {
+    const src = read(LAB('homework2.js'));
+    const moved = src.replace('app.use(requestId);\n', '')
+      .replace("app.use((req, res) => {\n  res.status(404)", "app.use(requestId);\n\napp.use((req, res) => {\n  res.status(404)");
+    await withLab('homework2.js', moved, 4012, async (lab) => {
+      const boom = await getJson(`${lab.base}/api/boom`);
+      expect(boom).toMatchObject({ status: 500 });
+      expect(boom.body).toEqual({ message: '서버에서 문제가 생겼어요' });
+      expect(boom.headers.get('x-request-id')).toBeNull();
+      await sleep(150);
+      expect(lab.tail()).toContain('[undefined] Error: 일부러 낸 에러예요');
+    });
+  });
+
+  it('🔴 과제 [응용] 흔한 실수 — finish 안에서 res.set 을 부르면 첫 응답은 오고 서버가 ERR_HTTP_HEADERS_SENT 로 꺼진다', async () => {
+    const src = read(LAB('homework2.js')).replace(
+      "    console.log(`[${id}] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms.toFixed(1)}ms`);\n",
+      "    res.set('X-Response-Time', `${ms.toFixed(1)}ms`);\n    console.log(`[${id}] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms.toFixed(1)}ms`);\n");
+    expect(src).not.toBe(read(LAB('homework2.js')));
+    // 이미 꺼진 프로세스는 'exit' 를 다시 내지 않아 lab.stop() 이 끝나지 않는다 — 기다림에 상한을 둔다.
+    const dir = studentLab({ 'homework2.js': src });
+    const lab = await boot(join(dir, 'lab', 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
+    try {
+      expect((await fetch(`${lab.base}/api/notices`)).status).toBe(200);
+      await sleep(300);
+      expect(lab.tail()).toContain("throw new ERR_HTTP_HEADERS_SENT('set');");
+      expect(await fetch(`${lab.base}/api/notices`).then(() => 'answered', () => 'refused')).toBe('refused');
+    } finally {
+      await Promise.race([lab.stop(), sleep(500)]);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('🔴 Step 4 · Step 6 — 잠깐 넣는 줄: req.query === req.query 는 false · req.get(host) · req.path 는 라우터 안이라 /check-duplicate', async () => {
+    await withVariant({
+      'middlewares/validate.js': read(P('snapshots/p3-28.step4-object-assign.validate.js')),
+      'routes/auth.js': read(P('snapshots/p3-28.step4-identity.auth.js')),
+    }, async (app) => {
+      const { lines } = await newLines(app, () => fetch(`${app.base}${SPACED_EMAIL}`));
+      expect(lines.map(withoutMs)).toEqual(['false', `GET ${SPACED_EMAIL} 200`]);
+    });
+    await withVariant({ 'routes/auth.js': read(P('snapshots/p3-28.step6-req-tools.auth.js')) }, async (app) => {
+      const { lines } = await newLines(app, () => fetch(`${app.base}/api/auth/check-duplicate?type=username&value=sora`));
+      expect(lines[0]).toBe(`localhost:${SNAP_PORT} /check-duplicate /api/auth/check-duplicate?type=username&value=sora`);
+    });
   });
 });

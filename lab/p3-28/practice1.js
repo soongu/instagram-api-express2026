@@ -50,8 +50,17 @@ function checkTitle(req, res, next) {
   next();
 }
 
+app.get('/api/notices/:id', noticeTarget, (req, res) => {
+  res.json(req.notice);
+});
+
 app.patch('/api/notices/:id', noticeTarget, checkTitle, (req, res) => {
   req.notice.title = req.body.title.trim();
+  res.json(req.notice);
+});
+
+app.delete('/api/notices/:id', noticeTarget, (req, res) => {
+  notices.splice(notices.indexOf(req.notice), 1);
   res.json(req.notice);
 });
 

@@ -22,7 +22,7 @@ Content-Type: application/json
   "title": ""
 }
 
-### 번호 자리에 글자를 넣고 빈 제목으로
+### 번호 대신 글자를 넣고 빈 제목으로
 PATCH http://localhost:4001/api/notices/abc
 Content-Type: application/json
 
