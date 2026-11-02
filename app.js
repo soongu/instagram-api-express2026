@@ -5,11 +5,13 @@ import cookieParser from 'cookie-parser';
 import postsRouter from './routes/posts.js';
 import authRouter from './routes/auth.js';
 import { HttpError } from './errors.js';
+import { logger } from './middlewares/logger.js';
 
 const app = express();
 
 const allowedOrigins = process.env.CORS_ORIGIN.split(',').map((one) => one.trim());
 
+app.use(logger);
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(cookieParser());

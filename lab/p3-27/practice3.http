@@ -1,0 +1,17 @@
+### 메시지 되돌려 받기
+POST http://localhost:4003/api/echo
+Content-Type: application/json
+
+{
+  "message": "안녕하세요"
+}
+
+### 깨진 JSON 보내기
+POST http://localhost:4003/api/echo
+Content-Type: application/json
+
+{
+  "message": "안녕하세요"
+
+### 없는 주소
+GET http://localhost:4003/api/nope
