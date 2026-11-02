@@ -1,0 +1,8 @@
+### 1번 공지
+GET http://localhost:4011/api/notices/1
+
+### 없는 9번 공지
+GET http://localhost:4011/api/notices/9
+
+### 일부러 내는 에러
+GET http://localhost:4011/api/boom

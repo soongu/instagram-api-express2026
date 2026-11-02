@@ -1,0 +1,17 @@
+### JSON으로 보내기
+POST http://localhost:4007/api/echo
+Content-Type: application/json
+
+{"title": "서버 점검 안내", "pinned": true}
+
+### 폼 형식으로 보내기
+POST http://localhost:4007/api/echo
+Content-Type: application/x-www-form-urlencoded
+
+title=서버 점검 안내&pinned=true
+
+### 글자 그대로 보내기
+POST http://localhost:4007/api/echo
+Content-Type: text/plain
+
+서버 점검 안내

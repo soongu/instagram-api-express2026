@@ -28,6 +28,11 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
   if (err instanceof HttpError) {
     const body = { message: err.message };
     if (err.details) body.details = err.details;

@@ -1,0 +1,11 @@
+### 바로 던지는 에러
+GET http://localhost:4012/api/boom
+
+### 기다렸다가 던지는 에러
+GET http://localhost:4012/api/slow-boom
+
+### 답한 뒤에 던지는 에러
+GET http://localhost:4012/api/late
+
+### 기록한 에러
+GET http://localhost:4012/api/errors
