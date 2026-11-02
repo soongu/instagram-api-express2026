@@ -1,7 +1,7 @@
-### 앞뒤에 빈칸이 든 검색어
+### 앞뒤에 공백이 든 검색어
 GET http://localhost:4002/api/members?keyword=%20min%20
 
-### 빈칸만 있는 검색어
+### 공백만 있는 검색어
 GET http://localhost:4002/api/members?keyword=%20
 
 ### 검색어 없이

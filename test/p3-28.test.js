@@ -10,7 +10,7 @@
 // 축 ③ Step 1 — 라우트 안 차례: parseId 가 앞이면 404, validateBody 가 앞이면 400 · 999 + 틀린 본문은 둘 다 400
 // 축 ④ Step 2 — lab/notices.js: 세 라우트가 같은 배열 · 배열 안 차례를 바꾸면 있는 공지도 404
 // 축 ⑤ Step 3 — validateQuery 가 `req.query` 에 넣으면 500 + TypeError
-// 축 ⑥ Step 4 — `req.query` 는 읽을 때마다 새 객체 · Object.assign 판은 에러 없이 빈칸 든 이메일을 «쓸 수 있어요»
+// 축 ⑥ Step 4 — `req.query` 는 읽을 때마다 새 객체 · Object.assign 판은 에러 없이 공백 든 이메일을 «쓸 수 있어요»
 // 축 ⑦ Step 5 — res.locals 판은 «이미 가입한 이메일이에요» · 요청마다 빈 객체 · 응답에 안 실린다
 // 축 ⑧ Step 6 — 우리가 안 넣은 응답 헤더(X-Powered-By · ETag) · req.get 은 대소문자를 안 가린다
 // 축 ⑨ `requests/middleware.http` 를 httpYac 으로 — 이 회차 요청 둘
@@ -109,7 +109,7 @@ const getJson = async (url, init) => {
   return { status: res.status, type, headers: res.headers, body: type.includes('json') ? await res.json() : await res.text() };
 };
 const patch = (base, path, body) => getJson(`${base}${path}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
-// requests/middleware.http 의 «앞뒤에 빈칸이 든 이메일로 중복 확인»
+// requests/middleware.http 의 «앞뒤에 공백이 든 이메일로 중복 확인»
 const SPACED_EMAIL = '/api/auth/check-duplicate?type=email&value=%20yuna@example.com%20';
 // 로거 한 줄의 모양 — «메서드 주소 상태 코드 걸린시간ms»
 const LINE = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS) (\S+) (\d{3}) (\d+\.\d)ms$/;
@@ -383,7 +383,7 @@ app.listen(4006, () => console.log('4006번 포트에서'));
     expect(read(P('snapshots/p3-28.step4-object-assign.validate.js'))).toBe(stepValidate('    Object.assign(req.query, result.data);\n'));
   });
 
-  it('🔴 그 판 — 에러는 없고 앞뒤 빈칸 든 yuna@example.com 이 «쓸 수 있어요»(거짓) · 빈칸 없으면 «이미 가입한 이메일이에요»', async () => {
+  it('🔴 그 판 — 에러는 없고 앞뒤 공백 든 yuna@example.com 이 «쓸 수 있어요»(거짓) · 공백 없으면 «이미 가입한 이메일이에요»', async () => {
     await withVariant({
       'middlewares/validate.js': read(P('snapshots/p3-28.step4-object-assign.validate.js')),
       'routes/auth.js': read(P('snapshots/p3-28.step3-read-query.auth.js')),
@@ -406,7 +406,7 @@ app.listen(4006, () => console.log('4006번 포트에서'));
 });
 
 describe('축 ⑦ — Step 5: res.locals 에 담는다', () => {
-  it('🔴 끝 판 — 빈칸 든 이메일도 «이미 가입한 이메일이에요» · 사용자 이름 jaehoon · 하이픈 든 휴대폰 · 틀린 type 400', async () => {
+  it('🔴 끝 판 — 공백 든 이메일도 «이미 가입한 이메일이에요» · 사용자 이름 jaehoon · 하이픈 든 휴대폰 · 틀린 type 400', async () => {
     expect(await getJson(`${server.base}${SPACED_EMAIL}`)).toMatchObject({ status: 200, body: { available: false, message: '이미 가입한 이메일이에요' } });
     expect(await getJson(`${server.base}/api/auth/check-duplicate?type=username&value=jaehoon`)).toMatchObject({ body: { available: false, message: '이미 쓰고 있는 사용자 이름이에요' } });
     expect(await getJson(`${server.base}/api/auth/check-duplicate?type=phone&value=010-1234-5678`)).toMatchObject({ body: { available: true, message: '쓸 수 있어요' } });
@@ -482,7 +482,7 @@ app.listen(4006, () => console.log('4006번 포트에서'));
 });
 
 describe('축 ⑨ — requests/middleware.http 를 httpYac 으로', () => {
-  it('🔴 끝에 이 회차 요청 둘 — 번호도 본문도 틀린 수정 404 · 빈칸 든 이메일 중복 확인 «이미 가입한 이메일이에요»', () => {
+  it('🔴 끝에 이 회차 요청 둘 — 번호도 본문도 틀린 수정 404 · 공백 든 이메일 중복 확인 «이미 가입한 이메일이에요»', () => {
     const text = read(R('requests/middleware.http'));
     expect(text.startsWith(read(BEFORE.dir ? join(BEFORE.dir, 'requests/middleware.http') : P('requests/middleware.http')))).toBe(true);
     const dir = mkdtempSync(join(tmpdir(), 'p328-http-'));
@@ -496,7 +496,7 @@ describe('축 ⑨ — requests/middleware.http 를 httpYac 으로', () => {
       const fix = send('번호도 본문도 틀린 수정');
       expect(fix.statusCode).toBe(404);
       expect(JSON.parse(fix.body)).toEqual({ message: '그런 게시물은 없어요' });
-      const dup = send('앞뒤에 빈칸이 든 이메일로 중복 확인');
+      const dup = send('앞뒤에 공백이 든 이메일로 중복 확인');
       expect(dup.statusCode).toBe(200);
       expect(JSON.parse(dup.body)).toEqual({ available: false, message: '이미 가입한 이메일이에요' });
       expect(dup.headers['x-powered-by']).toBe('Express');
@@ -544,7 +544,7 @@ describe('축 ⑩ — 실습·과제 (lab/p3-28)', () => {
     });
   });
 
-  it('🔴 직접 해보기 2 (4002) — 검색어 앞뒤 빈칸을 다듬어 찾는다 · 빈칸만·없으면 400 · req.query 로 읽은 판은 0명', async () => {
+  it('🔴 직접 해보기 2 (4002) — 검색어 앞뒤 공백을 다듬어 찾는다 · 공백만·없으면 400 · req.query 로 읽은 판은 0명', async () => {
     await withLab('practice2.js', LAB('practice2.js'), 4002, async (lab) => {
       expect(await getJson(`${lab.base}/api/members?keyword=%20min%20`)).toMatchObject({ status: 200, body: [{ id: 2, username: 'minji' }, { id: 4, username: 'minseo' }] });
       expect(await getJson(`${lab.base}/api/members?keyword=hye`)).toMatchObject({ status: 200, body: [{ id: 3, username: 'dahye' }] });
