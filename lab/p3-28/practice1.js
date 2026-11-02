@@ -55,7 +55,7 @@ app.get('/api/notices/:id', noticeTarget, (req, res) => {
 });
 
 app.patch('/api/notices/:id', noticeTarget, checkTitle, (req, res) => {
-  req.notice.title = req.body.title.trim();
+  req.notice.title = req.body.title;
   res.json(req.notice);
 });
 

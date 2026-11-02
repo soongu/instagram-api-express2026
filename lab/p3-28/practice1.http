@@ -29,3 +29,6 @@ Content-Type: application/json
 {
   "title": ""
 }
+
+### 1번 공지 지금 상태
+GET http://localhost:4001/api/notices/1

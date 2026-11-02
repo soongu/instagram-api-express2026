@@ -516,7 +516,26 @@ describe('축 ⑩ — 실습·과제 (lab/p3-28)', () => {
     });
   });
 
-  it('🔴 직접 해보기 1 요구사항 4 — checkTitle 을 앞에 둔 판은 9 + 빈 제목이 400', async () => {
+  it('🔴 직접 해보기 1 요구사항 4 — checkTitle 에서 return 을 빠뜨린 판은 상태 코드는 같지만 1번 공지 제목이 빈 글자로 바뀌고 창에 ERR_HTTP_HEADERS_SENT', async () => {
+    const src = read(LAB('practice1.js')).replace("    res.status(400).json({ message: '제목을 적어 주세요' });\n    return;\n", "    res.status(400).json({ message: '제목을 적어 주세요' });\n");
+    expect(src).not.toBe(read(LAB('practice1.js')));
+    await withLab('practice1.js', src, 4001, async (lab) => {
+      expect((await patch(lab.base, '/api/notices/1', { title: '서버 점검 시간 변경' })).status).toBe(200);
+      expect((await patch(lab.base, '/api/notices/1', { title: '' })).status).toBe(400);
+      expect((await patch(lab.base, '/api/notices/9', { title: '' })).status).toBe(404);
+      expect((await patch(lab.base, '/api/notices/abc', { title: '' })).status).toBe(404);
+      expect((await getJson(`${lab.base}/api/notices/1`)).body).toEqual({ id: 1, title: '' });
+      await sleep(150);
+      expect(lab.tail()).toContain('Error [ERR_HTTP_HEADERS_SENT]');
+    });
+    await withLab('practice1.js', LAB('practice1.js'), 4001, async (lab) => {
+      await patch(lab.base, '/api/notices/1', { title: '서버 점검 시간 변경' });
+      await patch(lab.base, '/api/notices/1', { title: '' });
+      expect((await getJson(`${lab.base}/api/notices/1`)).body).toEqual({ id: 1, title: '서버 점검 시간 변경' });
+    });
+  });
+
+  it('🔴 직접 해보기 1 요구사항 5 — checkTitle 을 앞에 둔 판은 9 + 빈 제목이 400', async () => {
     const swapped = read(LAB('practice1.js')).replace('noticeTarget, checkTitle, (req, res)', 'checkTitle, noticeTarget, (req, res)');
     expect(swapped).not.toBe(read(LAB('practice1.js')));
     await withLab('practice1.js', swapped, 4001, async (lab) => {
@@ -562,6 +581,8 @@ describe('축 ⑩ — 실습·과제 (lab/p3-28)', () => {
     await withLab('homework1.js', LAB('homework1.js'), 4011, async (lab) => {
       expect(await getJson(`${lab.base}/api/notices/1`, { method: 'DELETE' })).toMatchObject({ status: 403, body: { message: '관리자만 할 수 있어요' } });
       expect(await getJson(`${lab.base}/api/notices/1`, { method: 'DELETE', headers: { 'X-Role': 'member' } })).toMatchObject({ status: 403 });
+      await sleep(150);
+      expect(lab.tail()).toMatch(/DELETE \/api\/notices\/1 403 \d+\.\dms/);
       expect(await getJson(`${lab.base}/api/notices/1`, { method: 'DELETE', headers: { 'x-role': 'admin' } })).toMatchObject({ status: 200, body: { id: 1 } });
       expect(await getJson(`${lab.base}/api/notices`)).toMatchObject({ status: 200, body: [{ id: 2 }, { id: 3 }] });
     });
@@ -754,6 +775,34 @@ describe('축 ⑬ — 답안의 주장', () => {
       expect(boom.headers.get('x-request-id')).toBeNull();
       await sleep(150);
       expect(lab.tail()).toContain('[undefined] Error: 일부러 낸 에러예요');
+    });
+  });
+
+  it('🔴 과제 [응용] — 로거가 ?. 없이 slice 하면 요구사항 7(번호 미들웨어를 옮긴 판)에서 첫 요청 뒤 TypeError 로 서버가 꺼진다', async () => {
+    const src = read(LAB('homework2.js'));
+    const noOpt = src.replace('res.locals.requestId?.slice(0, 8)', 'res.locals.requestId.slice(0, 8)');
+    expect(noOpt).not.toBe(src);
+    const moved = noOpt.replace('app.use(requestId);\n', '')
+      .replace("app.use((req, res) => {\n  res.status(404)", "app.use(requestId);\n\napp.use((req, res) => {\n  res.status(404)");
+    const dir = studentLab({ 'homework2.js': moved });
+    const lab = await boot(join(dir, 'lab', 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
+    try {
+      expect((await fetch(`${lab.base}/api/notices`)).status).toBe(200);
+      await sleep(300);
+      expect(lab.tail()).toContain("TypeError: Cannot read properties of undefined (reading 'slice')");
+      expect(await fetch(`${lab.base}/api/notices`).then(() => 'answered', () => 'refused')).toBe('refused');
+    } finally {
+      await Promise.race([lab.stop(), sleep(500)]);
+      rmSync(dir, { recursive: true, force: true });
+    }
+    // 로거를 requestId 앞에 둔 판도 요구사항 6 의 결과가 같다 — 로거는 'finish' 에서 번호를 읽는다
+    const loggerFirst = src.replace('app.use(requestId);\napp.use(logger);\n', 'app.use(logger);\napp.use(requestId);\n');
+    expect(loggerFirst).not.toBe(src);
+    await withLab('homework2.js', loggerFirst, 4012, async (lab) => {
+      const res = await fetch(`${lab.base}/api/notices`);
+      const id = res.headers.get('x-request-id');
+      await sleep(150);
+      expect(lab.tail()).toContain(`[${id.slice(0, 8)}] GET /api/notices 200`);
     });
   });
 
