@@ -470,6 +470,15 @@ app.listen(4006, () => console.log('4006번 포트에서'));
       expect(res.headers.get('x-checked')).toBe('yes');
     });
   });
+  it('🔴 🙋 — app.js 에 app.disable(\'x-powered-by\') 를 적으면 응답에서 x-powered-by 가 사라진다', async () => {
+    const appJs = read(R('app.js')).replace('const app = express();\n', "const app = express();\napp.disable('x-powered-by');\n");
+    expect(appJs).not.toBe(read(R('app.js')));
+    await withVariant({ 'app.js': appJs }, async (app) => {
+      const res = await fetch(`${app.base}/api/auth/check-duplicate?type=username&value=sora`);
+      expect(res.headers.get('x-powered-by')).toBeNull();
+      expect(res.status).toBe(200);
+    });
+  });
 });
 
 describe('축 ⑨ — requests/middleware.http 를 httpYac 으로', () => {
