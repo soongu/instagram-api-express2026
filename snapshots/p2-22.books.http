@@ -1,0 +1,11 @@
+### 책 목록
+GET http://localhost:4000/api/books
+
+### 2번 책 하나
+GET http://localhost:4000/api/books/2
+
+### 없는 책
+GET http://localhost:4000/api/books/99
+
+### 없는 주소
+GET http://localhost:4000/api/authors

@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated-p2-35"   // 🚨 게이트 전용 — 회차마다 갈라야 앞 회차 실습이 안 깨진다
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Author {
+  id    Int    @id @default(autoincrement())
+  name  String @db.VarChar(100)
+  books Book[]
+
+  @@map("authors")
+}
+
+model Book {
+  id        Int      @id @default(autoincrement())
+  title     String   @db.VarChar(200)
+  price     Int
+  stock     Int      @default(0)
+  authorId  Int?     @map("author_id")
+  author    Author?  @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isSoldOut Boolean  @default(false) @map("is_sold_out")
+  publisherId Int?       @map("publisher_id")
+  publisher   Publisher? @relation(fields: [publisherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviews   Review[]
+  images    BookImage[]
+  tags      BookTag[]
+
+  @@map("books")
+}
+
+model BookImage {
+  id       Int    @id @default(autoincrement())
+  bookId   Int    @map("book_id")
+  book     Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  imageUrl String @map("image_url")
+  imgOrder Int    @map("img_order")
+
+  @@map("book_images")
+}
+
+model Review {
+  id        Int     @id @default(autoincrement())
+  bookTitle String  @map("book_title") @db.VarChar(200)
+  reviewer  String  @db.VarChar(100)
+  score     Int
+  comment   String?
+  bookId    Int?    @map("book_id")
+  book      Book?   @relation(fields: [bookId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parentId  Int?     @map("parent_id")
+  parent    Review?  @relation("ReviewReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Review[] @relation("ReviewReplies")
+
+  @@map("reviews")
+}
+
+model Publisher {
+  id          Int    @id @default(autoincrement())
+  name        String @db.VarChar(100)
+  foundedYear Int?   @map("founded_year")
+  books       Book[]
+
+  @@map("publishers")
+}
+
+model Tag {
+  id    Int       @id @default(autoincrement())
+  name  String    @unique @db.VarChar(50)
+  books BookTag[]
+
+  @@map("tags")
+}
+
+model BookTag {
+  id     Int  @id @default(autoincrement())
+  bookId Int  @map("book_id")
+  book   Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  tagId  Int  @map("tag_id")
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, tagId])
+  @@map("book_tags")
+}

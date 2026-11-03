@@ -1,0 +1,14 @@
+### 책 전체 목록
+GET http://localhost:4000/api/books
+
+### 저자로 거르기
+GET http://localhost:4000/api/books?author=로버트 마틴
+
+### 없는 저자로 거르기
+GET http://localhost:4000/api/books?author=없는사람
+
+### 비싼 것 둘만
+GET http://localhost:4000/api/books?limit=2
+
+### 저자와 개수를 함께
+GET http://localhost:4000/api/books?author=로버트 마틴&limit=1

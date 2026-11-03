@@ -1,0 +1,32 @@
+### 책 목록
+GET http://localhost:4000/api/books
+
+### 책 올리기
+# @name created
+POST http://localhost:4000/api/books
+Content-Type: application/json
+
+{
+  "title": "코드 그 자체",
+  "author": "박서준",
+  "stock": 999
+}
+
+### 제목 없이 올리기
+POST http://localhost:4000/api/books
+Content-Type: application/json
+
+{
+  "author": "박서준"
+}
+
+### 방금 올린 책의 재고를 9로
+PATCH http://localhost:4000/api/books/{{created._id}}
+Content-Type: application/json
+
+{
+  "stock": 9
+}
+
+### 방금 올린 책 지우기
+DELETE http://localhost:4000/api/books/{{created._id}}

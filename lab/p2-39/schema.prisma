@@ -1,0 +1,53 @@
+// ~/nanum/prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+}
+
+// 동네에 사는 사람 — 로그인이 없으니 닉네임이 곧 그 사람을 가리키는 이름이다.
+model Neighbor {
+  id       Int            @id @default(autoincrement())
+  nickname String         @unique @db.VarChar(20)
+  town     String         @db.VarChar(30)
+  shares   Share[]
+  requests ShareRequest[]
+
+  @@map("neighbors")
+}
+
+model Category {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique @db.VarChar(20)
+  shares Share[]
+
+  @@map("categories")
+}
+
+model Share {
+  id          Int            @id @default(autoincrement())
+  title       String         @db.VarChar(100)
+  content     String
+  ownerId     Int            @map("owner_id")
+  owner       Neighbor       @relation(fields: [ownerId], references: [id])
+  categoryId  Int            @map("category_id")
+  category    Category       @relation(fields: [categoryId], references: [id])
+  isGivenAway Boolean        @default(false) @map("is_given_away")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  requests    ShareRequest[]
+
+  @@map("shares")
+}
+
+// 「받고 싶어요」 한 줄 — 누가 어느 글에 신청했는가.
+// 같은 쌍은 한 번만 들어가고, 글이 사라지면 신청도 함께 사라진다.
+model ShareRequest {
+  id         Int      @id @default(autoincrement())
+  shareId    Int      @map("share_id")
+  share      Share    @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  neighborId Int      @map("neighbor_id")
+  neighbor   Neighbor @relation(fields: [neighborId], references: [id], onDelete: Cascade)
+  message    String?  @db.VarChar(200)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([shareId, neighborId])
+  @@map("share_requests")
+}

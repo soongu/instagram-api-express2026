@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Post {
+  id           Int       @id @default(autoincrement())
+  username     String    @db.VarChar(50)
+  profileImage String?   @map("profile_image")
+  postImage    String    @map("post_image")
+  postAlt      String?   @map("post_alt")
+  content      String?
+  minutesAgo   Int       @default(0) @map("minutes_ago")
+  likeCount    Int       @default(0) @map("like_count")
+  commentCount Int       @default(0) @map("comment_count")
+  comments     Comment[]
+
+  @@map("posts")
+}
+
+model Comment {
+  id         Int    @id @default(autoincrement())
+  postId     Int    @map("post_id")
+  username   String @db.VarChar(50)
+  content    String
+  likeCount  Int    @default(0) @map("like_count")
+  minutesAgo Int    @default(0) @map("minutes_ago")
+  post       Post   @relation(fields: [postId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("comments")
+}

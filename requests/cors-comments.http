@@ -1,0 +1,10 @@
+### 우리 프론트에서 온 것처럼 물어보기
+GET http://localhost:4001/api/comments?postId=1&limit=2
+Origin: http://localhost:5173
+
+### 우리가 모르는 곳에서 온 것처럼 물어보기
+GET http://localhost:4001/api/comments?postId=1&limit=2
+Origin: http://not-ours.example.com
+
+### 어디서 왔는지 안 대고 물어보기
+GET http://localhost:4001/api/comments?postId=1&limit=2

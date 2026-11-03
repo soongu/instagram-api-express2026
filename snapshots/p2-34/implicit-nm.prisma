@@ -1,0 +1,25 @@
+// 교안 Step 6 이 「이렇게 적으면 어떻게 되는지」로 보여주는 판 — 우리가 쓰지 «않는» 쪽이다.
+// 게이트가 migrate diff 로 돌려서 칸 이름이 A·B 로 나오는 것을 실측한다.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  username String @unique
+  liked    Post[] @relation("Likes")
+
+  @@map("users")
+}
+
+model Post {
+  id      Int     @id @default(autoincrement())
+  content String?
+  likedBy User[]  @relation("Likes")
+
+  @@map("posts")
+}

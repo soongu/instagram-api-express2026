@@ -1,0 +1,30 @@
+### 댓글 목록
+# @name list
+GET http://localhost:4000/api/comments
+
+### 댓글 올리기
+# @name created
+POST http://localhost:4000/api/comments
+Content-Type: application/json
+
+{
+  "postId": 1,
+  "username": "yuna",
+  "content": "저도 가보고 싶어요",
+  "likeCount": 500
+}
+
+### content 없이 올리기
+POST http://localhost:4000/api/comments
+Content-Type: application/json
+
+{
+  "postId": 1,
+  "username": "yuna"
+}
+
+### 방금 올린 댓글 지우기
+DELETE http://localhost:4000/api/comments/{{created._id}}
+
+### 지운 뒤 목록
+GET http://localhost:4000/api/comments

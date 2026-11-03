@@ -1,0 +1,89 @@
+### 게시물 목록
+# @name list
+GET http://localhost:3000/api/posts
+
+### 목록의 첫 게시물 하나
+GET http://localhost:3000/api/posts/{{list[0].id}}
+
+### 없는 게시물
+GET http://localhost:3000/api/posts/999
+
+### 번호가 들어갈 곳에 아무 글자나
+GET http://localhost:3000/api/posts/abc
+
+### 없는 주소
+GET http://localhost:3000/api/comments
+
+### minji가 올린 것만
+GET http://localhost:3000/api/posts?username=minji
+
+### 최신 두 개만
+GET http://localhost:3000/api/posts?limit=2
+
+### 게시물 올리기
+# @name created
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 3,
+  "imageUrls": ["/images/post-8.jpg", "/images/post-9.jpg"],
+  "postAlt": "제주도 바다 사진",
+  "content": "제주 왔어요 🌊"
+}
+
+### 사진 없이 올리기
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 3
+}
+
+### 없는 사람 번호로 올리기
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 999,
+  "imageUrls": ["/images/post-8.jpg"]
+}
+
+### 방금 올린 게시물의 하트 수 고치기
+PATCH http://localhost:3000/api/posts/{{created.id}}
+Content-Type: application/json
+
+{
+  "likeCount": 7
+}
+
+### 방금 올린 게시물 지우기
+DELETE http://localhost:3000/api/posts/{{created.id}}
+
+### 깨진 몸통 보내기
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 3
+
+### 좋아요 누르기
+PUT http://localhost:3000/api/posts/3/likes/2
+
+### 좋아요 취소
+DELETE http://localhost:3000/api/posts/3/likes/2
+
+### 좋아요 누른 사람들
+GET http://localhost:3000/api/posts/3/likes
+
+### 1번 게시물 지금 상태 — 좋아요 실험 전후로 확인
+GET http://localhost:3000/api/posts/1
+
+### 1번 게시물에 dahye가 좋아요
+PUT http://localhost:3000/api/posts/1/likes/1
+
+### 1번 게시물에 dahye가 누른 좋아요 취소
+DELETE http://localhost:3000/api/posts/1/likes/1
+
+### 1번 게시물 좋아요 누른 사람들
+GET http://localhost:3000/api/posts/1/likes

@@ -1,0 +1,40 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+node_modules
+
+# 환경변수 — 값은 저장소에 안 올린다
+.env
+.env.*
+!.env.example
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.sw?
+
+# oh-my-claudecode local session state (not project content)
+.omc/
+
+# 게이트가 서버 블록을 돌릴 때 쓰는 임시 폴더 (replay.py)
+__replay__/
+
+# 게이트가 연결 문자열 한 줄만 바꿔 띄우는 사본 (p2-24~)
+*.local.js
+
+# 서점 실습이 만드는 Prisma 클라이언트 (p2-30 · 생성물)
+lab/generated
+
+# 게이트가 만드는 것 — 커밋하지 않는다
+snapshots/*.frozen.js
+snapshots/p2-29/client/
+lab/generated-p2-33/
+snapshots/p2-33-final/client/
+lab/generated-p2-34/
+lab/generated-p2-35/
+.p2-37-run/
+.p2-37-before/

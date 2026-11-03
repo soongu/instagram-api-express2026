@@ -1,0 +1,5 @@
+# ~/nanum/lab/practice2.http
+# 계약에 한 줄 더 — 받고 싶어요 취소
+
+### 3번 나눔에 2번 이웃이 넣은 신청을 취소
+DELETE http://localhost:3000/api/shares/3/requests/2

@@ -1,0 +1,24 @@
+### 소개글만 고치기
+PATCH http://localhost:4000/api/profiles/minji
+Content-Type: application/json
+
+{
+  "bio": "오늘도 카페"
+}
+
+### 없는 사람 고치기
+PATCH http://localhost:4000/api/profiles/haecker
+Content-Type: application/json
+
+{
+  "bio": "안녕"
+}
+
+### username 을 바꿔보기
+PATCH http://localhost:4000/api/profiles/minji
+Content-Type: application/json
+
+{
+  "username": "haecker",
+  "bio": "바뀌었을까요"
+}

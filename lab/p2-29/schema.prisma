@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Author {
+  id    Int    @id @default(autoincrement())
+  name  String @db.VarChar(100)
+  books Book[]
+
+  @@map("authors")
+}
+
+model Book {
+  id        Int      @id @default(autoincrement())
+  title     String   @db.VarChar(200)
+  author    String   @db.VarChar(100)
+  price     Int
+  stock     Int      @default(0)
+  authorId  Int?     @map("author_id")
+  authorRef Author?  @relation(fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isSoldOut Boolean  @default(false) @map("is_sold_out")
+  reviews   Review[]
+
+  @@map("books")
+}
+
+model Review {
+  id        Int     @id @default(autoincrement())
+  bookTitle String  @map("book_title") @db.VarChar(200)
+  reviewer  String  @db.VarChar(100)
+  score     Int
+  comment   String?
+  bookId    Int?    @map("book_id")
+  book      Book?   @relation(fields: [bookId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("reviews")
+}

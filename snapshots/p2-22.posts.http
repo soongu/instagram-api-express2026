@@ -1,0 +1,11 @@
+### 게시물 목록
+GET http://localhost:3000/api/posts
+
+### 2번 게시물 하나
+GET http://localhost:3000/api/posts/2
+
+### 없는 게시물
+GET http://localhost:3000/api/posts/999
+
+### 없는 주소
+GET http://localhost:3000/api/comments

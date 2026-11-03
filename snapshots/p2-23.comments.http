@@ -1,0 +1,15 @@
+### 댓글 목록
+GET http://localhost:4000/api/comments
+
+### 댓글 올리기
+POST http://localhost:4000/api/comments
+Content-Type: application/json
+
+{
+  "postId": 1,
+  "username": "yuna",
+  "text": "저도 가보고 싶어요"
+}
+
+### 올린 뒤 목록 다시 보기
+GET http://localhost:4000/api/comments
