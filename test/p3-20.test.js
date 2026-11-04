@@ -15,7 +15,7 @@
 // 축 ⑥ Step 별 판 — Step 1 판은 로그인만 세션(`/me` 는 아직 옛 판).
 // 축 ⑦ 토큰 스크립트 다섯(`lab/p3-20/base64.js`·`token.js`·`verify.js`·`old-token.js`·`expire.js`)의 출력.
 //      `verify.js` 는 가짜 토큰을 `jwt.decode` 로 먼저 연다 · `old-token.js` 는 교안 Step 5 에 실린 토큰(만료 없음)을 지금 확인한다.
-// 실습·과제 — `lab/p3-20/`(학생 쪽 경로 주석은 `~/instagram-api/lab/…`).
+// 실습·과제 — `lab/p3-20/`(학생 쪽 경로 주석은 `~/instagram-api/lab/p3-20/…`).
 //
 // 🔎 크롬에서만 보이는 주장(Application 탭에서 쿠키 줄 더하기·지우기 · 로그아웃 뒤 쿠키 표)은
 //    이 파일이 못 본다 — 기록 `progress/p3-20-session-token.md` 「브라우저 실측」 이 헤드리스 크롬으로 쟀다.
@@ -371,7 +371,7 @@ describe('축 ⑥ — Step 별 판', () => {
   });
 });
 
-// ── 토큰 스크립트 — 학생 폴더 `~/instagram-api/lab/` (코드베이스는 `lab/p3-20/`) ──
+// ── 토큰 스크립트 — 학생 폴더 `~/instagram-api/lab/p3-20/` (코드베이스도 같은 `lab/p3-20/`) ──
 const runLab = (file) => execFileSync(process.execPath, [P(`lab/p3-20/${file}`)], { cwd: P('.'), encoding: 'utf8' });
 const b64 = (part) => JSON.parse(Buffer.from(part, 'base64url').toString());
 const LAB_SECRET = 'my-lab-secret';
@@ -759,8 +759,8 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     for (const b of blocks) {
       const rel = b.lines[0].replace('// ~/instagram-api/', '');
       const body = b.lines.slice(1);
-      if (rel.startsWith('lab/')) {
-        const name = rel.replace('lab/', '');
+      if (rel.startsWith('lab/p3-20/')) {
+        const name = rel.replace('lab/p3-20/', '');
         const labFile = read(P(`lab/p3-20/${name}`));
         const start = START[name] ? read(P(START[name])) : '';
         const strip = (t) => t.split('\n').slice(1).join('\n');
@@ -803,9 +803,9 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
   it('🔴 답안의 해설 블록 — 과제 두 파일', () => {
     const blocks = blocksOf(ANSWERS);
     const js = blocks.filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\/lab\//.test(b.lines[0] ?? ''));
-    expect(js.map((b) => b.lines[0])).toEqual(['// ~/instagram-api/lab/homework1.js', '// ~/instagram-api/lab/homework2.js']);
+    expect(js.map((b) => b.lines[0])).toEqual(['// ~/instagram-api/lab/p3-20/homework1.js', '// ~/instagram-api/lab/p3-20/homework2.js']);
     for (const b of js) {
-      const name = b.lines[0].replace('// ~/instagram-api/lab/', '');
+      const name = b.lines[0].replace('// ~/instagram-api/lab/p3-20/', '');
       expect(b.lines.join('\n') + '\n').toBe(read(P(`lab/p3-20/${name}`)));
     }
   });

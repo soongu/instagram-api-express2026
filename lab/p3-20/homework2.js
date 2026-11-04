@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/homework2.js
+// ~/instagram-api/lab/p3-20/homework2.js
 import { createHmac } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 

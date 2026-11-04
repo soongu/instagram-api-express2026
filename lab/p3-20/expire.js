@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/expire.js
+// ~/instagram-api/lab/p3-20/expire.js
 import jwt from 'jsonwebtoken';
 
 const SECRET = 'my-lab-secret';

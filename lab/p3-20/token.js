@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/token.js
+// ~/instagram-api/lab/p3-20/token.js
 import jwt from 'jsonwebtoken';
 
 // 실습용 비밀키 — 실제 서버에서는 코드에 적지 않고 환경 변수에 둔다.

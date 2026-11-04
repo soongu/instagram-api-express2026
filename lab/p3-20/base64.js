@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/base64.js
+// ~/instagram-api/lab/p3-20/base64.js
 const header = '{"alg":"HS256","typ":"JWT"}';
 
 // 글자를 바이트로 바꾼 다음 Base64URL 글자로 적는다.

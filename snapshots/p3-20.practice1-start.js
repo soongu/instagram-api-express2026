@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/practice1.js
+// ~/instagram-api/lab/p3-20/practice1.js
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { randomUUID } from 'node:crypto';
