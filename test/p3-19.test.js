@@ -17,7 +17,7 @@
 //      손으로 적은 `Cookie:` 에는 기억한 쿠키를 덧붙인다(`# @no-cookie-jar` 가 그것을 뺀다) ·
 //      `secure: true` 판이면 httpYac 은 그 쿠키를 `http://localhost` 로 안 보내 401(Step 6 의 주장).
 // 축 ⑦ 좋아요의 `/likes/{userId}` 는 이 회차가 안 걷는다 — 로그인과 상관없이 주소의 번호대로.
-// 실습·과제 — `lab/p3-19/` 다섯 서버(학생 쪽 경로 주석은 `~/instagram-api/lab/…`).
+// 실습·과제 — `lab/p3-19/` 다섯 서버(학생 쪽 경로 주석은 `~/instagram-api/lab/p3-19/…`).
 //
 // 🔎 크롬에서만 보이는 주장(Application 탭 · `document.cookie` · 다른 사이트의 폼·링크·이미지)은
 //    이 파일이 못 본다 — 기록 `progress/p3-19-cookie-auth.md` 「브라우저 실측」 이 헤드리스 크롬으로 쟀다.
@@ -401,7 +401,7 @@ describe('축 ⑦ — 좋아요의 `/likes/{userId}` 는 이 회차가 안 걷�
   });
 });
 
-// ── 직접 해보기·과제 — 학생 폴더 `~/instagram-api/lab/` (코드베이스는 `lab/p3-19/`) ──
+// ── 직접 해보기·과제 — 학생 폴더 `~/instagram-api/lab/p3-19/` (코드베이스도 같은 `lab/p3-19/`) ──
 const bootLab = (file, port) => boot(`lab/p3-19/${file}`, { port, ready: `${port}번 포트에서` });
 
 describe('직접 해보기 1 — 방문 횟수 쿠키', () => {
@@ -604,8 +604,8 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
       }
       const rel = b.lines[0].replace('// ~/instagram-api/', '');
       const body = b.lines.slice(1);
-      if (rel.startsWith('lab/')) {
-        const name = rel.replace('lab/', '');
+      if (rel.startsWith('lab/p3-19/')) {
+        const name = rel.replace('lab/p3-19/', '');
         const labFile = read(P(`lab/p3-19/${name}`));
         const start = name === 'practice2.js' ? read(P('snapshots/p3-19.practice2-start.js')) : '';
         if (!(contains(labFile.split('\n').slice(1).join('\n'), body) || contains(start.split('\n').slice(1).join('\n'), body))) misses.push(`Step ${b.step} ${rel}`);
@@ -632,10 +632,10 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
 
   it('🔴 답안의 해설 블록 — 과제 두 서버 · homework2.http', () => {
     const blocks = blocksOf(ANSWERS);
-    const js = blocks.filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\/lab\//.test(b.lines[0] ?? ''));
-    expect(js.map((b) => b.lines[0])).toEqual(['// ~/instagram-api/lab/homework1.js', '// ~/instagram-api/lab/homework2.js']);
+    const js = blocks.filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\/lab\/p3-19\//.test(b.lines[0] ?? ''));
+    expect(js.map((b) => b.lines[0])).toEqual(['// ~/instagram-api/lab/p3-19/homework1.js', '// ~/instagram-api/lab/p3-19/homework2.js']);
     for (const b of js) {
-      const name = b.lines[0].replace('// ~/instagram-api/lab/', '');
+      const name = b.lines[0].replace('// ~/instagram-api/lab/p3-19/', '');
       expect(b.lines.join('\n') + '\n').toBe(read(P(`lab/p3-19/${name}`)));
     }
     const http = blocks.find((b) => b.lang === '' && b.lines[0] === '### 아무것도 안 싣고');

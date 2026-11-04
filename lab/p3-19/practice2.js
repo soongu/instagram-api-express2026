@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/practice2.js
+// ~/instagram-api/lab/p3-19/practice2.js
 import express from 'express';
 
 const app = express();
