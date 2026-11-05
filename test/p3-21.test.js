@@ -17,7 +17,10 @@
 // 축 ② Step 별 판 — Step 2(동의 화면까지) · 3(code) · 4(토큰 · 사진 · 토큰은 터미널에만) · 5(state — 남의 code 를
 //      끼우면 403) · 6(PKCE — state 를 통과한 가로챈 code 도 invalid_grant) · 7(ID 토큰 읽기) · 8(ID 토큰 확인).
 // 축 ③ ID 토큰 확인 — aud · iss · nonce · 다른 키로 만든 서명을 Step 8 은 막고, Step 7 은 그대로 믿는다.
-// 실습·과제 — `lab/p3-21/`(학생 쪽 경로 주석은 `~/instagram-api/lab/…`).
+// 실습·과제 — `lab/p3-21/`(학생 쪽 경로 주석도 `~/instagram-api/lab/p3-21/…` · 2026-11-05 소급).
+// 🔀 2026-11-05 OIDC 보강(사용자 결정) — Step 7 이 Access 토큰으로 로그인을 먼저 만들어 보고(`/userinfo`) 다른 앱의 토큰이
+//    통과하는 구멍(RFC 6749 §10.16)을 겪은 뒤 OIDC 로 간다. Step 8 이 같은 입구에 다른 앱의 ID 토큰을 넣어 `aud` 로 막는다.
+//    입구 `POST /login/token` 은 Step 8 끝에서 지운다 — 그래서 tip 의 `photo-app.js` 는 보강 전과 같고 실습 3·과제 둘은 그대로다.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -139,11 +142,36 @@ const tokenFor = (code, extra = {}) => fetch(`${AUTH}/token`, {
   }),
 });
 
+// 직접 해보기 1 의 스토리 앱이 받는 토큰 · 우리 서비스의 토큰 입구
+const STORY = { client_id: 'story-app', redirect_uri: 'http://localhost:4003/callback' };
+const storyTokens = async (username, scope, extra = {}) => {
+  const code = await codeFor(username, { ...STORY, scope, ...extra });
+  return (await tokenFor(code, { ...STORY, client_secret: 'story-app-secret' })).json();
+};
+const door = (body, headers = {}) => fetch(`${APP}/login/token`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', ...headers },
+  body: JSON.stringify(body),
+});
+const bearer = (token) => ({ headers: { Authorization: `Bearer ${token}` } });
+
+// 직접 해보기 1 이 인가 서버에 더하는 `story-app` 등록 — Step 7·8 의 «다른 앱» 이기도 하다.
+const REGISTER = [
+  "    redirectUris: ['http://localhost:4002/callback'],\n  },\n};",
+  "    redirectUris: ['http://localhost:4002/callback'],\n  },\n  'story-app': {\n    name: '스토리 만들기',\n    secret: 'story-app-secret',\n    redirectUris: ['http://localhost:4003/callback'],\n  },\n};",
+];
+
 // ── Step 커밋 ──
 const git = (...args) => execFileSync('git', args, { cwd: P('.'), encoding: 'utf8' });
 const stepCommits = (n) => git('log', '--format=%H %s', 'HEAD').split('\n')
   .filter((l) => l.includes(' feat(p3-21): ') && l.endsWith(`(Step ${n})`))
   .map((l) => l.split(' ')[0]);
+// Step 7·8 은 한 Step 안에서 photo-app.js 를 여러 번 고친다 — 커밋 제목의 표식으로 그 판을 꺼낸다.
+const appIn = (mark) => {
+  const [line] = git('log', '--format=%H %s', 'HEAD').split('\n').filter((l) => l.includes(' feat(p3-21): ') && l.includes(mark));
+  if (!line) throw new Error(`«${mark}» 커밋이 없다`);
+  return git('show', `${line.split(' ')[0]}:lab/p3-21/photo-app.js`);
+};
 const appAt = (n) => {
   const [last] = stepCommits(n);
   if (!last) throw new Error(`Step ${n} 커밋이 없다`);
@@ -159,6 +187,7 @@ describe('축 ① — 나눠 주는 인가 서버', () => {
         issuer: AUTH,
         authorization_endpoint: `${AUTH}/authorize`,
         token_endpoint: `${AUTH}/token`,
+        userinfo_endpoint: `${AUTH}/userinfo`,
         jwks_uri: `${AUTH}/jwks`,
         response_types_supported: ['code'],
         scopes_supported: ['photos', 'openid', 'email', 'profile'],
@@ -296,7 +325,6 @@ describe('축 ① — 나눠 주는 인가 서버', () => {
   // 교안 Step 4 ⚠️ 뒤 — 오늘의 Access 토큰은 인가 서버가 메모리(`tokens` Map)에 적어 둔 기록을 가리키는 무작위 문자열이다
   // (지난 시간 비교표의 «세션» 칸). 그래서 인가 서버가 다시 뜨면 받아 둔 토큰도 통하지 않는다.
   it('🔴 인가 서버가 다시 뜨면 받아 둔 Access 토큰은 401 invalid_token', async () => {
-    const bearer = (token) => ({ headers: { Authorization: `Bearer ${token}` } });
     const token = await withServers([() => bootAuth()], async () => {
       const { access_token } = await (await tokenFor(await codeFor('jaehoon'))).json();
       expect(await (await fetch(`${AUTH}/photos`, bearer(access_token))).json()).toEqual({ photos: ['한강 노을', '제주 바다', '강아지 산책'] });
@@ -494,11 +522,6 @@ describe('축 ③ — ID 토큰 확인: Step 8 은 막고 Step 7 은 그대로 �
 });
 
 describe('직접 해보기 1 — 우리 앱을 인가 서버에 등록하기', () => {
-  const REGISTER = [
-    "    redirectUris: ['http://localhost:4002/callback'],\n  },\n};",
-    "    redirectUris: ['http://localhost:4002/callback'],\n  },\n  'story-app': {\n    name: '스토리 만들기',\n    secret: 'story-app-secret',\n    redirectUris: ['http://localhost:4003/callback'],\n  },\n};",
-  ];
-
   it('🔴 등록하기 전 — 「등록되지 않은 클라이언트예요」 400', async () => {
     await withServers([() => bootAuth(), () => bootApp(read(LAB('practice1.js')), 4003)], async (auth, app) => {
       expect(app.log.trim()).toBe('스토리 앱이 4003번 포트에서 기다리고 있어요.');
@@ -615,30 +638,68 @@ describe('과제 [응용] — sub 로 우리 회원을 찾고 세션을 준다',
 });
 
 describe('실습 `.http` 를 httpYac 으로', () => {
+  // 교안의 `.http` 는 Step 마다 이어 적는다 — 요청 묶음마다 그 Step 판 서버를 띄워 따로 보낸다.
+  const requestsOf = () => read(LAB('oauth.http')).split(/^(?=### )/m);
+  const sendAll = (text) => {
+    const dir = mkdtempSync(join(tmpdir(), 'p321-http-'));
+    try {
+      writeFileSync(join(dir, 'oauth.http'), text);
+      return JSON.parse(execFileSync(P('node_modules/.bin/httpyac'), ['send', 'oauth.http', '--all', '--json'],
+        { encoding: 'utf-8', cwd: dir })).requests;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
   it('🔴 oauth.http — 앞 둘(Step 4)은 인가 코드만으로 401 둘 · 뒤 셋은 `# @no-redirect` 로 303 에서 멈춘다 · Location 에 code(state 없음)', async () => {
     await withServers([() => bootAuth()], async () => {
-      const dir = mkdtempSync(join(tmpdir(), 'p321-http-'));
-      try {
-        // 교안 Step 4 — 「화면에 보인 인가 코드」 두 곳에 Step 3 화면의 code 를 붙여 넣는다.
-        const text = read(LAB('oauth.http'));
-        expect(text.split('화면에 보인 인가 코드').length - 1).toBe(2);
-        writeFileSync(join(dir, 'oauth.http'), text.replaceAll('화면에 보인 인가 코드', await codeFor('jaehoon')));
-        const out = JSON.parse(execFileSync(P('node_modules/.bin/httpyac'), ['send', 'oauth.http', '--all', '--json'],
-          { encoding: 'utf-8', cwd: dir })).requests;
-        expect(out.map((r) => r.title)).toEqual(['인가 코드로 사진 달라고 해 보기', '비밀값 없이 인가 코드를 토큰으로 바꿔 보기',
-          'dahye의 인가 코드 받기', 'jaehoon의 인가 코드 받기', 'jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
-        const [photos, token, ...codes] = out;
-        expect([photos.response.statusCode, JSON.parse(photos.response.body)])
-          .toEqual([401, { error: 'invalid_token', error_description: 'Access 토큰을 확인하지 못했어요' }]);
-        expect([token.response.statusCode, JSON.parse(token.response.body)])
-          .toEqual([401, { error: 'invalid_client', error_description: '클라이언트를 확인하지 못했어요' }]);
-        for (const r of codes) {
-          expect(r.response.statusCode).toBe(303);
-          expect(r.response.headers.location).toMatch(/^http:\/\/localhost:4002\/callback\?code=[\w-]{22}$/);
-        }
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
+      // 교안 Step 4 — 「화면에 보인 인가 코드」 두 곳에 Step 3 화면의 code 를 붙여 넣는다.
+      const text = requestsOf().slice(0, 5).join('');
+      expect(text.split('화면에 보인 인가 코드').length - 1).toBe(2);
+      const out = sendAll(text.replaceAll('화면에 보인 인가 코드', await codeFor('jaehoon')));
+      expect(out.map((r) => r.title)).toEqual(['인가 코드로 사진 달라고 해 보기', '비밀값 없이 인가 코드를 토큰으로 바꿔 보기',
+        'dahye의 인가 코드 받기', 'jaehoon의 인가 코드 받기', 'jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
+      const [photos, token, ...codes] = out;
+      expect([photos.response.statusCode, JSON.parse(photos.response.body)])
+        .toEqual([401, { error: 'invalid_token', error_description: 'Access 토큰을 확인하지 못했어요' }]);
+      expect([token.response.statusCode, JSON.parse(token.response.body)])
+        .toEqual([401, { error: 'invalid_client', error_description: '클라이언트를 확인하지 못했어요' }]);
+      for (const r of codes) {
+        expect(r.response.statusCode).toBe(303);
+        expect(r.response.headers.location).toMatch(/^http:\/\/localhost:4002\/callback\?code=[\w-]{22}$/);
       }
+    });
+  }, 60000);
+
+  it('🔴 oauth.http — Step 7 의 셋: 스토리 앱이 인가 코드 → Access 토큰 → 우리 입구에 내면 jaehoon 으로 로그인된다', async () => {
+    await withServers([() => bootAuth([REGISTER]), () => bootApp(appIn('토큰 입구'))], async () => {
+      const text = requestsOf().slice(5, 8).join('');
+      const code = await codeFor('jaehoon', { ...STORY, scope: 'email' });
+      const { access_token } = await storyTokens('jaehoon', 'email');
+      const out = sendAll(text.replace('스토리 앱의 인가 코드', code).replace('스토리 앱의 access_token', access_token));
+      expect(out.map((r) => r.title)).toEqual(['스토리 앱의 인가 코드 받기', '스토리 앱의 Access 토큰 받기', '스토리 앱의 Access 토큰을 우리 서비스에 내기']);
+      const [authorize, token, door] = out;
+      expect(authorize.response.statusCode).toBe(303);
+      expect(authorize.response.headers.location).toMatch(/^http:\/\/localhost:4003\/callback\?code=[\w-]{22}$/);
+      expect(Object.keys(JSON.parse(token.response.body))).toEqual(['access_token', 'token_type', 'expires_in', 'scope']);
+      expect(JSON.parse(token.response.body).scope).toBe('email');
+      expect([door.response.statusCode, door.response.body]).toEqual([200, '{"loggedIn":"jaehoon@example.com"}']);
+    });
+  }, 60000);
+
+  it('🔴 oauth.http — Step 8 의 셋: 스토리 앱의 ID 토큰을 우리 입구에 내면 aud 로 막힌다', async () => {
+    await withServers([() => bootAuth([REGISTER]), () => bootApp(appIn('입구를 ID 토큰으로'))], async () => {
+      const text = requestsOf().slice(8, 11).join('');
+      const code = await codeFor('jaehoon', { ...STORY, scope: 'openid email', nonce: 'story-nonce' });
+      const { id_token } = await storyTokens('jaehoon', 'openid email', { nonce: 'story-nonce' });
+      const out = sendAll(text.replace('스토리 앱의 인가 코드', code).replace('스토리 앱의 id_token', id_token));
+      expect(out.map((r) => r.title)).toEqual(['스토리 앱의 인가 코드 받기 (openid를 담아)', '스토리 앱의 ID 토큰 받기', '스토리 앱의 ID 토큰을 우리 서비스에 내기']);
+      const [authorize, token, door] = out;
+      expect(authorize.response.statusCode).toBe(303);
+      expect(JSON.parse(token.response.body).scope).toBe('openid email');
+      expect(Object.keys(JSON.parse(token.response.body))).toEqual(['access_token', 'token_type', 'expires_in', 'scope', 'id_token']);
+      expect([door.response.statusCode, JSON.parse(door.response.body)])
+        .toEqual([401, { message: 'ID 토큰을 믿을 수 없어요', reason: 'jwt audience invalid. expected: photo-app' }]);
     });
   }, 60000);
 });
@@ -691,7 +752,7 @@ const stepFiles = (n) => stepCommits(n).map((c) => git('show', `${c}:lab/p3-21/p
 
 describe('교안·답안 블록이 코드베이스에 실재한다', () => {
   it('🔴 교안 본문의 photo-app.js 블록 — 그 Step 커밋의 photo-app.js 안에 줄 그대로', () => {
-    const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && b.lines[0] === '// ~/instagram-api/lab/photo-app.js');
+    const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && b.lines[0] === '// ~/instagram-api/lab/p3-21/photo-app.js');
     expect(blocks.length).toBe(15);
     const misses = blocks.filter((b) => !stepFiles(b.step).some((t) => contains(t, b.lines.slice(1))));
     expect(misses.map((b) => `Step ${b.step} ${b.lines[1]}`)).toEqual([]);
@@ -701,33 +762,33 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     const REGISTERED = read(LAB('auth-server.js')).replace(
       "    redirectUris: ['http://localhost:4002/callback'],\n  },\n};",
       "    redirectUris: ['http://localhost:4002/callback'],\n  },\n  'story-app': {\n    name: '스토리 만들기',\n    secret: 'story-app-secret',\n    redirectUris: ['http://localhost:4003/callback'],\n  },\n};");
-    const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\/lab\//.test(b.lines[0])
-      && b.lines[0] !== '// ~/instagram-api/lab/photo-app.js');
-    // 인가 서버 블록 넷 — Step 2 🙋 의 303 줄 · 직접 해보기 1 의 등록 · Step 4 의 `tokens` Map · Step 7 의 `aud` 줄
+    const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && /^\/\/ ~\/instagram-api\/lab\/p3-21\//.test(b.lines[0])
+      && b.lines[0] !== '// ~/instagram-api/lab/p3-21/photo-app.js');
+    // 인가 서버 블록 셋 — Step 2 🙋 의 303 줄 · 직접 해보기 1 의 등록 · Step 4 의 `tokens` Map
     expect(blocks.map((b) => b.lines[0])).toEqual([
-      '// ~/instagram-api/lab/auth-server.js', '// ~/instagram-api/lab/practice1.js', '// ~/instagram-api/lab/auth-server.js',
-      '// ~/instagram-api/lab/auth-server.js', '// ~/instagram-api/lab/practice2.js', '// ~/instagram-api/lab/auth-server.js',
-      '// ~/instagram-api/lab/practice3.js',
+      '// ~/instagram-api/lab/p3-21/auth-server.js', '// ~/instagram-api/lab/p3-21/practice1.js', '// ~/instagram-api/lab/p3-21/auth-server.js',
+      '// ~/instagram-api/lab/p3-21/auth-server.js', '// ~/instagram-api/lab/p3-21/practice2.js', '// ~/instagram-api/lab/p3-21/practice3.js',
     ]);
-    expect(blocks.filter((b) => b.lines[0].endsWith('auth-server.js')).map((b) => b.step)).toEqual([2, 3, 4, 7]);
+    expect(blocks.filter((b) => b.lines[0].endsWith('auth-server.js')).map((b) => b.step)).toEqual([2, 3, 4]);
     const misses = blocks.filter((b) => {
-      const name = b.lines[0].replace('// ~/instagram-api/lab/', '');
+      const name = b.lines[0].replace('// ~/instagram-api/lab/p3-21/', '');
       const hay = name === 'auth-server.js' ? REGISTERED : read(LAB(name));
       return !contains(hay, b.lines.slice(1));
     });
     expect(misses.map((b) => `Step ${b.step} ${b.lines[0]}`)).toEqual([]);
     // 실습 1·2 의 해설은 파일 전체다
     for (const name of ['practice1.js', 'practice2.js']) {
-      const b = blocks.find((x) => x.lines[0] === `// ~/instagram-api/lab/${name}`);
+      const b = blocks.find((x) => x.lines[0] === `// ~/instagram-api/lab/p3-21/${name}`);
       expect(b.lines.join('\n') + '\n').toBe(read(LAB(name)));
     }
   });
 
-  it('🔴 교안의 .http 블록 — lab/p3-21/oauth.http 의 요청 다섯 그대로(Step 4 블록 하나에 요청 둘)', () => {
+  it('🔴 교안의 .http 블록 — lab/p3-21/oauth.http 의 요청 열하나 그대로(Step 4 블록 하나에 요청 둘 · Step 7·8 블록 하나에 요청 셋)', () => {
     const blocks = blocksOf(LECTURE).filter((b) => b.lang === '' && b.lines[0]?.startsWith('### '));
     expect(blocks.map((b) => b.lines[0])).toEqual(['### 인가 코드로 사진 달라고 해 보기', '### dahye의 인가 코드 받기',
-      '### jaehoon의 인가 코드 받기', '### jaehoon의 인가 코드 받기 (code_challenge를 담아)']);
-    expect(blocks.map((b) => b.step)).toEqual([4, 5, 6, 6]);
+      '### jaehoon의 인가 코드 받기', '### jaehoon의 인가 코드 받기 (code_challenge를 담아)',
+      '### 스토리 앱의 인가 코드 받기', '### 스토리 앱의 인가 코드 받기 (openid를 담아)']);
+    expect(blocks.map((b) => b.step)).toEqual([4, 5, 6, 6, 7, 8]);
     expect(blocks[0].lines).toContain('### 비밀값 없이 인가 코드를 토큰으로 바꿔 보기');
     const http = read(LAB('oauth.http'));
     expect(blocks.filter((b) => !contains(http, b.lines)).map((b) => b.lines[0])).toEqual([]);
@@ -736,10 +797,10 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
   it('🔴 답안의 해설 블록 — homework1·homework2 안에 줄 그대로', () => {
     const blocks = blocksOf(ANSWERS).filter((b) => b.lang === 'javascript');
     expect(blocks.map((b) => b.lines[0])).toEqual([
-      '// ~/instagram-api/lab/homework1.js', '// ~/instagram-api/lab/homework1.js',
-      '// ~/instagram-api/lab/homework2.js', '// ~/instagram-api/lab/homework2.js',
+      '// ~/instagram-api/lab/p3-21/homework1.js', '// ~/instagram-api/lab/p3-21/homework1.js',
+      '// ~/instagram-api/lab/p3-21/homework2.js', '// ~/instagram-api/lab/p3-21/homework2.js',
     ]);
-    const misses = blocks.filter((b) => !contains(read(LAB(b.lines[0].replace('// ~/instagram-api/lab/', ''))), b.lines.slice(1)));
+    const misses = blocks.filter((b) => !contains(read(LAB(b.lines[0].replace('// ~/instagram-api/lab/p3-21/', ''))), b.lines.slice(1)));
     expect(misses.map((b) => b.lines[1])).toEqual([]);
   });
 
@@ -766,7 +827,8 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
       '  "error_description": "클라이언트를 확인하지 못했어요"',
       '`Cannot POST /callback`',
       'scope=photos&username=jaehoon&password=jaehoon1234&decision=allow',
-      "`aud`가 `'story-app'`이에요",
+      '{"loggedIn":"jaehoon@example.com"}',
+      '`GET /userinfo 200`',
     ]) expect(text).toContain(line);
   });
 
@@ -898,5 +960,109 @@ describe('소급 뒤 낭독 — 확인 절차와 새로 쓴 사실', () => {
     });
     expect(await open(reg("['http://localhost:4003/callback']"))).toBe(400);
     expect(await open(reg("'http://localhost:4003/callback'"))).toBe(200);
+  });
+});
+
+// ── OIDC 보강(2026-11-05) — Access 토큰으로 로그인을 만들어 보고, 다른 앱의 토큰이 통과하는 구멍을 겪은 뒤 OIDC 로 간다 ──
+describe('OIDC 보강 — Access 토큰으로 로그인을 만들면', () => {
+  const PHOTOS = ['한강 노을', '제주 바다', '강아지 산책'];
+
+  it('🔴 /userinfo — 토큰 없으면 401 · email 허락이 없으면 403 · 토큰만 맞으면 어느 앱이 받은 것이든 답한다 · 창 1 에 요청마다 한 줄', async () => {
+    await withServers([() => bootAuth([REGISTER])], async (auth) => {
+      const none = await fetch(`${AUTH}/userinfo`);
+      expect(none.status).toBe(401);
+      expect(none.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+      expect(await none.json()).toEqual({ error: 'invalid_token', error_description: 'Access 토큰을 확인하지 못했어요' });
+      const { access_token: photosOnly } = await (await tokenFor(await codeFor('jaehoon'))).json();
+      const narrow = await fetch(`${AUTH}/userinfo`, bearer(photosOnly));
+      expect(narrow.status).toBe(403);
+      expect(narrow.headers.get('www-authenticate')).toBe('Bearer error="insufficient_scope", scope="email"');
+      const { access_token } = await storyTokens('jaehoon', 'email');
+      expect(await (await fetch(`${AUTH}/userinfo`, bearer(access_token))).json()).toEqual({ sub: '10001', email: 'jaehoon@example.com' });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(auth.tail().split('\n').filter((l) => l.startsWith('GET /userinfo')))
+        .toEqual(['GET /userinfo 401', 'GET /userinfo 403', 'GET /userinfo 200']);
+    });
+  });
+
+  it('🔴 Step 7 첫 판 — scope 는 email photos · nonce 없음 · /userinfo 로 물어 sub·email·photos · 창 1 에 두 줄', async () => {
+    await withServers([() => bootAuth(), () => bootApp(appIn('누구인지 묻기'))], async (auth) => {
+      const { consent, after } = await signIn(browser());
+      const q = new URL(consent.url).searchParams;
+      expect(q.get('scope')).toBe('email photos');
+      expect(q.get('nonce')).toBeNull();
+      expect(consent.body).toContain('<ul><li>이메일 주소</li><li>사진 목록 보기</li></ul>');
+      expect(after.body).toBe('{"sub":"10001","email":"jaehoon@example.com","photos":["한강 노을","제주 바다","강아지 산책"]}');
+      await new Promise((r) => setTimeout(r, 100));
+      expect(auth.tail()).toContain('GET /userinfo 200');
+      expect(auth.tail()).toContain('GET /photos 200');
+    });
+  });
+
+  it('🔴 Step 7 둘째 판 — 스토리 앱의 Access 토큰을 입구에 내면 jaehoon 으로 로그인된다 · 엉터리 토큰은 401', async () => {
+    await withServers([() => bootAuth([REGISTER]), () => bootApp(appIn('토큰 입구'))], async () => {
+      const { access_token } = await storyTokens('jaehoon', 'email');
+      const got = await door({ accessToken: access_token });
+      expect(got.status).toBe(200);
+      expect(await got.text()).toBe('{"loggedIn":"jaehoon@example.com"}');
+      const bad = await door({ accessToken: 'nope' });
+      expect([bad.status, await bad.json()]).toEqual([401, { message: '토큰을 확인하지 못했어요' }]);
+    });
+  });
+
+  it('🔴 우리 /callback 은 이 구멍이 없다 — 스토리 앱의 인가 코드를 넣어도 우리 비밀값으로는 못 바꾼다(invalid_grant)', async () => {
+    await withServers([() => bootAuth([REGISTER]), () => bootApp(appIn('토큰 입구'))], async () => {
+      const b = browser();
+      const consent = await b.go(`${APP}/login`);
+      const state = new URL(consent.url).searchParams.get('state');
+      const code = await codeFor('jaehoon', { ...STORY, scope: 'email' });
+      const out = await b.go(`${APP}/callback?code=${code}&state=${state}`);
+      expect([out.status, out.json()]).toEqual([400, { error: 'invalid_grant', error_description: '쓸 수 없는 인가 코드예요' }]);
+    });
+  });
+
+  it('🔴 Step 7 끝 판 — ID 토큰을 읽으니 창 1 에 GET /userinfo 줄이 없다 · 입구는 아직 Access 토큰 그대로', async () => {
+    await withServers([() => bootAuth([REGISTER]), () => bootApp(appAt(7))], async (auth) => {
+      const { after } = await signIn(browser());
+      expect(after.json()).toEqual({ sub: '10001', email: 'jaehoon@example.com', photos: PHOTOS });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(auth.tail()).toContain('GET /photos 200');
+      expect(auth.tail()).not.toContain('GET /userinfo');
+      const { access_token } = await storyTokens('jaehoon', 'email');
+      expect(await (await door({ accessToken: access_token })).text()).toBe('{"loggedIn":"jaehoon@example.com"}');
+    });
+  });
+
+  it('🔴 Step 8 입구 — 스토리 앱의 ID 토큰은 aud 로 막힌다 · 우리 앱 ID 토큰은 nonce 쿠키까지 맞으면 통과 · 쿠키가 없으면 nonce 로 막힌다', async () => {
+    await withServers([() => bootAuth([REGISTER]), () => bootApp(appIn('입구를 ID 토큰으로'))], async () => {
+      const { id_token: story } = await storyTokens('jaehoon', 'openid email', { nonce: 'story-nonce' });
+      const refused = await door({ idToken: story });
+      expect([refused.status, await refused.json()])
+        .toEqual([401, { message: 'ID 토큰을 믿을 수 없어요', reason: 'jwt audience invalid. expected: photo-app' }]);
+      const { id_token: ours } = await (await tokenFor(await codeFor('jaehoon', { scope: 'openid email', nonce: 'our-nonce' }))).json();
+      const ok = await door({ idToken: ours }, { Cookie: 'oauth_nonce=our-nonce' });
+      expect([ok.status, await ok.text()]).toEqual([200, '{"loggedIn":"jaehoon@example.com"}']);
+      const noCookie = await door({ idToken: ours });
+      expect([noCookie.status, await noCookie.json()]).toEqual([401, { message: 'ID 토큰을 믿을 수 없어요', reason: 'nonce가 달라요' }]);
+    });
+  });
+
+  it('🔴 Step 8 끝 판 — 입구를 지워 실습 3·과제 둘의 시작점이 보강 전과 같다', async () => {
+    const tip = read(LAB('photo-app.js'));
+    expect(tip).not.toContain('/login/token');
+    expect(tip).not.toContain('express.json()');
+    expect(appAt(8)).toBe(tip);
+    await withServers([() => bootAuth(), () => bootApp(tip)], async () => {
+      expect((await door({ idToken: 'x' })).status).toBe(404);
+      expect((await signIn(browser())).after.json()).toEqual({ sub: '10001', email: 'jaehoon@example.com', photos: PHOTOS });
+    });
+    for (const name of ['practice3.js', 'homework1.js', 'homework2.js']) expect(read(LAB(name))).not.toContain('/login/token');
+  });
+
+  it('🔴 교안·답안에 평평한 실습 경로가 남아 있지 않다', () => {
+    const flat = /lab\/(auth-server|photo-app|practice\d|homework\d|oauth)/;
+    for (const file of [LECTURE, ANSWERS]) {
+      expect(read(file).split('\n').filter((l) => flat.test(l))).toEqual([]);
+    }
   });
 });
