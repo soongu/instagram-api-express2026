@@ -519,6 +519,7 @@ describe('축 ⑩ — 실습·과제 (lab/p3-30)', () => {
         atApi: rep(rep(rep(src, "meRouter.get('/', ", "meRouter.get('/me', "), "meRouter.get('/bookmarks', ", "meRouter.get('/me/bookmarks', "), "app.use('/api/me', meRouter);", "app.use('/api', meRouter);"),
         perRoute: rep(rep(src, 'meRouter.use(requireUser);\n\n', ''), "meRouter.get('/', (req", "meRouter.get('/', requireUser, (req"),
         global: rep(src, 'meRouter.use(requireUser);\n\n', '').replace("// 누구나\napp.get", 'app.use(requireUser);\n\n// 누구나\napp.get'),
+        blankApi: rep(src, "app.use('/api/me', meRouter);", "app.use('/api', meRouter);"),
       };
       for (const [name, file] of Object.entries(wrong)) {
         await withLab({ files: { 'practice1.js': file }, entry: 'practice1.js', labPort: 4001, port: P1 }, async (srv) => {
@@ -807,6 +808,74 @@ describe('축 ⑫ — 교안·답안 코드 블록의 줄이 코드베이스에 
 
 describe('축 ⑬ — 교안 · 답안의 주장', () => {
   const H1 = 3730;
+  it('🔴 교안 Step 2 — adminRouter.use 줄보다 «위» 에 등록한 라우트는 adminOnly 를 거치지 않는다', async () => {
+    const src = read(SNAP('step2.board.js'));
+    const early = rep(src, '// 이 라우터에 들어온 요청은 모두 adminOnly 부터 지나간다\nadminRouter.use(adminOnly);\n',
+      "adminRouter.get('/early', (req, res) => res.json({ early: true }));\n\n// 이 라우터에 들어온 요청은 모두 adminOnly 부터 지나간다\nadminRouter.use(adminOnly);\n");
+    await withLab({ files: { 'board.js': early }, entry: 'board.js', labPort: 4008, port: H1 + 5 }, async (srv) => {
+      expect(await send(srv.base, 'GET', '/api/admin/early')).toEqual({ status: 200, body: { early: true } });
+      expect((await send(srv.base, 'PATCH', '/api/admin/notices/2/hide')).status).toBe(403);
+    });
+  });
+
+  it('🔴 교안 직접 해보기 1 해설 — 빈칸 3 을 /api 로 채운 판은 북마크 404 · 마지막 요청 401', async () => {
+    const blankApi = rep(lab('practice1.js'), "app.use('/api/me', meRouter);", "app.use('/api', meRouter);");
+    await withLab({ files: { 'practice1.js': blankApi }, entry: 'practice1.js', labPort: 4001, port: H1 + 6 }, async (srv) => {
+      expect((await runHttp(lab('practice1.http'), 4001, srv.base)).map((r) => r.status)).toEqual([200, 401, 401, 404, 404, 401]);
+    });
+  });
+
+  it("🔴 교안 직접 해보기 2 해설 — router.param(':id', …) 는 에러 없이 한 번도 안 불린다", async () => {
+    const colon = rep(lab('practice2.js'), "router.param('id', findNotice);", "router.param(':id', findNotice);");
+    await withLab({ files: { 'practice2.js': colon }, entry: 'practice2.js', labPort: 4002, port: H1 + 7 }, async (srv) => {
+      const got = await runHttp(lab('practice2.http'), 4002, srv.base);
+      expect(got[1]).toMatchObject({ status: 200, body: '' });
+      expect(got[4].body).toEqual({ found: 0 });
+    });
+  });
+
+  it('🔴 교안 Step 4 — 앞 회차 좋아요가 남아 있으면(jaehoon 이 1번에도) 빠뜨린 판의 목록에 같은 이름이 두 번', async () => {
+    await send(server.base, 'PUT', '/api/posts/1/likes/2');
+    try {
+      await withVariant(PORT + 30, {
+        'app.js': git('code/p3-29', 'app.js'), 'routes/posts.js': read(SNAP('step4-no-parseid.posts.js')), 'routes/likes.js': null, 'middlewares/params.js': null,
+      }, async (v) => {
+        const names = (await send(v.base, 'GET', '/api/posts/3/likes')).body;
+        expect(names).toHaveLength(3);
+        expect(names.filter((n) => n === 'jaehoon')).toHaveLength(2);
+      });
+    } finally {
+      await send(server.base, 'DELETE', '/api/posts/1/likes/2');
+    }
+  });
+
+  it('🔴 교안 Step 7 🤔 — 게시물 라우터 «안» 에 붙이면 router.use(parseId) 를 빼고 mergeParams 없이도 동작 · 남기면 404', async () => {
+    const nestedPosts = rep(read(R('routes/posts.js')), 'export default router;',
+      "router.use('/:id/likes', likesRouter);\n\nexport default router;").replace("import express from 'express';\n", "import express from 'express';\nimport likesRouter from './likes.js';\n");
+    const appNoMount = rep(read(R('app.js')), "app.use('/api/posts/:id/likes', likesRouter);\n", '');
+    const childNoUse = rep(read(SNAP('step7-no-merge.likes.js')), '// 이 라우터에 들어온 요청은 모두 어느 게시물의 좋아요라서, 게시물 번호부터 확인한다.\nrouter.use(parseId);\n', '');
+    await withVariant(PORT + 31, { 'app.js': appNoMount, 'routes/posts.js': nestedPosts, 'routes/likes.js': childNoUse }, async (v) => {
+      expect(await send(v.base, 'GET', '/api/posts/3/likes')).toEqual({ status: 200, body: ['jaehoon'] });
+      expect((await send(v.base, 'GET', '/api/posts/abc/likes')).status).toBe(404);
+    });
+    await withVariant(PORT + 32, { 'app.js': appNoMount, 'routes/posts.js': nestedPosts, 'routes/likes.js': read(SNAP('step7-no-merge.likes.js')) }, async (v) => {
+      expect(await send(v.base, 'GET', '/api/posts/3/likes')).toEqual({ status: 404, body: { message: '그런 게시물은 없어요' } });
+    });
+  });
+
+  it("🔴 교안 Step 7 ⚠️ — mergeParams 를 켜도 그 라우터의 router.param('id') 는 안 불린다", async () => {
+    const mergedParam = rep(read(R('routes/likes.js')), 'router.use(parseId);\n', "router.param('id', parseId);\n");
+    await withVariant(PORT + 33, { 'routes/likes.js': mergedParam }, async (v) => {
+      expect(await send(v.base, 'GET', '/api/posts/3/likes')).toEqual({ status: 200, body: ['jaehoon', 'dahye'] });
+    });
+  });
+
+  it('🔴 교안 Step 8 — models/Post 를 찾는 grep 은 그 파일 첫 줄 주석 하나(code/p3-29)', () => {
+    const hits = execFileSync('git', ['grep', '-n', 'models/Post', 'code/p3-29', '--', '*.js', ':!lab', ':!test', ':!snapshots', ':!sql'], { cwd: P('.'), encoding: 'utf8' });
+    expect(hits.trim().split('\n')).toEqual(['code/p3-29:models/Post.js:1:// ~/instagram-api/models/Post.js']);
+    expect(read(LECTURE)).toContain('./models/Post.js:1:// ~/instagram-api/models/Post.js');
+  });
+
   it('🔴 Step 1 — app.js 에 확인용 한 줄을 더하고 저장하면 --watch 가 «Change detected» · «Restarting» · function 3 · 시작 줄', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'p330-watch-'));
     for (const name of ['app.js', 'db.js', 'errors.js', 'routes', 'services', 'middlewares', 'schemas', 'package.json']) cpSync(R(name), join(dir, name), { recursive: true });
