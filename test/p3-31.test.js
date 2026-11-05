@@ -652,7 +652,8 @@ describe('축 ⑩ — 실습·과제: 정답 판 · 확인 절차가 틀린 판�
     const order = await hw1(rep(lab('homework1.js'),
       "app.post('/api/notices', upload.single('image'), (req, res) => {\n  const title = (req.body.title ?? '').trim();\n\n  if (title === '') {\n    throw new BadRequestError('제목을 적어 주세요');\n  }\n",
       "function checkTitle(req, res, next) {\n  if (req.body.title.trim() === '') {\n    throw new BadRequestError('제목을 적어 주세요');\n  }\n  next();\n}\n\napp.post('/api/notices', checkTitle, upload.single('image'), (req, res) => {\n  const title = req.body.title.trim();\n"));
-    expect(order.slice(0, 3).map(([status]) => status)).toEqual([500, 500, 500]);
+    // 공지를 올리는 다섯 요청이 모두 500 — 본문을 아직 아무도 안 읽어 req.body 가 undefined
+    expect(order.slice(0, 5).map(([status]) => status)).toEqual([500, 500, 500, 500, 500]);
   });
 
   it('🔴 과제 [기초] 답안 «더 좋아요» 판 — 제목 검사에 떨어지면 저장한 사진을 지워 폴더가 빈다', async () => {
