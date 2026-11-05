@@ -82,6 +82,7 @@ app.get('/.well-known/openid-configuration', (req, res) => {
     issuer: ISSUER,
     authorization_endpoint: `${ISSUER}/authorize`,
     token_endpoint: `${ISSUER}/token`,
+    userinfo_endpoint: `${ISSUER}/userinfo`,
     jwks_uri: `${ISSUER}/jwks`,
     response_types_supported: ['code'],
     scopes_supported: Object.keys(SCOPES),
@@ -170,12 +171,18 @@ app.post('/token', (req, res) => {
   res.json(body);
 });
 
+// Authorization 헤더의 Access 토큰으로 기록을 찾는다 — 없거나 시간이 지났으면 undefined.
+const grantOf = (req) => {
+  const header = req.headers.authorization ?? '';
+  const grant = header.startsWith('Bearer ') ? tokens.get(header.slice('Bearer '.length)) : undefined;
+  return grant && grant.expiresAt >= Date.now() ? grant : undefined;
+};
+
 // 리소스 서버 역할 — Access 토큰을 받고, 허락받은 범위(scope)만 내준다.
 app.get('/photos', (req, res) => {
   res.on('finish', () => console.log(`GET /photos ${res.statusCode}`)); // 사진 요청이 올 때마다 한 줄
-  const header = req.headers.authorization ?? '';
-  const grant = header.startsWith('Bearer ') ? tokens.get(header.slice('Bearer '.length)) : undefined;
-  if (!grant || grant.expiresAt < Date.now()) {
+  const grant = grantOf(req);
+  if (!grant) {
     res.set('WWW-Authenticate', 'Bearer error="invalid_token"');
     return fail(res, 401, 'invalid_token', 'Access 토큰을 확인하지 못했어요');
   }
@@ -184,6 +191,22 @@ app.get('/photos', (req, res) => {
     return fail(res, 403, 'insufficient_scope', '사진을 볼 허락을 받지 않았어요');
   }
   res.json({ photos: photos[grant.sub] });
+});
+
+// 리소스 서버 역할 — Access 토큰의 주인이 누구인지 알려 준다. 토큰만 맞으면 어느 앱이 불러도 답한다.
+app.get('/userinfo', (req, res) => {
+  res.on('finish', () => console.log(`GET /userinfo ${res.statusCode}`)); // 물어볼 때마다 한 줄
+  const grant = grantOf(req);
+  if (!grant) {
+    res.set('WWW-Authenticate', 'Bearer error="invalid_token"');
+    return fail(res, 401, 'invalid_token', 'Access 토큰을 확인하지 못했어요');
+  }
+  if (!scopesOf(grant.scope).includes('email')) {
+    res.set('WWW-Authenticate', 'Bearer error="insufficient_scope", scope="email"');
+    return fail(res, 403, 'insufficient_scope', '이메일을 볼 허락을 받지 않았어요');
+  }
+  const account = Object.values(accounts).find((item) => item.sub === grant.sub);
+  res.json({ sub: grant.sub, email: account.email });
 });
 
 app.listen(4001, () => {
