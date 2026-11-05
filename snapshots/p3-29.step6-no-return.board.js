@@ -1,8 +1,8 @@
-// ~/instagram-api/lab/board.js
+// ~/instagram-api/lab/p3-29/board.js
 import express from 'express';
 import morgan from 'morgan';
-import { logger } from '../middlewares/logger.js';
-import { HttpError } from '../errors.js';
+import { logger } from '../../middlewares/logger.js';
+import { HttpError } from '../../errors.js';
 
 const app = express();
 

@@ -2,8 +2,8 @@
 //
 // `5-express-core` 셋째 회차다. 수업 백엔드에서 바뀌는 학생 파일은 셋 — 에러 미들웨어 맨 앞의 `res.headersSent`
 // (`app.js`)와 `npm install morgan`·`npm install helmet` 이 고친 `package.json`·`package-lock.json`
-// (`curriculum.md` 「`p3-29` 착수 결정」). 나머지 장면은 모두 실습 서버 `lab/board.js`(4006) · `lab/parsers.js`(4007)에서 겪는다.
-// 판정은 학생이 치는 `node lab/….js` 를 그대로 띄워 진짜 포트로 왕복한다.
+// (`curriculum.md` 「`p3-29` 착수 결정」). 나머지 장면은 모두 실습 서버 `lab/p3-29/board.js`(4006) · `lab/p3-29/parsers.js`(4007)에서 겪는다.
+// 판정은 학생이 치는 `node lab/p3-29/….js` 를 그대로 띄워 진짜 포트로 왕복한다.
 //
 // 축 ① Step 1 — return 을 빠뜨린 판: 클라이언트는 404 · 로거는 500 · 창에 ERR_HTTP_HEADERS_SENT 두 번(사이에 로거 줄)
 // 축 ② Step 2 — morgan('dev') 를 옆에 세우면 morgan 도 500 · 주소는 둘 다 req.originalUrl · 크기 칸은 처음 보낸 404 본문
@@ -14,7 +14,7 @@
 // 축 ⑦ Step 7 — parsers.js: JSON · 폼(값은 글자) · 글자 · json 만 있으면 나머지 둘은 null
 // 축 ⑧ Step 8 — helmet: 헤더 12개가 더해지고 X-Powered-By 가 사라진다
 // 축 ⑨ 수업 백엔드 — app.js 는 code/p3-28 에서 다섯 줄만 · 평범한 요청은 그대로
-// 축 ⑩ 실습·과제 — `lab/p3-29/`(학생 쪽 경로 주석은 `~/instagram-api/lab/…`)
+// 축 ⑩ 실습·과제 — `lab/p3-29/`(학생 쪽 경로 주석도 `~/instagram-api/lab/p3-29/…`)
 // 축 ⑪ 이 회차 학생 파일 — `code/p3-28` 에서 app.js · package.json · package-lock.json 만 바뀌었다
 // 축 ⑫ 교안·답안 코드 블록의 줄이 코드베이스에 실재한다
 // 축 ⑬ 답안의 주장
@@ -46,28 +46,29 @@ const ROUND = roundDir('code/p3-29');
 const R = (rel) => join(ROUND.dir, rel);
 const BEFORE = roundDir('code/p3-28');
 
-const LAB = (name) => P(`lab/p3-29/${name}`);
+const LAB_DIR = 'lab/p3-29';
+const LAB = (name) => P(`${LAB_DIR}/${name}`);
 const SNAP = (name) => P(`snapshots/p3-29.${name}`);
 const ERR_SENT = 'Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client';
 
-// 학생 폴더를 흉내 낸다 — lab/ 아래 파일이 ../middlewares · ../errors.js 를 그대로 찾게.
+// 학생 폴더를 흉내 낸다 — lab/p3-29/ 아래 파일이 ../../middlewares · ../../errors.js 를 그대로 찾게.
 const studentLab = (files, modules = P('node_modules')) => {
   const dir = mkdtempSync(join(tmpdir(), 'p329-lab-'));
-  mkdirSync(join(dir, 'lab'));
+  mkdirSync(join(dir, LAB_DIR), { recursive: true });
   cpSync(R('middlewares'), join(dir, 'middlewares'), { recursive: true });
   cpSync(R('errors.js'), join(dir, 'errors.js'));
   writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
   symlinkSync(modules, join(dir, 'node_modules'));
   for (const [name, from] of Object.entries(files)) {
     // 여러 줄이면 파일 내용, 한 줄이면 복사할 파일 경로
-    if (from.includes('\n')) writeFileSync(join(dir, 'lab', name), from);
-    else cpSync(from, join(dir, 'lab', name));
+    if (from.includes('\n')) writeFileSync(join(dir, LAB_DIR, name), from);
+    else cpSync(from, join(dir, LAB_DIR, name));
   }
   return dir;
 };
 const withLab = async (name, from, port, fn, { env = { NO_COLOR: '1' }, modules } = {}) => {
   const dir = studentLab({ [name]: from }, modules);
-  const lab = await boot(join(dir, 'lab', name), { port, ready: `${port}번 포트에서`, env });
+  const lab = await boot(join(dir, LAB_DIR, name), { port, ready: `${port}번 포트에서`, env });
   try {
     await fn(lab);
   } finally {
@@ -240,7 +241,7 @@ describe('축 ④ — Step 4: Express 5 가 받는 async 에러 · 못 받는 as
       expect(three.res).toMatchObject({ status: 500, body: { message: '서버에서 문제가 생겼어요' } });
       expect(three.lines.map(noMs)).toEqual(['Error: 3번 공지의 조회 수를 저장하지 못했어요',
         'POST /api/notices/3/views 500', 'POST /api/notices/3/views 500 ms - 49']);
-      expect(lab.tail()).toMatch(/at saveView \(file:\/\/\/\S+\/lab\/board\.js:35:11\)\n {4}at async file:\/\/\/\S+\/lab\/board\.js:44:3/);
+      expect(lab.tail()).toMatch(/at saveView \(file:\/\/\/\S+\/lab\/p3-29\/board\.js:35:11\)\n {4}at async file:\/\/\/\S+\/lab\/p3-29\/board\.js:44:3/);
       const nine = await post(`${lab.base}/api/notices/9/views`);
       expect(nine).toMatchObject({ status: 404, body: { message: '그런 공지는 없어요' } });
     });
@@ -248,7 +249,7 @@ describe('축 ④ — Step 4: Express 5 가 받는 async 에러 · 못 받는 as
 
   it('🔴 await 를 뺀 판 — 1번 · 3번 모두 200 이 바로 가고(10ms 안쪽) 그 뒤 서버가 꺼진다 · 다음 요청은 연결 거부', async () => {
     const dir = studentLab({ 'board.js': SNAP('step4-no-await.board.js') });
-    const lab = await boot(join(dir, 'lab', 'board.js'), { port: 4006, ready: '4006번 포트에서', env: { NO_COLOR: '1' } });
+    const lab = await boot(join(dir, LAB_DIR, 'board.js'), { port: 4006, ready: '4006번 포트에서', env: { NO_COLOR: '1' } });
     try {
       const one = await newLines(lab, () => post(`${lab.base}/api/notices/1/views`), 50);
       expect(one.res.status).toBe(200);
@@ -264,12 +265,12 @@ describe('축 ④ — Step 4: Express 5 가 받는 async 에러 · 못 받는 as
     }
   });
 
-  it('🔴 --watch 로 띄우면 꺼진 뒤 «Failed running \'lab/board.js\'. Waiting for file changes before restarting...»', async () => {
+  it('🔴 --watch 로 띄우면 꺼진 뒤 «Failed running \'lab/p3-29/board.js\'. Waiting for file changes before restarting...»', async () => {
     const dir = studentLab({ 'board.js': SNAP('step4-no-await.board.js') });
     const envNoTest = { ...process.env, NO_COLOR: '1' };
     delete envNoTest.NODE_ENV;
     delete envNoTest.VITEST;
-    const child = spawn(process.execPath, ['--watch', 'lab/board.js'], { cwd: dir, env: envNoTest });
+    const child = spawn(process.execPath, ['--watch', `${LAB_DIR}/board.js`], { cwd: dir, env: envNoTest });
     let log = '';
     child.stdout.on('data', (b) => { log += b; });
     child.stderr.on('data', (b) => { log += b; });
@@ -277,7 +278,7 @@ describe('축 ④ — Step 4: Express 5 가 받는 async 에러 · 못 받는 as
       for (let i = 0; i < 40 && !log.includes('4006번 포트에서'); i += 1) await sleep(100);
       await fetch('http://localhost:4006/api/notices/3/views', { method: 'POST' });
       await sleep(600);
-      expect(log).toContain("Failed running 'lab/board.js'. Waiting for file changes before restarting...");
+      expect(log).toContain("Failed running 'lab/p3-29/board.js'. Waiting for file changes before restarting...");
     } finally {
       child.kill();
       await sleep(200);
@@ -313,7 +314,7 @@ describe('축 ⑤ — Step 5: 돌려준 Promise · asyncHandler · Express 4', (
         { cwd: dir4, encoding: 'utf8' });
       expect(JSON.parse(read(join(dir4, 'node_modules/express/package.json'))).version).toBe('4.22.3');
       const dir = studentLab({ 'board.js': SNAP('step4.board.js') }, join(dir4, 'node_modules'));
-      const lab = await boot(join(dir, 'lab', 'board.js'), { port: 4006, ready: '4006번 포트에서', env: { NO_COLOR: '1' } });
+      const lab = await boot(join(dir, LAB_DIR, 'board.js'), { port: 4006, ready: '4006번 포트에서', env: { NO_COLOR: '1' } });
       try {
         const res = await fetch(`${lab.base}/api/notices/3/views`, { method: 'POST' }).then((r) => r.status, () => 'no answer');
         expect(res).toBe('no answer');
@@ -369,7 +370,7 @@ describe('축 ⑥ — Step 6: 에러 미들웨어 여러 개', () => {
   });
 });
 
-describe('축 ⑦ — Step 7: 내장 미들웨어 (lab/parsers.js 4007)', () => {
+describe('축 ⑦ — Step 7: 내장 미들웨어 (lab/p3-29/parsers.js 4007)', () => {
   const send = (base, type, body) => getJson(`${base}/api/echo`, { method: 'POST', headers: { 'Content-Type': type }, body });
   it('🔴 json · urlencoded · text — 폼으로 보낸 true 는 글자 "true"', async () => {
     await withLab('parsers.js', LAB('parsers.js'), 4007, async (lab) => {
@@ -398,7 +399,7 @@ describe('축 ⑦ — Step 7: 내장 미들웨어 (lab/parsers.js 4007)', () => 
 
   it('🔴 parsers.http 세 요청을 httpYac 으로 — 읽힌 본문', () => {
     const dir = studentLab({ 'parsers.js': LAB('parsers.js') });
-    const child = spawn(process.execPath, ['lab/parsers.js'], { cwd: dir });
+    const child = spawn(process.execPath, [`${LAB_DIR}/parsers.js`], { cwd: dir });
     try {
       execFileSync('sleep', ['0.8']);
       cpSync(LAB('parsers.http'), join(dir, 'parsers.http'));
@@ -502,7 +503,7 @@ describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
 
   it('🔴 직접 해보기 2 (4002) — 처음 판을 하나씩: [1,2] 200 · [4,3] 200(거짓) · 0.1초 뒤 서버가 꺼져 «읽은 공지 번호» 는 연결 거부', async () => {
     const dir = studentLab({ 'practice2.js': SNAP('practice2-start.js') });
-    const lab = await boot(join(dir, 'lab', 'practice2.js'), { port: 4002, ready: '4002번 포트에서' });
+    const lab = await boot(join(dir, LAB_DIR, 'practice2.js'), { port: 4002, ready: '4002번 포트에서' });
     const send = (ids) => getJson(`${lab.base}/api/notices/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
     try {
       expect(await send([1, 2])).toMatchObject({ status: 200, body: { message: '읽음으로 표시했어요' } });
@@ -616,11 +617,11 @@ describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
     });
   });
 
-  it('🔴 경로 주석 — 학생 쪽 lab 파일은 ~/instagram-api/lab/… · 실습 .http 는 포트가 맞다', () => {
+  it('🔴 경로 주석 — 학생 쪽 lab 파일은 ~/instagram-api/lab/p3-29/… · 실습 .http 는 포트가 맞다', () => {
     const files = { 'board.js': 4006, 'parsers.js': 4007, 'practice1.js': 4001, 'practice2.js': 4002, 'practice3.js': 4003, 'homework1.js': 4011, 'homework2.js': 4012 };
     for (const [name, port] of Object.entries(files)) {
       const src = read(LAB(name));
-      expect(src.split('\n')[0]).toBe(`// ~/instagram-api/lab/${name}`);
+      expect(src.split('\n')[0]).toBe(`// ~/instagram-api/${LAB_DIR}/${name}`);
       expect(src).toContain(`app.listen(${port}, () => {`);
       const httpFile = LAB(name.replace('.js', '.http'));
       if (existsSync(httpFile)) {
@@ -641,6 +642,22 @@ describe('축 ⑪ — 이 회차 학생 파일', () => {
 });
 
 describe('축 ⑫ — 교안·답안 코드 블록', () => {
+  it('🔴 학생 쪽 실습 경로는 lab/p3-29/ — 교안·답안에 평평한 경로가 없고, 회차 폴더를 만드는 법을 말한다', () => {
+    const flat = /\blab\/(board|parsers|practice\d|homework\d|hook)\b/;
+    const texts = [P('../../part3/5-express-core/p3-29-error-builtin-thirdparty-lecture.md'), P('../../part3/5-express-core/p3-29-error-builtin-thirdparty-answers.md')].map(read);
+    for (const text of texts) expect(text.split('\n').filter((l) => flat.test(l))).toEqual([]);
+    expect(texts[0]).toContain('경로째 적으면');
+    expect(texts[0]).toContain('두 단계를 올라가요');
+  });
+
+  it('🔴 실습 파일 · 스냅숏은 수업 백엔드를 ../../ 로 부른다 — 한 단계만 올라가는 줄이 없다', () => {
+    const snaps = execFileSync('ls', [P('snapshots')], { encoding: 'utf8' }).split('\n').filter((f) => /^p3-29\..*\.js$/.test(f)).map((f) => P(`snapshots/${f}`));
+    const labs = execFileSync('ls', [P(LAB_DIR)], { encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.js')).map((f) => LAB(f));
+    const lines = [...labs, ...snaps].flatMap((f) => read(f).split('\n').map((l) => [f, l]));
+    expect(lines.filter(([, l]) => /from '\.\.\/(?!\.\.\/)/.test(l))).toEqual([]);
+    expect(lines.filter(([, l]) => l.startsWith('// ~/instagram-api/lab/') && !l.startsWith(`// ~/instagram-api/${LAB_DIR}/`))).toEqual([]);
+  });
+
   const LECTURE = P('../../part3/5-express-core/p3-29-error-builtin-thirdparty-lecture.md');
   const ANSWERS = P('../../part3/5-express-core/p3-29-error-builtin-thirdparty-answers.md');
   const blocks = (file) => {
@@ -659,10 +676,11 @@ describe('축 ⑫ — 교안·답안 코드 블록', () => {
   const candidates = (path) => {
     if (path.startsWith('~/instagram-api/node_modules/')) return [P(path.slice('~/instagram-api/'.length))];
     const rel = path.slice('~/instagram-api/'.length);
-    if (rel.startsWith('lab/')) {
-      const name = rel.slice('lab/'.length);
-      return [LAB(name), P(rel), ...snapshotsFor(name)]; // 교안이 앞 회차 파일을 `lab/p3-21/…` 로 부른다
+    if (rel.startsWith(`${LAB_DIR}/`)) {
+      const name = rel.slice(`${LAB_DIR}/`.length);
+      return [LAB(name), ...snapshotsFor(name)];
     }
+    if (rel.startsWith('lab/')) return [P(rel)]; // 교안이 앞 회차 파일을 `lab/p3-21/…` 로 부른다
     return [R(rel), join(BEFORE.dir, rel)];
   };
   // `...` 줄은 생략, `____` 줄은 빈칸 — 나머지 줄은 그 파일 안에 «차례대로» 있어야 한다.
@@ -730,9 +748,9 @@ describe('축 ⑫ — 교안·답안 코드 블록', () => {
     const text = read(LECTURE);
     for (const line of ['GET /api/notices/9 500 1.1ms', 'GET /api/notices/9 500 0.288 ms - 40', 'GET /api/notices/9 404 1.071 ms - 40',
       'POST /api/notices/3/views 500 102.5ms', 'POST /api/notices/3/views 200 0.5ms', '[에러] POST /api/notices/3/views',
-      'at saveView (file:///Users/hong/instagram-api/lab/board.js:35:11)', 'at async file:///Users/hong/instagram-api/lab/board.js:44:3',
-      "Failed running 'lab/board.js'. Waiting for file changes before restarting...", 'at file:///Users/hong/instagram-api/lab/board.js:29:7',
-      'at file:///Users/hong/instagram-api/lab/board.js:43:19']) {
+      'at saveView (file:///Users/hong/instagram-api/lab/p3-29/board.js:35:11)', 'at async file:///Users/hong/instagram-api/lab/p3-29/board.js:44:3',
+      "Failed running 'lab/p3-29/board.js'. Waiting for file changes before restarting...", 'at file:///Users/hong/instagram-api/lab/p3-29/board.js:29:7',
+      'at file:///Users/hong/instagram-api/lab/p3-29/board.js:43:19']) {
       expect(text, line).toContain(line);
     }
   });
@@ -752,7 +770,7 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
 
   it('🔴 Step 7 🙋 — 라우트에 붙인 express.raw 는 app.use(express.json()) 보다 «위» 에 등록해야 Buffer · 아래면 이미 객체', async () => {
     const make = (rawFirst) => [
-      '// ~/instagram-api/lab/hook.js',
+      '// ~/instagram-api/lab/p3-29/hook.js',
       "import express from 'express';",
       'const app = express();',
       "const hook = (req, res) => { res.json({ isBuffer: Buffer.isBuffer(req.body) }); };",
@@ -795,12 +813,12 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
     try {
       let out = '';
       try {
-        execFileSync(process.execPath, ['lab/homework1.js'], { cwd: dir, encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
+        execFileSync(process.execPath, [`${LAB_DIR}/homework1.js`], { cwd: dir, encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
       } catch (e) {
         out = `${e.stdout}${e.stderr}`;
       }
       expect(out).toContain("  skip: res.statusCode < 400,\n        ^\n\nReferenceError: res is not defined");
-      expect(out).toContain('lab/homework1.js:9');
+      expect(out).toContain('lab/p3-29/homework1.js:9');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -810,7 +828,7 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
     await withLab('homework1.js', LAB('homework1.js'), 4011, async (lab) => {
       await fetch(`${lab.base}/api/boom`);
       await sleep(150);
-      expect(lab.tail()).toMatch(/at file:\/\/\/\S+\/lab\/homework1\.js:36:9/);
+      expect(lab.tail()).toMatch(/at file:\/\/\/\S+\/lab\/p3-29\/homework1\.js:36:9/);
     });
   });
 
@@ -831,7 +849,7 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
       "app.get('/api/slow-boom', async (req, res) => {\n  await new Promise((resolve) => setTimeout(resolve, 100));\n  throw new Error('기다렸다가 낸 에러예요');\n});",
       "app.get('/api/slow-boom', (req, res) => {\n  setTimeout(() => {\n    throw new Error('기다렸다가 낸 에러예요');\n  }, 100);\n});"));
     const dir = studentLab({ 'homework2.js': src });
-    const lab = await boot(join(dir, 'lab', 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
+    const lab = await boot(join(dir, LAB_DIR, 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
     try {
       expect(await fetch(`${lab.base}/api/slow-boom`).then((r) => r.status, () => 'no answer')).toBe('no answer');
       await sleep(200);

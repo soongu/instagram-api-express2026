@@ -1,7 +1,7 @@
-// ~/instagram-api/lab/practice1.js
+// ~/instagram-api/lab/p3-29/practice1.js
 import express from 'express';
 import morgan from 'morgan';
-import { logger } from '../middlewares/logger.js';
+import { logger } from '../../middlewares/logger.js';
 
 const app = express();
 
