@@ -661,7 +661,7 @@ describe('축 ⑫ — 교안·답안 코드 블록', () => {
     const rel = path.slice('~/instagram-api/'.length);
     if (rel.startsWith('lab/')) {
       const name = rel.slice('lab/'.length);
-      return [LAB(name), P(`lab/p3-21/${name}`), ...snapshotsFor(name)];
+      return [LAB(name), P(rel), ...snapshotsFor(name)]; // 교안이 앞 회차 파일을 `lab/p3-21/…` 로 부른다
     }
     return [R(rel), join(BEFORE.dir, rel)];
   };
