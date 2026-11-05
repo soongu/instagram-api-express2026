@@ -612,6 +612,20 @@ describe('축 ⑩ — 실습·과제: 정답 판 · 확인 절차가 틀린 판�
     expect(order.slice(0, 3).map(([status]) => status)).toEqual([500, 500, 500]);
   });
 
+  it('🔴 과제 [기초] 답안 «더 좋아요» 판 — 제목 검사에 떨어지면 저장한 사진을 지워 폴더가 빈다', async () => {
+    let src = rep(lab('homework1.js'), "import express from 'express';", "import { rm } from 'node:fs/promises';\nimport express from 'express';");
+    src = rep(src, "app.post('/api/notices', upload.single('image'), (req, res) => {", "app.post('/api/notices', upload.single('image'), async (req, res) => {");
+    src = rep(src, "  if (title === '') {\n    throw new BadRequestError('제목을 적어 주세요');", "  if (title === '') {\n    if (req.file) await rm(req.file.path, { force: true });\n    throw new BadRequestError('제목을 적어 주세요');");
+    const answer = read(new URL('../../../part3/5-express-core/p3-31-file-upload-answers.md', import.meta.url).pathname);
+    expect(answer).toContain("  if (title === '') {\n    if (req.file) await rm(req.file.path, { force: true });\n    throw new BadRequestError('제목을 적어 주세요');\n  }");
+    await withLab({ src, labPort: 4011, port: 3749 }, async (srv) => {
+      const res = await upload(srv.base, '/api/notices', [{ name: 'pinned', value: 'false' }, jpg('beach.jpg', 'beach.jpg', 'image')]);
+      expect(res.status).toBe(400);
+      expect(readdirSync(join(srv.dir, 'lab', 'p3-31', 'notice-images'))).toEqual([]);
+      expect((await upload(srv.base, '/api/notices', [{ name: 'title', value: '서버 점검 안내' }, jpg('beach.jpg', 'beach.jpg', 'image')])).status).toBe(201);
+    });
+  });
+
   it('🔴 과제 [기초] 답안 «더 좋아요» — 정답 판은 제목 없이 보낸 사진이 폴더에 남는다', async () => {
     await withLab({ src: lab('homework1.js'), labPort: 4011, port: 3749 }, async (srv) => {
       const res = await upload(srv.base, '/api/notices', [{ name: 'pinned', value: 'false' }, jpg('beach.jpg', 'beach.jpg', 'image')]);
@@ -697,6 +711,13 @@ describe('축 ⑫ — 교안·답안 코드 블록의 줄이 코드베이스에 
       expect(checked).toBeGreaterThan(file.includes('lecture') ? 10 : 1);
     });
   }
+
+  it('🔴 직접 해보기 1·2 해설의 경로 없는 조각 — 정답 파일에 차례대로 있다', () => {
+    const blocks = fences('p3-31-file-upload-lecture.md').filter(({ lang, body }) => lang === 'javascript' && !body[0].startsWith('//'));
+    const pick = (first) => blocks.find(({ body }) => body[0].trim().startsWith(first)).body.filter((l) => l.trim() !== '...');
+    expect(inOrder(pick('const upload = multer({ dest:'), lab('practice1.js'))).toBe(true);
+    expect(inOrder(pick('limits: { fileSize: 1024 * 1024 }'), lab('practice2.js'))).toBe(true);
+  });
 
   it('🔴 교안의 .http 블록 — 요청마다 codebase 의 .http 파일에 그대로 있다', () => {
     const all = ['requests/uploads.http', ...readdirSync(P('lab/p3-31')).filter((n) => n.endsWith('.http')).map((n) => `lab/p3-31/${n}`)].map((f) => read(P(f))).join('\n');
