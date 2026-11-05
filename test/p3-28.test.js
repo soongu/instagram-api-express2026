@@ -14,9 +14,12 @@
 // 축 ⑦ Step 5 — res.locals 판은 «이미 가입한 이메일이에요» · 요청마다 빈 객체 · 응답에 안 실린다
 // 축 ⑧ Step 6 — 우리가 안 넣은 응답 헤더(X-Powered-By · ETag) · req.get 은 대소문자를 안 가린다
 // 축 ⑨ `requests/middleware.http` 를 httpYac 으로 — 이 회차 요청 둘
-// 축 ⑩ 실습·과제 — `lab/p3-28/`(학생 쪽 경로 주석은 `~/instagram-api/lab/…`)
+// 축 ⑩ 실습·과제 — `lab/p3-28/`(학생 쪽 경로도 `~/instagram-api/lab/p3-28/…` — 2026-11-05 앞 회차 실습 파일과 이름이 겹치지 않게 옮겼다.
+//   실습 파일은 북마크 `code/p3-28` 이 아니라 `main` 에서 읽는다. 북마크의 lab 은 옛 평평한 경로 주석·`../` import 그대로다)
 // 축 ⑪ 이 회차 학생 파일 — `code/p3-27` 에서 네 파일만 바뀌었다
 // 축 ⑫ 교안·답안 코드 블록의 줄이 코드베이스에 실재한다
+// 축 ⑭ 학생 낭독 집중 검수(2026-11-05) — Step 7 의 304 판 · 304 도 DB 를 다녀온다 · 연결은 10초 쉬면 닫힌다 · 첫 요청 ≠ 첫 DB 요청 ·
+//   app.use(noticeTarget) 판 · 앞 회차에 잇는 문장(그 회차에 사실이 정말 있는지까지)
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -261,25 +264,26 @@ describe('축 ③ — Step 1: 라우트 안 차례', () => {
   });
 });
 
-// ── 실습 서버 — 학생 쪽 `~/instagram-api/lab/` 처럼 임시 폴더에 놓고 띄운다 ──
+// ── 실습 서버 — 학생 쪽 `~/instagram-api/lab/p3-28/` 처럼 임시 폴더에 놓고 띄운다 ──
+const LAB_DIR = 'lab/p3-28';
 const studentLab = (files) => {
   const dir = mkdtempSync(join(tmpdir(), 'p328-lab-'));
-  mkdirSync(join(dir, 'lab'));
+  mkdirSync(join(dir, LAB_DIR), { recursive: true });
   cpSync(R('middlewares'), join(dir, 'middlewares'), { recursive: true });
   cpSync(R('errors.js'), join(dir, 'errors.js'));
   writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
   symlinkSync(P('node_modules'), join(dir, 'node_modules'));
   for (const [name, from] of Object.entries(files)) {
     // 여러 줄이면 파일 내용, 한 줄이면 복사할 파일 경로(학생 파일은 «// ~/…» 로 시작해 앞 글자로는 못 가른다)
-    if (from.includes('\n')) writeFileSync(join(dir, 'lab', name), from);
-    else cpSync(from, join(dir, 'lab', name));
+    if (from.includes('\n')) writeFileSync(join(dir, LAB_DIR, name), from);
+    else cpSync(from, join(dir, LAB_DIR, name));
   }
   return dir;
 };
 const LAB = (name) => P(`lab/p3-28/${name}`);
 const withLab = async (name, from, port, fn) => {
   const dir = studentLab({ [name]: from });
-  const lab = await boot(join(dir, 'lab', name), { port, ready: `${port}번 포트에서` });
+  const lab = await boot(join(dir, LAB_DIR, name), { port, ready: `${port}번 포트에서` });
   try {
     await fn(lab);
   } finally {
@@ -637,9 +641,9 @@ describe('축 ⑪ — 이 회차 학생 파일', () => {
     expect(files.sort()).toEqual(['middlewares/logger.js', 'middlewares/validate.js', 'requests/middleware.http', 'routes/auth.js']);
   });
 
-  it('🔴 경로 주석 — 학생 쪽 lab 파일은 ~/instagram-api/lab/… · 실습 .http 는 포트가 맞다', () => {
+  it('🔴 경로 주석 — 학생 쪽 lab 파일은 ~/instagram-api/lab/p3-28/… · 실습 .http 는 포트가 맞다', () => {
     for (const name of ['notices.js', 'practice1.js', 'practice2.js', 'practice3.js', 'homework1.js', 'homework2.js']) {
-      expect(read(LAB(name)).split('\n')[0]).toBe(`// ~/instagram-api/lab/${name}`);
+      expect(read(LAB(name)).split('\n')[0]).toBe(`// ~/instagram-api/lab/p3-28/${name}`);
     }
     expect(existsSync(LAB('practice1.http'))).toBe(true);
     expect(read(LAB('practice1.http'))).not.toMatch(/localhost:(?!4001)\d+/);
@@ -662,8 +666,8 @@ describe('축 ⑫ — 교안·답안 코드 블록과 응답 블록', () => {
   const candidates = (path) => {
     if (path.startsWith('~/instagram-api/node_modules/')) return [P(path.slice('~/instagram-api/'.length))];
     const rel = path.slice('~/instagram-api/'.length);
-    if (rel.startsWith('lab/')) {
-      const name = rel.slice('lab/'.length);
+    if (rel.startsWith('lab/p3-28/')) {
+      const name = rel.slice('lab/p3-28/'.length);
       return [LAB(name), ...snapshotsFor(name)];
     }
     return [R(rel), join(BEFORE.dir, rel), ...snapshotsFor(rel.split('/').pop())];
@@ -785,7 +789,7 @@ describe('축 ⑬ — 답안의 주장', () => {
     const moved = noOpt.replace('app.use(requestId);\n', '')
       .replace("app.use((req, res) => {\n  res.status(404)", "app.use(requestId);\n\napp.use((req, res) => {\n  res.status(404)");
     const dir = studentLab({ 'homework2.js': moved });
-    const lab = await boot(join(dir, 'lab', 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
+    const lab = await boot(join(dir, LAB_DIR, 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
     try {
       expect((await fetch(`${lab.base}/api/notices`)).status).toBe(200);
       await sleep(300);
@@ -813,7 +817,7 @@ describe('축 ⑬ — 답안의 주장', () => {
     expect(src).not.toBe(read(LAB('homework2.js')));
     // 이미 꺼진 프로세스는 'exit' 를 다시 내지 않아 lab.stop() 이 끝나지 않는다 — 기다림에 상한을 둔다.
     const dir = studentLab({ 'homework2.js': src });
-    const lab = await boot(join(dir, 'lab', 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
+    const lab = await boot(join(dir, LAB_DIR, 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
     try {
       expect((await fetch(`${lab.base}/api/notices`)).status).toBe(200);
       await sleep(300);
@@ -837,5 +841,224 @@ describe('축 ⑬ — 답안의 주장', () => {
       const { lines } = await newLines(app, () => fetch(`${app.base}/api/auth/check-duplicate?type=username&value=sora`));
       expect(lines[0]).toBe(`localhost:${SNAP_PORT} /check-duplicate /api/auth/check-duplicate?type=username&value=sora`);
     });
+  });
+});
+
+describe('축 ⑭ — 학생 낭독 집중 검수(2026-11-05)', () => {
+  const LECTURE_TEXT = () => read(P('../../part3/5-express-core/p3-28-middleware-chain-lecture.md'));
+  const LIST = '/api/posts?userId=9&limit=2';
+
+  it('🔴 Step 7 — 받아 둔 응답과 같으면 304 · 로거 줄에 걸린 시간이 남는다', async () => {
+    const first = await fetch(`${server.base}${LIST}`);
+    const etag = first.headers.get('etag');
+    await first.text();
+    await sleep(150);
+    const again = await newLines(server, () => fetch(`${server.base}${LIST}`, {
+      headers: { 'If-None-Match': etag, 'Cache-Control': 'max-age=0' },
+    }));
+    expect(again.res.status).toBe(304);
+    expect(again.lines).toHaveLength(1);
+    expect(again.lines[0]).toMatch(LINE);
+    expect(withoutMs(again.lines[0])).toBe(`GET ${LIST} 304`);
+  });
+
+  it('🔴 Step 7 — 304 도 DB 를 다녀온다: DB 값이 바뀌면 같은 ETag 를 보내도 200 이다', async () => {
+    const first = await fetch(`${server.base}${LIST}`);
+    const etag = first.headers.get('etag');
+    const { id } = (await first.json()).items[0];
+    await db.query('UPDATE posts SET like_count = like_count + 1 WHERE id = $1', [id]);
+    try {
+      const again = await fetch(`${server.base}${LIST}`, { headers: { 'If-None-Match': etag, 'Cache-Control': 'max-age=0' } });
+      expect(again.status).toBe(200);
+    } finally {
+      await db.query('UPDATE posts SET like_count = like_count - 1 WHERE id = $1', [id]);
+    }
+  });
+
+  it('🔴 Step 7 — 교안이 같은 브라우저의 304 판 다섯 줄을 싣고 304 의 시간을 말한다', () => {
+    const t = LECTURE_TEXT();
+    expect(t).toMatch(/GET \/api\/auth\/me 401 \d+\.\dms\nPOST \/api\/auth\/login 200 \d+\.\dms\nGET \/api\/auth\/me 304 \d+\.\dms\nGET \/api\/posts\?userId=9&limit=2 304 \d+\.\dms\nGET \/api\/posts\?userId=9&limit=2&cursor=2 304 \d+\.\dms\n/);
+    expect(t).not.toMatch(/GET \/api\/auth\/me 200 \d/);
+    expect(t).toContain('304로 끝난 요청도 DB를 다녀와요');
+  });
+
+  it('🔴 Step 6 — req.path 설명은 지난 시간 토글이 아니라 라우터를 배울 때 들은 사실에 잇는다(p2-31 에 그 문장이 있다)', () => {
+    const t = LECTURE_TEXT();
+    expect(t).not.toContain('지난 시간에 라우터 안에서 `req.url`이');
+    expect(t).toContain('라우터를 배울 때 Express가 `app.use`에 적은 앞부분을 떼어 내고 남은 부분만 라우터에 건넨다고 했죠');
+    expect(read(P('../../part2/5-db-prisma/p2-31-layers-lecture.md'))).toContain('앞의 `/api/posts`를 Express가 떼어내고 남은 `/3`을 라우터에 건네요');
+  });
+
+  const LECTURE_SEC = () => LECTURE_TEXT();
+  const ANSWERS_TEXT = () => read(P('../../part3/5-express-core/p3-28-middleware-chain-answers.md'));
+  const PART2 = (rel) => read(P(`../../part2/${rel}`));
+
+  it('🔴 Step 1 — 표에 abc + 7 줄(404 / 404) · 실제로 그렇다 · 둘째 기준을 그 줄로 받는다', async () => {
+    const t = LECTURE_SEC();
+    expect(t).toContain('| `abc` + `7` | 404 | 404 |');
+    expect(t).toContain('표의 `abc` 두 줄을 보면');
+    expect((await patch(server.base, '/api/posts/abc', { likeCount: 7 })).status).toBe(404);
+    await withVariant({ 'routes/posts.js': read(P('snapshots/p3-28.step1-body-first.posts.js')) }, async (app) => {
+      expect((await patch(app.base, '/api/posts/abc', { likeCount: 7 })).status).toBe(404);
+    });
+  });
+
+  it('🔴 Step 1 — `999` 줄을 검증 회차의 물음에 잇는다(p2-32 🤔 에 그 물음이 있다)', () => {
+    expect(LECTURE_SEC()).toContain('검증을 배울 때 «없는 게시물을 고치려는데 본문까지 틀리면 뭐가 먼저일까»');
+    const p232 = PART2('5-db-prisma/p2-32-validation-lecture.md');
+    expect(p232).toContain('없는 게시물을 고치려는데 몸통까지 틀리면, 뭐가 먼저일까요');
+    expect(p232).toContain('**400이 먼저예요.**');
+  });
+
+  it('🔴 Step 2 🙋 — app.use(noticeTarget) 판은 있는 공지도 404 · 에러는 없다', async () => {
+    const src = read(LAB('notices.js'))
+      .replaceAll("'/api/notices/:id', noticeTarget, ", "'/api/notices/:id', ")
+      .replace('const noticeTarget = [parseNoticeId, findNotice];\n', 'const noticeTarget = [parseNoticeId, findNotice];\napp.use(noticeTarget);\n');
+    expect(src).toContain('app.use(noticeTarget);');
+    await withLab('notices.js', src, 4005, async (lab) => {
+      const one = await getJson(`${lab.base}/api/notices/1`);
+      expect(one.status).toBe(404);
+      expect(one.body).toEqual({ message: '그런 공지는 없어요' });
+      expect(lab.tail()).not.toContain('Error');
+    });
+    expect(LECTURE_SEC()).toContain('🙋 학생 질문 — "이 배열을 `app.use(noticeTarget);`로 등록하면');
+  });
+
+  it('🔴 Step 2 — arguments 한 문장 · route.js 의 slice 가 정말 배열 메서드다', () => {
+    expect(LECTURE_SEC()).toContain('`slice.call(arguments)`는 그것을 배열로 옮겨요');
+    expect(read(P('node_modules/router/lib/route.js'))).toContain('const slice = Array.prototype.slice');
+  });
+
+  it('🔴 Step 3 — 받는 라우트가 아니라 검사하는 라우트 · 게시물 목록은 이미 쿼리 문자열을 읽는다', () => {
+    expect(LECTURE_SEC()).toContain('쿼리 문자열을 스키마로 검사하는 라우트가 하나뿐일 때는');
+    expect(LECTURE_SEC()).not.toContain('쿼리 문자열을 받는 라우트가 하나뿐일 때는');
+    expect(read(R('routes/posts.js'))).toContain('req.query.');
+  });
+
+  it('🔴 Step 3 — getter 를 그 자리에서 풀어 준다', () => {
+    expect(LECTURE_SEC()).toContain('지금은 «getter만 있는 속성»을 «읽을 수만 있는 속성»으로 보면 돼요');
+  });
+
+  it('🔴 Step 5 — «언제 무엇을» 규칙이 본문에 있고 토글은 그것을 받는다', () => {
+    const t = LECTURE_SEC();
+    const step5 = t.slice(t.indexOf('## Step 5:'), t.indexOf('### 🤔 같이 생각해보기 — `req.postId`도'));
+    expect(step5).toContain('**그래서 `req`와 `res.locals` 가운데 어디에 담을지는 이름으로 정해요.**');
+    expect(t).toContain('우리 수업 백엔드의 규칙은 앞에서 세운 그대로예요');
+  });
+
+  it('🔴 Step 6 — etag · content-length 를 res.json 이 보내면서 붙인다(res.send 가 실제로 붙인다) · 찾아보는 표', () => {
+    const t = LECTURE_SEC();
+    expect(t).toContain('`etag`는 지난 시간에 304를 볼 때 나온 그 값이에요');
+    expect(t).toContain('외울 표가 아니라 필요할 때 찾아보는 표예요');
+    const res = read(P('node_modules/express/lib/response.js'));
+    expect(res).toContain("this.set('Content-Length', len);");
+    expect(res).toContain('generateETag');
+    expect(read(P('../../part3/5-express-core/p3-27-middleware-structure-lecture.md'))).toContain('`ETag` 헤더의 값');
+  });
+
+  it('🔴 Step 7 — 클로저 이름(p2-16 에 있다) · 304 숫자 쌍 · 탭으로 돌아온 순간', () => {
+    const t = LECTURE_SEC();
+    expect(t).toContain('커스텀 Hook을 배울 때 이름을 들은 클로저(closure)가 바로 이것이에요');
+    expect(PART2('2-react-data/p2-16-custom-hook-lecture.md')).toContain('클로저라는 이름을 줘요');
+    expect(t).toContain('`Disable cache`를 켠 탭');
+    expect(t).toContain('탭이 열려 있으면 브라우저로 돌아온 순간');
+    expect(t).not.toContain('백엔드가 다시 뜬 순간 화면이');
+  });
+
+  it('🔴 Step 8 — 연결은 10초 쉬면 닫힌다: pg-pool 기본값 · 어댑터가 안 덮어쓴다 · 실제로 첫 요청이 더 걸린다', async () => {
+    expect(read(P('node_modules/pg-pool/index.js'))).toContain('this.options.idleTimeoutMillis = 10000');
+    expect(read(P('node_modules/@prisma/adapter-pg/dist/index.mjs'))).not.toContain('idleTimeout');
+    const login = () => fetch(`${server.base}/api/auth/login`, {
+      method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ username: 'yuna', password: 'yuna1234' }),
+    });
+    await (await login()).text();
+    await sleep(11000);
+    const first = await newLines(server, login);
+    const second = await newLines(server, login);
+    expect(msOf(first.lines[0])).toBeGreaterThan(msOf(second.lines[0]));
+    const t = LECTURE_SEC();
+    expect(t).toMatch(/POST \/api\/auth\/login 200 10\.\dms\nPOST \/api\/auth\/login 200 \d\.\dms\nPOST \/api\/auth\/login 200 \d\.\dms\n/);
+    expect(t).toContain('많아야 10ms 남짓이에요');
+    expect(t).not.toContain('3ms도 안 걸려요');
+    expect(t).toContain('**다만 요청 없이 10초쯤 지나면 쉬던 연결이 닫혀요.**');
+  }, 25000);
+
+  it('🔴 Step 8 — 서버를 띄운 뒤 첫 요청이 me 401 이면 느리지 않고, 세션 없이 다시 받은 게시물 304 가 첫 DB 요청이라 느리다', async () => {
+    const before = await fetch(`${server.base}${LIST}`);
+    const etag = before.headers.get('etag');
+    await before.text();
+    await withVariant({}, async (app) => {
+      const me = await newLines(app, () => fetch(`${app.base}/api/auth/me`, { headers: { Cookie: 'sessionId=gone' } }));
+      const list = await newLines(app, () => fetch(`${app.base}${LIST}`, {
+        headers: { 'If-None-Match': etag, 'Cache-Control': 'max-age=0' },
+      }));
+      expect(me.lines.map(withoutMs)).toEqual(['GET /api/auth/me 401']);
+      expect(list.res.status).toBe(304);
+      expect(msOf(list.lines[0])).toBeGreaterThan(msOf(me.lines[0]));
+      expect(msOf(list.lines[0])).toBeGreaterThan(30);
+    });
+    const t = LECTURE_SEC();
+    expect(t).toContain('`GET /api/auth/me 401`은 서버를 띄운 뒤 처음 들어온 요청인데도 느리지 않았죠');
+    expect(t).toMatch(/GET \/api\/auth\/me 401 \d+\.\dms\nGET \/api\/auth\/me 401 \d+\.\dms\nGET \/api\/posts\?userId=9&limit=2 304 1\d\d\.\dms\nGET \/api\/posts\?userId=9&limit=2&cursor=2 304 \d+\.\dms\n/);
+  }, 30000);
+
+  it('🔴 Step 8 — 연결이 닫힐 틈이 없어도 처음 보내는 종류의 쿼리는 그다음보다 오래 걸린다(10초 뒤 다시 맺기와 원인이 다르다)', async () => {
+    await withVariant({}, async (app) => {
+      const login = () => fetch(`${app.base}/api/auth/login`, {
+        method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ username: 'yuna', password: 'yuna1234' }),
+      });
+      for (let i = 0; i < 3; i += 1) await (await fetch(`${app.base}/api/posts`)).text();
+      await sleep(200);
+      const first = await newLines(app, login);
+      const second = await newLines(app, login);
+      expect(msOf(first.lines[0])).toBeGreaterThan(msOf(second.lines[0]));
+    });
+    expect(LECTURE_SEC()).toContain('앞에서 세 번 보낸 로그인의 둘째·셋째 줄(2ms대)보다 조금 긴 10.8ms');
+  }, 20000);
+
+  it('🔴 Step 8 — 앞 회차에 잇는다: p2-30 ⚠️ · p2-24 🤔 에 그 사실이 있다', () => {
+    const t = LECTURE_SEC();
+    expect(t).toContain('까닭은 MongoDB에서 Prisma로 옮길 때 들은 적이 있어요');
+    expect(t).toContain('`db.js`를 다시 보면 연결하는 줄이 정말 없어요');
+    expect(t).toContain('MongoDB를 쓸 때처럼 서버가 뜰 때 미리 연결해 두면 되지 않을까요');
+    expect(t).toContain('**그것 없이 의미가 있는 서버인가**');
+    const p230 = PART2('5-db-prisma/p2-30-prisma-crud-lecture.md');
+    expect(p230).toContain('MongoDB를 쓸 때는 서버가 시작하면서 접속을 미리 열었어요');
+    expect(p230).toContain('첫 요청이 올 때 접속이 열려서');
+    const p224 = PART2('4-node-backend/p2-24-mongodb-mongoose-lecture.md');
+    expect(p224).toContain('연결에 실패하면 서버도 뜨지 않는 게 맞을까요');
+    expect(p224).toContain('판단 기준은 **그것 없이 의미가 있는 서버인가**예요');
+  });
+
+  it('🔴 다음 시간 예고 — 해설에서 본 일로 말한다 · p3-29 가 인용하는 문장은 그대로다', () => {
+    const t = LECTURE_SEC();
+    expect(t).toContain('지난 시간 직접 해보기 1의 해설에서 이런 일을 봤어요.');
+    expect(t).toContain('공지를 찾는 미들웨어가 404로 답한 뒤 `return;`을 빠뜨린 코드는 404를 보내고도 로거 줄이 `500`으로 찍혔죠.');
+  });
+
+  it('🔴 직접 해보기 1 — 요구 3 에 메모리 배열 · 요구 4 에 404 기대값', () => {
+    const t = LECTURE_SEC();
+    expect(t).toContain('`findNotice`는 DB가 아니라 메모리의 배열에서 찾아서 시간이 거의 안 드니');
+    expect(t).toContain('없는 9번 공지와 번호 대신 글자를 넣은 요청은 제목이 비어 있어도 404여야 해요');
+  });
+
+  it('🔴 과제 [기초] — 요구 3 이 막힌 요청 뒤 목록까지 본다 · return 을 뺀 판은 그 목록에서 드러난다', async () => {
+    const t = LECTURE_SEC();
+    expect(t).toContain('상태 코드는 차례대로 200, 403, 200이어야 해요');
+    expect(t).toContain('공지 목록을 한 번 더 보내 공지 3개가 그대로인지');
+    const noReturn = read(LAB('homework1.js')).replace("res.status(403).json({ message: '관리자만 할 수 있어요' });\n    return;\n", "res.status(403).json({ message: '관리자만 할 수 있어요' });\n");
+    expect(noReturn).not.toBe(read(LAB('homework1.js')));
+    await withLab('homework1.js', noReturn, 4011, async (lab) => {
+      await fetch(`${lab.base}/api/notices/1`, { method: 'DELETE' });
+      expect((await getJson(`${lab.base}/api/notices`)).body).toHaveLength(2);
+    });
+    expect(ANSWERS_TEXT()).toMatch(/GET \/api\/notices 200 \d\.\dms\nDELETE \/api\/notices\/1 403 \d\.\dms\nGET \/api\/notices 200 \d\.\dms\nDELETE \/api\/notices\/1 200 \d\.\dms\nGET \/api\/notices 200 \d\.\dms\n/);
+  });
+
+  it('🔴 과제 [응용] — p2-25 답안의 절충에 잇는다(그 답안에 사실이 있다)', () => {
+    expect(LECTURE_SEC()).toContain('«에러 메시지를 얼마나 자세히 알려 줘야 할까»');
+    const a = PART2('4-node-backend/p2-25-deploy-answers.md');
+    expect(a).toContain('### 2. 에러 메시지를 얼마나 자세히 알려줘야 할까');
+    expect(a).toContain('흔히 쓰는 절충이 에러마다 번호를 붙여 보내는 것이에요');
   });
 });

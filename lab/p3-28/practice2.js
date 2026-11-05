@@ -1,9 +1,9 @@
-// ~/instagram-api/lab/practice2.js
+// ~/instagram-api/lab/p3-28/practice2.js
 import express from 'express';
 import { z } from 'zod';
-import { logger } from '../middlewares/logger.js';
-import { validateQuery } from '../middlewares/validate.js';
-import { HttpError } from '../errors.js';
+import { logger } from '../../middlewares/logger.js';
+import { validateQuery } from '../../middlewares/validate.js';
+import { HttpError } from '../../errors.js';
 
 const app = express();
 
