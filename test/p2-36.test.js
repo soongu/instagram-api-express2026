@@ -477,7 +477,9 @@ describe('인용이 코드베이스와 맞는가', () => {
     '../instagram-react/src/components/p2-21.final.FeedItem.snapshot.jsx',
     '../instagram-react/src/components/p2-21.final.FeedItemContent.snapshot.jsx',
     '../instagram-react/src/components/p2-21.final.FeedItemCaption.snapshot.jsx',
-  ].map((f) => squash(read(P(f))));
+  ].map((f) => squash(read(P(f))))
+    // 🔑 (p3-30) 이 회차 당시의 routes/posts.js — p3-30 이 parseId 를 router.param 으로 바꾸고 좋아요 라우트를 routes/likes.js 로 뗐다.
+    .concat(squash(execFileSync('git', ['show', 'code/p2-36:routes/posts.js'], { cwd: P('.'), encoding: 'utf8' })));
 
   for (const [이름, path] of [['교안', LECTURE], ['답안', ANSWERS]]) {
     for (const lang of ['js', 'jsx', 'javascript']) {

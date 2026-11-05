@@ -249,7 +249,8 @@ describe('축 ⑧ — 교안이 인용한 백엔드 코드가 그 Step 의 파�
   const blocks = fences(md, 'javascript').filter((b) => b.startsWith('// ~/instagram-api/'));
   // Step 2 의 중간 판(조건 없이 붙인 _count)은 함정 판 스냅숏, 나머지는 끝 판이다.
   const sources = {
-    'routes/posts.js': [read(P('routes/posts.js'))],
+    // 🔑 (p3-30) 이 회차 당시 판 — p3-30 이 routes/posts.js 를 router.param 으로 바꾸고 좋아요를 routes/likes.js 로 뗐다.
+    'routes/posts.js': [git('code/p3-17', 'routes/posts.js')],
     'services/postService.js': [read(P('services/postService.js')), read(P('snapshots/p3-17.step2-trap.postService.js'))],
   };
 
