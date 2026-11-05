@@ -792,7 +792,7 @@ describe('축 ⑬ — 학생 낭독 집중 검수(2026-11-05)', () => {
     expect(t).toContain('로거가 404를 200으로 적었어요');
     expect(t).toContain('304(Not Modified)');
     expect(t).toContain('`Disable cache`');
-    expect(t).toContain('백엔드에 일을 시키는 동작만 줄이 남아요');
+    expect(t).toContain('백엔드에 요청을 보내는 동작만 창 1에 줄을 남겨요');
     expect(t).not.toContain('GET /api/auth/me 200\nGET /api/posts?userId=9&limit=2 200');
     expect(ANSWERS_TEXT()).toContain('Step 2에서 본 304');
   });
@@ -890,8 +890,8 @@ describe('축 ⑬ — 학생 낭독 집중 검수(2026-11-05)', () => {
     const close = '}));\n';
     expect(start).toContain(open);
     expect(read(P('snapshots/p3-27.practice3-length.practice3.js'))).toBe(start
-      .replace(open, 'const handler = withLog((err, req, res, next) => {\n')
-      .replace(close, '});\n\nconsole.log(handler.length);\napp.use(handler);\n'));
+      .replace(open, 'const wrapped = withLog((err, req, res, next) => {\n')
+      .replace(close, '});\n\nconsole.log(wrapped.length);\napp.use(wrapped);\n'));
     await withLab('practice3.js', P('snapshots/p3-27.practice3-length.practice3.js'), 4003, async (lab) => {
       expect(lab.tail()).toContain('0\n실습 서버가 4003번 포트에서 기다리고 있어요.');
     });
@@ -901,7 +901,7 @@ describe('축 ⑬ — 학생 낭독 집중 검수(2026-11-05)', () => {
     const t = LECTURE_TEXT();
     // Step 2 — 미들웨어를 처음 배울 때 심어 둔 복선
     expect(older('part2/4-node-backend/p2-23-crud-api-lecture.md')).toContain('앞으로 로그를 남기거나 로그인 여부를 확인하는 함수도 전부 여기에 등록하게 돼요');
-    expect(t).toContain('앞으로 로그를 남기는 함수도');
+    expect(t).toContain('로그를 남기는 함수도 앞으로 `app.use`로');
     // Step 5 — CORS 의 결론 · 프리플라이트 정의
     const p237 = older('part2/6-fullstack-join/p2-37-cors-proxy-env-lecture.md');
     expect(p237).toContain('CORS는 서버를 지키는 장치가 아니라는 것이었죠');
@@ -919,7 +919,7 @@ describe('축 ⑬ — 학생 낭독 집중 검수(2026-11-05)', () => {
     const t = LECTURE_TEXT();
     expect(t).toMatch(/<summary>🙋 학생 질문 — "`req\.url`/);
     expect(t).toMatch(/<summary>🙋 학생 질문 — "`next\(\)` 아래 줄도 실행된다면/);
-    expect(t).toMatch(/<summary>🙋 학생 질문 — "그럼 세 줄의 차례를 바꿔도 되나요\?"/);
+    expect(t).toMatch(/<summary>🙋 학생 질문 — "그럼 `cors\(…\)`·`express\.json\(\)`·`cookieParser\(\)`의 차례를 바꿔도 되나요\?"/);
     expect(t).toContain('`node --watch lab/p3-27/homework2.js`');
     expect(t).not.toMatch(/~\/instagram-api\/lab\/(?!p3-27\/)/);
     expect(ANSWERS_TEXT()).not.toMatch(/~\/instagram-api\/lab\/(?!p3-27\/)/);

@@ -17,12 +17,12 @@ function withLog(handler) {
   };
 }
 
-const handler = withLog((err, req, res, next) => {
+const wrapped = withLog((err, req, res, next) => {
   res.status(err.status ?? 500).json({ message: '보낸 내용을 읽을 수 없어요' });
 });
 
-console.log(handler.length);
-app.use(handler);
+console.log(wrapped.length);
+app.use(wrapped);
 
 app.listen(4003, () => {
   console.log('실습 서버가 4003번 포트에서 기다리고 있어요.');
