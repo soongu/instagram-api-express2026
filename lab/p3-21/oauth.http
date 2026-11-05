@@ -47,3 +47,22 @@ POST http://localhost:4002/login/token
 Content-Type: application/json
 
 { "accessToken": "스토리 앱의 access_token" }
+
+### 스토리 앱의 인가 코드 받기 (openid를 담아)
+# @no-redirect
+POST http://127.0.0.1:4001/authorize
+Content-Type: application/x-www-form-urlencoded
+
+response_type=code&client_id=story-app&redirect_uri=http://localhost:4003/callback&scope=openid email&nonce=story-nonce&username=jaehoon&password=jaehoon1234&decision=allow
+
+### 스토리 앱의 ID 토큰 받기
+POST http://127.0.0.1:4001/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&code=스토리 앱의 인가 코드&redirect_uri=http://localhost:4003/callback&client_id=story-app&client_secret=story-app-secret
+
+### 스토리 앱의 ID 토큰을 우리 서비스에 내기
+POST http://localhost:4002/login/token
+Content-Type: application/json
+
+{ "idToken": "스토리 앱의 id_token" }
