@@ -20,7 +20,9 @@
 // 실습·과제 — `lab/p3-21/`(학생 쪽 경로 주석도 `~/instagram-api/lab/p3-21/…` · 2026-11-05 소급).
 // 🔀 2026-11-05 OIDC 보강(사용자 결정) — Step 7 이 Access 토큰으로 로그인을 먼저 만들어 보고(`/userinfo`) 다른 앱의 토큰이
 //    통과하는 구멍(RFC 6749 §10.16)을 겪은 뒤 OIDC 로 간다. Step 8 이 같은 입구에 다른 앱의 ID 토큰을 넣어 `aud` 로 막는다.
-//    입구 `POST /login/token` 은 Step 8 끝에서 지운다 — 그래서 tip 의 `photo-app.js` 는 보강 전과 같고 실습 3·과제 둘은 그대로다.
+//    라우트 `POST /login/token` 은 Step 8 끝에서 지운다 — 그래서 tip 의 `photo-app.js` 는 보강 전과 같고 실습 3·과제 둘은 그대로다.
+//    🔀 같은 날 낭독 반영 — 라우트는 «화면이 보낸 토큰» 을 받는다(쿠키의 nonce 가 자연스럽다) · Step 8 에 위조 장면(`forge.js` — `aud` 를 고쳐도
+//    invalid signature)과 재사용 장면(우리 앱의 지난 ID 토큰 — nonce 가 달라요)을 더했다. 쿠키를 손으로 고치던 nonce 장면은 뺐다(동작은 Step 8 판정이 그대로 잠근다).
 import { describe, it, expect } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -671,34 +673,36 @@ describe('실습 `.http` 를 httpYac 으로', () => {
     });
   }, 60000);
 
-  it('🔴 oauth.http — Step 7 의 셋: 스토리 앱이 인가 코드 → Access 토큰 → 우리 입구에 내면 jaehoon 으로 로그인된다', async () => {
+  it('🔴 oauth.http — Step 7 의 셋: 라우트에 Access 토큰을 내는 요청 · 스토리 앱이 인가 코드 → Access 토큰 · 같은 요청에 스토리 앱의 토큰을 넣어도 jaehoon 으로 로그인된다', async () => {
     await withServers([() => bootAuth([REGISTER]), () => bootApp(appIn('토큰 입구'))], async () => {
       const text = requestsOf().slice(5, 8).join('');
       const code = await codeFor('jaehoon', { ...STORY, scope: 'email' });
       const { access_token } = await storyTokens('jaehoon', 'email');
-      const out = sendAll(text.replace('code=스토리 앱의 인가 코드', `code=${code}`).replace('스토리 앱의 access_token', access_token));
-      expect(out.map((r) => r.title)).toEqual(['스토리 앱의 인가 코드 받기', '스토리 앱의 Access 토큰 받기', '스토리 앱의 Access 토큰을 우리 서비스에 내기']);
-      const [authorize, token, door] = out;
+      expect(text).toContain('{ "accessToken": "access_token 값" }');
+      const out = sendAll(text.replace('code=스토리 앱의 인가 코드', `code=${code}`).replace('access_token 값', access_token));
+      expect(out.map((r) => r.title)).toEqual(['우리 서비스에 Access 토큰 내기', '스토리 앱의 인가 코드 받기', '스토리 앱의 Access 토큰 받기']);
+      const [route, authorize, token] = out;
+      expect([route.response.statusCode, route.response.body]).toEqual([200, '{"loggedIn":"jaehoon@example.com"}']);
       expect(authorize.response.statusCode).toBe(303);
       expect(authorize.response.headers.location).toMatch(/^http:\/\/localhost:4003\/callback\?code=[\w-]{22}$/);
       expect(Object.keys(JSON.parse(token.response.body))).toEqual(['access_token', 'token_type', 'expires_in', 'scope']);
       expect(JSON.parse(token.response.body).scope).toBe('email');
-      expect([door.response.statusCode, door.response.body]).toEqual([200, '{"loggedIn":"jaehoon@example.com"}']);
     });
   }, 60000);
 
-  it('🔴 oauth.http — Step 8 의 셋: 스토리 앱의 ID 토큰을 우리 입구에 내면 aud 로 막힌다', async () => {
+  it('🔴 oauth.http — Step 8 의 셋: 스토리 앱의 ID 토큰을 라우트에 내면 aud 로 막힌다', async () => {
     await withServers([() => bootAuth([REGISTER]), () => bootApp(appIn('입구를 ID 토큰으로'))], async () => {
       const text = requestsOf().slice(8, 11).join('');
       const code = await codeFor('jaehoon', { ...STORY, scope: 'openid email', nonce: 'story-nonce' });
       const { id_token } = await storyTokens('jaehoon', 'openid email', { nonce: 'story-nonce' });
-      const out = sendAll(text.replace('code=스토리 앱의 인가 코드', `code=${code}`).replace('스토리 앱의 id_token', id_token));
-      expect(out.map((r) => r.title)).toEqual(['스토리 앱의 인가 코드 받기 (openid를 담아)', '스토리 앱의 ID 토큰 받기', '스토리 앱의 ID 토큰을 우리 서비스에 내기']);
-      const [authorize, token, door] = out;
+      expect(text).toContain('{ "idToken": "id_token 값" }');
+      const out = sendAll(text.replace('code=스토리 앱의 인가 코드', `code=${code}`).replace('id_token 값', id_token));
+      expect(out.map((r) => r.title)).toEqual(['스토리 앱의 인가 코드 받기 (openid를 담아)', '스토리 앱의 ID 토큰 받기', '우리 서비스에 ID 토큰 내기']);
+      const [authorize, token, route] = out;
       expect(authorize.response.statusCode).toBe(303);
       expect(JSON.parse(token.response.body).scope).toBe('openid email');
       expect(Object.keys(JSON.parse(token.response.body))).toEqual(['access_token', 'token_type', 'expires_in', 'scope', 'id_token']);
-      expect([door.response.statusCode, JSON.parse(door.response.body)])
+      expect([route.response.statusCode, JSON.parse(route.response.body)])
         .toEqual([401, { message: 'ID 토큰을 믿을 수 없어요', reason: 'jwt audience invalid. expected: photo-app' }]);
     });
   }, 60000);
@@ -767,7 +771,8 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     // 인가 서버 블록 셋 — Step 2 🙋 의 303 줄 · 직접 해보기 1 의 등록 · Step 4 의 `tokens` Map
     expect(blocks.map((b) => b.lines[0])).toEqual([
       '// ~/instagram-api/lab/p3-21/auth-server.js', '// ~/instagram-api/lab/p3-21/practice1.js', '// ~/instagram-api/lab/p3-21/auth-server.js',
-      '// ~/instagram-api/lab/p3-21/auth-server.js', '// ~/instagram-api/lab/p3-21/practice2.js', '// ~/instagram-api/lab/p3-21/practice3.js',
+      '// ~/instagram-api/lab/p3-21/auth-server.js', '// ~/instagram-api/lab/p3-21/practice2.js', '// ~/instagram-api/lab/p3-21/forge.js',
+      '// ~/instagram-api/lab/p3-21/practice3.js',
     ]);
     expect(blocks.filter((b) => b.lines[0].endsWith('auth-server.js')).map((b) => b.step)).toEqual([2, 3, 4]);
     const misses = blocks.filter((b) => {
@@ -777,18 +782,18 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
     });
     expect(misses.map((b) => `Step ${b.step} ${b.lines[0]}`)).toEqual([]);
     // 실습 1·2 의 해설은 파일 전체다
-    for (const name of ['practice1.js', 'practice2.js']) {
+    for (const name of ['practice1.js', 'practice2.js', 'forge.js']) {
       const b = blocks.find((x) => x.lines[0] === `// ~/instagram-api/lab/p3-21/${name}`);
       expect(b.lines.join('\n') + '\n').toBe(read(LAB(name)));
     }
   });
 
-  it('🔴 교안의 .http 블록 — lab/p3-21/oauth.http 의 요청 열하나 그대로(Step 4 블록 하나에 요청 둘 · Step 7·8 블록 하나에 요청 셋)', () => {
+  it('🔴 교안의 .http 블록 — lab/p3-21/oauth.http 의 요청 열하나 그대로(Step 4 블록 하나에 요청 둘 · Step 7 블록 둘 · Step 8 블록 하나에 요청 셋)', () => {
     const blocks = blocksOf(LECTURE).filter((b) => b.lang === '' && b.lines[0]?.startsWith('### '));
     expect(blocks.map((b) => b.lines[0])).toEqual(['### 인가 코드로 사진 달라고 해 보기', '### dahye의 인가 코드 받기',
       '### jaehoon의 인가 코드 받기', '### jaehoon의 인가 코드 받기 (code_challenge를 담아)',
-      '### 스토리 앱의 인가 코드 받기', '### 스토리 앱의 인가 코드 받기 (openid를 담아)']);
-    expect(blocks.map((b) => b.step)).toEqual([4, 5, 6, 6, 7, 8]);
+      '### 우리 서비스에 Access 토큰 내기', '### 스토리 앱의 인가 코드 받기', '### 스토리 앱의 인가 코드 받기 (openid를 담아)']);
+    expect(blocks.map((b) => b.step)).toEqual([4, 5, 6, 6, 7, 7, 8]);
     expect(blocks[0].lines).toContain('### 비밀값 없이 인가 코드를 토큰으로 바꿔 보기');
     const http = read(LAB('oauth.http'));
     expect(blocks.filter((b) => !contains(http, b.lines)).map((b) => b.lines[0])).toEqual([]);
@@ -828,6 +833,8 @@ describe('교안·답안 블록이 코드베이스에 실재한다', () => {
       '`Cannot POST /callback`',
       'scope=photos&username=jaehoon&password=jaehoon1234&decision=allow',
       '{"loggedIn":"jaehoon@example.com"}',
+      '{"message":"ID 토큰을 믿을 수 없어요","reason":"invalid signature"}',
+      '{"alg":"RS256","typ":"JWT","kid":"b9afdec3"}',
       '`GET /userinfo 200`',
     ]) expect(text).toContain(line);
   });
@@ -1047,6 +1054,41 @@ describe('OIDC 보강 — Access 토큰으로 로그인을 만들면', () => {
     });
   });
 
+  it('🔴 Step 8 위조 장면 — forge.js 로 aud 만 photo-app 으로 고친 토큰은 페이로드는 우리 앱 것이지만 invalid signature', async () => {
+    await withServers([() => bootAuth([REGISTER]), () => bootApp(appIn('입구를 ID 토큰으로'))], async () => {
+      const { id_token: story } = await storyTokens('jaehoon', 'openid email', { nonce: 'story-nonce' });
+      const dir = mkdtempSync(join(tmpdir(), 'p321-forge-'));
+      try {
+        const src = read(LAB('forge.js'));
+        expect(src.split('스토리 앱의 id_token').length - 1).toBe(1);
+        writeFileSync(join(dir, 'forge.mjs'), src.replace('스토리 앱의 id_token', story));
+        const fake = execFileSync(process.execPath, [join(dir, 'forge.mjs')], { encoding: 'utf8' }).trim();
+        const [h, p, sig] = fake.split('.');
+        const [h0, , sig0] = story.split('.');
+        expect([h, sig]).toEqual([h0, sig0]); // 헤더와 서명은 진짜 토큰 그대로
+        expect(b64(p)).toMatchObject({ aud: 'photo-app', sub: '10001', nonce: 'story-nonce' });
+        const refused = await door({ idToken: fake }, { Cookie: 'oauth_nonce=story-nonce' });
+        expect([refused.status, await refused.json()]).toEqual([401, { message: 'ID 토큰을 믿을 수 없어요', reason: 'invalid signature' }]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it('🔴 Step 8 nonce 장면 — 우리 앱에 준 진짜 ID 토큰도 지난 로그인의 것이면 nonce 가 달라요 · 그 브라우저의 쿠키가 맞을 때만 통과', async () => {
+    await withServers([() => bootAuth(), () => bootApp(appIn('입구를 ID 토큰으로'))], async (auth, app) => {
+      const b = browser();
+      const { after } = await signIn(b);
+      expect(after.status).toBe(200);
+      const printed = app.tail().match(/id_token: '([\w.-]+)'/)[1];
+      expect(b64(printed.split('.')[1]).aud).toBe('photo-app');
+      const replay = await door({ idToken: printed });
+      expect([replay.status, await replay.json()]).toEqual([401, { message: 'ID 토큰을 믿을 수 없어요', reason: 'nonce가 달라요' }]);
+      const sameBrowser = await door({ idToken: printed }, { Cookie: `oauth_nonce=${b64(printed.split('.')[1]).nonce}` });
+      expect([sameBrowser.status, await sameBrowser.text()]).toEqual([200, '{"loggedIn":"jaehoon@example.com"}']);
+    });
+  });
+
   it('🔴 Step 8 끝 판 — 입구를 지워 실습 3·과제 둘의 시작점이 보강 전과 같다', async () => {
     const tip = read(LAB('photo-app.js'));
     expect(tip).not.toContain('/login/token');
@@ -1057,6 +1099,13 @@ describe('OIDC 보강 — Access 토큰으로 로그인을 만들면', () => {
       expect((await signIn(browser())).after.json()).toEqual({ sub: '10001', email: 'jaehoon@example.com', photos: PHOTOS });
     });
     for (const name of ['practice3.js', 'homework1.js', 'homework2.js']) expect(read(LAB(name))).not.toContain('/login/token');
+  });
+
+  it('🔴 비유어 「입구」가 라우트 이름을 대신하지 않는다 · 교안의 헤더 인용은 Step 7 토큰의 헤더 그대로', () => {
+    for (const file of [LECTURE, ANSWERS]) expect(read(file).split('\n').filter((l) => l.includes('입구'))).toEqual([]);
+    const text = read(LECTURE);
+    const idt = text.match(/id_token: '([\w.-]+)'/)[1];
+    expect(Buffer.from(idt.split('.')[0], 'base64url').toString()).toBe('{"alg":"RS256","typ":"JWT","kid":"b9afdec3"}');
   });
 
   it('🔴 교안·답안에 평평한 실습 경로가 남아 있지 않다', () => {
