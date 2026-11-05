@@ -676,7 +676,7 @@ describe('실습 `.http` 를 httpYac 으로', () => {
       const text = requestsOf().slice(5, 8).join('');
       const code = await codeFor('jaehoon', { ...STORY, scope: 'email' });
       const { access_token } = await storyTokens('jaehoon', 'email');
-      const out = sendAll(text.replace('스토리 앱의 인가 코드', code).replace('스토리 앱의 access_token', access_token));
+      const out = sendAll(text.replace('code=스토리 앱의 인가 코드', `code=${code}`).replace('스토리 앱의 access_token', access_token));
       expect(out.map((r) => r.title)).toEqual(['스토리 앱의 인가 코드 받기', '스토리 앱의 Access 토큰 받기', '스토리 앱의 Access 토큰을 우리 서비스에 내기']);
       const [authorize, token, door] = out;
       expect(authorize.response.statusCode).toBe(303);
@@ -692,7 +692,7 @@ describe('실습 `.http` 를 httpYac 으로', () => {
       const text = requestsOf().slice(8, 11).join('');
       const code = await codeFor('jaehoon', { ...STORY, scope: 'openid email', nonce: 'story-nonce' });
       const { id_token } = await storyTokens('jaehoon', 'openid email', { nonce: 'story-nonce' });
-      const out = sendAll(text.replace('스토리 앱의 인가 코드', code).replace('스토리 앱의 id_token', id_token));
+      const out = sendAll(text.replace('code=스토리 앱의 인가 코드', `code=${code}`).replace('스토리 앱의 id_token', id_token));
       expect(out.map((r) => r.title)).toEqual(['스토리 앱의 인가 코드 받기 (openid를 담아)', '스토리 앱의 ID 토큰 받기', '스토리 앱의 ID 토큰을 우리 서비스에 내기']);
       const [authorize, token, door] = out;
       expect(authorize.response.statusCode).toBe(303);
@@ -725,7 +725,7 @@ describe('과제 [기초] — 화면으로는 못 가리고 창 1 로 가리는 
 });
 
 // ── 교안·답안의 코드 블록이 코드베이스에 «실재» 한다 ──
-// 교안 Step N 의 `// ~/instagram-api/lab/photo-app.js` 블록은 «그 Step 커밋» 의 photo-app.js 안에 줄 그대로 있어야 한다.
+// 교안 Step N 의 `// ~/instagram-api/lab/p3-21/photo-app.js` 블록은 «그 Step 커밋» 의 photo-app.js 안에 줄 그대로 있어야 한다.
 const LECTURE = P('../../part3/3-auth-principles/p3-21-oauth-oidc-lecture.md');
 const ANSWERS = P('../../part3/3-auth-principles/p3-21-oauth-oidc-answers.md');
 const blocksOf = (file) => {
@@ -753,7 +753,7 @@ const stepFiles = (n) => stepCommits(n).map((c) => git('show', `${c}:lab/p3-21/p
 describe('교안·답안 블록이 코드베이스에 실재한다', () => {
   it('🔴 교안 본문의 photo-app.js 블록 — 그 Step 커밋의 photo-app.js 안에 줄 그대로', () => {
     const blocks = blocksOf(LECTURE).filter((b) => b.lang === 'javascript' && b.lines[0] === '// ~/instagram-api/lab/p3-21/photo-app.js');
-    expect(blocks.length).toBe(15);
+    expect(blocks.length).toBe(20);
     const misses = blocks.filter((b) => !stepFiles(b.step).some((t) => contains(t, b.lines.slice(1))));
     expect(misses.map((b) => `Step ${b.step} ${b.lines[1]}`)).toEqual([]);
   });
