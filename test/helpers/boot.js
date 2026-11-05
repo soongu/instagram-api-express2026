@@ -32,7 +32,11 @@ export function portIsFree(port) {
 //    빼면서 `const MONGO_URL = '...'` 줄이 «사라진다». 그러면 아래 `localSource` 가
 //    바꿔 칠 줄이 없어 `withLocalMongo` 가 못 쓰인다. 대신 학생이 `--env-file` 로
 //    넣어주는 그 자리에 게이트가 자기 값을 넣는다 — **파일은 한 글자도 안 건드린다.**
-export async function boot(file, { port = 3000, timeoutMs = 8000, ready = '\n', env: extraEnv = null } = {}) {
+// 🚨 `cwd` 를 받는 이유 (2026-11-05 `p3-31`) — `multer({ dest: 'uploads/' })` 와 `express.static('uploads')` 는
+//    «서버를 띄운 폴더» 기준이다. 학생은 `~/instagram-api` 에서 `npm run dev` 를 치므로 그 폴더 아래에
+//    `uploads/` 가 생긴다. 판정이 저장소 루트에서 띄우면 판정이 올린 사진이 저장소에 쌓이므로,
+//    학생 폴더를 흉내 낸 임시 폴더를 `cwd` 로 준다(안 주면 예전처럼 저장소 루트).
+export async function boot(file, { port = 3000, timeoutMs = 8000, ready = '\n', env: extraEnv = null, cwd = ROOT } = {}) {
   if (!(await portIsFree(port))) {
     throw new Error(
       `포트 ${port} 가 이미 물려 있습니다. 교안이 틀린 게 아니라 환경입니다 — ` +
@@ -49,7 +53,7 @@ export async function boot(file, { port = 3000, timeoutMs = 8000, ready = '\n', 
   // extraEnv 는 «지우기 뒤» 에 얹는다 — 순서를 뒤집으면 `NODE_ENV` 를 일부러 주는
   // 검사(배포본 흉내)가 그 지우기에 조용히 먹힌다.
   Object.assign(env, extraEnv ?? {});
-  const child = spawn(process.execPath, [file], { cwd: ROOT, env });
+  const child = spawn(process.execPath, [file], { cwd, env });
   let log = '';
   const first = await new Promise((resolve, reject) => {
     const timer = setTimeout(
