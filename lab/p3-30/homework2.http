@@ -1,0 +1,28 @@
+### 공지 목록
+GET http://localhost:4012/api/notices
+
+### 역할 없이 공지 올리기
+POST http://localhost:4012/api/admin/notices
+Content-Type: application/json
+
+{"title": "아무나 올린 공지"}
+
+### 관리자로 공지 올리기
+POST http://localhost:4012/api/admin/notices
+Content-Type: application/json
+X-Role: admin
+
+{"title": "새 공지"}
+
+### 관리자로 2번 공지 숨기기
+PATCH http://localhost:4012/api/admin/notices/2/hide
+X-Role: admin
+
+### 공지 목록 다시 보기
+GET http://localhost:4012/api/notices
+
+### 역할 없이 없는 관리자 주소
+GET http://localhost:4012/api/admin/nope
+
+### 없는 주소
+GET http://localhost:4012/api/nope

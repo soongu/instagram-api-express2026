@@ -1,0 +1,14 @@
+### 1번 공지의 댓글
+GET http://localhost:4011/api/notices/1/comments
+
+### 1번 공지의 2번 댓글 지우기
+DELETE http://localhost:4011/api/notices/1/comments/2
+
+### 2번 공지의 1번 댓글 지우기
+DELETE http://localhost:4011/api/notices/2/comments/1
+
+### 없는 9번 공지의 1번 댓글 지우기
+DELETE http://localhost:4011/api/notices/9/comments/1
+
+### 1번 공지의 댓글 다시 보기
+GET http://localhost:4011/api/notices/1/comments

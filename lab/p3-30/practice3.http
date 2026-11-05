@@ -1,0 +1,14 @@
+### 1번 공지의 댓글
+GET http://localhost:4003/api/notices/1/comments
+
+### 2번 공지에 댓글 달기
+POST http://localhost:4003/api/notices/2/comments
+Content-Type: application/json
+
+{"text": "언제부터 쓸 수 있나요?"}
+
+### 2번 공지의 댓글
+GET http://localhost:4003/api/notices/2/comments
+
+### 없는 9번 공지의 댓글
+GET http://localhost:4003/api/notices/9/comments
