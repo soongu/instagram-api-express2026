@@ -418,7 +418,8 @@ describe('축 ⑦ — Step 7: mergeParams', () => {
   });
 
   it('🔴 parseId 맨 위에 console.log(req.params) — mergeParams 없으면 {} · 있으면 { id: \'3\' }', async () => {
-    const logged = rep(read(R('middlewares/params.js')), 'export function parseId(req, res, next) {\n', 'export function parseId(req, res, next) {\n  console.log(req.params);\n');
+    const logged = read(SNAP('step7-log.params.js'));
+    expect(logged).toBe(rep(read(R('middlewares/params.js')), 'export function parseId(req, res, next) {\n', 'export function parseId(req, res, next) {\n  console.log(req.params);\n'));
     await withVariant(PORT + 22, { 'routes/likes.js': read(SNAP('step7-no-merge.likes.js')), 'middlewares/params.js': logged }, async (v) => {
       await send(v.base, 'GET', '/api/posts/3/likes');
       await sleep(100);
@@ -706,5 +707,199 @@ describe('축 ⑪ — 이 회차 학생 파일', () => {
     const fn = (src, name) => src.slice(src.indexOf(`function ${name}(`), src.indexOf('\n}\n', src.indexOf(`function ${name}(`)) + 2);
     const now = read(R('middlewares/params.js'));
     for (const name of ['parseId', 'parseUserId']) expect(now).toContain(`export ${fn(was, name)}`);
+  });
+});
+
+// ───────── 축 ⑫ — 교안·답안 코드 블록 ─────────
+const TRACK = new URL('../../part3/5-express-core/', ROOT).pathname;
+const LECTURE = join(TRACK, 'p3-30-router-structure-lecture.md');
+const ANSWERS = join(TRACK, 'p3-30-router-structure-answers.md');
+const fences = (md, lang) => [...md.matchAll(/^```(\w*)\n([\s\S]*?)^```$/gm)].filter((m) => m[1] === lang).map((m) => m[2].replace(/\n$/, ''));
+// 경로 주석 → 그 파일이 이 회차에 거친 판들(어느 하나에 차례대로 있으면 통과)
+const versionsOf = (path) => {
+  const snaps = (names) => names.map((n) => read(SNAP(n)));
+  const map = {
+    'app.js': [read(R('app.js')), git('code/p3-29', 'app.js')],
+    'routes/posts.js': [git('code/p3-29', 'routes/posts.js'), ...snaps(['step4-no-parseid.posts.js', 'step4.posts.js', 'step5.posts.js']), read(R('routes/posts.js'))],
+    'routes/likes.js': [...snaps(['step6-param.likes.js', 'step7-no-merge.likes.js']), read(R('routes/likes.js'))],
+    'middlewares/params.js': [read(R('middlewares/params.js')), read(SNAP('step7-log.params.js'))],
+    'services/likeService.js': [read(R('services/likeService.js'))],
+    'lab/p3-30/board.js': [...snaps(['step2-start.board.js', 'step2-hole.board.js', 'step2.board.js', 'step3-same-path.board.js']), lab('board.js')],
+    'lab/p3-30/homework1.js': [lab('homework1.js'), read(SNAP('homework1-guard.js'))],
+  };
+  if (map[path]) return map[path];
+  if (path.startsWith('lab/p3-30/')) return [lab(path.slice('lab/p3-30/'.length))];
+  throw new Error(`경로 주석의 파일을 모릅니다: ${path}`);
+};
+// 블록의 줄이 «차례대로» 그 판에 있는가 — `...` 는 건너뛴 줄 · `____` 는 아무 글자(빈칸 뼈대)
+const inOrder = (block, source) => {
+  const src = source.split('\n');
+  let at = 0;
+  for (const line of block.split('\n')) {
+    if (line.trim() === '...' || line.trim() === '') continue;
+    const re = new RegExp('^' + line.split('____').map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.+') + '$');
+    while (at < src.length && !re.test(src[at])) at += 1;
+    if (at === src.length) return false;
+    at += 1;
+  }
+  return true;
+};
+// 경로 없는 블록이 기댈 곳 — router 패키지 소스 · 실습 파일 · 스냅숏 · 수업 파일
+const looseCorpus = () => [read(P('node_modules/router/index.js')), ...['board.js', 'practice1.js', 'practice2.js', 'practice3.js', 'homework1.js'].map(lab),
+  read(SNAP('homework1-guard.js')), read(R('routes/posts.js')), read(R('routes/likes.js')), read(R('app.js'))];
+
+describe('축 ⑫ — 교안·답안 코드 블록의 줄이 코드베이스에 차례대로 있다', () => {
+  for (const [name, file] of [['교안', LECTURE], ['답안', ANSWERS]]) {
+    it(`🔴 ${name} — 경로 주석이 있는 javascript 블록은 그 파일의 어느 판에 차례대로 있다`, () => {
+      const bad = [];
+      for (const b of fences(read(file), 'javascript')) {
+        const m = b.match(/^\/\/ ~\/instagram-api\/(\S+)\n/);
+        if (!m) continue;
+        if (!versionsOf(m[1]).some((v) => inOrder(b.slice(m[0].length), v))) bad.push(b.split('\n').slice(0, 3).join(' ⏎ '));
+      }
+      expect(bad).toEqual([]);
+    });
+
+    it(`🔴 ${name} — 경로 주석이 없는 javascript 블록은 «틀린 판» 셋과 임시 한 줄을 빼면 코드베이스에 차례대로 있다`, () => {
+      // 교안이 «이렇게 적으면 틀린다» 고 일부러 보이는 줄 · 잠깐 더했다 지우는 확인용 한 줄 — 축 ⑦·⑩·⑬ 이 실행으로 잠근다
+      const deliberate = new Set([
+        'console.log(typeof postsRouter, postsRouter.length);',
+        'const comment = comments.find((one) => one.id === Number(value));',
+        'commentRouter.use(findComment);',
+      ]);
+      const bad = [];
+      for (const b of fences(read(file), 'javascript')) {
+        if (/^\/\/ ~\//.test(b)) continue;
+        if (b.split('\n').every((l) => deliberate.has(l.trim()) || l.trim() === '')) continue;
+        if (!looseCorpus().some((v) => inOrder(b, v))) bad.push(b.split('\n').slice(0, 2).join(' ⏎ '));
+      }
+      expect(bad).toEqual([]);
+    });
+
+    it(`🔴 ${name} — http 블록은 같은 이름의 실습 .http 파일에 그대로 있다`, () => {
+      const https = ['board.http', 'practice1.http', 'practice2.http', 'practice3.http', 'homework1.http', 'homework2.http'].map(lab);
+      const bad = fences(read(file), 'http').filter((b) => !https.some((h) => h.includes(b)));
+      expect(bad).toEqual([]);
+    });
+  }
+
+  it('🔴 교안 javascript 블록 수 · 경로가 있는 블록의 파일', () => {
+    const paths = fences(read(LECTURE), 'javascript').map((b) => (b.match(/^\/\/ ~\/instagram-api\/(\S+)/) ?? [])[1]).filter(Boolean);
+    expect([...new Set(paths)].sort()).toEqual([
+      'app.js', 'lab/p3-30/board.js', 'lab/p3-30/homework1.js', 'lab/p3-30/practice1.js', 'lab/p3-30/practice2.js', 'lab/p3-30/practice3.js',
+      'middlewares/params.js', 'routes/likes.js', 'routes/posts.js', 'services/likeService.js',
+    ]);
+  });
+
+  it('🔴 교안 json 블록 — Step 4·6 이 인용한 좋아요 목록이 축 ④·⑥ 이 잰 값이다', () => {
+    expect(fences(read(LECTURE), 'json')).toEqual(['["jaehoon"]', '["jaehoon","dahye"]', '["jaehoon","dahye"]']);
+  });
+
+  it('🔴 교안 bash 블록 — 창 1 에 찍힌 줄이 축 ⑥·⑦·⑧ 이 잰 줄이다', () => {
+    const bash = fences(read(LECTURE), 'bash');
+    const joined = bash.join('\n');
+    for (const line of ['Argument `postId` is missing.', 'postId: undefined,', 'PrismaClientValidationError:', '{}', "{ id: '3' }",
+      'grep -rl "mongoose" --include="*.js" --exclude-dir=node_modules --exclude-dir=lab .', './models/Post.js', 'npm uninstall mongoose']) {
+      expect(joined).toContain(line);
+    }
+  });
+});
+
+describe('축 ⑬ — 교안 · 답안의 주장', () => {
+  const H1 = 3730;
+  it('🔴 Step 1 — app.js 에 확인용 한 줄을 더하고 저장하면 --watch 가 «Change detected» · «Restarting» · function 3 · 시작 줄', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'p330-watch-'));
+    for (const name of ['app.js', 'db.js', 'errors.js', 'routes', 'services', 'middlewares', 'schemas', 'package.json']) cpSync(R(name), join(dir, name), { recursive: true });
+    symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+    writeFileSync(join(dir, '.env'), `DATABASE_URL=${GATE_URL}\nCORS_ORIGIN=${STUDENT_ORIGIN}\nPORT=${H1}\n`);
+    const envv = { ...process.env };
+    delete envv.NODE_ENV;
+    const { spawn } = await import('node:child_process');
+    const child = spawn(process.execPath, ['--watch', '--env-file=.env', 'app.js'], { cwd: dir, env: envv });
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
+    child.stderr.on('data', (d) => { out += d; });
+    try {
+      for (let i = 0; i < 50 && !out.includes('기다리고'); i += 1) await sleep(100);
+      await sleep(500);
+      writeFileSync(join(dir, 'app.js'), rep(read(join(dir, 'app.js')), "app.use('/api/posts', postsRouter);\n",
+        "console.log(typeof postsRouter, postsRouter.length);\napp.use('/api/posts', postsRouter);\n"));
+      for (let i = 0; i < 50 && out.split('기다리고').length < 3; i += 1) await sleep(100);
+      const after = out.slice(out.indexOf('Change detected'));
+      expect(after.split('\n').slice(0, 4).map((l) => l.replace(dir, '/Users/hong/instagram-api').replace('/private', ''))).toEqual([
+        "Change detected in '/Users/hong/instagram-api/app.js'", "Restarting 'app.js'", 'function 3', `서버가 ${H1}번 포트에서 기다리고 있어요.`,
+      ]);
+    } finally {
+      child.kill();
+      await sleep(200);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('🔴 답안 [기초] — 공지를 안 따진 판은 셋째 요청에서 1번 공지의 1번 댓글을 지워 «다시 보기» 가 비어 있다', async () => {
+    const anyNotice = rep(lab('homework1.js'), ' && one.noticeId === req.notice.id', '');
+    await withLab({ files: { 'homework1.js': anyNotice }, entry: 'homework1.js', labPort: 4011, port: H1 + 1 }, async (srv) => {
+      const got = await runHttp(lab('homework1.http'), 4011, srv.base);
+      expect(got[2]).toMatchObject({ status: 200, body: { id: 1, noticeId: 1 } });
+      expect(got[4].body).toEqual([]);
+    });
+  });
+
+  it('🔴 답안 [기초] — router.use(findComment) 판의 둘째 요청은 3번 댓글(2번 공지)을 지운다', async () => {
+    const useVersion = rep(lab('homework1.js'), "commentRouter.param('commentId', findComment);", 'commentRouter.use(findComment);');
+    await withLab({ files: { 'homework1.js': useVersion }, entry: 'homework1.js', labPort: 4011, port: H1 + 2 }, async (srv) => {
+      await send(srv.base, 'DELETE', '/api/notices/1/comments/2');
+      expect((await send(srv.base, 'GET', '/api/notices/2/comments')).body).toEqual([]);
+      expect((await send(srv.base, 'GET', '/api/notices/1/comments')).body.map((c) => c.id)).toEqual([1, 2]);
+    });
+  });
+
+  it('🔴 답안 [기초] «더 좋아요» — 확인을 더한 판은 같은 실수에서 지우지 않고 500 으로 멈춘다', async () => {
+    const guardUse = rep(read(SNAP('homework1-guard.js')), "commentRouter.param('commentId', findComment);", 'commentRouter.use(findComment);');
+    await withLab({ files: { 'homework1.js': guardUse }, entry: 'homework1.js', labPort: 4011, port: H1 + 3 }, async (srv) => {
+      const got = await runHttp(lab('homework1.http'), 4011, srv.base);
+      expect(got.map((r) => r.status)).toEqual([200, 500, 500, 404, 200]);
+      expect(got[4].body.map((c) => c.id)).toEqual([1, 2]);
+    });
+    await withLab({ files: { 'homework1.js': read(SNAP('homework1-guard.js')) }, entry: 'homework1.js', labPort: 4011, port: H1 + 3 }, async (srv) => {
+      const got = await runHttp(lab('homework1.http'), 4011, srv.base);
+      expect(got.map((r) => r.status)).toEqual([200, 200, 404, 404, 200]);
+    });
+  });
+
+  const hw2 = () => Object.fromEntries(['app.js', 'data/notices.js', 'middlewares/adminOnly.js', 'routes/notices.js', 'routes/admin.js']
+    .map((f) => [`homework2/${f}`, lab(`homework2/${f}`)]));
+  it('🔴 답안 [응용] — nextId 를 데이터 파일에서 export let 으로 불러와 늘리면 서버는 뜨고, 올리는 순간 500 · TypeError: Assignment to constant variable.', async () => {
+    const files = hw2();
+    files['homework2/data/notices.js'] += '\nexport let nextId = 4;\n';
+    files['homework2/routes/admin.js'] = rep(rep(files['homework2/routes/admin.js'],
+      "import { notices } from '../data/notices.js';", "import { notices, nextId } from '../data/notices.js';"),
+      '// 새 공지 번호는 공지를 올리는 이 파일만 쓴다\nlet nextId = 4;\n\n', '');
+    await withLab({ files, entry: 'homework2/app.js', labPort: 4012, port: H1 + 4 }, async (srv) => {
+      expect((await send(srv.base, 'GET', '/api/notices')).status).toBe(200);
+      expect((await send(srv.base, 'POST', '/api/admin/notices', { headers: { 'X-Role': 'admin' }, json: { title: '새 공지' } })).status).toBe(500);
+      await sleep(100);
+      expect(srv.tail()).toContain('TypeError: Assignment to constant variable.');
+      expect(srv.tail()).toMatch(/lab\/p3-30\/homework2\/routes\/admin\.js:12:10/);
+    });
+  });
+
+  it('🔴 답안 [응용] — 로거 경로를 board.js 그대로(../../) 두면 ERR_MODULE_NOT_FOUND · 찾은 곳은 lab/middlewares/logger.js', async () => {
+    const files = hw2();
+    files['homework2/app.js'] = rep(files['homework2/app.js'], "'../../../middlewares/logger.js'", "'../../middlewares/logger.js'");
+    const dir = studentLab(files);
+    try {
+      let msg = '';
+      try {
+        execFileSync(process.execPath, [join(dir, 'lab/p3-30/homework2/app.js')], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
+      } catch (e) {
+        msg = String(e.stderr);
+      }
+      expect(msg).toContain('Error [ERR_MODULE_NOT_FOUND]: Cannot find module');
+      expect(msg).toContain("/lab/middlewares/logger.js' imported from");
+      expect(msg).toContain('/lab/p3-30/homework2/app.js');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
