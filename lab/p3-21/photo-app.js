@@ -14,6 +14,7 @@ const TEMP_COOKIE = { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000 };
 const app = express();
 
 app.use(cookieParser());
+app.use(express.json());
 
 app.get('/', (req, res) => {
   res.send('<a href="/login">사진 불러오기</a>');
@@ -85,6 +86,19 @@ app.get('/callback', async (req, res) => {
   const { photos } = await photosRes.json();
 
   res.json({ sub: user.sub, email: user.email, photos });
+});
+
+// 앱이 로그인을 마치고 보낸 Access 토큰으로 그 사람을 찾아 로그인시킨다.
+app.post('/login/token', async (req, res) => {
+  const userRes = await fetch(`${AUTH_SERVER}/userinfo`, {
+    headers: { Authorization: `Bearer ${req.body.accessToken}` },
+  });
+  if (!userRes.ok) {
+    res.status(401).json({ message: '토큰을 확인하지 못했어요' });
+    return;
+  }
+  const user = await userRes.json();
+  res.json({ loggedIn: user.email }); // 실제 서비스라면 여기서 세션을 준다.
 });
 
 app.listen(4002, () => {
