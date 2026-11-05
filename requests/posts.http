@@ -87,3 +87,6 @@ DELETE http://localhost:3000/api/posts/1/likes/1
 
 ### 1번 게시물 좋아요 누른 사람들
 GET http://localhost:3000/api/posts/1/likes
+
+### jaehoon(2번)이 보는 최신 두 개
+GET http://localhost:3000/api/posts?userId=3&limit=2

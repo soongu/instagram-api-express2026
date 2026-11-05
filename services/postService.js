@@ -5,12 +5,14 @@ import { BadRequestError, NotFoundError } from '../errors.js';
 // 저장하는 모양과 내보내는 모양은 다르다.
 // 표는 글쓴이를 번호로, 사진을 딴 표의 줄로 갖고 있지만,
 // 화면이 기다리는 것은 이름 한 줄과 사진 주소 목록이다.
-function flatten({ author, images, ...post }) {
+function flatten({ author, images, _count, ...post }) {
   return {
     ...post,
     username: author.username,
     profileImage: author.profileImage,
     imageUrls: images.map((image) => image.imageUrl),
+    // 보는 사람이 누른 좋아요를 셌을 때만 그 수로 정한다. 세지 않았으면 «안 눌렀다».
+    liked: _count !== undefined && _count.likes > 0,
   };
 }
 
@@ -29,14 +31,19 @@ const postFields = {
   images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' } },
 };
 
-export async function getPosts({ username, limit = 5, cursor }) {
-  // 한 장 더 달라고 한다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
+export async function getPosts({ username, userId, limit = 5, cursor }) {
+  // 누가 보는지 알 때만 그 사람이 누른 좋아요를 센다.
+  // userId 가 undefined 면 `where` 가 «조건 없음» 이 되어 누가 누른 좋아요든 다 센다.
+  const fields = userId
+    ? { ...postFields, _count: { select: { likes: { where: { userId } } } } }
+    : postFields;
+
+  // 하나 더 달라고 한다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
   const posts = await prisma.post.findMany({
     where: { author: { username } },
-    select: postFields,
+    select: fields,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: limit + 1,
-    // 커서가 오면 «그 게시물 다음» 부터다. 커서가 가리키는 줄 자신은 건너뛴다.
+    take: limit + 1, // 커서가 오면 «그 게시물 다음» 부터다. 커서가 가리키는 줄 자신은 건너뛴다.
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
 
