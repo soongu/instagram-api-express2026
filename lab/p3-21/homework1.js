@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/homework1.js
+// ~/instagram-api/lab/p3-21/homework1.js
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';

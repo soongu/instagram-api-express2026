@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/practice2.js
+// ~/instagram-api/lab/p3-21/practice2.js
 import { createHash } from 'node:crypto';
 
 // PKCE 표준 문서(RFC 7636) 부록 B에 실린 예시 code_verifier

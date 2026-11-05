@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/photo-app.js
+// ~/instagram-api/lab/p3-21/photo-app.js
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';

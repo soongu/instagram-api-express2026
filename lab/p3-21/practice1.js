@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/practice1.js
+// ~/instagram-api/lab/p3-21/practice1.js
 import express from 'express';
 
 const AUTH_SERVER = 'http://127.0.0.1:4001';

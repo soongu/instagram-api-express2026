@@ -1,4 +1,4 @@
-// ~/instagram-api/lab/auth-server.js
+// ~/instagram-api/lab/p3-21/auth-server.js
 // 실습용 «구글 역할» 인가 서버 — 강의 자료로 나눠 주는 완성 파일이에요.
 import express from 'express';
 import jwt from 'jsonwebtoken';
