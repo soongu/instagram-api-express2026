@@ -108,8 +108,13 @@ async function removeUploadedFiles(imageUrls) {
   const uploaded = imageUrls.filter((imageUrl) => imageUrl.startsWith('/uploads/'));
 
   for (const imageUrl of uploaded) {
-    // 주소에서 파일 이름만 꺼낸다 — 주소에 ../ 가 섞여 와도 uploads 폴더 밖은 못 건드린다.
-    await rm(path.join('uploads', path.basename(imageUrl)), { force: true });
+    try {
+      // 주소에서 파일 이름만 꺼낸다 — 주소에 ../ 가 섞여 와도 uploads 폴더 밖은 못 건드린다.
+      await rm(path.join('uploads', path.basename(imageUrl)), { force: true });
+    } catch (error) {
+      // 게시물은 이미 지웠다 — 파일 하나를 못 지웠다고 요청을 실패로 돌리지 않고, 기록만 남기고 다음 파일로 간다.
+      console.error(error);
+    }
   }
 }
 

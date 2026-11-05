@@ -400,6 +400,20 @@ describe('축 ⑦ — Step 7: 게시물을 지우면 사진 파일도', () => {
     reseed();
   });
 
+  it('🔴 끝 판 — 파일 하나를 못 지워도(/uploads/.. → rm(\'.\') 실패) 게시물 지우기는 200 · 나머지 파일은 지운다 · 에러는 터미널에', async () => {
+    reseed();
+    await withServer(PORT, {}, async (srv) => {
+      const up = await upload(srv.base, '/api/uploads', [jpg('beach.jpg')]);
+      const created = await send(srv.base, 'POST', '/api/posts', { json: { authorId: 2, imageUrls: ['/uploads/..', up.body.imageUrls[0]] } });
+      expect(created.status).toBe(201);
+      expect((await send(srv.base, 'DELETE', `/api/posts/${created.body.id}`)).status).toBe(200);
+      expect(srv.uploads()).toEqual([]);
+      await sleep(100);
+      expect(srv.tail()).toMatch(/EISDIR|ERR_FS_EISDIR/);
+    });
+    reseed();
+  });
+
   it('🔴 basename 을 뺀 판 — 같은 요청으로 uploads 폴더 밖 파일이 지워진다', async () => {
     reseed();
     await withServer(PORT, { 'services/postService.js': read(SNAP('step7-no-basename.postService.js')) }, async (srv) => {
@@ -443,6 +457,22 @@ describe('축 ⑧ — Step 8: helmet 과 CORP', () => {
       expect(res.headers.get('x-powered-by')).toBe(null);
     });
     expect(read(SNAP('step8-default.app.js'))).toBe(rep(read(R('app.js')), "app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));", 'app.use(helmet());'));
+  });
+});
+
+describe('축 ⑧-b — Step 8 🤔 3 해설의 «사진 경로에만» 판', () => {
+  it('🔴 helmet() 기본값 + express.static 의 setHeaders — 사진만 cross-origin · API 응답과 없는 파일 404 는 same-origin', async () => {
+    let app = rep(read(R('app.js')), "app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));", 'app.use(helmet());');
+    app = rep(app, "app.use('/uploads', express.static('uploads'));",
+      "app.use('/uploads', express.static('uploads', {\n  setHeaders: (res) => res.set('Cross-Origin-Resource-Policy', 'cross-origin'),\n}));");
+    const lecture = read(new URL('../../../part3/5-express-core/p3-31-file-upload-lecture.md', import.meta.url).pathname);
+    expect(lecture).toContain("app.use('/uploads', express.static('uploads', {\n  setHeaders: (res) => res.set('Cross-Origin-Resource-Policy', 'cross-origin'),\n}));");
+    await withServer(PORT, { 'app.js': app }, async (srv) => {
+      const up = await upload(srv.base, '/api/uploads', [jpg('beach.jpg')]);
+      expect((await fetch(`${srv.base}${up.body.imageUrls[0]}`)).headers.get('cross-origin-resource-policy')).toBe('cross-origin');
+      expect((await fetch(`${srv.base}/api/posts`)).headers.get('cross-origin-resource-policy')).toBe('same-origin');
+      expect((await fetch(`${srv.base}/uploads/nope.jpg`)).headers.get('cross-origin-resource-policy')).toBe('same-origin');
+    });
   });
 });
 
