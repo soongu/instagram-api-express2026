@@ -1,0 +1,36 @@
+### 사진 두 장 올리기
+# @name uploaded
+POST http://localhost:4012/api/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ../../requests/photos/beach.jpg
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="forest.jpg"
+Content-Type: image/jpeg
+
+< ../../requests/photos/forest.jpg
+--photo-boundary--
+
+### 첫 사진만 써서 게시물 만들기
+POST http://localhost:4012/api/posts
+Content-Type: application/json
+
+{
+  "imageUrls": ["{{uploaded.imageUrls[0]}}"]
+}
+
+### 곧바로 청소
+DELETE http://localhost:4012/api/uploads/orphans
+
+### 10초 기다린 뒤 청소
+DELETE http://localhost:4012/api/uploads/orphans
+
+### 게시물 사진 열기
+GET http://localhost:4012{{uploaded.imageUrls[0]}}
+
+### 안 쓴 사진 열기
+GET http://localhost:4012{{uploaded.imageUrls[1]}}

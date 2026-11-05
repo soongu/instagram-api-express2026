@@ -1,0 +1,24 @@
+### 첨부 파일 올리기
+# @name attached
+POST http://localhost:4001/api/files
+Content-Type: multipart/form-data; boundary=file-boundary
+
+--file-boundary
+Content-Disposition: form-data; name="file"; filename="hello.txt"
+Content-Type: text/plain
+
+< ./hello.txt
+--file-boundary--
+
+### 올린 파일 열기
+GET http://localhost:4001{{attached.url}}
+
+### 파일 없이 올리기
+POST http://localhost:4001/api/files
+Content-Type: multipart/form-data; boundary=file-boundary
+
+--file-boundary
+Content-Disposition: form-data; name="title"
+
+첨부 없는 공지
+--file-boundary--

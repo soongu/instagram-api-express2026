@@ -1,0 +1,43 @@
+### 프로필 사진 올리기
+POST http://localhost:4002/api/avatar
+Content-Type: multipart/form-data; boundary=avatar-boundary
+
+--avatar-boundary
+Content-Disposition: form-data; name="avatar"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ../../requests/photos/beach.jpg
+--avatar-boundary--
+
+### 1MB가 넘는 사진
+POST http://localhost:4002/api/avatar
+Content-Type: multipart/form-data; boundary=avatar-boundary
+
+--avatar-boundary
+Content-Disposition: form-data; name="avatar"; filename="big.jpg"
+Content-Type: image/jpeg
+
+< ../../requests/photos/big.jpg
+--avatar-boundary--
+
+### 사진이 아닌 파일
+POST http://localhost:4002/api/avatar
+Content-Type: multipart/form-data; boundary=avatar-boundary
+
+--avatar-boundary
+Content-Disposition: form-data; name="avatar"; filename="memo.txt"
+Content-Type: text/plain
+
+< ../../requests/photos/memo.txt
+--avatar-boundary--
+
+### 이름을 photo로 보내기
+POST http://localhost:4002/api/avatar
+Content-Type: multipart/form-data; boundary=avatar-boundary
+
+--avatar-boundary
+Content-Disposition: form-data; name="photo"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ../../requests/photos/beach.jpg
+--avatar-boundary--

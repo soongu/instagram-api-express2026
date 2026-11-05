@@ -1,0 +1,49 @@
+### 프로필 사진 올리기
+# @name first
+PUT http://localhost:4003/api/avatar
+Content-Type: multipart/form-data; boundary=avatar-boundary
+
+--avatar-boundary
+Content-Disposition: form-data; name="avatar"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ../../requests/photos/beach.jpg
+--avatar-boundary--
+
+### 다른 사진으로 바꾸기
+# @name second
+PUT http://localhost:4003/api/avatar
+Content-Type: multipart/form-data; boundary=avatar-boundary
+
+--avatar-boundary
+Content-Disposition: form-data; name="avatar"; filename="forest.jpg"
+Content-Type: image/jpeg
+
+< ../../requests/photos/forest.jpg
+--avatar-boundary--
+
+### 옛 사진 열기
+GET http://localhost:4003{{first.url}}
+
+### 사진이 아닌 파일로 바꾸기
+PUT http://localhost:4003/api/avatar
+Content-Type: multipart/form-data; boundary=avatar-boundary
+
+--avatar-boundary
+Content-Disposition: form-data; name="avatar"; filename="memo.txt"
+Content-Type: text/plain
+
+< ../../requests/photos/memo.txt
+--avatar-boundary--
+
+### 지금 프로필 사진
+GET http://localhost:4003/api/avatar
+
+### 지금 사진 열기
+GET http://localhost:4003{{second.url}}
+
+### 프로필 사진 지우기
+DELETE http://localhost:4003/api/avatar
+
+### 지운 사진 열기
+GET http://localhost:4003{{second.url}}

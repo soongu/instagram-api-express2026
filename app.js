@@ -2,9 +2,11 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import postsRouter from './routes/posts.js';
 import likesRouter from './routes/likes.js';
 import authRouter from './routes/auth.js';
+import uploadsRouter from './routes/uploads.js';
 import { HttpError } from './errors.js';
 import { logger } from './middlewares/logger.js';
 
@@ -13,9 +15,13 @@ const app = express();
 const allowedOrigins = process.env.CORS_ORIGIN.split(',').map((one) => one.trim());
 
 app.use(logger);
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(cookieParser());
+
+// 올린 사진 파일을 주소로 내보낸다 — /uploads/파일 이름 은 uploads 폴더의 그 파일이다.
+app.use('/uploads', express.static('uploads'));
 
 app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
@@ -24,6 +30,7 @@ app.get('/', (req, res) => {
 app.use('/api/posts', postsRouter);
 app.use('/api/posts/:id/likes', likesRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/uploads', uploadsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ message: '그런 주소는 없어요' });

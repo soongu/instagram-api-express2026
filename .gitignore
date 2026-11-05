@@ -5,6 +5,9 @@ npm-debug.log*
 
 node_modules
 
+# 사용자가 올린 사진 — 코드가 아니라 데이터다
+uploads/
+
 # 환경변수 — 값은 저장소에 안 올린다
 .env
 .env.*

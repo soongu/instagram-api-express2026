@@ -1,0 +1,64 @@
+### 사진 두 장 올리기
+# @name uploaded
+POST http://localhost:3000/api/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ./photos/beach.jpg
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="forest.jpg"
+Content-Type: image/jpeg
+
+< ./photos/forest.jpg
+--photo-boundary--
+
+### 5MB가 넘는 사진
+POST http://localhost:3000/api/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="big.jpg"
+Content-Type: image/jpeg
+
+< ./photos/big.jpg
+--photo-boundary--
+
+### 사진이 아닌 파일
+POST http://localhost:3000/api/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="memo.txt"
+Content-Type: text/plain
+
+< ./photos/memo.txt
+--photo-boundary--
+
+### 이름을 image로 보내기
+POST http://localhost:3000/api/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="image"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ./photos/beach.jpg
+--photo-boundary--
+
+### 올린 사진으로 게시물 만들기
+# @name created
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 2,
+  "imageUrls": {{uploaded.imageUrls}},
+  "postAlt": "바다와 숲 사진",
+  "content": "직접 올린 사진이에요"
+}
+
+### 방금 만든 게시물 지우기
+DELETE http://localhost:3000/api/posts/{{created.id}}
