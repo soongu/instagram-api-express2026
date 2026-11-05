@@ -1,6 +1,6 @@
-// ~/instagram-api/lab/practice2.js
+// ~/instagram-api/lab/p3-27/practice2.js
 import express from 'express';
-import { logger } from '../middlewares/logger.js';
+import { logger } from '../../middlewares/logger.js';
 
 const app = express();
 

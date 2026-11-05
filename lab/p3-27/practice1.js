@@ -1,7 +1,7 @@
-// ~/instagram-api/lab/practice1.js
+// ~/instagram-api/lab/p3-27/practice1.js
 import express from 'express';
-import { logger } from '../middlewares/logger.js';
-import { HttpError, BadRequestError } from '../errors.js';
+import { logger } from '../../middlewares/logger.js';
+import { HttpError, BadRequestError } from '../../errors.js';
 
 const app = express();
 
@@ -37,6 +37,8 @@ app.get('/api/notices/:id', findNotice, (req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  console.log('에러 미들웨어에 들어왔어요');
+
   if (err instanceof HttpError) {
     res.status(err.status).json({ message: err.message });
     return;

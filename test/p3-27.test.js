@@ -13,7 +13,9 @@
 // 축 ⑥ Step 6 — 깨진 JSON 은 400 · 글자(text/plain) 본문은 express.json 이 그냥 넘겨 `req.body` 가 undefined
 // 축 ⑦ Step 8 — 에러 미들웨어에 기본값을 준 판은 Express 기본 처리(HTML)로 답한다
 // 축 ⑧ 이 회차 학생 파일 — `app.js` 는 `code/p3-23` 에서 로거 두 줄만 더했다
-// 축 ⑨ 실습·과제 — `lab/p3-27/`(학생 쪽 경로 주석은 `~/instagram-api/lab/…`)
+// 축 ⑨ 실습·과제 — `lab/p3-27/`(학생 쪽 경로도 `~/instagram-api/lab/p3-27/…` — 2026-11-05 앞 회차 실습 파일과 이름이 겹치지 않게 옮겼다.
+//   실습 파일은 북마크 `code/p3-27` 이 아니라 `main` 에서 읽는다. 북마크의 lab 은 옛 평평한 경로 주석·`../` import 그대로다)
+// 축 ⑬ 학생 낭독 집중 검수(2026-11-05) — 로거 첫 판의 거짓 200 · 304 · 🙋 next() 아래 · 🙋 세 줄의 차례 · 틀린 판 · 앞 회차에 잇는 문장
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -211,20 +213,21 @@ describe('축 ③ — Step 3: 아무것도 안 하는 미들웨어를 끼우면'
 });
 
 // 학생 폴더 모양 — lab 파일이 `../middlewares/logger.js`·`../errors.js` 를 부른다.
+const LAB_DIR = 'lab/p3-27';
 const studentLab = (files) => {
   const dir = mkdtempSync(join(tmpdir(), 'p327-lab-'));
-  mkdirSync(join(dir, 'lab'));
+  mkdirSync(join(dir, LAB_DIR), { recursive: true });
   mkdirSync(join(dir, 'middlewares'));
   cpSync(R('middlewares/logger.js'), join(dir, 'middlewares/logger.js'));
   cpSync(R('errors.js'), join(dir, 'errors.js'));
   writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
   symlinkSync(P('node_modules'), join(dir, 'node_modules'));
-  for (const [name, from] of Object.entries(files)) cpSync(from, join(dir, 'lab', name));
+  for (const [name, from] of Object.entries(files)) cpSync(from, join(dir, LAB_DIR, name));
   return dir;
 };
 const withLab = async (name, from, port, fn) => {
   const dir = studentLab({ [name]: from });
-  const lab = await boot(join(dir, 'lab', name), { port, ready: `${port}번 포트에서` });
+  const lab = await boot(join(dir, LAB_DIR, name), { port, ready: `${port}번 포트에서` });
   try {
     await fn(lab);
   } finally {
@@ -238,10 +241,10 @@ const getJson = async (url, init) => {
   return { status: res.status, type, body: type.includes('json') ? await res.json() : await res.text() };
 };
 
-describe('축 ③ — Step 3: 답한 뒤 또 넘기면 (lab/hello.js · 4004)', () => {
+describe('축 ③ — Step 3: 답한 뒤 또 넘기면 (lab/p3-27/hello.js · 4004)', () => {
   it('🔴 return 을 빠뜨린 판 — 400 은 그대로 오고, 터미널에 ERR_HTTP_HEADERS_SENT', async () => {
     const snap = read(P('snapshots/p3-27.step3-no-return.hello.js'));
-    expect(snap).toBe(read(R('lab/p3-27/hello.js')).replace('    return;\n', ''));
+    expect(snap).toBe(read(P('lab/p3-27/hello.js')).replace('    return;\n', ''));
     await withLab('hello.js', P('snapshots/p3-27.step3-no-return.hello.js'), 4004, async (lab) => {
       const res = await getJson(`${lab.base}/api/hello`);
       expect(res).toMatchObject({ status: 400, body: { message: '이름을 보내 주세요' } });
@@ -251,7 +254,7 @@ describe('축 ③ — Step 3: 답한 뒤 또 넘기면 (lab/hello.js · 4004)', 
   });
 
   it('🔴 return 을 넣은 판 — 이름 없으면 400 만 · minji 면 «안녕하세요, minji님» · 에러 없음', async () => {
-    await withLab('hello.js', R('lab/p3-27/hello.js'), 4004, async (lab) => {
+    await withLab('hello.js', P('lab/p3-27/hello.js'), 4004, async (lab) => {
       expect(await getJson(`${lab.base}/api/hello`)).toMatchObject({ status: 400, body: { message: '이름을 보내 주세요' } });
       expect(await getJson(`${lab.base}/api/hello?name=minji`)).toMatchObject({ status: 200, body: { message: '안녕하세요, minji님' } });
       await sleep(150);
@@ -375,9 +378,9 @@ describe('축 ⑨ — 직접 해보기 · 과제 (lab/p3-27/)', () => {
     return join(dir, name);
   };
 
-  it('🔴 경로 주석은 학생 쪽 평평한 lab/ · 서버 넷은 실습 문장으로 뜬다', () => {
+  it('🔴 경로 주석은 학생 쪽 lab/p3-27/ · 서버 넷은 실습 문장으로 뜬다', () => {
     for (const name of ['hello.js', 'practice1.js', 'practice2.js', 'practice3.js', 'count.js', 'homework1.js', 'homework2.js']) {
-      expect(read(LAB(name)).split('\n')[0]).toBe(`// ~/instagram-api/lab/${name}`);
+      expect(read(LAB(name)).split('\n')[0]).toBe(`// ~/instagram-api/lab/p3-27/${name}`);
     }
   });
 
@@ -388,7 +391,7 @@ describe('축 ⑨ — 직접 해보기 · 과제 (lab/p3-27/)', () => {
       expect(one.lines).toEqual(['GET /api/notices/1 200']);
       const abc = await newLines(lab, () => getJson(`${lab.base}/api/notices/abc`));
       expect(abc.res).toMatchObject({ status: 400, body: { message: '공지 번호는 숫자로 보내 주세요' } });
-      expect(abc.lines).toEqual(['GET /api/notices/abc 400']);
+      expect(abc.lines).toEqual(['에러 미들웨어에 들어왔어요', 'GET /api/notices/abc 400']);
       const nine = await newLines(lab, () => getJson(`${lab.base}/api/notices/9`));
       expect(nine.res).toMatchObject({ status: 404, body: { message: '그런 공지는 없어요' } });
       expect(nine.lines).toEqual(['GET /api/notices/9 404']);
@@ -510,7 +513,7 @@ describe('축 ⑨ — 직접 해보기 · 과제 (lab/p3-27/)', () => {
     try {
       let out = '';
       try {
-        execFileSync(process.execPath, [join(dir, 'lab/homework2.js')], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
+        execFileSync(process.execPath, [join(dir, LAB_DIR, 'homework2.js')], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
       } catch (error) {
         out = error.stderr;
         expect(error.status).toBe(1);
@@ -601,16 +604,16 @@ describe('축 ⑩ — 교안의 다른 주장들', () => {
     const src = read(P('lab/p3-27/homework2.js'))
       .replace('app.use(assertErrorHandler((err, req, res, next) => {', 'app.use(assertErrorHandler((err, req, res, next = () => {}) => {');
     const dir = studentLab({});
-    writeFileSync(join(dir, 'lab/homework2.js'), src);
+    writeFileSync(join(dir, LAB_DIR, 'homework2.js'), src);
     const { spawn } = await import('node:child_process');
-    const child = spawn(process.execPath, ['--watch', 'lab/homework2.js'], { cwd: dir });
+    const child = spawn(process.execPath, ['--watch', `${LAB_DIR}/homework2.js`], { cwd: dir });
     let out = '';
     child.stdout.on('data', (b) => { out += b; });
     child.stderr.on('data', (b) => { out += b; });
     try {
       for (let i = 0; i < 40 && !out.includes('Waiting for file changes'); i++) await sleep(100);
       expect(out).toContain('Error: 에러 미들웨어는 매개변수가 4개여야 해요 (지금은 3개)');
-      expect(out).toContain("Failed running 'lab/homework2.js'. Waiting for file changes before restarting...");
+      expect(out).toContain("Failed running 'lab/p3-27/homework2.js'. Waiting for file changes before restarting...");
     } finally {
       child.kill();
       rmSync(dir, { recursive: true, force: true });
@@ -621,17 +624,17 @@ describe('축 ⑩ — 교안의 다른 주장들', () => {
     const five = read(P('lab/p3-27/homework2.js'))
       .replace('app.use(assertErrorHandler((err, req, res, next) => {', 'app.use(assertErrorHandler((err, req, res, next, extra) => {');
     const dir = studentLab({});
-    writeFileSync(join(dir, 'lab/homework2.js'), five);
+    writeFileSync(join(dir, LAB_DIR, 'homework2.js'), five);
     let out = '';
     try {
-      execFileSync(process.execPath, [join(dir, 'lab/homework2.js')], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
+      execFileSync(process.execPath, [join(dir, LAB_DIR, 'homework2.js')], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 });
     } catch (error) {
       out = error.stderr;
     }
     expect(out).toContain('Error: 에러 미들웨어는 매개변수가 4개여야 해요 (지금은 5개)');
     const lessThan = five.replace('if (handler.length !== 4) {', 'if (handler.length < 4) {');
-    writeFileSync(join(dir, 'lab/homework2.js'), lessThan);
-    const lab = await boot(join(dir, 'lab/homework2.js'), { port: 4012, ready: '4012번 포트에서' });
+    writeFileSync(join(dir, LAB_DIR, 'homework2.js'), lessThan);
+    const lab = await boot(join(dir, LAB_DIR, 'homework2.js'), { port: 4012, ready: '4012번 포트에서' });
     try {
       const res = await getJson(`${lab.base}/api/echo`, { method: 'POST', headers: JSON_HEADERS, body: BROKEN });
       expect(res.status).toBe(400);
@@ -658,8 +661,8 @@ describe('축 ⑪ — 교안 코드 블록의 줄이 실재한다', () => {
   const candidates = (path) => {
     if (path.startsWith('~/instagram-api/node_modules/')) return [P(path.slice('~/instagram-api/'.length))];
     const rel = path.slice('~/instagram-api/'.length);
-    if (rel.startsWith('lab/')) {
-      const name = rel.slice('lab/'.length);
+    if (rel.startsWith('lab/p3-27/')) {
+      const name = rel.slice('lab/p3-27/'.length);
       return [P(`lab/p3-27/${name}`), ...snapshotsFor(name)];
     }
     return [R(rel), ...snapshotsFor(rel.split('/').pop())];
@@ -722,5 +725,203 @@ describe('축 ⑫ — 답안의 주장', () => {
       await sleep(150);
       expect(lab.tail()).toContain('Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client');
     });
+  });
+});
+
+describe('축 ⑬ — 학생 낭독 집중 검수(2026-11-05)', () => {
+  const LECTURE_TEXT = () => read(P('../../part3/5-express-core/p3-27-middleware-structure-lecture.md'));
+  const ANSWERS_TEXT = () => read(P('../../part3/5-express-core/p3-27-middleware-structure-answers.md'));
+  const older = (path) => read(P(`../../${path}`));
+  const LOG_LINE = '  console.log(`${req.method} ${req.originalUrl} ${res.statusCode}`);\n';
+  const ON_FINISH = "  // 응답을 다 보낸 뒤에 한 줄 — 상태 코드는 그때 정해져 있다.\n  res.on('finish', () => {\n  " + LOG_LINE + '  });\n';
+  const HEAD = '// ~/instagram-api/middlewares/logger.js\nexport function logger(req, res, next) {\n';
+
+  const withLogger = async (snap, fn) => {
+    const dir = copyStudent(ROUND.dir, 'p327-logger-');
+    cpSync(P(`snapshots/${snap}`), join(dir, 'middlewares/logger.js'));
+    const app = await bootApp(dir, SNAP_PORT);
+    try {
+      await fn(app);
+    } finally {
+      await app.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const variant = (name, a, b) => {
+    const src = read(P(`lab/p3-27/${name}`));
+    if (!src.includes(a)) throw new Error(`${name} 에서 바꿀 곳을 못 찾았다: ${a}`);
+    const dir = mkdtempSync(join(tmpdir(), 'p327-variant-'));
+    writeFileSync(join(dir, name), src.replace(a, b));
+    return join(dir, name);
+  };
+
+  it('🔴 logger 스냅숏 셋은 끝 판의 줄만 옮긴 것이다', () => {
+    expect(read(R('middlewares/logger.js'))).toBe(`${HEAD}${ON_FINISH}\n  next();\n}\n`);
+    expect(read(P('snapshots/p3-27.step2-first.logger.js'))).toBe(`${HEAD}${LOG_LINE}  next();\n}\n`);
+    expect(read(P('snapshots/p3-27.step3-after-next.logger.js'))).toBe(`${HEAD}  next();\n${LOG_LINE}}\n`);
+    expect(read(P('snapshots/p3-27.step3-on-after-next.logger.js'))).toBe(`${HEAD}  next();\n\n${ON_FINISH}}\n`);
+  });
+
+  it('🔴 Step 2 첫 판(next() 앞에서 찍기) — 목록은 맞아 보이고, 없는 게시물은 응답 404 인데 로거는 200', async () => {
+    await withLogger('p3-27.step2-first.logger.js', async (app) => {
+      expect((await newLines(app, () => fetch(`${app.base}/api/posts`))).lines).toEqual(['GET /api/posts 200']);
+      const missing = await newLines(app, () => fetch(`${app.base}/api/posts/999`));
+      expect(missing.res.status).toBe(404);
+      expect(missing.lines).toEqual(['GET /api/posts/999 200']);
+    });
+  });
+
+  it('🔴 Step 2 — 받아 둔 응답과 같으면 304 · 본문 없음 · 로거 줄도 304', async () => {
+    const first = await fetch(`${server.base}/api/posts?limit=2`);
+    const etag = first.headers.get('etag');
+    await first.text();
+    await sleep(150);
+    expect(etag).toBeTruthy();
+    const again = await newLines(server, () => fetch(`${server.base}/api/posts?limit=2`, {
+      // 🚨 fetch 는 If-None-Match 를 직접 주면 Cache-Control: no-cache 를 스스로 붙여 Express 가 늘 200 으로 답한다 — 브라우저의 재검증 요청에는 없는 줄이다.
+      headers: { 'If-None-Match': etag, 'Cache-Control': 'max-age=0' },
+    }));
+    expect(again.res.status).toBe(304);
+    expect(await again.res.text()).toBe('');
+    expect(again.lines).toEqual(['GET /api/posts?limit=2 304']);
+  });
+
+  it('🔴 Step 2 — 교안이 304 판 다섯 줄과 304 뜻 · 장면 표를 싣는다 · 답안이 그것을 받는다', () => {
+    const t = LECTURE_TEXT();
+    expect(t).toContain('GET /api/auth/me 401\nPOST /api/auth/login 200\nGET /api/auth/me 304\nGET /api/posts?userId=9&limit=2 304\nGET /api/posts?userId=9&limit=2&cursor=2 304\n');
+    expect(t).toContain('로거가 404를 200으로 적었어요');
+    expect(t).toContain('304(Not Modified)');
+    expect(t).toContain('`Disable cache`');
+    expect(t).toContain('백엔드에 일을 시키는 동작만 줄이 남아요');
+    expect(t).not.toContain('GET /api/auth/me 200\nGET /api/posts?userId=9&limit=2 200');
+    expect(ANSWERS_TEXT()).toContain('Step 2에서 본 304');
+  });
+
+  it('🔴 🙋 next() 아래에서 찍는 판 — 기다리는 요청은 200 으로 찍히고 곧바로 답하는 요청은 맞다', async () => {
+    await withLogger('p3-27.step3-after-next.logger.js', async (app) => {
+      const missing = await newLines(app, () => fetch(`${app.base}/api/posts/999`));
+      expect(missing.res.status).toBe(404);
+      expect(missing.lines).toEqual(['GET /api/posts/999 200']);
+      const nope = await newLines(app, () => fetch(`${app.base}/api/comments`));
+      expect(nope.res.status).toBe(404);
+      expect(nope.lines).toEqual(['GET /api/comments 404']);
+    });
+  });
+
+  it('🔴 🙋 res.on 을 next() 아래로 옮긴 판 — 바른 판과 같다(곧바로 답하는 GET / 까지)', async () => {
+    await withLogger('p3-27.step3-on-after-next.logger.js', async (app) => {
+      expect((await newLines(app, () => fetch(`${app.base}/api/posts/999`))).lines).toEqual(['GET /api/posts/999 404']);
+      expect((await newLines(app, () => fetch(`${app.base}/`))).lines).toEqual(['GET / 200']);
+      const broken = await newLines(app, () => fetch(`${app.base}/api/posts`, { method: 'POST', headers: JSON_HEADERS, body: BROKEN }));
+      expect(broken.lines).toEqual(['POST /api/posts 400']);
+    });
+  });
+
+  describe('🙋 세 줄의 차례', () => {
+    const broken = (base) => fetch(`${base}/api/posts`, { method: 'POST', headers: { ...JSON_HEADERS, Origin: STUDENT_ORIGIN }, body: BROKEN });
+    const ALLOW = 'access-control-allow-origin';
+    const ORDER = 'app.use(cors({ origin: allowedOrigins }));\napp.use(express.json());\napp.use(cookieParser());\n';
+
+    it('🔴 스냅숏 둘은 그 두 줄의 차례만 다르다', () => {
+      const real = read(R('app.js'));
+      expect(real).toContain(ORDER);
+      expect(read(P('snapshots/p3-27.step6-json-before-cors.app.js')))
+        .toBe(real.replace(ORDER, 'app.use(express.json());\napp.use(cors({ origin: allowedOrigins }));\napp.use(cookieParser());\n'));
+      expect(read(P('snapshots/p3-27.step6-cookie-before-json.app.js')))
+        .toBe(real.replace(ORDER, 'app.use(cors({ origin: allowedOrigins }));\napp.use(cookieParser());\napp.use(express.json());\n'));
+    });
+
+    it('🔴 지금 판 — 깨진 본문의 400 에 허락 헤더가 있다', async () => {
+      const res = await broken(server.base);
+      expect(res.status).toBe(400);
+      expect(res.headers.get(ALLOW)).toBe(STUDENT_ORIGIN);
+      expect(await res.json()).toEqual({ message: '보낸 내용을 읽을 수 없어요' });
+    });
+
+    it('🔴 express.json 을 cors 앞에 둔 판 — 400 과 문장은 같은데 허락 헤더가 없다 · 평범한 요청에는 있다', async () => {
+      await withSnapshot('p3-27.step6-json-before-cors.app.js', async (app) => {
+        const res = await broken(app.base);
+        expect(res.status).toBe(400);
+        expect(res.headers.get(ALLOW)).toBeNull();
+        expect(await res.json()).toEqual({ message: '보낸 내용을 읽을 수 없어요' });
+        const ok = await fetch(`${app.base}/api/posts?limit=1`, { headers: { Origin: STUDENT_ORIGIN } });
+        expect(ok.headers.get(ALLOW)).toBe(STUDENT_ORIGIN);
+      });
+    });
+
+    it('🔴 cookieParser 를 express.json 앞에 둔 판 — 깨진 본문에도 허락 헤더가 있고 응답이 같다', async () => {
+      await withSnapshot('p3-27.step6-cookie-before-json.app.js', async (app) => {
+        const res = await broken(app.base);
+        expect(res.status).toBe(400);
+        expect(res.headers.get(ALLOW)).toBe(STUDENT_ORIGIN);
+        expect(await res.json()).toEqual({ message: '보낸 내용을 읽을 수 없어요' });
+      });
+    });
+  });
+
+  it('🔴 직접 해보기 1 — abc 를 직접 답한 판은 응답이 같아도 «에러 미들웨어에 들어왔어요» 가 안 찍혀 갈린다', async () => {
+    const file = variant('practice1.js', "    next(new BadRequestError('공지 번호는 숫자로 보내 주세요'));\n", "    res.status(400).json({ message: '공지 번호는 숫자로 보내 주세요' });\n");
+    await withLab('practice1.js', file, 4001, async (lab) => {
+      const abc = await newLines(lab, () => getJson(`${lab.base}/api/notices/abc`));
+      expect(abc.res).toMatchObject({ status: 400, body: { message: '공지 번호는 숫자로 보내 주세요' } });
+      expect(abc.lines).toEqual(['GET /api/notices/abc 400']);
+    });
+  });
+
+  it('🔴 직접 해보기 2 — Content-Type 없는 POST: 바른 판은 415 · ?? 를 지운 판은 TypeError 500', async () => {
+    const noType = async (base) => {
+      const res = await fetch(`${base}/api/notes`, { method: 'POST' });
+      return { status: res.status, body: await res.text() };
+    };
+    await withLab('practice2.js', P('lab/p3-27/practice2.js'), 4002, async (lab) => {
+      expect(await noType(lab.base)).toMatchObject({ status: 415 });
+    });
+    const file = variant('practice2.js', "const type = req.headers['content-type'] ?? '';", "const type = req.headers['content-type'];");
+    await withLab('practice2.js', file, 4002, async (lab) => {
+      const res = await noType(lab.base);
+      expect(res.status).toBe(500);
+      expect(res.body).toContain('TypeError');
+    });
+  });
+
+  it('🔴 직접 해보기 3 — 해설대로 변수에 담아 찍으면 0 · 스냅숏은 시작 판에서 그 줄만 다르다', async () => {
+    const start = read(P('snapshots/p3-27.practice3-start.js'));
+    const open = 'app.use(withLog((err, req, res, next) => {\n';
+    const close = '}));\n';
+    expect(start).toContain(open);
+    expect(read(P('snapshots/p3-27.practice3-length.practice3.js'))).toBe(start
+      .replace(open, 'const handler = withLog((err, req, res, next) => {\n')
+      .replace(close, '});\n\nconsole.log(handler.length);\napp.use(handler);\n'));
+    await withLab('practice3.js', P('snapshots/p3-27.practice3-length.practice3.js'), 4003, async (lab) => {
+      expect(lab.tail()).toContain('0\n실습 서버가 4003번 포트에서 기다리고 있어요.');
+    });
+  });
+
+  it('🔴 교안의 새 문장 — 앞 회차에 잇는 사실이 그 회차 교안에 정말 있다', () => {
+    const t = LECTURE_TEXT();
+    // Step 2 — 미들웨어를 처음 배울 때 심어 둔 복선
+    expect(older('part2/4-node-backend/p2-23-crud-api-lecture.md')).toContain('앞으로 로그를 남기거나 로그인 여부를 확인하는 함수도 전부 여기에 등록하게 돼요');
+    expect(t).toContain('앞으로 로그를 남기는 함수도');
+    // Step 5 — CORS 의 결론 · 프리플라이트 정의
+    const p237 = older('part2/6-fullstack-join/p2-37-cors-proxy-env-lecture.md');
+    expect(p237).toContain('CORS는 서버를 지키는 장치가 아니라는 것이었죠');
+    expect(p237).toContain('프리플라이트(preflight)라는 이름');
+    expect(older('part3/4-react-auth/p3-23-login-cookie-lecture.md')).toContain('`Content-Type: application/json` 헤더를 붙여 JSON을 다른 출처로 보낼 때는 브라우저가 실제 요청 전에');
+    expect(t).toContain('CORS는 서버를 지키는 장치가 아니라고');
+    expect(t).toContain('프리플라이트(preflight)');
+    // Step 1 — proxy.js 와 Express 미들웨어
+    expect(older('part3/1-nextjs/p3-10-streaming-proxy-lecture.md')).toContain('이 파일의 이름도 `middleware.js`였어요');
+    expect(older('part3/4-react-auth/p3-22-signup-lecture.md')).toContain('라우트 가드도 페이지만 막고, API를 직접 부르는 요청은 막지 못해요');
+    expect(t).toContain('`AuthGuard`');
+  });
+
+  it('🔴 교안의 새 토글·요구사항', () => {
+    const t = LECTURE_TEXT();
+    expect(t).toMatch(/<summary>🙋 학생 질문 — "`req\.url`/);
+    expect(t).toMatch(/<summary>🙋 학생 질문 — "`next\(\)` 아래 줄도 실행된다면/);
+    expect(t).toMatch(/<summary>🙋 학생 질문 — "그럼 세 줄의 차례를 바꿔도 되나요\?"/);
+    expect(t).toContain('`node --watch lab/p3-27/homework2.js`');
+    expect(t).not.toMatch(/~\/instagram-api\/lab\/(?!p3-27\/)/);
+    expect(ANSWERS_TEXT()).not.toMatch(/~\/instagram-api\/lab\/(?!p3-27\/)/);
   });
 });
