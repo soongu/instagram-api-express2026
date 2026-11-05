@@ -830,6 +830,7 @@ describe('축 ⑬ — 교안 · 답안의 주장', () => {
     await withLab({ files: { 'practice2.js': colon }, entry: 'practice2.js', labPort: 4002, port: H1 + 7 }, async (srv) => {
       const got = await runHttp(lab('practice2.http'), 4002, srv.base);
       expect(got[1]).toMatchObject({ status: 200, body: '' });
+      expect(got[2].status).toBe(500); // req.notice 가 undefined — TypeError
       expect(got[4].body).toEqual({ found: 0 });
     });
   });
