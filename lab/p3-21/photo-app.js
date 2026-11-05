@@ -15,7 +15,6 @@ const TEMP_COOKIE = { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000 };
 const app = express();
 
 app.use(cookieParser());
-app.use(express.json());
 
 app.get('/', (req, res) => {
   res.send('<a href="/login">사진 불러오기</a>');
@@ -111,16 +110,6 @@ app.get('/callback', async (req, res) => {
   const { photos } = await photosRes.json();
 
   res.json({ sub: user.sub, email: user.email, photos });
-});
-
-// 화면이 로그인을 마치고 보낸 ID 토큰을 확인해 그 사람을 로그인시킨다.
-app.post('/login/token', async (req, res) => {
-  try {
-    const user = await verifyIdToken(req.body.idToken, req.cookies.oauth_nonce);
-    res.json({ loggedIn: user.email }); // 실제 서비스라면 여기서 세션을 준다.
-  } catch (error) {
-    res.status(401).json({ message: 'ID 토큰을 믿을 수 없어요', reason: error.message });
-  }
 });
 
 app.listen(4002, () => {
