@@ -1,8 +1,7 @@
 // ~/instagram-api/lab/p3-21/photo-app.js
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import jwt from 'jsonwebtoken';
-import { createHash, createPublicKey, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 const AUTH_SERVER = 'http://127.0.0.1:4001';
 const CLIENT_ID = 'photo-app';
@@ -23,45 +22,23 @@ app.get('/', (req, res) => {
 // 인가 서버의 동의 화면으로 보낸다 — 무엇을 허락받고 싶은지 주소에 담아서
 app.get('/login', (req, res) => {
   const state = randomUUID();
-  const nonce = randomUUID();
   const codeVerifier = randomBytes(32).toString('base64url');
   const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
 
   res.cookie('oauth_state', state, TEMP_COOKIE);
-  res.cookie('oauth_nonce', nonce, TEMP_COOKIE);
   res.cookie('oauth_verifier', codeVerifier, TEMP_COOKIE);
 
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
-    scope: 'openid email photos',
+    scope: 'email photos',
     state,
-    nonce,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
   });
   res.redirect(`${AUTH_SERVER}/authorize?${params}`);
 });
-
-const verifyIdToken = async (idToken, nonce) => {
-  // ① 토큰 헤더의 kid로 인가 서버의 공개키를 고른다.
-  const { header } = jwt.decode(idToken, { complete: true });
-  const { keys } = await (await fetch(`${AUTH_SERVER}/jwks`)).json();
-  const jwk = keys.find((key) => key.kid === header.kid);
-  const publicKey = createPublicKey({ key: jwk, format: 'jwk' });
-
-  // ② 서명 · 누가 만들었나(iss) · 누구에게 준 것인가(aud) · 끝나는 시각(exp)
-  const payload = jwt.verify(idToken, publicKey, {
-    algorithms: ['RS256'],
-    issuer: AUTH_SERVER,
-    audience: CLIENT_ID,
-  });
-
-  // ③ 이 브라우저가 시작한 로그인에서 나온 토큰인가
-  if (payload.nonce !== nonce) throw new Error('nonce가 달라요');
-  return payload;
-};
 
 app.get('/callback', async (req, res) => {
   if (!req.query.state || req.query.state !== req.cookies.oauth_state) {
@@ -95,13 +72,11 @@ app.get('/callback', async (req, res) => {
     return;
   }
 
-  let user;
-  try {
-    user = await verifyIdToken(tokens.id_token, req.cookies.oauth_nonce);
-  } catch (error) {
-    res.status(401).json({ message: 'ID 토큰을 믿을 수 없어요', reason: error.message });
-    return;
-  }
+  // Access 토큰으로 누구인지 물어본다.
+  const userRes = await fetch(`${AUTH_SERVER}/userinfo`, {
+    headers: { Authorization: `Bearer ${tokens.access_token}` },
+  });
+  const user = await userRes.json();
 
   // Access 토큰으로 사진 목록을 받는다.
   const photosRes = await fetch(`${AUTH_SERVER}/photos`, {
