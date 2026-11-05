@@ -502,7 +502,7 @@ describe('축 ⑪ — 이 회차 학생 파일', () => {
   });
 
   it('🔴 .gitignore 에 uploads/', () => {
-    expect(read(R('.gitignore'))).toContain('\n# 사용자가 올린 사진 — 코드가 아니라 데이터다\nuploads/\n');
+    expect(read(R('.gitignore'))).toContain('\n# 사용자가 올린 사진 — 코드가 아니라 데이터다\nuploads/\n# 실습 서버가 받은 파일(lab/p3-31 아래에 생기는 폴더들)\nlab/p3-31/*/\n');
   });
 });
 
@@ -585,7 +585,7 @@ describe('축 ⑩ — 실습·과제: 정답 판 · 확인 절차가 틀린 판�
   const p2 = async (src, port = 3747) => {
     const out = [];
     await withLab({ src, labPort: 4002, port }, async (srv) => {
-      for (const parts of [[jpg('beach.jpg', 'beach.jpg', 'avatar')], [jpg('big.jpg', 'big.jpg', 'avatar')],
+      for (const parts of [[jpg('beach.jpg', 'beach.jpg', 'avatar')], [jpg('medium.jpg', 'medium.jpg', 'avatar')],
         [{ name: 'avatar', file: PHOTO('memo.txt'), filename: 'memo.txt', type: 'text/plain' }], [jpg('beach.jpg', 'beach.jpg', 'photo')]]) {
         const res = await upload(srv.base, '/api/avatar', parts);
         out.push([res.status, res.body.message ?? null]);
@@ -599,6 +599,9 @@ describe('축 ⑩ — 실습·과제: 정답 판 · 확인 절차가 틀린 판�
     expect(await p2(rep(lab('practice2.js'), 'if (err instanceof multer.MulterError) {', 'if (err) {'))).toEqual([[201, null], [400, '프로필 사진은 1MB까지 올릴 수 있어요'],
       [400, '프로필 사진을 받지 못했어요'], [400, '프로필 사진은 avatar 이름으로 한 장만 보낼 수 있어요']]);
     expect((await p2(rep(lab('practice2.js'), 'limits: { fileSize: 1024 * 1024 },', 'limits: { fileSize: 1024 },')))[0]).toEqual([400, '프로필 사진은 1MB까지 올릴 수 있어요']);
+    // Step 5 의 5MB 를 그대로 둔 판 — medium.jpg(2,018,501 B)가 201 로 들어온다
+    expect((await p2(rep(lab('practice2.js'), 'limits: { fileSize: 1024 * 1024 },', 'limits: { fileSize: 5 * 1024 * 1024 },')))[1]).toEqual([201, null]);
+    expect(PHOTO('medium.jpg').length).toBe(2018501);
   });
 
   const p3 = async (src) => {
@@ -625,17 +628,27 @@ describe('축 ⑩ — 실습·과제: 정답 판 · 확인 절차가 틀린 판�
     const out = [];
     await withLab({ src, labPort: 4011, port: 3749 }, async (srv) => {
       for (const parts of [[{ name: 'title', value: '서버 점검 안내' }, { name: 'pinned', value: 'true' }, jpg('beach.jpg', 'beach.jpg', 'image')],
-        [{ name: 'title', value: '새 기능 소개' }, { name: 'pinned', value: 'false' }], [{ name: 'pinned', value: 'false' }]]) {
+        [{ name: 'title', value: '새 기능 소개' }, { name: 'pinned', value: 'false' }], [{ name: 'pinned', value: 'false' }],
+        [{ name: 'title', value: '   ' }],
+        [{ name: 'title', value: '사진 공지' }, { name: 'image', file: PHOTO('memo.txt'), filename: 'memo.txt', type: 'text/plain' }]]) {
         const res = await upload(srv.base, '/api/notices', parts);
         out.push([res.status, res.body.pinned ?? res.body.message]);
+        if (res.body.imageUrl) out.push(['image', (await fetch(`${srv.base}${res.body.imageUrl}`)).status]);
       }
       out.push((await send(srv.base, 'GET', '/api/notices')).body.length ?? null);
     });
     return out;
   };
   it('🔴 과제 [기초] — 정답 · Boolean 판은 둘째 공지 pinned true · 제목 검사를 multer 앞에 둔 판은 셋 다 500', async () => {
-    expect(await hw1(lab('homework1.js'))).toEqual([[201, true], [201, false], [400, '제목을 적어 주세요'], 2]);
-    expect((await hw1(rep(lab('homework1.js'), "pinned: req.body.pinned === 'true',", 'pinned: Boolean(req.body.pinned),')))[1]).toEqual([201, true]);
+    expect(await hw1(lab('homework1.js'))).toEqual([[201, true], ['image', 200], [201, false], [400, '제목을 적어 주세요'], [400, '제목을 적어 주세요'],
+      [400, '공지 사진은 JPG나 PNG만 올릴 수 있어요'], 2]);
+    // 학생 낭독이 찾은 «셋을 한꺼번에 빠뜨린 판»(trim 없음 · 종류 확인 없음 · 정적 주소 없음) — 새 요청 셋이 가려낸다
+    let wrong = rep(lab('homework1.js'), "const title = (req.body.title ?? '').trim();", "const title = req.body.title ?? '';");
+    wrong = rep(wrong, '    if (!EXTENSIONS[file.mimetype]) {', '    if (false) {');
+    wrong = rep(wrong, "app.use('/notice-images', express.static('lab/p3-31/notice-images'));\n", '');
+    const w = await hw1(wrong);
+    expect([w[1], w[4][0], w[5][0]]).toEqual([['image', 404], 201, 201]);
+    expect((await hw1(rep(lab('homework1.js'), "pinned: req.body.pinned === 'true',", 'pinned: Boolean(req.body.pinned),')))[2]).toEqual([201, true]);
     const order = await hw1(rep(lab('homework1.js'),
       "app.post('/api/notices', upload.single('image'), (req, res) => {\n  const title = (req.body.title ?? '').trim();\n\n  if (title === '') {\n    throw new BadRequestError('제목을 적어 주세요');\n  }\n",
       "function checkTitle(req, res, next) {\n  if (req.body.title.trim() === '') {\n    throw new BadRequestError('제목을 적어 주세요');\n  }\n  next();\n}\n\napp.post('/api/notices', checkTitle, upload.single('image'), (req, res) => {\n  const title = req.body.title.trim();\n"));
@@ -670,10 +683,10 @@ describe('축 ⑩ — 실습·과제: 정답 판 · 확인 절차가 틀린 판�
       const up = await upload(srv.base, '/api/uploads', [jpg('beach.jpg'), jpg('forest.jpg')]);
       await send(srv.base, 'POST', '/api/posts', { json: { imageUrls: [up.body.imageUrls[0]] } });
       const now = (await send(srv.base, 'DELETE', '/api/uploads/orphans')).body.removed;
-      // 10초 기다리는 대신 파일 시각을 20초 앞으로 돌린다
+      // 30초 기다리는 대신 파일 시각을 40초 앞으로 돌린다
       const { utimesSync } = await import('node:fs');
       const dir = join(srv.dir, 'lab', 'p3-31', 'hw2-uploads');
-      const past = new Date(Date.now() - 20000);
+      const past = new Date(Date.now() - 40000);
       for (const name of readdirSync(dir)) utimesSync(join(dir, name), past, past);
       const later = (await send(srv.base, 'DELETE', '/api/uploads/orphans')).body.removed;
       out = { now: now.length, later: later.map((n) => `/uploads/${n}`), used: (await fetch(`${srv.base}${up.body.imageUrls[0]}`)).status,

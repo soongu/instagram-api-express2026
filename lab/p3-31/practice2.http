@@ -14,10 +14,10 @@ POST http://localhost:4002/api/avatar
 Content-Type: multipart/form-data; boundary=avatar-boundary
 
 --avatar-boundary
-Content-Disposition: form-data; name="avatar"; filename="big.jpg"
+Content-Disposition: form-data; name="avatar"; filename="medium.jpg"
 Content-Type: image/jpeg
 
-< ../../requests/photos/big.jpg
+< ../../requests/photos/medium.jpg
 --avatar-boundary--
 
 ### 사진이 아닌 파일

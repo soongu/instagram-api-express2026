@@ -26,7 +26,7 @@ Content-Type: application/json
 ### 곧바로 청소
 DELETE http://localhost:4012/api/uploads/orphans
 
-### 10초 기다린 뒤 청소
+### 30초 기다린 뒤 청소
 DELETE http://localhost:4012/api/uploads/orphans
 
 ### 게시물 사진 열기

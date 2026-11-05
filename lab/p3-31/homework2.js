@@ -35,7 +35,7 @@ app.post('/api/posts', (req, res) => {
 });
 
 // 올라온 지 이만큼이 안 된 파일은 아직 게시물을 기다리는 중일 수 있어 남긴다.
-const WAIT_MS = 10 * 1000;
+const WAIT_MS = 30 * 1000;
 
 app.delete('/api/uploads/orphans', async (req, res) => {
   // 게시물이 쓰고 있는 파일 이름들
