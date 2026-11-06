@@ -47,7 +47,7 @@ function decodeCursor(cursor) {
 
 // 목록은 «시각이 늦은 순, 같으면 번호가 큰 순» 이다. 그러니 커서 다음 행은
 // 시각이 더 이르거나, 시각이 같고 번호가 더 작은 행이다.
-// `lte` 가 인덱스에서 시작 위치를 찾고, OR 는 시각이 같은 행만 거른다.
+// `lte` 가 인덱스에서 시작 위치를 찾고, OR 는 시각이 같은 행에서 커서 앞의 행을 걸러 낸다.
 function afterCursor({ createdAt, id }) {
   return {
     createdAt: { lte: createdAt },

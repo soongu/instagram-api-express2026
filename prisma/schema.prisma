@@ -35,7 +35,7 @@ model Post {
   images       PostImage[]
   likes        PostLike[]
 
-  // 목록의 정렬과 같은 차례로 인덱스를 둔다 — 최신 글부터 정렬 없이 읽어 나갈 수 있다.
+  // 목록의 정렬과 같은 순서로 인덱스를 둔다 — 최신 글부터 정렬 없이 읽어 나갈 수 있다.
   @@index([createdAt(sort: Desc), id(sort: Desc)])
   @@map("posts")
 }
