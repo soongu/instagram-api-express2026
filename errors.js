@@ -30,3 +30,9 @@ export class ConflictError extends HttpError {
     super(409, message);
   }
 }
+
+export class MethodNotAllowedError extends HttpError {
+  constructor(message) {
+    super(405, message);
+  }
+}

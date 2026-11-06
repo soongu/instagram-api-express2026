@@ -3,6 +3,7 @@ import express from 'express';
 import * as postService from '../services/postService.js';
 import { validateBody } from '../middlewares/validate.js';
 import { parseId } from '../middlewares/params.js';
+import { allowOnly } from '../middlewares/methods.js';
 import { postCreateSchema, postUpdateSchema } from '../schemas/postSchema.js';
 
 const router = express.Router();
@@ -31,7 +32,8 @@ router.get('/:id', async (req, res) => {
 router.post('/', validateBody(postCreateSchema), async (req, res) => {
   const newPost = await postService.createPost(req.body);
 
-  res.status(201).json(newPost);
+  // 새 게시물을 가리키는 주소를 Location 머리글에 싣는다.
+  res.status(201).location(`/api/posts/${newPost.id}`).json(newPost);
 });
 
 router.patch('/:id', validateBody(postUpdateSchema), async (req, res) => {
@@ -45,5 +47,9 @@ router.delete('/:id', async (req, res) => {
 
   res.json(deleted);
 });
+
+// 위 라우트가 받지 않은 HTTP 메서드는 여기까지 내려온다 — 라우트보다 «아래» 에 둔다.
+router.all('/', allowOnly('GET', 'POST'));
+router.all('/:id', allowOnly('GET', 'PATCH', 'DELETE'));
 
 export default router;

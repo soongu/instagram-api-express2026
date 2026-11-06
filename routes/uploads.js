@@ -1,6 +1,7 @@
 // ~/instagram-api/routes/uploads.js
 import express from 'express';
 import { uploadImages } from '../middlewares/upload.js';
+import { allowOnly } from '../middlewares/methods.js';
 import { BadRequestError } from '../errors.js';
 
 const router = express.Router();
@@ -15,5 +16,7 @@ router.post('/', uploadImages, (req, res) => {
 
   res.status(201).json({ imageUrls });
 });
+
+router.all('/', allowOnly('POST'));
 
 export default router;

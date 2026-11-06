@@ -2,6 +2,7 @@
 import express from 'express';
 import * as likeService from '../services/likeService.js';
 import { parseId, parseUserId } from '../middlewares/params.js';
+import { allowOnly } from '../middlewares/methods.js';
 
 // app.js 가 붙인 주소(/api/posts/:id/likes)의 :id 까지 req.params 로 받는다.
 const router = express.Router({ mergeParams: true });
@@ -29,5 +30,8 @@ router.delete('/:userId', async (req, res) => {
 
   res.json(status);
 });
+
+router.all('/', allowOnly('GET'));
+router.all('/:userId', allowOnly('PUT', 'DELETE'));
 
 export default router;
