@@ -21,3 +21,8 @@ GET http://localhost:3000/api/auth/me
 # @no-cookie-jar
 GET http://localhost:3000/api/auth/me
 Cookie: userId=1
+
+### 헤더로 보내면
+# @no-cookie-jar
+GET http://localhost:3000/api/auth/me
+Authorization: Bearer 1
