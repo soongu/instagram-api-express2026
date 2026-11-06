@@ -32,7 +32,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', validateBody(postCreateSchema), async (req, res) => {
   const newPost = await postService.createPost(req.body);
 
-  // 새 게시물을 가리키는 주소를 Location 머리글에 싣는다.
+  // 새 게시물을 가리키는 주소를 Location 헤더에 싣는다.
   res.status(201).location(`/api/posts/${newPost.id}`).json(newPost);
 });
 
