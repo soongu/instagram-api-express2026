@@ -4,7 +4,7 @@ GET http://localhost:3000/API/POSTS/1
 ### 끝에 빗금을 붙인 주소
 GET http://localhost:3000/api/posts/1/
 
-### 머리글만 받기
+### 헤더만 받기
 HEAD http://localhost:3000/api/posts/1
 
 ### 좋아요를 POST로 누르기

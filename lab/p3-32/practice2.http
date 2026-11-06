@@ -1,0 +1,22 @@
+### 받는 HTTP 메서드 묻기
+OPTIONS http://localhost:4002/api/notices/1
+
+### 공지 하나를 PUT으로 바꾸기
+PUT http://localhost:4002/api/notices/1
+Content-Type: application/json
+
+{
+  "title": "서버 점검 안내 (시간 변경)"
+}
+
+### 공지 목록을 통째로 지우기
+DELETE http://localhost:4002/api/notices
+
+### 공지 목록
+GET http://localhost:4002/api/notices
+
+### 공지 지우기
+DELETE http://localhost:4002/api/notices/3
+
+### 없는 주소로 보내기
+PATCH http://localhost:4002/api/notice

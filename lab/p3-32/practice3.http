@@ -1,0 +1,32 @@
+### 공지 올리기
+POST http://localhost:4003/api/notices
+Content-Type: application/json
+
+{
+  "title": "스터디 모집"
+}
+
+### 빈 제목으로 올리기
+POST http://localhost:4003/api/notices
+Content-Type: application/json
+
+{
+  "title": "   "
+}
+
+### 같은 제목으로 한 번 더 올리기
+POST http://localhost:4003/api/notices
+Content-Type: application/json
+
+{
+  "title": "스터디 모집"
+}
+
+### 없는 공지 보기
+GET http://localhost:4003/api/notices/99
+
+### 공지 지우기
+DELETE http://localhost:4003/api/notices/1
+
+### 지운 공지를 한 번 더 지우기
+DELETE http://localhost:4003/api/notices/1

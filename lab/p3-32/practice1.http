@@ -1,0 +1,25 @@
+### 공지 목록
+GET http://localhost:4001/api/notices
+
+### 고정된 공지만
+GET http://localhost:4001/api/notices?pinned=true
+
+### 공지 하나
+GET http://localhost:4001/api/notices/2
+
+### 공지 올리기
+POST http://localhost:4001/api/notices
+Content-Type: application/json
+
+{
+  "title": "스터디 모집"
+}
+
+### 공지 지우기
+DELETE http://localhost:4001/api/notices/2
+
+### 지운 공지 다시 보기
+GET http://localhost:4001/api/notices/2
+
+### 옛 주소로 목록 보기
+GET http://localhost:4001/api/getNotices

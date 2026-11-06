@@ -1,0 +1,26 @@
+### 저장하기
+PUT http://localhost:4011/api/posts/1/saves/2
+
+### 한 번 더 저장하기
+PUT http://localhost:4011/api/posts/1/saves/2
+
+### 다른 게시물도 저장하기
+PUT http://localhost:4011/api/posts/3/saves/2
+
+### 내가 저장한 게시물
+GET http://localhost:4011/api/users/2/saves
+
+### 저장 취소
+DELETE http://localhost:4011/api/posts/1/saves/2
+
+### 한 번 더 취소
+DELETE http://localhost:4011/api/posts/1/saves/2
+
+### 취소한 뒤 목록
+GET http://localhost:4011/api/users/2/saves
+
+### 없는 게시물 저장하기
+PUT http://localhost:4011/api/posts/99/saves/2
+
+### 저장을 POST로 보내기
+POST http://localhost:4011/api/posts/1/saves/2

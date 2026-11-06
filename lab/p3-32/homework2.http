@@ -1,0 +1,25 @@
+### 공지 목록
+GET http://localhost:4012/api/notices
+
+### 없는 공지 보기
+GET http://localhost:4012/api/notices/99
+
+### 없는 공지 지우기
+DELETE http://localhost:4012/api/notices/99
+
+### 공지 하나를 PUT으로 바꾸기
+PUT http://localhost:4012/api/notices/1
+Content-Type: application/json
+
+{
+  "title": "서버 점검 안내 (시간 변경)"
+}
+
+### 없는 주소로 보내기
+GET http://localhost:4012/api/notice
+
+### 깨진 JSON 보내기
+POST http://localhost:4012/api/notices
+Content-Type: application/json
+
+{ "title": 
