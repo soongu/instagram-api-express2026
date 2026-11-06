@@ -445,6 +445,9 @@ describe('축 ② — Step 2~6: 교안의 실행 계획', () => {
     expect(good).toMatchObject({ noRemoved: true, noSort: true });
     expect(good.blocks).toBeLessThan(30);
     expect(good.plan).toContain('Index Cond: (author_id = 5)');
+    // 교안 해설의 계획 펜스 — 둘째 실행(인덱스 이름만 판정용 lab_try)
+    const fence = fences(lecture).find((f) => f.lang === '' && f.body.includes('Index Scan using lab_profile'));
+    expect(fencePlan(fence.body.replace(/Buffers: shared hit=\d+/g, 'Buffers'))).toBe(normal(good.plan.replace(/lab_try/g, 'lab_profile').replace(/Buffers: shared hit=\d+/g, 'Buffers')));
     const reversed = await second('(created_at DESC, id DESC, author_id)');
     expect(reversed).toMatchObject({ noRemoved: true, noSort: true });
     expect(reversed.plan).toContain('Index Cond: (author_id = 5)');

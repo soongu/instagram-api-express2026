@@ -15,7 +15,7 @@ router.get('/', validateQuery(postListQuerySchema), async (req, res) => {
   const { limit, cursor } = res.locals.query;
   const page = await postService.getPosts({
     username: req.query.username,
-    // 로그인을 배우기 전까지는 «누가 보는지» 를 주소에 실어 받는다.
+    // 서버가 로그인 정보를 쓰기 전까지는 «누가 보는지» 를 주소에 실어 받는다.
     userId: Number(req.query.userId) || undefined,
     limit,
     cursor,
