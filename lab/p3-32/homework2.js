@@ -56,7 +56,7 @@ app.delete('/api/notices/:id', (req, res) => {
 app.all('/api/notices', allowOnly('GET', 'POST'));
 app.all('/api/notices/:id', allowOnly('GET', 'DELETE'));
 
-// 맞는 라우트가 하나도 없으면 에러로 넘겨, 에러 미들웨어 한 곳에서 같은 꼴로 답한다.
+// 맞는 라우트가 하나도 없으면 에러로 넘겨, 에러 미들웨어 한곳에서 같은 꼴로 답한다.
 app.use((req, res, next) => {
   next(new NotFoundError('그런 주소는 없어요'));
 });
