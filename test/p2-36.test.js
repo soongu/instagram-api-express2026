@@ -287,7 +287,11 @@ describe('Step 5·6 — 프론트가 보내는 몸통이 서버가 받는 모양
     const old = await fetch(`${server.base}/api/posts/1/likes`, {
       method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ userId: MY }),
     });
-    expect(old.status, '옛 토글 주소는 이제 없다').toBe(404);
+    // 🔀 p3-32 부터 이 주소(누른 사람 목록 GET)에 POST 가 오면 405 + Allow: GET 이다 — 이 축의 뜻은 «토글로 누르는 길은 이제 없다» 라
+    //    404·405 둘 다 받는다. 교안은 이 요청의 상태 코드를 말하지 않는다. 누르지 않았다는 것은 행 수로 본다.
+    expect([404, 405], '옛 토글 주소는 이제 누르지 않는다').toContain(old.status);
+    const after = await db.query('select count(*)::int c from post_likes where post_id = 1');
+    expect(after.rows[0].c, '옛 토글 주소로 보내도 행이 안 생긴다').toBe(0);
     expect(FRONT('services/api.js'), '프론트에 토글 길이 남으면 하트가 404 를 받는다').not.toContain('toggleLike');
   });
 });
