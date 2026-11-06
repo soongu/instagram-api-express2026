@@ -16,3 +16,8 @@ Content-Type: application/json
 
 ### 나는 누구
 GET http://localhost:3000/api/auth/me
+
+### 쿠키를 고쳐서 보내면
+# @no-cookie-jar
+GET http://localhost:3000/api/auth/me
+Cookie: userId=1
