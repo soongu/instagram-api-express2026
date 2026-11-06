@@ -374,6 +374,14 @@ describe('축 ⑩ — 직접 해보기 1: 공지 서버의 주소 고치기', ()
     await withLab({ src: queryId, labPort: 4001, port: P1 }, async () => {
       expect((await sendAll(lab('practice1.http'), 4001, P1))[2].status).toBe(404);
     });
+    // 해설의 주장 — 지우기에서 req.body.id 를 남기면 다섯째 요청이 500(본문 없는 DELETE 의 req.body 는 undefined)
+    const bodyId = rep(answer, "const index = notices.findIndex((one) => one.id === Number(req.params.id));",
+      "const index = notices.findIndex((one) => one.id === Number(req.body.id));");
+    await withLab({ src: bodyId, labPort: 4001, port: P1 }, async (srv) => {
+      expect((await sendAll(lab('practice1.http'), 4001, P1))[4].status).toBe(500);
+      await sleep(100);
+      expect(srv.tail()).toContain("TypeError: Cannot read properties of undefined (reading 'id')");
+    });
     const keepOld = rep(answer, "app.listen(4001", "app.get('/api/getNotices', (req, res) => {\n  res.json(notices);\n});\n\napp.listen(4001");
     await withLab({ src: keepOld, labPort: 4001, port: P1 }, async () => {
       expect((await sendAll(lab('practice1.http'), 4001, P1))[6].status).toBe(200);
@@ -405,6 +413,15 @@ describe('축 ⑩ — 직접 해보기 2: 공지 서버에 405 붙이기', () =>
     });
   });
 
+  it('🔴 틀린 판 — /api/notices/:id 목록을 GET, POST 로 잘못 적으면 상태 코드는 같고 allow 만 다르다(요구사항 4 가 목록과 대조하게 한다)', async () => {
+    const wrong = rep(lab('practice2.js'), "app.all('/api/notices/:id', allowOnly('GET', 'DELETE'));", "app.all('/api/notices/:id', allowOnly('GET', 'POST'));");
+    await withLab({ src: wrong, labPort: 4002, port: P2 }, async () => {
+      const r = await sendAll(lab('practice2.http'), 4002, P2);
+      expect(statuses(r)).toEqual([405, 405, 405, 200, 200, 404]);
+      expect(r[1].allow).toBe('GET, POST');
+    });
+  });
+
   it('🔴 틀린 판 — app.all 두 줄을 라우트 위에 두면 넷째 요청(목록)부터 405', async () => {
     const src = lab('practice2.js');
     const lines = "app.all('/api/notices', allowOnly('GET', 'POST'));\napp.all('/api/notices/:id', allowOnly('GET', 'DELETE'));\n";
@@ -431,6 +448,22 @@ describe('축 ⑩ — 직접 해보기 3: 상태 코드로 말하게 고치기',
       expect(r[0].body).toEqual({ id: 3, title: '스터디 모집' });
       expect(r[1].body).toEqual({ message: '제목을 적어 주세요' });
       expect(r[4].raw).toBe('');
+    });
+  });
+
+  it('🔴 틀린 판 둘 — Location 을 빠뜨린 판 · 성공 본문을 { ok, notice } 로 남긴 판은 상태 코드가 같아 요구사항 5 의 헤더·본문 확인으로만 갈린다', async () => {
+    const noLocation = rep(lab('practice3.js'), 'res.status(201).location(`/api/notices/${notice.id}`).json(notice);', 'res.status(201).json(notice);');
+    await withLab({ src: noLocation, labPort: 4003, port: P3 }, async () => {
+      const r = await sendAll(lab('practice3.http'), 4003, P3);
+      expect(statuses(r)).toEqual([201, 400, 409, 404, 204, 404]);
+      expect(r[0].location).toBeNull();
+    });
+    const wrapped = rep(lab('practice3.js'), 'res.status(201).location(`/api/notices/${notice.id}`).json(notice);',
+      'res.status(201).location(`/api/notices/${notice.id}`).json({ ok: true, notice });');
+    await withLab({ src: wrapped, labPort: 4003, port: P3 }, async () => {
+      const r = await sendAll(lab('practice3.http'), 4003, P3);
+      expect(statuses(r)).toEqual([201, 400, 409, 404, 204, 404]);
+      expect(r[0].body).toEqual({ ok: true, notice: { id: 3, title: '스터디 모집' } });
     });
   });
 
