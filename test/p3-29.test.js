@@ -18,6 +18,7 @@
 // 축 ⑪ 이 회차 학생 파일 — `code/p3-28` 에서 app.js · package.json · package-lock.json 만 바뀌었다
 // 축 ⑫ 교안·답안 코드 블록의 줄이 코드베이스에 실재한다
 // 축 ⑬ 답안의 주장
+// 축 ⑭ 교안이 기대는 앞 회차 사실 — 잇는 문장이 그 회차에 정말 있는가 · 틀렸던 문장이 돌아오지 않는가
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -212,6 +213,53 @@ describe('축 ③ — Step 3: res.headersSent', () => {
     });
   });
 
+  it('🔴 Step 3 — 응답이 끝까지 나간 9번은 연결이 끊겨도 404 본문을 그대로 받는다', async () => {
+    await withLab('board.js', SNAP('step3-guard.board.js'), 4006, async (lab) => {
+      const raw = await new Promise((resolve) => {
+        const agent = new http.Agent({ keepAlive: true });
+        http.get(`${lab.base}/api/notices/9`, { agent }, (res) => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => { agent.destroy(); resolve({ status: res.statusCode, complete: res.complete, body }); });
+        });
+      });
+      expect(raw).toEqual({ status: 404, complete: true, body: '{"message":"그런 공지는 없어요"}' });
+    });
+  });
+
+  it('🔴 Step 3 🙋 — 헤더만 보내고 던지면 클라이언트는 본문을 못 읽는다 · 창에 morgan 줄은 있고 손 로거 줄은 없다(finish 가 안 온다)', async () => {
+    expect(read(SNAP('step3-half.board.js'))).toBe(read(SNAP('step3-return.board.js')).replace("app.use((req, res) => {\n  res.status(404)",
+      "app.get('/api/half', (req, res) => {\n  res.flushHeaders();\n  throw new Error('본문을 보내기 전에 난 에러예요');\n});\n\napp.use((req, res) => {\n  res.status(404)"));
+    await withLab('board.js', SNAP('step3-half.board.js'), 4006, async (lab) => {
+      const { res, lines } = await newLines(lab, () => fetch(`${lab.base}/api/half`).then(
+        (r) => r.text().then(() => `read ${r.status}`, () => `aborted ${r.status}`), () => 'no answer'));
+      expect(res).toBe('aborted 200');
+      expect(lines.map(noMs)).toContain('GET /api/half 200 ms - -');
+      expect(lines.some((line) => /^GET \/api\/half 200 \d+\.\dms$/.test(line))).toBe(false);
+      expect(lab.tail()).toContain('Error: 본문을 보내기 전에 난 에러예요');
+    });
+  });
+
+  it('🔴 Step 3 🙋 — httpYac 에는 The server aborted pending request', async () => {
+    await withLab('board.js', SNAP('step3-half.board.js'), 4006, async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'p329-half-'));
+      try {
+        writeFileSync(join(dir, 'half.http'), '### half\nGET http://localhost:4006/api/half\n');
+        let out = '';
+        try {
+          out = execFileSync(P('node_modules/.bin/httpyac'), ['send', 'half.http', '--all'], { encoding: 'utf-8', cwd: dir });
+        } catch (e) {
+          out = `${e.stdout}${e.stderr}`;
+        }
+        expect(out).toContain('The server aborted pending request');
+        expect(out).toContain('1 requests processed (1 errored)');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  }, 30000);
+
   it('🔴 return 판 — 창에 에러가 없다 · 둘 다 404', async () => {
     await withLab('board.js', SNAP('step3-return.board.js'), 4006, async (lab) => {
       const nine = await newLines(lab, () => getJson(`${lab.base}/api/notices/9`));
@@ -330,6 +378,87 @@ describe('축 ⑤ — Step 5: 돌려준 Promise · asyncHandler · Express 4', (
       rmSync(dir4, { recursive: true, force: true });
     }
   }, 120000);
+
+  it('🔴 Step 5 겪기 — express4 별칭: 안 감싼 판은 응답 없이 서버가 꺼지고 · asyncHandler 판은 500 · (...args) 판도 500', async () => {
+    const dir4 = mkdtempSync(join(tmpdir(), 'p329-alias-'));
+    try {
+      writeFileSync(join(dir4, 'package.json'), '{"type":"module","private":true}');
+      execFileSync('npm', ['install', 'express@5.2.1', 'express4@npm:express@4.22.3', 'morgan@1.12.1', '--prefer-offline', '--no-audit', '--no-fund'],
+        { cwd: dir4, encoding: 'utf8' });
+      const modules = join(dir4, 'node_modules');
+      expect(JSON.parse(read(join(modules, 'express/package.json'))).version).toBe('5.2.1');
+      expect(JSON.parse(read(join(modules, 'express4/package.json'))).version).toBe('4.22.3');
+      const dir = studentLab({ 'board.js': SNAP('step5-express4.board.js') }, modules);
+      const lab = await boot(join(dir, LAB_DIR, 'board.js'), { port: 4006, ready: '4006번 포트에서', env: { NO_COLOR: '1' } });
+      try {
+        expect(await fetch(`${lab.base}/api/notices/3/views`, { method: 'POST' }).then((r) => r.status, () => 'no answer')).toBe('no answer');
+        await sleep(200);
+        expect(lab.tail()).toContain('at saveView (');
+        expect(lab.tail()).toMatch(/board\.js:35:11\)\n    at async .*board\.js:44:3/);
+        expect(await fetch(`${lab.base}/api/notices/1`).then(() => 'answered', () => 'refused')).toBe('refused');
+      } finally {
+        await Promise.race([lab.stop(), sleep(500)]);
+        rmSync(dir, { recursive: true, force: true });
+      }
+      await withLab('board.js', SNAP('step5-express4-wrapped.board.js'), 4006, async (wrapped) => {
+        expect(await post(`${wrapped.base}/api/notices/3/views`)).toMatchObject({ status: 500, body: { message: '서버에서 문제가 생겼어요' } });
+        expect(await post(`${wrapped.base}/api/notices/1/views`)).toMatchObject({ status: 200 });
+        expect(wrapped.tail()).toMatch(/board\.js:35:11\)\n    at async .*board\.js:50:3/);
+      }, { modules });
+      await withLab('board.js', read(SNAP('step5-rest-args.board.js')).replace("from 'express';", "from 'express4';"), 4006, async (rest) => {
+        expect(await post(`${rest.base}/api/notices/3/views`)).toMatchObject({ status: 500, body: { message: '서버에서 문제가 생겼어요' } });
+        expect(await post(`${rest.base}/api/notices/1/views`)).toMatchObject({ status: 200 });
+      }, { modules });
+    } finally {
+      rmSync(dir4, { recursive: true, force: true });
+    }
+  }, 120000);
+
+  it('🔴 Step 5 — (...args) 판도 Express 5 에서 같은 결과(length 0 이어도 라우트로는 불린다)', async () => {
+    await withLab('board.js', SNAP('step5-rest-args.board.js'), 4006, async (lab) => {
+      expect(await post(`${lab.base}/api/notices/3/views`)).toMatchObject({ status: 500, body: { message: '서버에서 문제가 생겼어요' } });
+      expect(await post(`${lab.base}/api/notices/1/views`)).toMatchObject({ status: 200, body: { message: '조회 수를 남겼어요' } });
+      expect((await post(`${lab.base}/api/notices/9/views`)).status).toBe(404);
+    });
+    const rest = (fn) => (...args) => fn(...args).catch(args[2]);
+    expect(rest(async (req, res) => {}).length).toBe(0);
+  });
+
+  it('🔴 Step 5 — .catch 에 console.log 를 넣은 판: 에러 위에 «asyncHandler가 받았어요»', async () => {
+    await withLab('board.js', SNAP('step5-catch-log.board.js'), 4006, async (lab) => {
+      const { res, lines } = await newLines(lab, () => post(`${lab.base}/api/notices/3/views`));
+      expect(res).toMatchObject({ status: 500 });
+      expect(lines.indexOf('asyncHandler가 받았어요')).toBeGreaterThanOrEqual(0);
+      expect(lines.indexOf('asyncHandler가 받았어요')).toBeLessThan(lines.indexOf('Error: 3번 공지의 조회 수를 저장하지 못했어요'));
+    });
+  });
+
+  it('🔴 Step 5 스냅숏 — Express 4 판은 import 한 줄만 · 감싼 판은 asyncHandler 판에서 import 한 줄만 · console.log 판은 .catch 만', () => {
+    const swap = (text) => text.replace("import express from 'express';", "import express from 'express4';");
+    expect(read(SNAP('step5-express4.board.js'))).toBe(swap(read(SNAP('step4.board.js'))));
+    expect(read(SNAP('step5-express4-wrapped.board.js'))).toBe(swap(read(SNAP('step5-async-handler.board.js'))));
+    expect(read(SNAP('step5-catch-log.board.js'))).toBe(read(SNAP('step5-async-handler.board.js')).replace('fn(req, res, next).catch(next);',
+      "fn(req, res, next).catch((err) => {\n      console.log('asyncHandler가 받았어요');\n      next(err);\n    });"));
+  });
+
+  it('🔴 Step 5 — express4 를 깔면 패키지 25개가 더해지고, 지우면 package.json · package-lock.json 이 그대로 돌아온다', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'p329-lock-'));
+    try {
+      cpSync(R('package.json'), join(dir, 'package.json'));
+      cpSync(R('package-lock.json'), join(dir, 'package-lock.json'));
+      const before = { pkg: read(join(dir, 'package.json')), lock: read(join(dir, 'package-lock.json')) };
+      const keys = () => Object.keys(JSON.parse(read(join(dir, 'package-lock.json'))).packages);
+      const start = new Set(keys());
+      const npm = (...args) => execFileSync('npm', [...args, '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: dir, encoding: 'utf8' });
+      npm('install', 'express4@npm:express@4.22.3');
+      expect(keys().filter((k) => !start.has(k))).toHaveLength(25);
+      npm('uninstall', 'express4');
+      expect(read(join(dir, 'package.json'))).toBe(before.pkg);
+      expect(read(join(dir, 'package-lock.json'))).toBe(before.lock);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60000);
 });
 
 describe('축 ⑥ — Step 6: 에러 미들웨어 여러 개', () => {
@@ -440,6 +569,34 @@ describe('축 ⑧ — Step 8: helmet', () => {
       .replace("app.use(morgan('dev'));\n", "app.use(morgan('dev'));\napp.use(helmet());\n"));
   });
 
+  it('🔴 Step 8 겪기 — other-site.js(4008)는 4006 의 공지를 <iframe> 으로 띄운다', async () => {
+    await withLab('other-site.js', LAB('other-site.js'), 4008, async (lab) => {
+      const res = await getJson(`${lab.base}/`);
+      expect(res.status).toBe(200);
+      expect(res.body).toContain('<iframe src="http://localhost:4006/api/notices/1"');
+    });
+  });
+
+  it('🔴 Step 8 — 끝 판 응답에 frame-ancestors · SAMEORIGIN · script-src-attr · 같은 ETag 로 다시 물으면 304 에도 그 헤더가 실린다(브라우저가 막는 근거)', async () => {
+    await withLab('board.js', SNAP('step6.board.js'), 4006, async (plain) => {
+      const res = await fetch(`${plain.base}/api/notices/1`);
+      expect(res.headers.get('content-security-policy')).toBeNull();
+      expect(res.headers.get('x-frame-options')).toBeNull();
+    });
+    await withLab('board.js', LAB('board.js'), 4006, async (lab) => {
+      const first = await fetch(`${lab.base}/api/notices/1`);
+      const csp = first.headers.get('content-security-policy');
+      expect(csp).toContain("frame-ancestors 'self'");
+      expect(csp).toContain("script-src-attr 'none'");
+      expect(first.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+      const again = await fetch(`${lab.base}/api/notices/1`, { headers: { 'If-None-Match': first.headers.get('etag'), 'Cache-Control': 'max-age=0' } });
+      expect(again.status).toBe(304);
+      expect(again.headers.get('content-security-policy')).toContain("frame-ancestors 'self'");
+      await sleep(100);
+      expect(lab.tail()).toMatch(/GET \/api\/notices\/1 304 \d+\.\dms/);
+    });
+  });
+
   it('🔴 helmet 의 Cross-Origin-Resource-Policy 는 same-origin', async () => {
     await withLab('board.js', LAB('board.js'), 4006, async (lab) => {
       const res = await fetch(`${lab.base}/api/notices/1`);
@@ -507,6 +664,25 @@ describe('축 ⑩ — 실습·과제 (lab/p3-29)', () => {
     const send = (ids) => getJson(`${lab.base}/api/notices/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
     try {
       expect(await send([1, 2])).toMatchObject({ status: 200, body: { message: '읽음으로 표시했어요' } });
+      await sleep(300);
+      expect(await send([4, 3])).toMatchObject({ status: 200, body: { message: '읽음으로 표시했어요' } });
+      await sleep(400);
+      expect(lab.tail()).toContain('Error: 3번 공지를 읽음으로 표시하지 못했어요');
+      expect(await fetch(`${lab.base}/api/notices/read`).then(() => 'answered', () => 'refused')).toBe('refused');
+    } finally {
+      await Promise.race([lab.stop(), sleep(500)]);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('🔴 직접 해보기 2 해설 — forEach 앞에 await 을 붙인 판도 처음 판과 같다: [1,2] 200 · [4,3] 200 · 0.1초 뒤 서버가 꺼진다', async () => {
+    expect(read(SNAP('practice2-await-foreach.js'))).toBe(read(SNAP('practice2-start.js'))
+      .replace("app.post('/api/notices/read', (req, res) => {\n  req.body.ids.forEach(", "app.post('/api/notices/read', async (req, res) => {\n  await req.body.ids.forEach("));
+    const dir = studentLab({ 'practice2.js': SNAP('practice2-await-foreach.js') });
+    const lab = await boot(join(dir, LAB_DIR, 'practice2.js'), { port: 4002, ready: '4002번 포트에서' });
+    const send = (ids) => getJson(`${lab.base}/api/notices/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+    try {
+      expect(await send([1, 2])).toMatchObject({ status: 200 });
       await sleep(300);
       expect(await send([4, 3])).toMatchObject({ status: 200, body: { message: '읽음으로 표시했어요' } });
       await sleep(400);
@@ -750,9 +926,27 @@ describe('축 ⑫ — 교안·답안 코드 블록', () => {
       'POST /api/notices/3/views 500 102.5ms', 'POST /api/notices/3/views 200 0.5ms', '[에러] POST /api/notices/3/views',
       'at saveView (file:///Users/hong/instagram-api/lab/p3-29/board.js:35:11)', 'at async file:///Users/hong/instagram-api/lab/p3-29/board.js:44:3',
       "Failed running 'lab/p3-29/board.js'. Waiting for file changes before restarting...", 'at file:///Users/hong/instagram-api/lab/p3-29/board.js:29:7',
-      'at file:///Users/hong/instagram-api/lab/p3-29/board.js:43:19']) {
+      'at file:///Users/hong/instagram-api/lab/p3-29/board.js:43:19', 'npm install express4@npm:express@4', 'npm uninstall express4',
+      '`added 25 packages`', 'at async file:///Users/hong/instagram-api/lab/p3-29/board.js:50:3', 'asyncHandler가 받았어요',
+      'The server aborted pending request', 'GET /api/notices/1 304 ', "frame-ancestors 'self'", '`http://localhost:4008`',
+      'node lab/p3-29/other-site.js']) {
       expect(text, line).toContain(line);
     }
+  });
+
+  it('🔴 낭독이 잡은 문장 — 사실이 아니거나 학생이 안 해 본 것을 해 봤다고 하던 문장이 돌아오지 않는다', () => {
+    const text = read(LECTURE);
+    for (const line of ['매개변수 셋을 적은 함수를 돌려줘야 해요', '끄는 방법도 봤죠', '직접 해보기 1에서 겪은 장면', '제가 Express 4(4.22 버전)', '감싸기 전과 같은 결과예요',
+      '`GET`으로 다시 요청하게 하는 상태 코드', '«기록한 에러»', '«바로 던지는 에러»를']) {
+      expect(text, line).not.toContain(line);
+    }
+    expect(read(ANSWERS)).not.toContain('진짜 해결이에요');
+  });
+
+  it('🔴 Step 8 표 — 헤더마다 «막으려는 일» 칸 · 브라우저가 지키는 약속 · 서버 쪽 일은 안 막는다', () => {
+    const text = read(LECTURE);
+    expect(text).toContain('| 헤더 | 브라우저에게 알려 주는 것 | 막으려는 일 |');
+    for (const line of ['클릭재킹(clickjacking)', 'XSS', '**이 헤더들은 모두 브라우저가 지키는 약속이에요.**', 'SQL 인젝션']) expect(text, line).toContain(line);
   });
 });
 
@@ -878,5 +1072,56 @@ describe('축 ⑬ — 교안 🙋 · 답안의 주장', () => {
         rmSync(dir, { recursive: true, force: true });
       }
     });
+  }, 30000);
+});
+
+describe('축 ⑭ — 교안이 기대는 앞 회차 사실', () => {
+  const part = (rel) => read(P(`../../${rel}`));
+  const LECTURE = () => part('part3/5-express-core/p3-29-error-builtin-thirdparty-lecture.md');
+  const ANSWER = () => part('part3/5-express-core/p3-29-error-builtin-thirdparty-answers.md');
+
+  it('🔴 Step 4 · 주제 1 ↔ p2-25 과제 [응용] — 세 주소 · 답안의 까닭 · uncaughtException', () => {
+    const lecture = part('part2/4-node-backend/p2-25-deploy-lecture.md');
+    expect(lecture).toContain('하나는 함수 안에서 바로 `throw`하고, 하나는 `await`을 한 번 한 뒤에 `throw`하고, 하나는 `setTimeout` 안에서 `throw`하세요.');
+    const answer = part('part2/4-node-backend/p2-25-deploy-answers.md');
+    expect(answer).toContain('아무도 안 받은 에러는 Node가 프로그램을 끝내는 것으로 처리하고요.');
+    expect(answer).toContain("process.on('uncaughtException')");
+    expect(answer).toContain("app.get('/boom/sync', (req, res) => {"); // Step 4 «바로 던진 에러는 catch 가» — async 가 아니어야 맞는 문장
+    expect(answer).toContain('다만 이건 「고치는 것」이 아니라 「죽기 전에 기록이라도 남기는 것」이에요.');
+    expect(LECTURE()).toContain('배포를 배울 때 과제에서');
+    expect(ANSWER()).toContain('«고치는 것»이 아니라 «죽기 전에 기록이라도 남기는 것»');
+  });
+
+  it('🔴 Step 3 ↔ p3-27 — 에러 미들웨어의 next 에 기본값을 붙여 Express 기본 처리가 답하게 한 장면', () => {
+    const text = part('part3/5-express-core/p3-27-middleware-structure-lecture.md');
+    expect(text).toContain('`app.js` 맨 아래 에러 미들웨어의 `next`에 기본값을 붙이고 저장해요.');
+    expect(text).toContain('Express의 기본 에러 처리가 답한 거예요.');
+    expect(LECTURE()).toContain('에러 미들웨어의 `next`에 기본값을 붙였더니');
+  });
+
+  it('🔴 Step 1 ↔ p3-27 — 거짓 500 은 직접 해보기 1 의 해설 안에 있었다(요구사항이 아니다)', () => {
+    const text = part('part3/5-express-core/p3-27-middleware-structure-lecture.md');
+    expect(text).toContain('로거 줄도 404가 아니라 `GET /api/notices/9 500`으로 찍혀요.');
+    expect(LECTURE()).toContain('직접 해보기 1의 해설에서 읽기만 한 장면');
+  });
+
+  it('🔴 직접 해보기 2 ↔ p1-44 — 규칙 문장이 그 회차에 그대로 있다', () => {
+    const rule = '비동기를 반복문으로 돌릴 거면 `for...of`를 쓰세요';
+    expect(part('part1/7-js-async/p1-44-js-async-await-lecture.md')).toContain(rule);
+    expect(LECTURE()).toContain(rule);
+  });
+
+  it('🔴 직접 해보기 3 ↔ p3-21 — authorize 줄의 303 은 본문에 있다', () => {
+    expect(part('part3/3-auth-principles/p3-21-oauth-oidc-lecture.md')).toContain('`authorize`(303)');
+    expect(LECTURE()).toContain('Network 탭의 `authorize` 줄에서 봤어요');
+  });
+
+  it('🔴 Step 8 ↔ p3-21 · p3-19 · p2-25 · p2-34 — 클릭재킹 · XSS · 막는 주체는 브라우저 · SQL 인젝션', () => {
+    const oauth = part('part3/3-auth-principles/p3-21-oauth-oidc-lecture.md');
+    expect(oauth).toContain('클릭재킹(clickjacking)이라고 불러요');
+    expect(part('part3/3-auth-principles/p3-19-cookie-auth-lecture.md')).toContain('XSS(Cross-Site Scripting)라고 불러요');
+    expect(part('part2/4-node-backend/p2-25-deploy-lecture.md')).toContain('막는 주체가 브라우저이기 때문이에요.');
+    expect(part('part2/5-db-prisma/p2-34-more-relations-lecture.md')).toContain('SQL 인젝션(SQL injection)이라고 불러요');
+    expect(LECTURE()).toContain('OAuth를 배울 때 이야기한 클릭재킹(clickjacking)이에요.');
   });
 });
