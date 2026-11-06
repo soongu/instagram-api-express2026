@@ -477,12 +477,12 @@ describe('축 ⑩ — 직접 해보기 3: 상태 코드로 말하게 고치기',
 
 describe('축 ⑩ — 과제 [기초]: 저장 API', () => {
   const H1 = 3774;
-  it('🔴 정답 판 — 아홉 요청 201 · 200 · 201 · 200 · 200 · 200 · 200 · 404 · 405 · 목록 [1, 3] → [3]', async () => {
+  it('🔴 정답 판 — 아홉 요청 201 · 200 · 201 · 200 · 200 · 200 · 200 · 404 · 405 · 목록 [1, 3] → 첫 취소 뒤 [3]', async () => {
     await withLab({ src: lab('homework1.js'), labPort: 4011, port: H1 }, async () => {
       const r = await sendAll(lab('homework1.http'), 4011, H1);
       expect(statuses(r)).toEqual([201, 200, 201, 200, 200, 200, 200, 404, 405]);
       expect(r[3].body.map((p) => p.id)).toEqual([1, 3]);
-      expect(r[6].body.map((p) => p.id)).toEqual([3]);
+      expect(r[5].body.map((p) => p.id)).toEqual([3]);
       expect(r[7].body).toEqual({ message: '그런 게시물은 없어요' });
       expect(r[8].allow).toBe('PUT, DELETE');
     });
@@ -500,6 +500,16 @@ describe('축 ⑩ — 과제 [기초]: 저장 API', () => {
     const above = rep(rep(src, lines, ''), '// 내가 저장한 게시물 목록', `${lines}\n// 내가 저장한 게시물 목록`);
     await withLab({ src: above, labPort: 4011, port: H1 }, async () => {
       expect((await sendAll(lab('homework1.http'), 4011, H1))[0].status).toBe(405);
+    });
+    // 정독이 만든 판 — 저장을 두 번 넣어 두고 상태 코드만 맞게 고른다. 넷째 목록은 filter 로 멀쩡하고, 첫 취소 뒤 목록(여섯째)에 1번이 남는다
+    const dup = rep(src,
+      "  if (saves.some((save) => save.postId === post.id && save.userId === userId)) {\n    res.json({ saved: true });\n    return;\n  }\n\n  saves.push({ postId: post.id, userId });\n  res.status(201).json({ saved: true });",
+      "  const already = saves.some((save) => save.postId === post.id && save.userId === userId);\n  saves.push({ postId: post.id, userId });\n  res.status(already ? 200 : 201).json({ saved: true });");
+    await withLab({ src: dup, labPort: 4011, port: H1 }, async () => {
+      const r = await sendAll(lab('homework1.http'), 4011, H1);
+      expect(statuses(r)).toEqual([201, 200, 201, 200, 200, 200, 200, 404, 405]);
+      expect(r[3].body.map((p) => p.id)).toEqual([1, 3]);
+      expect(r[5].body.map((p) => p.id)).toEqual([1, 3]);
     });
   });
 });

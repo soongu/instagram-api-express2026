@@ -13,11 +13,11 @@ GET http://localhost:4011/api/users/2/saves
 ### 저장 취소
 DELETE http://localhost:4011/api/posts/1/saves/2
 
-### 한 번 더 취소
-DELETE http://localhost:4011/api/posts/1/saves/2
-
 ### 취소한 뒤 목록
 GET http://localhost:4011/api/users/2/saves
+
+### 한 번 더 취소
+DELETE http://localhost:4011/api/posts/1/saves/2
 
 ### 없는 게시물 저장하기
 PUT http://localhost:4011/api/posts/99/saves/2
