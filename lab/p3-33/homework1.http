@@ -1,0 +1,17 @@
+### 첫 페이지
+GET http://localhost:4011/api/admin/posts
+
+### 5000번째 페이지
+GET http://localhost:4011/api/admin/posts?page=5000
+
+### 마지막 페이지
+GET http://localhost:4011/api/admin/posts?page=5001
+
+### 없는 페이지
+GET http://localhost:4011/api/admin/posts?page=5002
+
+### 규칙에 안 맞는 페이지 번호
+GET http://localhost:4011/api/admin/posts?page=0
+
+### 상한을 넘은 크기
+GET http://localhost:4011/api/admin/posts?size=51

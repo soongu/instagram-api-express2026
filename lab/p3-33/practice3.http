@@ -1,0 +1,12 @@
+### 첫 페이지 — 4번과 5번 댓글
+# @name first
+GET http://localhost:4003/api/posts/2/comments?limit=2
+
+### 다음 페이지 — 6번과 7번 댓글, 여기가 끝이다
+GET http://localhost:4003/api/posts/2/comments?limit=2&cursor={{first.nextCursor}}
+
+### 커서가 아닌 글자
+GET http://localhost:4003/api/posts/2/comments?limit=2&cursor=abc
+
+### 상한을 넘은 개수
+GET http://localhost:4003/api/posts/2/comments?limit=21
