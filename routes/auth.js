@@ -18,4 +18,19 @@ router.post('/login', validateBody(loginSchema), async (req, res) => {
   res.json(user);
 });
 
+
+router.get('/me', async (req, res) => {
+  // 브라우저가 다시 실어 보낸 쿠키 — cookie-parser 가 `userId=2` 를 { userId: '2' } 로 바꿔 둔다.
+  const userId = Number(req.cookies.userId);
+
+  if (!Number.isInteger(userId))
+    throw new UnauthorizedError('로그인이 필요해요');
+
+  const user = await userService.findUserById(userId);
+
+  if (!user) throw new UnauthorizedError('로그인이 필요해요');
+
+  res.json(user);
+});
+
 export default router;
