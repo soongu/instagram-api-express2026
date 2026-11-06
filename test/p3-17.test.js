@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
+import { roundDir } from './helpers/round.js';
 import { boot } from './helpers/boot.js';
 import { setupP236 } from '../sql/p2-36/setup.mjs';
 import { applyMigrationsAfter, P234_LAST } from './helpers/tip-schema.js';
@@ -31,6 +32,9 @@ const ENV = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:5173' };
 const PORT = 3471;
 
 const read = (p) => readFileSync(p, 'utf8');
+// 🚨 (p3-33) 목록의 커서 계약이 바뀌었다(`cursor` 가 불투명 글자 · 응답에 `nextCursor`) — 이 판정은 그 직전 판 `code/p3-32` 를 띄운다.
+const PIN = roundDir('code/p3-32');
+const C = (rel) => join(PIN.dir, rel);
 
 let db = null;
 let server = null;
@@ -68,12 +72,13 @@ beforeAll(async () => {
   await startState();
 
   server = await boot('app.js', {
-    port: PORT, env: { ...ENV, PORT: String(PORT) }, ready: `${PORT}번 포트에서`,
+    port: PORT, cwd: PIN.dir, env: { ...ENV, PORT: String(PORT) }, ready: `${PORT}번 포트에서`,
   });
 }, 120000);
 
 afterAll(async () => {
   if (server) await server.stop();
+  PIN.cleanup();
   if (db) await db.end();
   const admin = await dropGate();
   await admin.end();
@@ -91,7 +96,7 @@ const withVariant = async (port, replace, fn) => {
   const dir = mkdtempSync(join(tmpdir(), 'p317-variant-'));
   try {
     for (const name of ['app.js', 'db.js', 'errors.js', 'routes', 'services', 'middlewares', 'schemas', 'package.json']) {
-      cpSync(P(name), join(dir, name), { recursive: true });
+      cpSync(C(name), join(dir, name), { recursive: true });
     }
     symlinkSync(P('node_modules'), join(dir, 'node_modules'));
     for (const [rel, text] of Object.entries(replace)) writeFileSync(join(dir, rel), text);
@@ -162,7 +167,7 @@ describe('축 ③ — 교안 Step 2 의 함정 판', () => {
 
 describe('축 ④ — _count 는 쿼리를 따로 안 보낸다', () => {
   it('🔴 userId 를 줘도 안 줘도 목록 하나에 쿼리 3개', async () => {
-    const dbWithLog = read(P('db.js')).replace(
+    const dbWithLog = read(C('db.js')).replace(
       'new PrismaClient({ adapter })', "new PrismaClient({ adapter, log: ['query'] })");
     expect(dbWithLog).toContain("log: ['query']");
     await withVariant(PORT + 2, { 'db.js': dbWithLog }, async (variant) => {
@@ -251,7 +256,7 @@ describe('축 ⑧ — 교안이 인용한 백엔드 코드가 그 Step 의 파�
   const sources = {
     // 🔑 (p3-30) 이 회차 당시 판 — p3-30 이 routes/posts.js 를 router.param 으로 바꾸고 좋아요를 routes/likes.js 로 뗐다.
     'routes/posts.js': [git('code/p3-17', 'routes/posts.js')],
-    'services/postService.js': [read(P('services/postService.js')), read(P('snapshots/p3-17.step2-trap.postService.js'))],
+    'services/postService.js': [read(C('services/postService.js')), read(P('snapshots/p3-17.step2-trap.postService.js'))],
   };
 
   it('🔴 백엔드 블록이 넷이다 — 라우트 하나 · 서비스 셋', () => {
@@ -283,7 +288,7 @@ describe('축 ⑧ — 교안이 인용한 백엔드 코드가 그 Step 의 파�
   it('Step 2 의 함정 판 블록과 고친 판 블록은 서로 다른 판에서 왔다', () => {
     const [, , trapBlock, fixBlock] = blocks;
     expect(trapBlock).toContain('select: { ...postFields, _count: { select: { likes: { where: { userId } } } } },');
-    expect(read(P('services/postService.js'))).not.toContain('select: { ...postFields, _count');
+    expect(read(C('services/postService.js'))).not.toContain('select: { ...postFields, _count');
     expect(fixBlock).toContain('select: fields,');
   });
 
@@ -316,7 +321,7 @@ describe('축 ⑨ — Step 1·2 의 «이렇게 하면» 주장', () => {
   });
 
   it('🔴 `_count !== undefined` 없이 `_count.likes` 를 읽으면 `### 1번 게시물 지금 상태` 가 500 이다', async () => {
-    const noGuard = read(P('services/postService.js')).replace(
+    const noGuard = read(C('services/postService.js')).replace(
       'liked: _count !== undefined && _count.likes > 0,', 'liked: _count.likes > 0,');
     expect(noGuard).toContain('liked: _count.likes > 0,');
     await withVariant(PORT + 4, { 'services/postService.js': noGuard }, async (variant) => {

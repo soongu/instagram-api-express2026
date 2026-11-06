@@ -15,6 +15,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import pg from 'pg';
+import { roundDir } from './helpers/round.js';
 import { boot } from './helpers/boot.js';
 import { setupP236 } from '../sql/p2-36/setup.mjs';
 import { applyMigrationsAfter, P234_LAST } from './helpers/tip-schema.js';
@@ -30,6 +31,8 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const PORT = 3461;
 
 const read = (p) => readFileSync(p, 'utf8');
+// 🚨 (p3-33) 목록의 커서 계약이 바뀌었다(`cursor` 가 불투명 글자 · 응답에 `nextCursor`) — 이 판정은 그 직전 판 `code/p3-32` 를 띄운다.
+const PIN = roundDir('code/p3-32');
 const FRONT = (rel) => read(P(`../instagram-react/src/${rel}`));
 
 let db = null;
@@ -60,12 +63,13 @@ beforeAll(async () => {
   seed();
 
   server = await boot('app.js', {
-    port: PORT, env: { ...ENV, PORT: String(PORT) }, ready: `${PORT}번 포트에서`,
+    port: PORT, cwd: PIN.dir, env: { ...ENV, PORT: String(PORT) }, ready: `${PORT}번 포트에서`,
   });
 }, 120000);
 
 afterAll(async () => {
   if (server) await server.stop();
+  PIN.cleanup();
   if (db) await db.end();
   const admin = new pg.Client(ADMIN);
   await admin.connect();
@@ -483,7 +487,9 @@ describe('인용이 코드베이스와 맞는가', () => {
     '../instagram-react/src/components/p2-21.final.FeedItemCaption.snapshot.jsx',
   ].map((f) => squash(read(P(f))))
     // 🔑 (p3-30) 이 회차 당시의 routes/posts.js — p3-30 이 parseId 를 router.param 으로 바꾸고 좋아요 라우트를 routes/likes.js 로 뗐다.
-    .concat(squash(execFileSync('git', ['show', 'code/p2-36:routes/posts.js'], { cwd: P('.'), encoding: 'utf8' })));
+    .concat(squash(execFileSync('git', ['show', 'code/p2-36:routes/posts.js'], { cwd: P('.'), encoding: 'utf8' })))
+    // 🔑 (p3-33) 이 회차의 `getPosts` — p3-33 이 Prisma `cursor` 를 keyset 으로 바꿨다.
+    .concat(squash(execFileSync('git', ['show', 'code/p2-36:services/postService.js'], { cwd: P('.'), encoding: 'utf8' })));
 
   for (const [이름, path] of [['교안', LECTURE], ['답안', ANSWERS]]) {
     for (const lang of ['js', 'jsx', 'javascript']) {

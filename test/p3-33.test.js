@@ -628,9 +628,18 @@ describe('축 ② — Step 2~6: 교안의 실행 계획', () => {
     });
   });
 
+  it('🔴 답안의 EXPLAIN 블록 둘 — 펜스와 대조(인기순 깊은 페이지 · 위로 받는 쿼리)', async () => {
+    const list = fences(ANSWERS());
+    const pairs = list.flatMap((f, i) => (f.lang === 'sql' && f.body.startsWith('EXPLAIN') && list[i + 1]?.lang === '' ? [{ sql: f.body, plan: list[i + 1].body, line: f.line }] : []));
+    expect(pairs).toHaveLength(2);
+    for (const pair of pairs) expect(normal(await planText(pair.sql)), `L${pair.line}`).toBe(fencePlan(pair.plan));
+  });
+
   it('🔴 주제 1 — 위로 받는 쿼리는 Index Scan Backward + Index Cond · 20행', async () => {
     const t = await timeOf(50000);
     const plan = await planText(`${E}SELECT * FROM posts WHERE (created_at, id) > ('${t}', 50000) ORDER BY created_at ASC, id ASC LIMIT 20`);
+    const ids = (await lab.query(`SELECT id FROM posts WHERE (created_at, id) > ('${t}', 50000) ORDER BY created_at ASC, id ASC LIMIT 20`)).rows.map((row) => row.id);
+    expect([ids[0], ids.at(-1)]).toEqual([49999, 49980]);
     expect(plan).toMatch(/Index Scan Backward using posts_created_at_id_idx on posts \(actual time=\S+ rows=20\.00/);
     expect(plan).toContain('Index Cond: (ROW(created_at, id) > ROW(');
   });
@@ -708,6 +717,21 @@ describe('축 ⑨ — 학생 파일', () => {
     const step6 = http.find((f) => f.body.includes('# @name first')).body;
     const step7 = http.find((f) => f.body.startsWith('### 2번 게시물 지우기')).body;
     expect(read(R('requests/cursor.http'))).toBe(`${step6}\n\n${step7}\n`);
+  });
+
+  it('🔴 답안 — 코드 블록 줄 실재 · 요청 파일 byte 같다 · 실행 계획은 축 ⑧ 에서 잰 값', () => {
+    const answers = fences(ANSWERS());
+    const owners = { 'homework1.js': LAB_FILE('homework1.js'), 'homework2.js': LAB_FILE('homework2.js') };
+    let seen = 0;
+    for (const f of answers.filter((one) => one.lang === 'javascript')) {
+      const name = f.body.split('\n')[0].split('/').at(-1);
+      expect(owners[name], name).toBeDefined();
+      seen += 1;
+      for (const line of f.body.split('\n').filter((one) => one.trim() !== '')) expect(owners[name], line).toContain(line);
+    }
+    expect(seen).toBe(2);
+    expect(answers.some((f) => f.lang === 'http' && f.body === LAB_FILE('homework1.http').trimEnd())).toBe(true);
+    expect(answers.some((f) => f.lang === 'http' && f.body === LAB_FILE('homework2.http').trimEnd())).toBe(true);
   });
 
   it('🔴 Step 4 의 인용 — 무한 스크롤 회차의 답안에 축자로 있다', () => {

@@ -19,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
+import { roundDir } from './helpers/round.js';
 import { boot } from './helpers/boot.js';
 import { setupP236 } from '../sql/p2-36/setup.mjs';
 import { applyMigrationsAfter, P234_LAST } from './helpers/tip-schema.js';
@@ -33,6 +34,8 @@ const ENV = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:5173' };
 const PORT = 3462;
 
 const read = (p) => readFileSync(p, 'utf8');
+// 🚨 (p3-33) 목록의 커서 계약이 바뀌었다(`cursor` 가 불투명 글자 · 응답에 `nextCursor`) — 이 판정은 그 직전 판 `code/p3-32` 를 띄운다.
+const PIN = roundDir('code/p3-32');
 const FRONT = (rel) => read(P(`../instagram-react/${rel}`));
 
 // 🚨 `.env` 는 `p2-06` 이 정한 대로 저장소에 «안» 올라간다 — 없을 때 조용히
@@ -82,12 +85,13 @@ beforeAll(async () => {
   seed();
 
   server = await boot('app.js', {
-    port: PORT, env: { ...ENV, PORT: String(PORT) }, ready: `${PORT}번 포트에서`,
+    port: PORT, cwd: PIN.dir, env: { ...ENV, PORT: String(PORT) }, ready: `${PORT}번 포트에서`,
   });
 }, 120000);
 
 afterAll(async () => {
   if (server) await server.stop();
+  PIN.cleanup();
   if (db) await db.end();
 });
 
