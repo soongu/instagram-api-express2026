@@ -33,6 +33,28 @@ const postFields = {
   images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' } },
 };
 
+// 커서는 «마지막으로 내준 게시물의 시각과 번호» 를 글자 하나로 접은 것이다.
+// 받는 쪽은 뜻을 몰라도 된다 — 받아 두었다가 다음 요청에 그대로 돌려주기만 한다.
+function encodeCursor({ createdAt, id }) {
+  return Buffer.from(JSON.stringify({ createdAt, id })).toString('base64url');
+}
+
+function decodeCursor(cursor) {
+  const { createdAt, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+
+  return { createdAt: new Date(createdAt), id };
+}
+
+// 목록은 «시각이 늦은 순, 같으면 번호가 큰 순» 이다. 그러니 커서 다음 행은
+// 시각이 더 이르거나, 시각이 같고 번호가 더 작은 행이다.
+// `lte` 가 인덱스에서 시작 위치를 찾고, OR 는 시각이 같은 행만 거른다.
+function afterCursor({ createdAt, id }) {
+  return {
+    createdAt: { lte: createdAt },
+    OR: [{ createdAt: { lt: createdAt } }, { id: { lt: id } }],
+  };
+}
+
 export async function getPosts({ username, userId, limit = 5, cursor }) {
   // 누가 보는지 알 때만 그 사람이 누른 좋아요를 센다.
   // userId 가 undefined 면 `where` 가 «조건 없음» 이 되어 누가 누른 좋아요든 다 센다.
@@ -42,17 +64,25 @@ export async function getPosts({ username, userId, limit = 5, cursor }) {
 
   // 하나 더 달라고 한다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
   const posts = await prisma.post.findMany({
-    where: { author: { username } },
+    where: {
+      author: { username },
+      // 커서가 오면 «그 게시물 다음»부터다. 커서의 값만 쓰므로 그 게시물이 지워졌어도 이어진다.
+      ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
+    },
     select: fields,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
-    // 커서가 오면 «그 게시물 다음»부터다. 커서가 가리키는 게시물은 건너뛴다.
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
 
   const hasNext = posts.length > limit;
+  const page = posts.slice(0, limit);
 
-  return { items: posts.slice(0, limit).map(flatten), hasNext };
+  return {
+    items: page.map(flatten),
+    hasNext,
+    // 다음 페이지가 있을 때만 커서를 만든다 — 마지막 페이지의 null 은 «여기가 끝» 이라는 뜻이다.
+    nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
+  };
 }
 
 export async function getPost(id) {
