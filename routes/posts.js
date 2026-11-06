@@ -1,23 +1,24 @@
 // ~/instagram-api/routes/posts.js
 import express from 'express';
 import * as postService from '../services/postService.js';
-import { validateBody } from '../middlewares/validate.js';
+import { validateBody, validateQuery } from '../middlewares/validate.js';
 import { parseId } from '../middlewares/params.js';
 import { allowOnly } from '../middlewares/methods.js';
-import { postCreateSchema, postUpdateSchema } from '../schemas/postSchema.js';
+import { postCreateSchema, postListQuerySchema, postUpdateSchema } from '../schemas/postSchema.js';
 
 const router = express.Router();
 
 // 주소에 이 이름의 값이 있으면, 라우트로 들어가기 전에 이 함수부터 한 번 부른다.
 router.param('id', parseId);
 
-router.get('/', async (req, res) => {
+router.get('/', validateQuery(postListQuerySchema), async (req, res) => {
+  const { limit, cursor } = res.locals.query;
   const page = await postService.getPosts({
     username: req.query.username,
     // 로그인을 배우기 전까지는 «누가 보는지» 를 주소에 실어 받는다.
     userId: Number(req.query.userId) || undefined,
-    limit: Number(req.query.limit) || undefined,
-    cursor: req.query.cursor,
+    limit,
+    cursor,
   });
 
   res.json(page);

@@ -3,6 +3,7 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
+import { cursorSchema } from '../schemas/postSchema.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
 // 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
@@ -40,9 +41,11 @@ function encodeCursor({ createdAt, id }) {
 }
 
 function decodeCursor(cursor) {
-  const { createdAt, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
-
-  return { createdAt: new Date(createdAt), id };
+  try {
+    return cursorSchema.parse(JSON.parse(Buffer.from(cursor, 'base64url').toString()));
+  } catch {
+    throw new BadRequestError('커서 값이 올바르지 않아요');
+  }
 }
 
 // 목록은 «시각이 늦은 순, 같으면 번호가 큰 순» 이다. 그러니 커서 다음 행은

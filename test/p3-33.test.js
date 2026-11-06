@@ -183,3 +183,54 @@ describe('축 ⑥ — Step 6: 끝 판의 목록 계약', () => {
     });
   });
 });
+
+// Step 6 끝 판 — 검사가 없는 판. Step 7 이 «겪기» 로 쓴다.
+const STEP6 = {
+  'services/postService.js': read(P('snapshots/p3-33/step6.postService.js')),
+  'routes/posts.js': read(P('snapshots/p3-33/step6.posts-route.js')),
+};
+const BAD_CURSOR = { message: '커서 값이 올바르지 않아요' };
+
+describe('축 ⑦ — Step 7: 잘못된 입력', () => {
+  it('🔴 앞 판(Step 6) — 커서가 아닌 글자·옛 숫자 커서는 500', async () => {
+    reseed();
+    await withServer(PORT, STEP6, async (step6) => {
+      for (const cursor of ['abc', '2']) {
+        expect((await send(step6.base, 'GET', `/api/posts?limit=2&cursor=${cursor}`)).status, cursor).toBe(500);
+      }
+    });
+  });
+
+  it('🔴 끝 판 — 커서가 아닌 글자·옛 숫자 커서·모양이 틀린 커서는 400 «커서 값이 올바르지 않아요»', async () => {
+    reseed();
+    const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    await withServer(PORT, {}, async (now) => {
+      for (const cursor of ['abc', '2', encode({ id: 2 }), encode({ createdAt: '어제', id: 2 }), encode({ createdAt: '2026-01-01T00:00:00.000Z', id: '2' })]) {
+        const res = await send(now.base, 'GET', `/api/posts?limit=2&cursor=${cursor}`);
+        expect({ status: res.status, body: res.body }, cursor).toEqual({ status: 400, body: BAD_CURSOR });
+      }
+    });
+  });
+
+  it('🔴 끝 판 — limit 은 1 이상 50 이하의 정수(그 밖은 400) · 없으면 기본 5', async () => {
+    reseed();
+    await withServer(PORT, {}, async (now) => {
+      for (const limit of ['0', '-1', '51', '100000', 'abc', '1.5']) {
+        const res = await send(now.base, 'GET', `/api/posts?limit=${limit}`);
+        expect(res.status, limit).toBe(400);
+        expect(res.body.message, limit).toBe('보낸 내용이 규칙에 안 맞아요');
+      }
+      expect((await send(now.base, 'GET', '/api/posts?limit=50')).status).toBe(200);
+      expect((await send(now.base, 'GET', '/api/posts')).body.items).toHaveLength(5);
+    });
+  });
+
+  it('🔴 끝 판 — userId 가 숫자가 아니면 세지 않고 liked: false(계약 그대로)', async () => {
+    reseed();
+    await withServer(PORT, {}, async (now) => {
+      const res = await send(now.base, 'GET', '/api/posts?userId=abc&limit=1');
+      expect(res.status).toBe(200);
+      expect(res.body.items[0].liked).toBe(false);
+    });
+  });
+});
