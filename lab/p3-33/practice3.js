@@ -3,17 +3,18 @@ import express from 'express';
 import { z } from 'zod';
 import { prisma } from '../../db.js';
 import { validateQuery } from '../../middlewares/validate.js';
+import { parseId } from '../../middlewares/params.js';
 import { BadRequestError, HttpError } from '../../errors.js';
 
 const app = express();
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).optional(),
-  cursor: z.string().optional(),
+  cursor: z.string().min(1).optional(),
 });
 const cursorSchema = z.object({
-  createdAt: z.coerce.date(),
-  id: z.number().int(),
+  createdAt: z.iso.datetime(),
+  id: z.int32(),
 });
 
 function encodeCursor({ createdAt, id }) {
@@ -36,11 +37,13 @@ function afterCursor({ createdAt, id }) {
   };
 }
 
+app.param('id', parseId);
+
 app.get('/api/posts/:id/comments', validateQuery(querySchema), async (req, res) => {
   const { limit = 10, cursor } = res.locals.query;
   const comments = await prisma.comment.findMany({
     where: {
-      postId: Number(req.params.id),
+      postId: req.postId,
       parentId: null,
       ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
     },

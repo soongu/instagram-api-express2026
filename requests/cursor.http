@@ -10,8 +10,11 @@ GET http://localhost:3000/api/posts?limit=2&cursor={{first.nextCursor}}
 ### 셋째 페이지 — 게시물이 5개라 여기가 끝이다
 GET http://localhost:3000/api/posts?limit=2&cursor={{second.nextCursor}}
 
-### 커서가 아닌 글자를 보내면
+### 커서가 아닌 값을 보내면
 GET http://localhost:3000/api/posts?limit=2&cursor=abc
+
+### 필드가 빠진 커서를 보내면 — {"id":2} 를 base64url 로 인코딩한 값이다
+GET http://localhost:3000/api/posts?limit=2&cursor=eyJpZCI6Mn0
 
 ### 한 번에 너무 많이 달라고 하면
 GET http://localhost:3000/api/posts?limit=100000

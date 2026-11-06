@@ -9,11 +9,11 @@ const app = express();
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
-  cursor: z.string().optional(),
+  cursor: z.string().min(1).optional(),
 });
 const cursorSchema = z.object({
-  likeCount: z.number().int(),
-  id: z.number().int(),
+  likeCount: z.int32(),
+  id: z.int32(),
 });
 
 function encodeCursor({ likeCount, id }) {

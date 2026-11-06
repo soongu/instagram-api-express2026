@@ -34,7 +34,7 @@ const postFields = {
   images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' } },
 };
 
-// 커서는 «마지막으로 내준 게시물의 시각과 번호» 를 글자 하나로 접은 것이다.
+// 커서는 «마지막으로 내준 게시물의 시각과 번호» 를 문자열 하나로 인코딩한 것이다.
 // 받는 쪽은 뜻을 몰라도 된다 — 받아 두었다가 다음 요청에 그대로 돌려주기만 한다.
 function encodeCursor({ createdAt, id }) {
   return Buffer.from(JSON.stringify({ createdAt, id })).toString('base64url');

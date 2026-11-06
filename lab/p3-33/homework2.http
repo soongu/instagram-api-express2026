@@ -5,7 +5,7 @@ GET http://localhost:4012/api/popular-posts?limit=3
 ### 둘째 페이지
 GET http://localhost:4012/api/popular-posts?limit=3&cursor={{first.nextCursor}}
 
-### 커서가 아닌 글자
+### 커서가 아닌 값
 GET http://localhost:4012/api/popular-posts?cursor=abc
 
 ### 수업 목록의 커서
