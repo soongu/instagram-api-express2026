@@ -15,3 +15,6 @@ GET http://localhost:3000/api/posts?limit=2&cursor=abc
 
 ### 한 번에 너무 많이 달라고 하면
 GET http://localhost:3000/api/posts?limit=100000
+
+### 2번 게시물 지우기
+DELETE http://localhost:3000/api/posts/2
