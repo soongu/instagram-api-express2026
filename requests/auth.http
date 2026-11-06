@@ -1,0 +1,15 @@
+### 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### 없는 이름으로 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "hana"
+}

@@ -18,3 +18,9 @@ export class BadRequestError extends HttpError {
     this.details = details;
   }
 }
+
+export class UnauthorizedError extends HttpError {
+  constructor(message) {
+    super(401, message);
+  }
+}
