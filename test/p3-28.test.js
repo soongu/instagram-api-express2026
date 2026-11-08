@@ -1018,7 +1018,7 @@ describe('축 ⑭ — 학생 낭독 집중 검수(2026-11-05)', () => {
 
   it('🔴 Step 8 — 앞 회차에 잇는다: p2-30 ⚠️ · p2-24 🤔 에 그 사실이 있다', () => {
     const t = LECTURE_SEC();
-    expect(t).toContain('까닭은 MongoDB에서 Prisma로 옮길 때 들은 적이 있어요');
+    expect(t).toContain('이유는 MongoDB에서 Prisma로 옮길 때 들은 적이 있어요');
     expect(t).toContain('`db.js`를 다시 보면 연결하는 줄이 정말 없어요');
     expect(t).toContain('MongoDB를 쓸 때처럼 서버가 뜰 때 미리 연결해 두면 되지 않을까요');
     expect(t).toContain('**그것 없이 의미가 있는 서버인가**');
