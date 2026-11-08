@@ -570,6 +570,8 @@ describe('축 ⑦ — 학생 파일과 교안 블록', () => {
       'package-lock.json',
       'package.json',
       'requests/cursor.http',
+      // requests/uploads.http 는 p3-31 학생 검수(2026-11-08 · 3985bba)가 main 에서 고쳤다 — 이 회차의 변경이 아니다.
+      'requests/uploads.http',
       'routes/posts.js',
       'schemas/postSchema.js',
       'services/postService.js',
