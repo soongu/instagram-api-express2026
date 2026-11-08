@@ -1,6 +1,28 @@
 // ~/instagram-api/docs/openapi.js
 // 우리 API 의 계약을 OpenAPI 형식으로 적은 문서다.
+import { z } from 'zod';
+import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js';
+
 const json = (schema) => ({ 'application/json': { schema } });
+
+// 검사에 쓰는 zod 스키마를 OpenAPI 가 읽는 JSON Schema 로 바꾼다.
+// 요청으로 들어오는 값을 적는 것이라, zod 가 바꾸기 전의 모양(input)으로 뽑는다.
+function toSchema(schema) {
+  return z.toJSONSchema(schema, { io: 'input' });
+}
+
+// 쿼리 문자열 스키마의 필드를 하나씩 OpenAPI 의 parameters 로 펼친다.
+function queryParameters(schema) {
+  const { properties, required = [] } = toSchema(schema);
+
+  return Object.entries(properties).map(([name, { description, ...value }]) => ({
+    name,
+    in: 'query',
+    description,
+    required: required.includes(name),
+    schema: value,
+  }));
+}
 
 export const openapi = {
   openapi: '3.2.0',
@@ -10,14 +32,21 @@ export const openapi = {
       get: {
         summary: '게시물 목록',
         parameters: [
-          { name: 'limit', in: 'query', description: '한 페이지의 게시물 수 — 없으면 5', schema: { type: 'integer', minimum: 1, maximum: 50 } },
-          { name: 'cursor', in: 'query', description: '앞 응답의 nextCursor 그대로', schema: { type: 'string' } },
-          { name: 'username', in: 'query', description: '이 사람이 올린 게시물만', schema: { type: 'string' } },
+          ...queryParameters(postListQuerySchema),
+          // userId 는 검사 스키마 밖에서 읽는 값이라 손으로 적는다.
           { name: 'userId', in: 'query', description: '보는 사람의 번호 — 그 사람이 누른 좋아요가 liked 로 온다', schema: { type: 'integer' } },
         ],
         responses: {
           200: { description: '게시물 한 페이지', content: json({ $ref: '#/components/schemas/PostPage' }) },
           400: { description: '쿼리 값이 규칙에 안 맞음', content: json({ $ref: '#/components/schemas/Error' }) },
+        },
+      },
+      post: {
+        summary: '게시물 올리기',
+        requestBody: { required: true, content: json(toSchema(postCreateSchema)) },
+        responses: {
+          201: { description: '만든 게시물 — Location 헤더에 그 게시물의 주소', content: json({ $ref: '#/components/schemas/Post' }) },
+          400: { description: '보낸 내용이 규칙에 안 맞음', content: json({ $ref: '#/components/schemas/Error' }) },
         },
       },
     },
