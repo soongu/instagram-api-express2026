@@ -48,6 +48,22 @@ Content-Type: image/jpeg
 < ./photos/beach.jpg
 --photo-boundary--
 
+### 사진과 사진이 아닌 파일을 함께 보내기
+POST http://localhost:3000/api/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ./photos/beach.jpg
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="memo.txt"
+Content-Type: text/plain
+
+< ./photos/memo.txt
+--photo-boundary--
+
 ### 올린 사진으로 게시물 만들기
 # @name created
 POST http://localhost:3000/api/posts
@@ -62,3 +78,16 @@ Content-Type: application/json
 
 ### 방금 만든 게시물 지우기
 DELETE http://localhost:3000/api/posts/{{created.id}}
+
+### 폴더 밖 파일을 가리키는 게시물
+# @name escaped
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 2,
+  "imageUrls": ["/uploads/../lab/p3-31/canary.txt"]
+}
+
+### 그 게시물 지우기
+DELETE http://localhost:3000/api/posts/{{escaped.id}}

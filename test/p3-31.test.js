@@ -21,8 +21,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import pg from 'pg';
+import express from 'express';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { P235_MIGRATIONS } from '../sql/p2-36/setup.mjs';
@@ -772,6 +774,97 @@ describe('축 ⑫ — 교안·답안 코드 블록의 줄이 코드베이스에 
       expect(inOrder(body.filter((l) => l !== ''), all), body[0]).toBe(true);
       checked += 1;
     }
-    expect(checked).toBe(11);
+    expect(checked).toBe(13); // 2026-11-08 학생 검수 — Step 5 섞은 요청 · Step 7 폴더 밖 게시물 만들기·지우기(블록 하나)
   });
 });
+
+// ───────── 축 ⑬ — 학생 낭독 집중 검수 반영(2026-11-08) ─────────
+// 학생이 따라 치며 잡은 확인 절차의 구멍 하나와, 겪기·잇기로 바꾼 주장들을 실행으로 잠근다.
+describe('축 ⑬ — 학생 낭독 집중 검수 반영', () => {
+  const Q = 3790;
+  const LECTURE = new URL('../../../part3/5-express-core/p3-31-file-upload-lecture.md', import.meta.url).pathname;
+  const ANSWERS = new URL('../../../part3/5-express-core/p3-31-file-upload-answers.md', import.meta.url).pathname;
+  const BROWSE = new URL('../../../progress/reading-tools/browse.mjs', import.meta.url).pathname;
+
+  it('🔴 직접 해보기 2 — err?.code 판은 네 요청이 정답과 같지만, 폴더가 없을 때의 디스크 에러(ENOENT)를 400 으로 숨긴다(정답은 500)', async () => {
+    const codeVariant = rep(lab('practice2.js'), 'if (err instanceof multer.MulterError) {', 'if (err?.code) {');
+    expect(await p2Like(codeVariant, Q)).toEqual([[201, null], [400, '프로필 사진은 1MB까지 올릴 수 있어요'],
+      [400, '프로필 사진은 JPG나 PNG만 올릴 수 있어요'], [400, '프로필 사진은 avatar 이름으로 한 장만 보낼 수 있어요']]);
+    for (const [src, want] of [[lab('practice2.js'), [500, '서버에서 문제가 생겼어요']], [codeVariant, [400, '프로필 사진을 받지 못했어요']]]) {
+      await withLab({ src, labPort: 4002, port: Q + 1 }, async (srv) => {
+        rmSync(join(srv.dir, 'lab', 'p3-31', 'avatars'), { recursive: true, force: true });
+        const res = await upload(srv.base, '/api/avatar', [jpg('beach.jpg', 'beach.jpg', 'avatar')]);
+        expect([res.status, res.body.message]).toEqual(want);
+      });
+    }
+    expect(read(LECTURE)).toContain('`err?.code`');
+  });
+
+  it('🔴 Step 8 — 127.0.0.1 화면에서는 same-site 사진이 NotSameSite 로 막히고, cross-origin 은 뜬다 · localhost 화면은 둘 다 뜬다', async () => {
+    const final = read(R('app.js'));
+    const sameSite = rep(final, "policy: 'cross-origin'", "policy: 'same-site'");
+    const pagePort = Q + 3;
+    for (const [appSrc, want] of [[sameSite, { localhost: 600, ip: 0 }], [final, { localhost: 600, ip: 600 }]]) {
+      await withServer(Q + 2, { 'app.js': appSrc }, async (srv) => {
+        mkdirSync(join(srv.dir, 'uploads'), { recursive: true });
+        writeFileSync(join(srv.dir, 'uploads', 'beach.jpg'), PHOTO('beach.jpg'));
+        const page = express();
+        page.get('/photo', (req, res) => res.send(`<img src="http://localhost:${Q + 2}/uploads/beach.jpg" width="300">`));
+        const ps = page.listen(pagePort);
+        try {
+          const got = {};
+          for (const [key, host] of [['localhost', 'localhost'], ['ip', '127.0.0.1']]) {
+            // 화면 서버가 이 프로세스 안에 있어서 동기 실행은 막힌다 — 비동기로 기다린다
+            const { stdout: out } = await promisify(execFile)(process.execPath, [BROWSE, JSON.stringify([{ goto: `http://${host}:${pagePort}/photo` }, { wait: 600 },
+              { eval: "document.querySelector('img').naturalWidth" }, { console: true }])], { encoding: 'utf8', timeout: 60000 });
+            got[key] = Number(out.match(/naturalWidth\n\s*(\d+)/)?.[1] ?? out.match(/naturalWidth\s+(\d+)/)?.[1]);
+            if (key === 'ip' && want.ip === 0) expect(out).toContain('ERR_BLOCKED_BY_RESPONSE.NotSameSite');
+          }
+          expect(got).toEqual(want);
+        } finally { ps.close(); }
+      });
+    }
+    expect(read(LECTURE)).toContain('`http://127.0.0.1:4009/photo`');
+  }, 120000);
+
+  it('🔴 Step 7 겪기 — basename 을 뺀 판은 /uploads/../lab/p3-31/canary.txt 게시물을 지울 때 그 파일을 지운다 · 끝 판은 남긴다', async () => {
+    for (const [post, gone] of [[read(SNAP('step7-no-basename.postService.js')), true], [read(R('services/postService.js')), false]]) {
+      reseed();
+      await withServer(Q + 4, { 'services/postService.js': post }, async (srv) => {
+        mkdirSync(join(srv.dir, 'lab', 'p3-31'), { recursive: true });
+        writeFileSync(join(srv.dir, 'lab', 'p3-31', 'canary.txt'), lab('canary.txt'));
+        const created = await send(srv.base, 'POST', '/api/posts', { json: { authorId: 2, imageUrls: ['/uploads/../lab/p3-31/canary.txt'] } });
+        expect(created.status).toBe(201);
+        expect((await send(srv.base, 'DELETE', `/api/posts/${created.body.id}`)).status).toBe(200);
+        expect(existsSync(join(srv.dir, 'lab', 'p3-31', 'canary.txt'))).toBe(!gone);
+      });
+    }
+    reseed();
+  });
+
+  it('🔴 교안·답안 문장 — 학생 검수가 고친 자리', () => {
+    const lecture = read(LECTURE);
+    const answers = read(ANSWERS);
+    expect(lecture + answers).not.toContain('까닭');
+    expect(lecture).toContain('파일로 `hello.txt`를 고른 뒤');
+    expect(lecture).not.toMatch(/upload\.fields|upload\.none\(\)/);
+    expect(lecture).toContain('`VITE_API_URL`');
+    expect(lecture).toContain('### 사진과 사진이 아닌 파일을 함께 보내기');
+    expect(lecture).toContain('**이제 오프닝의 첫 물음에도 답할 수 있어요.**');
+    expect(lecture).toContain('`requests/photos/`');
+    expect(lecture).not.toContain('제가 두 도메인이 제 컴퓨터를 가리키게 해서');
+  });
+});
+
+// 축 ⑩ 의 p2 와 같은 네 요청(포트만 따로)
+async function p2Like(src, port) {
+  const out = [];
+  await withLab({ src, labPort: 4002, port }, async (srv) => {
+    for (const parts of [[jpg('beach.jpg', 'beach.jpg', 'avatar')], [jpg('medium.jpg', 'medium.jpg', 'avatar')],
+      [{ name: 'avatar', file: PHOTO('memo.txt'), filename: 'memo.txt', type: 'text/plain' }], [jpg('beach.jpg', 'beach.jpg', 'photo')]]) {
+      const res = await upload(srv.base, '/api/avatar', parts);
+      out.push([res.status, res.body.message ?? null]);
+    }
+  });
+  return out;
+}
