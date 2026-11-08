@@ -21,3 +21,9 @@ GET http://localhost:3000/api/posts?limit=100000
 
 ### 2번 게시물 지우기
 DELETE http://localhost:3000/api/posts/2
+
+### 옛 화면처럼 게시물 번호를 커서로 보내면
+GET http://localhost:3000/api/posts?limit=2&cursor=2
+
+### 없는 게시물 번호를 커서로 보내면
+GET http://localhost:3000/api/posts?limit=2&cursor=999

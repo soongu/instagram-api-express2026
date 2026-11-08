@@ -4,6 +4,7 @@ import * as postService from '../services/postService.js';
 import { validateBody, validateQuery } from '../middlewares/validate.js';
 import { parseId } from '../middlewares/params.js';
 import { allowOnly } from '../middlewares/methods.js';
+import { legacyCursor } from '../middlewares/legacyCursor.js';
 import { postCreateSchema, postListQuerySchema, postUpdateSchema } from '../schemas/postSchema.js';
 
 const router = express.Router();
@@ -11,7 +12,7 @@ const router = express.Router();
 // 주소에 이 이름의 값이 있으면, 라우트로 들어가기 전에 이 함수부터 한 번 부른다.
 router.param('id', parseId);
 
-router.get('/', validateQuery(postListQuerySchema), async (req, res) => {
+router.get('/', validateQuery(postListQuerySchema), legacyCursor, async (req, res) => {
   const { limit, cursor } = res.locals.query;
   const page = await postService.getPosts({
     username: req.query.username,

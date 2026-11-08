@@ -88,6 +88,16 @@ export async function getPosts({ username, userId, limit = 5, cursor }) {
   };
 }
 
+// 옛 화면이 커서로 보내던 게시물 번호를 지금 커서로 바꾼다. 그 게시물이 없으면 null.
+export async function cursorOf(id) {
+  const post = await prisma.post.findUnique({
+    where: { id },
+    select: { createdAt: true, id: true },
+  });
+
+  return post === null ? null : encodeCursor(post);
+}
+
 export async function getPost(id) {
   const post = await prisma.post.findUnique({
     where: { id },
