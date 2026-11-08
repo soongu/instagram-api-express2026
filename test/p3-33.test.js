@@ -759,7 +759,8 @@ describe('축 ⑦ — 커서를 고쳐서 보내면(주제 3)', () => {
 
 describe('축 ⑨ — 학생 파일', () => {
   it('🔴 code/p3-32 에서 바뀐 학생 파일', () => {
-    const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-32', 'HEAD', '--', '.', ':(exclude)test', ':(exclude)lab', ':(exclude)snapshots'], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').sort();
+    // 🔀 2026-11-08 p3-34 — HEAD 를 읽으면 뒤 회차가 바꾼 파일까지 센다. 북마크가 있으면 그 판을 읽는다.
+    const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-32', ROUND.fromBookmark ? 'code/p3-33' : 'HEAD', '--', '.', ':(exclude)test', ':(exclude)lab', ':(exclude)snapshots'], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').sort();
     expect(changed).toEqual([
       'prisma/migrations/20261106135135_add_posts_feed_index/migration.sql',
       'prisma/schema.prisma',

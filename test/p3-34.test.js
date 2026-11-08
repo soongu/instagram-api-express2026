@@ -559,7 +559,8 @@ const STEP6_SCHEMA = () => swap(read(B('schemas/postSchema.js')), '.max(50)', '.
 
 describe('축 ⑦ — 학생 파일과 교안 블록', () => {
   it('🔴 code/p3-33 에서 바뀐 학생 파일', () => {
-    const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-33', 'HEAD', '--', '.', ':(exclude)test', ':(exclude)lab', ':(exclude)snapshots'], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').sort();
+    // 북마크가 생기면 그 판을 읽는다 — HEAD 를 읽으면 뒤 회차가 바꾼 파일까지 센다(p3-33 판정이 그랬다).
+    const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-33', ROUND.fromBookmark ? 'code/p3-34' : 'HEAD', '--', '.', ':(exclude)test', ':(exclude)lab', ':(exclude)snapshots'], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').sort();
     expect(changed).toEqual([
       'app.js',
       // check.js 는 p3-30 학생 검수(2026-11-08 · ec74a37)가 main 에서 지웠다 — 이 회차의 변경이 아니다.
