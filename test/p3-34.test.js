@@ -412,9 +412,9 @@ describe('축 ⑥ — 직접 해보기', () => {
   it('🔴 1 정답 판 — keyword · q · 둘 다(keyword) · 없음 400', async () => {
     await withLab(LAB('practice1.js'), 4001, 3813, async (srv) => {
       const names = async (q) => (await send(srv.base, 'GET', `/api/members/search${q}`)).body.map((m) => m.username);
-      expect(await names('?keyword=%EB%AF%BC')).toEqual(['minji', 'minsu']);
-      expect(await names('?q=%EB%AF%BC')).toEqual(['minji', 'minsu']);
-      expect(await names('?keyword=dahye&q=%EB%AF%BC')).toEqual(['dahye']);
+      expect(await names('?keyword=min')).toEqual(['minji', 'minsu']);
+      expect(await names('?q=min')).toEqual(['minji', 'minsu']);
+      expect(await names('?keyword=dahye&q=min')).toEqual(['dahye']);
       const none = await send(srv.base, 'GET', '/api/members/search');
       expect([none.status, none.body]).toEqual([400, { message: '검색어를 보내 주세요' }]);
     });
@@ -424,12 +424,12 @@ describe('축 ⑥ — 직접 해보기', () => {
     const lost = swap(LAB('practice1.js'), '  res.locals.keyword = req.query.keyword ?? req.query.q;\n',
       '  req.query.keyword = req.query.keyword ?? req.query.q;\n  res.locals.keyword = req.query.keyword;\n');
     await withLab(lost, 4001, 3813, async (srv) => {
-      expect((await send(srv.base, 'GET', '/api/members/search?q=%EB%AF%BC')).status).toBe(400);
+      expect((await send(srv.base, 'GET', '/api/members/search?q=min')).status).toBe(400);
       expect((await send(srv.base, 'GET', '/api/members/search?keyword=dahye')).status).toBe(200);
     });
     const flipped = swap(LAB('practice1.js'), 'req.query.keyword ?? req.query.q', 'req.query.q ?? req.query.keyword');
     await withLab(flipped, 4001, 3813, async (srv) => {
-      const res = await send(srv.base, 'GET', '/api/members/search?keyword=dahye&q=%EB%AF%BC');
+      const res = await send(srv.base, 'GET', '/api/members/search?keyword=dahye&q=min');
       expect(res.body.map((m) => m.username)).toEqual(['minji', 'minsu']);
     });
   });
