@@ -15,9 +15,13 @@ const notices = [
 const v1 = express.Router();
 const v2 = express.Router();
 
+// v1 을 끝내는 날짜 — 헤더와 문서가 이 두 상수를 함께 쓴다.
+const DEPRECATED_AT = new Date('2026-12-01T00:00:00Z');
+const SUNSET_AT = new Date('2027-03-01T00:00:00Z');
+
 v1.use((req, res, next) => {
-  res.set('Deprecation', '@1796083200');
-  res.set('Sunset', 'Mon, 01 Mar 2027 00:00:00 GMT');
+  res.set('Deprecation', `@${DEPRECATED_AT.getTime() / 1000}`);
+  res.set('Sunset', SUNSET_AT.toUTCString());
   next();
 });
 
@@ -44,16 +48,17 @@ const noticeSchema = z.object({
 });
 const noticeList = z.array(noticeSchema);
 
+// 수업의 json 과 달리 zod 스키마를 받아, 안에서 JSON Schema 로 바꿔 담는다.
 const json = (schema) => ({ 'application/json': { schema: z.toJSONSchema(schema) } });
 
 const openapi = {
   openapi: '3.2.0',
-  info: { title: '공지 API', version: '2.0.0' },
+  info: { title: '공지 API', version: '1.0.0' },
   paths: {
     '/api/v1/notices': {
       get: {
         summary: '공지 목록 (v1)',
-        description: '2027-03-01 에 끝나요. /api/v2/notices 로 옮기세요. 버전 없는 /api/notices 도 v1 이에요.',
+        description: `${SUNSET_AT.toISOString().slice(0, 10)} 에 끝나요. /api/v2/notices 로 옮기세요. 버전 없는 /api/notices 도 v1 이에요.`,
         deprecated: true,
         responses: { 200: { description: '공지 배열', content: json(noticeList) } },
       },

@@ -4,5 +4,8 @@ GET http://localhost:4012/api/v1/notices
 ### v2
 GET http://localhost:4012/api/v2/notices
 
+### 버전 없는 옛 주소
+GET http://localhost:4012/api/notices
+
 ### 문서 JSON
 GET http://localhost:4012/openapi.json

@@ -13,7 +13,7 @@ export const openapi = {
           { name: 'limit', in: 'query', description: '한 페이지의 게시물 수 — 없으면 5', schema: { type: 'integer', minimum: 1, maximum: 50 } },
           { name: 'cursor', in: 'query', description: '앞 응답의 nextCursor 그대로', schema: { type: 'string' } },
           { name: 'username', in: 'query', description: '이 사람이 올린 게시물만', schema: { type: 'string' } },
-          { name: 'userId', in: 'query', description: '보는 사람의 번호 — 그 사람이 누른 좋아요가 liked 로 온다', schema: { type: 'integer' } },
+          { name: 'userId', in: 'query', description: '보는 사람의 번호 — 그 사람이 누른 좋아요가 liked 로 온다(숫자가 아니면 세지 않는다)', schema: { type: 'integer' } },
         ],
         responses: {
           200: { description: '게시물 한 페이지', content: json({ $ref: '#/components/schemas/PostPage' }) },

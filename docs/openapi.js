@@ -34,7 +34,7 @@ export const openapi = {
         parameters: [
           ...queryParameters(postListQuerySchema),
           // userId 는 검사 스키마 밖에서 읽는 값이라 손으로 적는다.
-          { name: 'userId', in: 'query', description: '보는 사람의 번호 — 그 사람이 누른 좋아요가 liked 로 온다', schema: { type: 'integer' } },
+          { name: 'userId', in: 'query', description: '보는 사람의 번호 — 그 사람이 누른 좋아요가 liked 로 온다(숫자가 아니면 세지 않는다)', schema: { type: 'integer' } },
         ],
         responses: {
           200: { description: '게시물 한 페이지', content: json({ $ref: '#/components/schemas/PostPage' }) },

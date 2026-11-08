@@ -9,3 +9,6 @@ GET http://localhost:4002/api/members/2
 
 ### 없는 회원 — v2
 GET http://localhost:4002/api/v2/members/9
+
+### 없는 회원 — v1
+GET http://localhost:4002/api/v1/members/9

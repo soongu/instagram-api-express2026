@@ -444,8 +444,10 @@ describe('축 ⑥ — 직접 해보기', () => {
       expect(old.body).toEqual(v1.body);
       expect([v1, old].map((res) => res.headers.get('deprecation'))).toEqual([DEP, DEP]);
       expect(v2.headers.get('deprecation')).toBeNull();
-      const missing = await send(srv.base, 'GET', '/api/v2/members/9');
-      expect([missing.status, missing.body]).toEqual([404, { message: '그런 회원은 없어요' }]);
+      for (const path of ['/api/v2/members/9', '/api/v1/members/9']) {
+        const missing = await send(srv.base, 'GET', path);
+        expect([path, missing.status, missing.body]).toEqual([path, 404, { message: '그런 회원은 없어요' }]);
+      }
     });
   });
 
@@ -501,10 +503,17 @@ describe('축 ⑥ — 과제', () => {
     });
   });
 
-  it('🔴 [기초] parse 를 거치면 스키마에 없는 필드가 응답에서 빠진다 — 스키마와 응답이 어긋날 수 없다', async () => {
-    const extra = swap(LAB('homework1.js'), '{ ...notice, body: notice.content }', '{ ...notice, body: notice.content, secret: 1 }');
-    await withLab(extra, 4011, 3816, async (srv) => {
+  const MEMO = (src) => swap(src, "{ id: 1, title: '서버 점검 안내', content:", "{ id: 1, memo: '관리자만 보는 메모', title: '서버 점검 안내', content:");
+  it('🔴 [기초] 요구사항 5 의 메모 확인 — parse 를 거치면 데이터에 더한 memo 가 응답에 안 온다', async () => {
+    await withLab(MEMO(LAB('homework1.js')), 4011, 3816, async (srv) => {
       expect(Object.keys((await send(srv.base, 'GET', '/api/notices/1')).body)).toEqual(['id', 'title', 'content', 'body']);
+    });
+  });
+
+  it('🔴 [기초] 틀린 판 — parse 없이 보내면 메모가 응답에 새어 나간다(요구사항 5 가 가려낸다)', async () => {
+    const noParse = swap(MEMO(LAB('homework1.js')), 'res.json(noticeSchema.parse({ ...notice, body: notice.content }));', 'res.json({ ...notice, body: notice.content });');
+    await withLab(noParse, 4011, 3816, async (srv) => {
+      expect((await send(srv.base, 'GET', '/api/notices/1')).body.memo).toBe('관리자만 보는 메모');
     });
   });
 
@@ -519,7 +528,9 @@ describe('축 ⑥ — 과제', () => {
       expect(v1Schema.type).toBe('array');
       expect(v2Schema.required).toEqual(['pinned', 'items']);
       expect(v2Schema.properties.items.items.required).toEqual(['id', 'title', 'pinned']);
-      expect((await send(srv.base, 'GET', '/api/notices')).headers.get('deprecation')).toBe(DEP);
+      const old = await send(srv.base, 'GET', '/api/notices');
+      expect([old.headers.get('deprecation'), old.headers.get('sunset')]).toEqual([DEP, 'Mon, 01 Mar 2027 00:00:00 GMT']);
+      expect(doc.paths['/api/v1/notices'].get.description).toBe('2027-03-01 에 끝나요. /api/v2/notices 로 옮기세요. 버전 없는 /api/notices 도 v1 이에요.');
       expect((await send(srv.base, 'GET', '/docs/')).body).toContain('Swagger UI');
     });
   });
@@ -579,6 +590,7 @@ describe('축 ⑦ — 학생 파일과 교안 블록', () => {
       '// ~/instagram-api/lab/p3-34/practice1.js': [LAB('practice1.js')],
       '// ~/instagram-api/lab/p3-34/practice2.js': [LAB('practice2.js')],
       '// ~/instagram-api/lab/p3-34/practice3.js': [LAB('practice3.js')],
+      '// ~/instagram-api/lab/p3-34/homework1.js': [read(P('snapshots/p3-34.homework1-start.homework1.js'))],
       '// ~/instagram-react/src/hooks/usePosts.js': [react],
     };
     let seen = 0;
@@ -630,5 +642,22 @@ describe('축 ⑦ — 학생 파일과 교안 블록', () => {
       const block = fences(LECTURE()).find((f) => f.lang === 'json' && f.body.includes('Too big'));
       expect(JSON.stringify(res.body, null, 2)).toBe(block.body);
     });
+  });
+});
+
+describe('축 ⑦ — 답안 블록', () => {
+  it('🔴 답안의 코드 블록 줄이 과제 파일에 실재하고, 요청 블록은 .http 와 byte 같다', () => {
+    const blocks = fences(ANSWERS());
+    let seen = 0;
+    for (const f of blocks.filter((one) => one.lang === 'javascript')) {
+      const name = f.body.split('\n')[0].split('/').at(-1);
+      const owner = LAB(name);
+      seen += 1;
+      for (const line of f.body.split('\n').filter((one) => one.trim() !== '')) expect(owner, `${name}: ${line}`).toContain(line);
+    }
+    // homework2 는 두 블록(날짜 상수 · 문서)으로 나눠 싣는다
+    expect(seen).toBe(3);
+    const http = blocks.filter((f) => f.lang === 'http').map((f) => `${f.body}\n`);
+    expect(http).toEqual([LAB('homework1.http'), LAB('homework2.http')]);
   });
 });
