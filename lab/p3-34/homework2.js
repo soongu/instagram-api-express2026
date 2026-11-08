@@ -15,7 +15,7 @@ const notices = [
 const v1 = express.Router();
 const v2 = express.Router();
 
-// v1 을 끝내는 날짜 — 헤더와 문서가 이 두 상수를 함께 쓴다.
+// v1 을 끝내는 날짜 — 헤더는 두 상수를 다 쓰고, 문서도 끝나는 날을 이 상수에서 꺼낸다.
 const DEPRECATED_AT = new Date('2026-12-01T00:00:00Z');
 const SUNSET_AT = new Date('2027-03-01T00:00:00Z');
 

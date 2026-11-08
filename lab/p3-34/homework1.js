@@ -15,7 +15,7 @@ const noticeSchema = z.object({
   id: z.int(),
   title: z.string(),
   content: z.string(),
-  body: z.string().meta({ deprecated: true, description: 'content 와 같은 값 — content 를 쓰세요. 2027-03-01 에 뺍니다' }),
+  body: z.string().meta({ deprecated: true, description: 'content 와 같은 값이에요 — content 를 쓰세요. 2027-03-01 에 빼요' }),
 });
 
 app.get('/api/notices/:id', (req, res) => {
