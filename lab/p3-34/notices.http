@@ -1,0 +1,9 @@
+# ~/instagram-api/lab/p3-34/notices.http
+### 버전을 나누기 전의 주소
+GET http://localhost:4010/api/notices
+
+### v1
+GET http://localhost:4010/api/v1/notices
+
+### v2
+GET http://localhost:4010/api/v2/notices
