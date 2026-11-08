@@ -530,3 +530,105 @@ describe('축 ⑥ — 과제', () => {
       LAB('notices.js').replace(/\n\/\/ v1 으로 온 요청에는[^\n]*\n/, '\n').replace(/\/\/ v1 — [^\n]*\n/, '').replace(/\/\/ v2 — [^\n]*\n/, '').replace(/\/\/ 버전을 나누기 전의[^\n]*\n/, ''));
   });
 });
+
+const LECTURE = () => read(P('../../part3/6-api-design/p3-34-versioning-docs-lecture.md'));
+const ANSWERS = () => read(P('../../part3/6-api-design/p3-34-versioning-docs-answers.md'));
+/** 마크다운의 펜스를 차례대로 { lang, body, line } 으로 */
+const fences = (md) => {
+  const out = [];
+  let open = null;
+  md.split('\n').forEach((text, index) => {
+    const m = text.match(/^```(\S*)$/);
+    if (!m) { if (open) open.body.push(text); return; }
+    if (open) { out.push({ ...open, body: open.body.join('\n') }); open = null; } else open = { lang: m[1], body: [], line: index + 1 };
+  });
+  return out;
+};
+const STEP6_SCHEMA = () => swap(read(B('schemas/postSchema.js')), '.max(50)', '.max(20)');
+
+describe('축 ⑦ — 학생 파일과 교안 블록', () => {
+  it('🔴 code/p3-33 에서 바뀐 학생 파일', () => {
+    const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-33', 'HEAD', '--', '.', ':(exclude)test', ':(exclude)lab', ':(exclude)snapshots'], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').sort();
+    expect(changed).toEqual([
+      'app.js',
+      // check.js 는 p3-30 학생 검수(2026-11-08 · ec74a37)가 main 에서 지웠다 — 이 회차의 변경이 아니다.
+      'check.js',
+      'docs/openapi.js',
+      'middlewares/legacyCursor.js',
+      'package-lock.json',
+      'package.json',
+      'requests/cursor.http',
+      'routes/posts.js',
+      'schemas/postSchema.js',
+      'services/postService.js',
+    ]);
+    expect(JSON.parse(read(R('package.json'))).dependencies['swagger-ui-express']).toBe('^5.0.1');
+  });
+
+  it('🔴 교안의 코드 블록 — 줄마다 그 파일(또는 그 Step 의 판)에 실재한다', () => {
+    const react = execFileSync('git', ['show', 'main:src/hooks/usePosts.js'], { cwd: P('../instagram-react'), encoding: 'utf8' });
+    const owners = {
+      '// ~/instagram-api/services/postService.js': [read(R('services/postService.js'))],
+      '// ~/instagram-api/middlewares/legacyCursor.js': [read(R('middlewares/legacyCursor.js')), read(P('snapshots/p3-34.step2-first.legacyCursor.js')), read(P('snapshots/p3-34.step2.legacyCursor.js'))],
+      '// ~/instagram-api/routes/posts.js': [read(R('routes/posts.js'))],
+      '// ~/instagram-api/app.js': [read(R('app.js')), read(P('snapshots/p3-34.step5.app.js'))],
+      '// ~/instagram-api/docs/openapi.js': [read(R('docs/openapi.js')), read(P('snapshots/p3-34.step5.openapi.js'))],
+      '// ~/instagram-api/schemas/postSchema.js': [read(R('schemas/postSchema.js')), STEP6_SCHEMA()],
+      '// ~/instagram-api/lab/p3-34/notices.js': [LAB('notices.js'), read(P('snapshots/p3-34.step4-start.notices.js'))],
+      '// ~/instagram-api/lab/p3-34/schema.js': [LAB('schema.js')],
+      '// ~/instagram-api/lab/p3-34/practice1.js': [LAB('practice1.js')],
+      '// ~/instagram-api/lab/p3-34/practice2.js': [LAB('practice2.js')],
+      '// ~/instagram-api/lab/p3-34/practice3.js': [LAB('practice3.js')],
+      '// ~/instagram-react/src/hooks/usePosts.js': [react],
+    };
+    let seen = 0;
+    for (const f of fences(LECTURE()).filter((one) => one.lang === 'javascript')) {
+      const [head, ...lines] = f.body.split('\n');
+      if (!head.startsWith('// ~/')) {
+        // 경로 주석이 없는 블록은 실습 데이터 배열 둘뿐이다
+        expect(f.body.startsWith('const members = ['), `L${f.line}`).toBe(true);
+        expect(LAB('practice1.js') + LAB('practice2.js'), `L${f.line}`).toContain(f.body);
+        continue;
+      }
+      expect(owners[head], `L${f.line}: ${head}`).toBeDefined();
+      seen += 1;
+      const hay = owners[head].join('\n');
+      for (const line of lines.filter((one) => one.trim() !== '')) {
+        expect(hay, `L${f.line}: ${line}`).toContain(line);
+      }
+    }
+    expect(seen).toBeGreaterThanOrEqual(20);
+  });
+
+  it('🔴 교안의 요청 블록 — cursor.http 끝 두 요청 · notices.http 는 byte 같다', () => {
+    const http = fences(LECTURE()).filter((f) => f.lang === 'http');
+    expect(read(R('requests/cursor.http')).endsWith(`${http[0].body}\n`)).toBe(true);
+    expect(`${http[1].body}\n`).toBe(LAB('notices.http'));
+  });
+
+  it('🔴 Step 7 — schema.js 를 Step 6 판 스키마로 실행한 출력이 교안 블록과 같다', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'p334-schema-'));
+    try {
+      symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+      mkdirSync(join(dir, 'schemas'));
+      mkdirSync(join(dir, 'lab/p3-34'), { recursive: true });
+      writeFileSync(join(dir, 'package.json'), '{ "type": "module" }');
+      writeFileSync(join(dir, 'schemas/postSchema.js'), STEP6_SCHEMA());
+      writeFileSync(join(dir, 'lab/p3-34/schema.js'), LAB('schema.js'));
+      const out = execFileSync(process.execPath, ['lab/p3-34/schema.js'], { cwd: dir, encoding: 'utf8' });
+      const block = fences(LECTURE()).find((f) => f.lang === 'json' && f.body.includes('"$schema"'));
+      expect(out.trimEnd()).toBe(block.body);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('🔴 Step 6 — 교안의 400 본문 블록이 실제 응답과 같다(상한 20 · limit=30)', async () => {
+    reseed();
+    await withServer(PORT, { 'schemas/postSchema.js': swap(read(R('schemas/postSchema.js')), '.max(50)', '.max(20)') }, async (now) => {
+      const res = await send(now.base, 'GET', '/api/posts?limit=30');
+      const block = fences(LECTURE()).find((f) => f.lang === 'json' && f.body.includes('Too big'));
+      expect(JSON.stringify(res.body, null, 2)).toBe(block.body);
+    });
+  });
+});

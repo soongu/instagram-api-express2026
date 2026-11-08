@@ -1,4 +1,3 @@
-# ~/instagram-api/lab/p3-34/homework2.http
 ### v1
 GET http://localhost:4012/api/v1/notices
 

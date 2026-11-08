@@ -1,4 +1,3 @@
-# ~/instagram-api/lab/p3-34/practice3.http
 ### 문서 JSON
 GET http://localhost:4003/openapi.json
 

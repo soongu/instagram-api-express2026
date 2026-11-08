@@ -1,4 +1,3 @@
-# ~/instagram-api/lab/p3-34/practice1.http
 ### 새 화면 — keyword
 GET http://localhost:4001/api/members/search?keyword=민
 
