@@ -1,0 +1,9 @@
+# ~/instagram-api/lab/p3-34/homework1.http
+### 공지 하나
+GET http://localhost:4011/api/notices/1
+
+### 없는 공지
+GET http://localhost:4011/api/notices/9
+
+### 문서 JSON
+GET http://localhost:4011/openapi.json

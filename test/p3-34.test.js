@@ -249,3 +249,284 @@ describe('축 ③ — Step 3: Deprecation · Sunset', () => {
     });
   });
 });
+
+// ── 실습 서버 — 사본을 임시 폴더에 두고 포트만 바꿔 띄운다(실습 포트를 다른 세션이 쥐고 있을 수 있다)
+const LAB = (name) => read(R(`lab/p3-34/${name}`));
+const withLab = async (src, labPort, port, fn) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p334-lab-'));
+  symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+  const body = src.replaceAll(`listen(${labPort}`, `listen(${port}`).replaceAll(`${labPort}번 포트`, `${port}번 포트`);
+  writeFileSync(join(dir, 'server.js'), body);
+  const srv = await boot(join(dir, 'server.js'), { port, cwd: dir, ready: `${port}번 포트에서` });
+  try {
+    await fn(srv);
+  } finally {
+    await Promise.race([srv.stop(), sleep(500)]);
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+const swap = (src, from, to) => {
+  expect(src.split(from).length - 1, from).toBe(1);
+  return src.replace(from, to);
+};
+const DEP = '@1796083200';
+
+describe('축 ④ — Step 4: 공지 서버의 v1 · v2', () => {
+  it('🔴 시작 판 — /api/notices 가 배열', async () => {
+    await withLab(read(P('snapshots/p3-34.step4-start.notices.js')), 4010, 3812, async (srv) => {
+      const res = await send(srv.base, 'GET', '/api/notices');
+      expect(res.body.map((notice) => notice.id)).toEqual([1, 2, 3, 4]);
+    });
+  });
+
+  it('🔴 끝 판 — v1 배열(헤더 둘) · v2 { pinned, items } · 버전 없는 옛 주소는 v1 그대로(헤더도)', async () => {
+    await withLab(LAB('notices.js'), 4010, 3812, async (srv) => {
+      const v1 = await send(srv.base, 'GET', '/api/v1/notices');
+      const old = await send(srv.base, 'GET', '/api/notices');
+      const v2 = await send(srv.base, 'GET', '/api/v2/notices');
+      expect(Array.isArray(v1.body)).toBe(true);
+      expect(old.body).toEqual(v1.body);
+      for (const res of [v1, old]) {
+        expect(res.headers.get('deprecation')).toBe(DEP);
+        expect(res.headers.get('sunset')).toBe('Mon, 01 Mar 2027 00:00:00 GMT');
+      }
+      expect(v2.headers.get('deprecation')).toBeNull();
+      expect(v2.body.pinned.map((notice) => notice.id)).toEqual([1, 3]);
+      expect(v2.body.items.map((notice) => notice.id)).toEqual([2, 4]);
+    });
+  });
+
+  it('🔴 틀린 판 — app.use(\'/api\', v1) 을 빼면 옛 주소가 404', async () => {
+    const src = swap(LAB('notices.js'), "app.use('/api', v1);\n", '');
+    await withLab(src, 4010, 3812, async (srv) => {
+      expect((await send(srv.base, 'GET', '/api/notices')).status).toBe(404);
+    });
+  });
+});
+
+describe('축 ⑤ — Step 5~7: 문서', () => {
+  it('🔴 /api/openapi.json — 3.2.0 · 목록 쿼리 넷(셋은 스키마에서 · userId 는 손으로) · 올리기 본문은 스키마에서', async () => {
+    reseed();
+    await withServer(PORT, {}, async (now) => {
+      const { body: doc } = await send(now.base, 'GET', '/api/openapi.json');
+      expect(doc.openapi).toBe('3.2.0');
+      const params = doc.paths['/api/posts'].get.parameters;
+      expect(params.map((param) => param.name)).toEqual(['limit', 'cursor', 'username', 'userId']);
+      expect(params[0].schema).toEqual({ type: 'integer', minimum: 1, maximum: 50 });
+      expect(params[0].description).toBe('한 페이지의 게시물 수 — 없으면 5');
+      const body = doc.paths['/api/posts'].post.requestBody.content['application/json'].schema;
+      expect(body.required).toEqual(['authorId', 'imageUrls']);
+      expect(body.properties.imageUrls).toEqual({ minItems: 1, type: 'array', items: { type: 'string', minLength: 1 } });
+    });
+  });
+
+  it('🔴 /api/docs — 301 뒤 Swagger UI 페이지 · init 스크립트에 문서가 담겨 있다', async () => {
+    await withServer(PORT, {}, async (now) => {
+      const first = await fetch(`${now.base}/api/docs`, { redirect: 'manual' });
+      expect([first.status, first.headers.get('location')]).toEqual([301, '/api/docs/']);
+      const page = await send(now.base, 'GET', '/api/docs/');
+      expect(page.body).toContain('<title>Swagger UI</title>');
+      const init = await send(now.base, 'GET', '/api/docs/swagger-ui-init.js');
+      expect(init.body).toContain('"openapi": "3.2.0"');
+      expect(init.body).toContain('"summary": "게시물 목록"');
+    });
+  });
+
+  it('🔴 손으로 쓴 응답 스키마의 필드가 실제 응답의 키와 같다(목록 · 게시물 하나)', async () => {
+    reseed();
+    await withServer(PORT, {}, async (now) => {
+      const { body: doc } = await send(now.base, 'GET', '/api/openapi.json');
+      const page = (await send(now.base, 'GET', '/api/posts?limit=2&userId=1')).body;
+      expect(Object.keys(doc.components.schemas.PostPage.properties).sort()).toEqual(Object.keys(page).sort());
+      expect(Object.keys(doc.components.schemas.Post.properties).sort()).toEqual(Object.keys(page.items[0]).sort());
+      const post = (await send(now.base, 'GET', '/api/posts/1')).body;
+      expect(Object.keys(post).sort()).toEqual(Object.keys(doc.components.schemas.Post.properties).sort());
+    });
+  });
+
+  const LIMIT20 = (src) => swap(src, '.max(50)', '.max(20)');
+
+  it('🔴 Step 6 어긋남 — 손으로 쓴 문서(Step 5 판)는 상한을 20 으로 줄여도 50 이라고 말하고, 서버는 30 에 400', async () => {
+    reseed();
+    const step6Schema = LIMIT20(read(B('schemas/postSchema.js')));
+    const step6Route = read(B('routes/posts.js')).replace(
+      "router.get('/', validateQuery(postListQuerySchema), async (req, res) => {",
+      "router.get('/', validateQuery(postListQuerySchema), legacyCursor, async (req, res) => {").replace(
+      "import { allowOnly } from '../middlewares/methods.js';\n",
+      "import { allowOnly } from '../middlewares/methods.js';\nimport { legacyCursor } from '../middlewares/legacyCursor.js';\n");
+    await withServer(PORT, {
+      'docs/openapi.js': read(P('snapshots/p3-34.step5.openapi.js')),
+      'schemas/postSchema.js': step6Schema,
+      'routes/posts.js': step6Route,
+    }, async (now) => {
+      const { body: doc } = await send(now.base, 'GET', '/api/openapi.json');
+      expect(doc.paths['/api/posts'].get.parameters[0].schema.maximum).toBe(50);
+      const res = await send(now.base, 'GET', '/api/posts?limit=30');
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('보낸 내용이 규칙에 안 맞아요');
+      expect(res.body.details.properties.limit.errors).toEqual(['Too big: expected number to be <=20']);
+    });
+  });
+
+  it('🔴 Step 7 — 스키마에서 뽑은 문서는 상한 20 을 따라온다 · 50 으로 되돌리면 문서도 50', async () => {
+    reseed();
+    await withServer(PORT, { 'schemas/postSchema.js': LIMIT20(read(R('schemas/postSchema.js'))) }, async (now) => {
+      const { body: doc } = await send(now.base, 'GET', '/api/openapi.json');
+      expect(doc.paths['/api/posts'].get.parameters[0].schema.maximum).toBe(20);
+    });
+  });
+
+  it('🔴 Step 7 — username 을 스키마로 옮겨도 받던 요청은 그대로 · 두 번 보내면 400 · userId=abc 는 여전히 200 liked:false', async () => {
+    reseed();
+    await withServer(PORT, {}, async (now) => {
+      const all = (await send(now.base, 'GET', '/api/posts?limit=5')).body.items;
+      const name = all[0].username;
+      const own = (await send(now.base, 'GET', `/api/posts?limit=5&username=${name}`)).body.items;
+      expect(own.map((post) => post.id)).toEqual(all.filter((post) => post.username === name).map((post) => post.id));
+      expect((await send(now.base, 'GET', '/api/posts?username=minji&username=dahye')).status).toBe(400);
+      const res = await send(now.base, 'GET', '/api/posts?limit=2&userId=abc');
+      expect(res.status).toBe(200);
+      expect(res.body.items.every((post) => post.liked === false)).toBe(true);
+    });
+  });
+
+  it('🔴 앞 판 — username 을 두 번 보내면 500(Prisma 가 배열을 못 받는다)', async () => {
+    reseed();
+    await withServer(PORT, {}, async (before) => {
+      expect((await send(before.base, 'GET', '/api/posts?username=minji&username=dahye')).status).toBe(500);
+    }, B);
+  });
+
+  it('🔴 userId 에 검사를 더하면 받던 요청이 400 — 그래서 손으로 남긴다', async () => {
+    reseed();
+    const strict = swap(read(R('schemas/postSchema.js')),
+      "  username: z.string().optional().describe('이 사람이 올린 게시물만'),\n",
+      "  username: z.string().optional().describe('이 사람이 올린 게시물만'),\n  userId: z.coerce.number().int().positive().optional(),\n");
+    await withServer(PORT, { 'schemas/postSchema.js': strict }, async (now) => {
+      expect((await send(now.base, 'GET', '/api/posts?limit=2&userId=abc')).status).toBe(400);
+    });
+  });
+});
+
+describe('축 ⑥ — 직접 해보기', () => {
+  it('🔴 1 정답 판 — keyword · q · 둘 다(keyword) · 없음 400', async () => {
+    await withLab(LAB('practice1.js'), 4001, 3813, async (srv) => {
+      const names = async (q) => (await send(srv.base, 'GET', `/api/members/search${q}`)).body.map((m) => m.username);
+      expect(await names('?keyword=%EB%AF%BC')).toEqual(['minji', 'minsu']);
+      expect(await names('?q=%EB%AF%BC')).toEqual(['minji', 'minsu']);
+      expect(await names('?keyword=dahye&q=%EB%AF%BC')).toEqual(['dahye']);
+      const none = await send(srv.base, 'GET', '/api/members/search');
+      expect([none.status, none.body]).toEqual([400, { message: '검색어를 보내 주세요' }]);
+    });
+  });
+
+  it('🔴 1 틀린 판 — req.query 에 넣으면 사라져 q 가 400 · 순서를 뒤집으면 둘 다 보낸 요청이 q 로', async () => {
+    const lost = swap(LAB('practice1.js'), '  res.locals.keyword = req.query.keyword ?? req.query.q;\n',
+      '  req.query.keyword = req.query.keyword ?? req.query.q;\n  res.locals.keyword = req.query.keyword;\n');
+    await withLab(lost, 4001, 3813, async (srv) => {
+      expect((await send(srv.base, 'GET', '/api/members/search?q=%EB%AF%BC')).status).toBe(400);
+      expect((await send(srv.base, 'GET', '/api/members/search?keyword=dahye')).status).toBe(200);
+    });
+    const flipped = swap(LAB('practice1.js'), 'req.query.keyword ?? req.query.q', 'req.query.q ?? req.query.keyword');
+    await withLab(flipped, 4001, 3813, async (srv) => {
+      const res = await send(srv.base, 'GET', '/api/members/search?keyword=dahye&q=%EB%AF%BC');
+      expect(res.body.map((m) => m.username)).toEqual(['minji', 'minsu']);
+    });
+  });
+
+  it('🔴 2 정답 판 — v1 이름 글자 · v2 { family, given } · 옛 주소 v1(헤더 둘) · 없는 회원 404', async () => {
+    await withLab(LAB('practice2.js'), 4002, 3814, async (srv) => {
+      const v1 = await send(srv.base, 'GET', '/api/v1/members/2');
+      const v2 = await send(srv.base, 'GET', '/api/v2/members/2');
+      const old = await send(srv.base, 'GET', '/api/members/2');
+      expect(v1.body).toEqual({ id: 2, username: 'minji', name: '이민지' });
+      expect(v2.body).toEqual({ id: 2, username: 'minji', name: { family: '이', given: '민지' } });
+      expect(old.body).toEqual(v1.body);
+      expect([v1, old].map((res) => res.headers.get('deprecation'))).toEqual([DEP, DEP]);
+      expect(v2.headers.get('deprecation')).toBeNull();
+      const missing = await send(srv.base, 'GET', '/api/v2/members/9');
+      expect([missing.status, missing.body]).toEqual([404, { message: '그런 회원은 없어요' }]);
+    });
+  });
+
+  it('🔴 2 틀린 판 — 헤더를 app.use(\'/api/v1\') 에 걸면 옛 주소에는 헤더가 없다', async () => {
+    let src = swap(LAB('practice2.js'), 'v1.use((req, res, next) => {', "app.use('/api/v1', (req, res, next) => {");
+    await withLab(src, 4002, 3814, async (srv) => {
+      expect((await send(srv.base, 'GET', '/api/v1/members/2')).headers.get('deprecation')).toBe(DEP);
+      const old = await send(srv.base, 'GET', '/api/members/2');
+      expect([old.status, old.headers.get('deprecation')]).toEqual([200, null]);
+    });
+  });
+
+  it('🔴 3 정답 판 — 문서의 title 은 1~50 · pinned 쿼리는 enum · 스키마를 30 으로 바꾸면 문서도 30', async () => {
+    await withLab(LAB('practice3.js'), 4003, 3815, async (srv) => {
+      const { body: doc } = await send(srv.base, 'GET', '/openapi.json');
+      expect(doc.paths['/api/notices'].get.parameters).toEqual([{ name: 'pinned', in: 'query', description: 'true 면 고정 공지만, false 면 고정 안 한 공지만', required: false, schema: { type: 'string', enum: ['true', 'false'] } }]);
+      expect(doc.paths['/api/notices'].post.requestBody.content['application/json'].schema.properties.title).toEqual({ type: 'string', minLength: 1, maxLength: 50, description: '공지 제목' });
+      expect((await send(srv.base, 'GET', '/docs/')).body).toContain('Swagger UI');
+      expect((await send(srv.base, 'POST', '/api/notices', { json: { title: 'x'.repeat(51) } })).status).toBe(400);
+      expect((await send(srv.base, 'GET', '/api/notices?pinned=true')).body.map((n) => n.id)).toEqual([1]);
+    });
+    await withLab(swap(LAB('practice3.js'), '.max(50)', '.max(30)'), 4003, 3815, async (srv) => {
+      const { body: doc } = await send(srv.base, 'GET', '/openapi.json');
+      expect(doc.paths['/api/notices'].post.requestBody.content['application/json'].schema.properties.title.maxLength).toBe(30);
+    });
+  });
+
+  it('🔴 3 시작 판 — 문서 없이 뜬다 · /docs 는 404', async () => {
+    await withLab(read(P('snapshots/p3-34.practice3-start.practice3.js')), 4003, 3815, async (srv) => {
+      expect((await send(srv.base, 'GET', '/docs/')).status).toBe(404);
+      expect((await send(srv.base, 'GET', '/api/notices')).body).toHaveLength(2);
+    });
+  });
+});
+
+describe('축 ⑥ — 과제', () => {
+  it('🔴 [기초] 정답 판 — content 와 body 가 같은 값 · 문서의 body 는 deprecated · 없는 공지 404', async () => {
+    await withLab(LAB('homework1.js'), 4011, 3816, async (srv) => {
+      const res = await send(srv.base, 'GET', '/api/notices/1');
+      expect(Object.keys(res.body)).toEqual(['id', 'title', 'content', 'body']);
+      expect(res.body.body).toBe(res.body.content);
+      const { body: doc } = await send(srv.base, 'GET', '/openapi.json');
+      const schema = doc.paths['/api/notices/{id}'].get.responses[200].content['application/json'].schema;
+      expect(schema.properties.body.deprecated).toBe(true);
+      expect(schema.required).toEqual(['id', 'title', 'content', 'body']);
+      expect((await send(srv.base, 'GET', '/api/notices/9')).status).toBe(404);
+    });
+  });
+
+  it('🔴 [기초] 시작 판 — body 만 있다', async () => {
+    await withLab(read(P('snapshots/p3-34.homework1-start.homework1.js')), 4011, 3816, async (srv) => {
+      expect(Object.keys((await send(srv.base, 'GET', '/api/notices/1')).body)).toEqual(['id', 'title', 'body']);
+    });
+  });
+
+  it('🔴 [기초] parse 를 거치면 스키마에 없는 필드가 응답에서 빠진다 — 스키마와 응답이 어긋날 수 없다', async () => {
+    const extra = swap(LAB('homework1.js'), '{ ...notice, body: notice.content }', '{ ...notice, body: notice.content, secret: 1 }');
+    await withLab(extra, 4011, 3816, async (srv) => {
+      expect(Object.keys((await send(srv.base, 'GET', '/api/notices/1')).body)).toEqual(['id', 'title', 'content', 'body']);
+    });
+  });
+
+  it('🔴 [응용] 정답 판 — 문서에 두 주소 · v1 은 deprecated · v2 응답은 { pinned, items } · 서버 응답은 시작 판 그대로', async () => {
+    await withLab(LAB('homework2.js'), 4012, 3817, async (srv) => {
+      const { body: doc } = await send(srv.base, 'GET', '/openapi.json');
+      expect(Object.keys(doc.paths)).toEqual(['/api/v1/notices', '/api/v2/notices']);
+      expect(doc.paths['/api/v1/notices'].get.deprecated).toBe(true);
+      expect(doc.paths['/api/v2/notices'].get.deprecated).toBeUndefined();
+      const v1Schema = doc.paths['/api/v1/notices'].get.responses[200].content['application/json'].schema;
+      const v2Schema = doc.paths['/api/v2/notices'].get.responses[200].content['application/json'].schema;
+      expect(v1Schema.type).toBe('array');
+      expect(v2Schema.required).toEqual(['pinned', 'items']);
+      expect(v2Schema.properties.items.items.required).toEqual(['id', 'title', 'pinned']);
+      expect((await send(srv.base, 'GET', '/api/notices')).headers.get('deprecation')).toBe(DEP);
+      expect((await send(srv.base, 'GET', '/docs/')).body).toContain('Swagger UI');
+    });
+  });
+
+  it('🔴 [응용] 시작 판 — notices.js 와 포트만 다르다', () => {
+    const start = read(P('snapshots/p3-34.homework2-start.homework2.js'));
+    expect(start.replace('homework2.js', 'notices.js').replaceAll('4012', '4010').replace('과제 서버', '공지 서버')).toBe(
+      LAB('notices.js').replace(/\n\/\/ v1 으로 온 요청에는[^\n]*\n/, '\n').replace(/\/\/ v1 — [^\n]*\n/, '').replace(/\/\/ v2 — [^\n]*\n/, '').replace(/\/\/ 버전을 나누기 전의[^\n]*\n/, ''));
+  });
+});

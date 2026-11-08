@@ -1,0 +1,12 @@
+# ~/instagram-api/lab/p3-34/practice1.http
+### 새 화면 — keyword
+GET http://localhost:4001/api/members/search?keyword=민
+
+### 옛 화면 — q
+GET http://localhost:4001/api/members/search?q=민
+
+### 둘 다 보내면 keyword
+GET http://localhost:4001/api/members/search?keyword=dahye&q=민
+
+### 검색어 없이
+GET http://localhost:4001/api/members/search

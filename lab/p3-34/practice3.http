@@ -1,0 +1,14 @@
+# ~/instagram-api/lab/p3-34/practice3.http
+### 문서 JSON
+GET http://localhost:4003/openapi.json
+
+### 고정 공지만
+GET http://localhost:4003/api/notices?pinned=true
+
+### 공지 올리기
+POST http://localhost:4003/api/notices
+Content-Type: application/json
+
+{
+  "title": "연말 이벤트"
+}

@@ -1,0 +1,12 @@
+# ~/instagram-api/lab/p3-34/practice2.http
+### v1
+GET http://localhost:4002/api/v1/members/2
+
+### v2
+GET http://localhost:4002/api/v2/members/2
+
+### 버전 없는 옛 주소
+GET http://localhost:4002/api/members/2
+
+### 없는 회원 — v2
+GET http://localhost:4002/api/v2/members/9
