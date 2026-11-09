@@ -205,3 +205,121 @@ describe('축 ④ — Step 4: 사진은 1년 + immutable', () => {
     }, B);
   });
 });
+
+// ── 실습 서버 — 학생 폴더 모양(lab/p3-35/ 아래 · middlewares/ 는 ../../)의 임시 폴더에 두고 포트만 바꿔 띄운다
+const LAB = (name) => read(R(`lab/p3-35/${name}`));
+const withLab = async (src, labPort, port, fn) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p335-lab-'));
+  symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+  cpSync(R('middlewares'), join(dir, 'middlewares'), { recursive: true });
+  cpSync(R('package.json'), join(dir, 'package.json'));
+  mkdirSync(join(dir, 'lab/p3-35'), { recursive: true });
+  const body = src.replaceAll(`listen(${labPort}`, `listen(${port}`).replaceAll(`${labPort}번 포트`, `${port}번 포트`);
+  writeFileSync(join(dir, 'lab/p3-35/server.js'), body);
+  const srv = await boot(join(dir, 'lab/p3-35/server.js'), { port, cwd: dir, ready: `${port}번 포트에서` });
+  try {
+    await fn(srv);
+  } finally {
+    await Promise.race([srv.stop(), sleep(500)]);
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+const swap = (src, from, to) => {
+  expect(src.split(from).length - 1, from).toBe(1);
+  return src.replace(from, to);
+};
+const built = (srv) => (srv.tail().match(/공지 목록을 만들었어요/g) ?? []).length;
+const logLine = (srv, re) => srv.tail().split('\n').filter((line) => re.test(line));
+const ms = (line) => Number(line.match(/([\d.]+)ms$/)[1]);
+const title = (title) => ({ method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
+
+describe('축 ⑤ — Step 5: 만들기 전에 비교', () => {
+  it('🔴 시작 판 — 304 로 끝나도 목록을 만든다(0.3초 · «공지 목록을 만들었어요» 두 줄)', async () => {
+    await withLab(read(P('snapshots/p3-35.step5-start.notices.js')), 4013, 3832, async (srv) => {
+      const first = await getRes(`${srv.base}/api/notices`);
+      expect(first.status).toBe(200);
+      expect(first.body).toHaveLength(3);
+      const etag = first.headers.get('etag');
+      expect(etag).toMatch(/^W\//);
+      const again = await getRes(`${srv.base}/api/notices`, { headers: ask(etag) });
+      expect(again.status).toBe(304);
+      await sleep(200);
+      expect(built(srv)).toBe(2);
+      const [line] = logLine(srv, /GET \/api\/notices 304/);
+      expect(ms(line)).toBeGreaterThan(290);
+    });
+  });
+
+  it('🔴 Step 5 판 — ETag "v1" 을 먼저 정하고 같으면 만들지 않고 304(한 줄 · 빠르다) · 고친 뒤에는 "v2" 로 다시 만든다', async () => {
+    await withLab(read(P('snapshots/p3-35.step5.notices.js')), 4013, 3832, async (srv) => {
+      const first = await getRes(`${srv.base}/api/notices`);
+      expect(first.headers.get('etag')).toBe('"v1"');
+      const again = await getRes(`${srv.base}/api/notices`, { headers: ask('"v1"') });
+      expect(again.status).toBe(304);
+      await sleep(200);
+      expect(built(srv)).toBe(1);
+      const [line] = logLine(srv, /GET \/api\/notices 304/);
+      expect(ms(line)).toBeLessThan(50);
+      expect((await getRes(`${srv.base}/api/notices/1`, title('서버 점검 시간 변경'))).status).toBe(200);
+      const after = await getRes(`${srv.base}/api/notices`, { headers: ask('"v1"') });
+      expect(after.status).toBe(200);
+      expect(after.headers.get('etag')).toBe('"v2"');
+      expect(after.body[0].title).toBe('서버 점검 시간 변경');
+    });
+  });
+
+  it('🔴 Step 5 판 — 처음 오는 요청(If-None-Match 없음)은 올 때마다 만든다', async () => {
+    await withLab(read(P('snapshots/p3-35.step5.notices.js')), 4013, 3832, async (srv) => {
+      for (let turn = 0; turn < 3; turn += 1) expect((await getRes(`${srv.base}/api/notices`)).status).toBe(200);
+      await sleep(200);
+      expect(built(srv)).toBe(3);
+    });
+  });
+
+  it('🔴 Cache-Control: no-cache 를 실은 요청(강력 새로고침 · Disable cache)은 번호가 같아도 만든다', async () => {
+    await withLab(read(P('snapshots/p3-35.step5.notices.js')), 4013, 3832, async (srv) => {
+      await getRes(`${srv.base}/api/notices`);
+      const forced = await getRes(`${srv.base}/api/notices`, { headers: { 'If-None-Match': '"v1"', 'Cache-Control': 'no-cache' } });
+      expect(forced.status).toBe(200);
+      await sleep(200);
+      expect(built(srv)).toBe(2);
+    });
+  });
+});
+
+describe('축 ⑤ — Step 6: 메모리 캐시와 무효화', () => {
+  it('🔴 끝 판 — 처음 오는 요청 셋에도 한 번만 만든다 · 고치면 다시 만든다 · 지우면 목록에서 빠진다', async () => {
+    await withLab(LAB('notices.js'), 4013, 3832, async (srv) => {
+      for (let turn = 0; turn < 3; turn += 1) expect((await getRes(`${srv.base}/api/notices`)).status).toBe(200);
+      await sleep(200);
+      expect(built(srv)).toBe(1);
+      const fast = logLine(srv, /GET \/api\/notices 200/).slice(1);
+      expect(fast.every((line) => ms(line) < 50)).toBe(true);
+      await getRes(`${srv.base}/api/notices/1`, title('서버 점검 시간 변경'));
+      expect((await getRes(`${srv.base}/api/notices`)).body[0].title).toBe('서버 점검 시간 변경');
+      expect((await getRes(`${srv.base}/api/notices/2`, { method: 'DELETE' })).status).toBe(204);
+      const list = await getRes(`${srv.base}/api/notices`, { headers: ask('"v2"') });
+      expect(list.status).toBe(200);
+      expect(list.headers.get('etag')).toBe('"v3"');
+      expect(list.body.map((notice) => notice.id)).toEqual([1, 3]);
+      await sleep(200);
+      expect(built(srv)).toBe(3);
+    });
+  });
+
+  it('🔴 DELETE 에서 changed() 를 빠뜨린 판 — 지운 공지가 목록에 남고, 받아 둔 브라우저에는 304', async () => {
+    await withLab(read(P('snapshots/p3-35.step6-forgot.notices.js')), 4013, 3832, async (srv) => {
+      await getRes(`${srv.base}/api/notices`);
+      expect((await getRes(`${srv.base}/api/notices/2`, { method: 'DELETE' })).status).toBe(204);
+      expect((await getRes(`${srv.base}/api/notices`, { headers: ask('"v1"') })).status).toBe(304);
+      expect((await getRes(`${srv.base}/api/notices`)).body.map((notice) => notice.id)).toEqual([1, 2, 3]);
+    });
+  });
+
+  it('🔴 끝 판이 Step 5 판에 더한 cachedList 줄은 다섯(선언 · 비우기 · 검사 · 담기 · 응답)', () => {
+    const final = LAB('notices.js');
+    const step5 = read(P('snapshots/p3-35.step5.notices.js'));
+    const extra = final.split('\n').filter((line) => !step5.split('\n').includes(line) && line.trim() !== '' && line.trim() !== '}');
+    expect(extra.filter((line) => line.includes('cachedList'))).toHaveLength(5);
+  });
+});
