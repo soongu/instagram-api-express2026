@@ -1,6 +1,6 @@
 ### 게시물 목록
 GET http://localhost:3000/api/posts?userId=2&limit=2
 
-### 받아 둔 ETag로 다시 묻기
+### 받아 둔 ETag로 다시 확인하기
 GET http://localhost:3000/api/posts?userId=2&limit=2
 If-None-Match: 위 응답의 ETag 값

@@ -34,7 +34,7 @@ app.get('/api/hashtags/popular', async (req, res) => {
     saved = { hashtags: await countHashtags(), countedAt: Date.now() };
   }
 
-  // 누구에게나 같고 10초쯤 늦어도 괜찮은 응답 — 브라우저도 10초 동안은 묻지 않고 쓴다.
+  // 누구에게나 같고 10초쯤 늦어도 괜찮은 응답 — 브라우저도 10초 동안은 서버에 확인하지 않고 쓴다.
   res.set('Cache-Control', 'public, max-age=10');
   res.json(saved.hashtags);
 });

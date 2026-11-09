@@ -181,7 +181,7 @@ describe('축 ③ — Step 3: /api 응답은 private, no-cache', () => {
     reseed();
     await withServer(PORT, {}, async (srv) => {
       const http = read(R('requests/cache.http'));
-      expect(http.split(/^### /m).slice(1).map((chunk) => chunk.split('\n')[0])).toEqual(['게시물 목록', '받아 둔 ETag로 다시 묻기']);
+      expect(http.split(/^### /m).slice(1).map((chunk) => chunk.split('\n')[0])).toEqual(['게시물 목록', '받아 둔 ETag로 다시 확인하기']);
       const first = await getRes(`${srv.base}${LIST}`);
       const etag = first.headers.get('etag');
       expect(http).toContain(`GET http://localhost:3000${LIST}\nIf-None-Match: 위 응답의 ETag 값\n`);
