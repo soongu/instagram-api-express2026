@@ -228,7 +228,8 @@ describe('축 ② 층의 규칙', () => {
 // 바뀌는 값(세션 ID · 올린 파일 이름 · 이 실행에서 만든 게시물의 시각)만 지우고 나머지는 글자 그대로 대조한다.
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 const ISO = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g;
-const normalize = (value) => JSON.parse(JSON.stringify(value).replace(UUID, '<uuid>').replace(ISO, '<time>'));
+// Set-Cookie 의 Expires 는 «지금 + 7일» 이라 두 판이 1초 경계를 사이에 두면 초가 다르다 — 값만 지운다(Max-Age 는 그대로 대조).
+const normalize = (value) => JSON.parse(JSON.stringify(value).replace(UUID, '<uuid>').replace(ISO, '<time>').replace(/Expires=[^;"]+/g, 'Expires=<date>'));
 const HEADERS = ['content-type', 'location', 'allow', 'cache-control', 'deprecation', 'sunset', 'set-cookie', 'etag'];
 
 const SCRIPT = async (base) => {
@@ -356,15 +357,21 @@ describe('축 ④ Step 7 — 응답을 보내는 줄', () => {
 
 // ───────── 축 ⑤ 이 회차 학생 파일 ─────────
 describe('축 ⑤ 이 회차 학생 파일 — code/p3-35 에서 바뀐 파일', () => {
-  it('바뀐 파일은 넷 라우터 · 새 컨트롤러 넷 · 서비스 둘 · 실습 스크립트', () => {
-    const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-35', ROUND.fromBookmark ? 'code/p3-36' : 'HEAD', '--', '.', ':!test', ':!snapshots', ':!sql'], { cwd: P('.'), encoding: 'utf8' })
+  it('바뀐 파일은 넷 라우터 · 새 컨트롤러 넷 · 서비스 둘(+ 다른 회차가 고친 cursor.http) · 실습은 lab/p3-36/ 만', () => {
+    const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-35', ROUND.fromBookmark ? 'code/p3-36' : 'HEAD', '--', '.', ':!test', ':!snapshots', ':!sql', ':!lab'], { cwd: P('.'), encoding: 'utf8' })
       .trim().split('\n').filter(Boolean).sort();
     expect(changed).toEqual([
       'controllers/authController.js', 'controllers/likeController.js', 'controllers/postController.js', 'controllers/uploadController.js',
-      'lab/p3-36/add-user.js',
+      // requests/cursor.http 는 p3-33 학생 낭독 집중 검수(2026-11-09 · 7b9b2c7)가 main 에서 고쳤다 — 이 회차의 변경이 아니다.
+      'requests/cursor.http',
       'routes/auth.js', 'routes/likes.js', 'routes/posts.js', 'routes/uploads.js',
       'services/authService.js', 'services/userService.js',
     ]);
+    // 실습 폴더 — 이 회차가 새로 만든 것만
+    const lab = execFileSync('git', ['diff', '--name-only', 'code/p3-35', ROUND.fromBookmark ? 'code/p3-36' : 'HEAD', '--', 'lab'], { cwd: P('.'), encoding: 'utf8' })
+      .trim().split('\n').filter(Boolean);
+    expect(lab.every((one) => one.startsWith('lab/p3-36/'))).toBe(true);
+    expect(lab).toContain('lab/p3-36/add-user.js');
   });
 });
 

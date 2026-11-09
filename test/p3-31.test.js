@@ -732,7 +732,8 @@ describe('축 ⑫ — 교안·답안 코드 블록의 줄이 코드베이스에 
     const rel = path.replace('~/instagram-api/', '');
     const base = rel.split('/').pop();
     const snaps = readdirSync(P('snapshots')).filter((n) => n.startsWith('p3-31.') && n.endsWith(`.${base}`)).map((n) => read(P(`snapshots/${n}`)));
-    return [existsSync(P(rel)) ? read(P(rel)) : '', ...snaps];
+    // 🔀 2026-11-09 p3-36 — 뒤 회차가 routes/uploads.js 를 컨트롤러로 나눴다. 작업트리(main)와 함께 이 회차 북마크 판도 출처로 본다.
+    return [existsSync(P(rel)) ? read(P(rel)) : '', existsSync(R(rel)) ? read(R(rel)) : '', ...snaps];
   };
   const inOrder = (needle, hay) => {
     const lines = hay.split('\n');
