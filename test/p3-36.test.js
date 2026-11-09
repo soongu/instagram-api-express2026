@@ -367,3 +367,162 @@ describe('축 ⑤ 이 회차 학생 파일 — code/p3-35 에서 바뀐 파일',
     ]);
   });
 });
+
+// ───────── 축 ⑥ 직접 해보기 · 과제 — 정답 판과 시작 판(틀린 판)을 확인 절차가 가려낸다 ─────────
+// 🚨 실습 포트(4001~4003 · 4011)는 다른 세션의 실습 서버가 쥐고 있을 수 있어 사본의 포트 숫자를 판정 포트로 바꿔 띄운다.
+const LAB_PORT = 3861;
+const withLab = async (rel, src, labPort, fn) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p336-lab-'));
+  for (const name of STUDENT_FILES) {
+    if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
+  }
+  symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+  mkdirSync(join(dir, rel, '..'), { recursive: true });
+  writeFileSync(join(dir, rel), src.replaceAll(String(labPort), String(LAB_PORT)));
+  const srv = await boot(join(dir, rel), { port: LAB_PORT, cwd: dir, env, ready: `${LAB_PORT}번 포트에서` });
+  try {
+    await fn({ ...srv, dir, base: `http://localhost:${LAB_PORT}` });
+  } finally {
+    await Promise.race([srv.stop(), sleep(500)]);
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+const tagScene = async (base) => [
+  await getRes(`${base}/api/tags`),
+  await getRes(`${base}/api/tags`, json('POST', { name: 'seoul' })),
+  await getRes(`${base}/api/tags`, json('POST', { name: '#Busan' })),
+  await getRes(`${base}/api/tags`),
+].map(({ status, body }) => ({ status, body }));
+const TAGS_DONE = [
+  { status: 200, body: ['seoul', 'busan', 'jeju'] },
+  { status: 200, body: { name: 'seoul', created: false } },
+  { status: 200, body: { name: 'busan', created: false } },
+  { status: 200, body: ['seoul', 'busan', 'jeju'] },
+];
+
+describe('축 ⑥ 직접 해보기 1 — 해시태그 이름을 서비스에서 맞추기', () => {
+  it('시작 판 — 옮겨 온 태그는 맞추지 않은 채 들어가고, API 로 올린 같은 태그가 또 생긴다(201 둘 · 다섯 개)', async () => {
+    await withLab('lab/p3-36/practice1.js', read(P('snapshots/p3-36.practice1-start.practice1.js')), 4001, async ({ base }) => {
+      expect(await tagScene(base)).toEqual([
+        { status: 200, body: ['#Seoul', 'busan ', 'JEJU'] },
+        { status: 201, body: { name: 'seoul', created: true } },
+        { status: 201, body: { name: 'busan', created: true } },
+        { status: 200, body: ['#Seoul', 'busan ', 'JEJU', 'seoul', 'busan'] },
+      ]);
+    });
+  }, 30000);
+  it('정답 판 — 세 개 모두 맞춘 모양 · 두 요청 모두 200 created false', async () => {
+    await withLab('lab/p3-36/practice1.js', read(R('lab/p3-36/practice1.js')), 4001, async ({ base }) => {
+      expect(await tagScene(base)).toEqual(TAGS_DONE);
+    });
+  }, 30000);
+  it('정답 판의 라우트에는 맞추는 줄이 없다 — 맞추는 일은 addTag 를 지나간다', () => {
+    const src = read(R('lab/p3-36/practice1.js'));
+    const route = src.slice(src.indexOf("app.post('/api/tags'"));
+    expect(route).not.toMatch(/toLowerCase|trim/);
+    expect(src.indexOf('normalize(rawName)')).toBeLessThan(src.indexOf("app.post('/api/tags'"));
+  });
+});
+
+describe('축 ⑥ 직접 해보기 2 — 세 층 파일로 나누기', () => {
+  it('practice2/app.js 는 practice1 정답 판과 같은 응답', async () => {
+    await withLab('lab/p3-36/practice2/app.js', read(R('lab/p3-36/practice2/app.js')), 4002, async ({ base }) => {
+      expect(await tagScene(base)).toEqual(TAGS_DONE);
+    });
+  }, 30000);
+  it('라우터에는 컨트롤러 이름만 · 서비스에는 req·res 가 없다', () => {
+    const routes = read(R('lab/p3-36/practice2/routes/tags.js'));
+    expect(routes).not.toMatch(/\(req, res/);
+    expect(routes).toContain("router.get('/', tagController.list);");
+    expect(read(R('lab/p3-36/practice2/services/tagService.js'))).not.toMatch(/\b(req|res)\b/);
+  });
+});
+
+describe('축 ⑥ 직접 해보기 3 — 서비스에 들어온 res 빼기', () => {
+  it('시작 판 — 서버가 뜨는 순간 서비스를 부른 줄에서 TypeError 로 끝난다', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'p336-p3s-'));
+    mkdirSync(join(dir, 'lab/p3-36'), { recursive: true });
+    writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
+    symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+    writeFileSync(join(dir, 'lab/p3-36/practice3.js'), read(P('snapshots/p3-36.practice3-start.practice3.js')).replace('4003', String(LAB_PORT)));
+    const out = runScript(dir, 'lab/p3-36/practice3.js');
+    rmSync(dir, { recursive: true, force: true });
+    expect(out.code).not.toBe(0);
+    expect(out.out).toContain("TypeError: Cannot read properties of undefined (reading 'json')");
+    expect(out.out).toContain('at removeTag');
+    expect(out.out).not.toContain('기다리고 있어요');
+  });
+  it('정답 판 — 서버가 뜨고 test 는 지워져 있다 · busan 지우기 200 · 없는 태그 404', async () => {
+    await withLab('lab/p3-36/practice3.js', read(R('lab/p3-36/practice3.js')), 4003, async ({ base }) => {
+      const list = await getRes(`${base}/api/tags`);
+      const del = await getRes(`${base}/api/tags/busan`, { method: 'DELETE' });
+      const none = await getRes(`${base}/api/tags/nope`, { method: 'DELETE' });
+      const after = await getRes(`${base}/api/tags`);
+      expect([list, del, none, after].map(({ status, body }) => ({ status, body }))).toEqual([
+        { status: 200, body: ['seoul', 'busan', 'jeju'] },
+        { status: 200, body: { removed: 'busan' } },
+        { status: 404, body: { message: '그런 해시태그는 없어요' } },
+        { status: 200, body: ['seoul', 'jeju'] },
+      ]);
+    });
+    const src = read(R('lab/p3-36/practice3.js'));
+    const service = src.slice(src.indexOf('function removeTag'), src.indexOf("removeTag('test');"));
+    expect(service).not.toMatch(/\bres\b/);
+  }, 30000);
+});
+
+describe('축 ⑥ 과제 [기초] — 수업 서비스를 다시 쓰는 관리자 서버', () => {
+  const scene = async (src) => {
+    await freshGate();
+    let out = null;
+    await withLab('lab/p3-36/homework1.js', src, 4011, async ({ base }) => {
+      const made = await getRes(`${base}/admin/users`, json('POST', { username: 'mina.admin', name: '최미나', phone: '010-7777-8888' }));
+      const check = await getRes(`${base}/admin/phones?phone=01077778888`);
+      const again = await getRes(`${base}/admin/users`, json('POST', { username: 'mina.admin2', name: '최미나', phone: '01077778888' }));
+      const rows = await query(`SELECT username, phone FROM users WHERE username LIKE 'mina%' ORDER BY id`);
+      out = { made, check, again, rows };
+    });
+    return out;
+  };
+  it('정답 판 — 201 · taken true · 409 · 숫자만 저장', async () => {
+    const { made, check, again, rows } = await scene(read(R('lab/p3-36/homework1.js')));
+    expect(made.status).toBe(201);
+    expect(made.body).toEqual({ id: 6, username: 'mina.admin', profileImage: null });
+    expect(check.body).toEqual({ phone: '01077778888', taken: true });
+    expect(again.status).toBe(409);
+    expect(again.body).toEqual({ message: '이미 쓰고 있는 사용자 이름이나 연락처예요' });
+    expect(rows).toEqual([{ username: 'mina.admin', phone: '01077778888' }]);
+  }, 60000);
+  it('틀린 판(서비스 대신 prisma 를 바로 부른다) — 하이픈째 저장 · taken false · 두 번째도 201', async () => {
+    const wrong = read(R('lab/p3-36/homework1.js'))
+      .replace("import * as userService from '../../services/userService.js';", "import * as userService from '../../services/userService.js';\nimport { prisma } from '../../db.js';")
+      .replace('const user = await userService.createUser({ username, name, phone });', 'const user = await prisma.user.create({ data: { username, name, phone }, select: { id: true, username: true, profileImage: true } });');
+    expect(wrong).toContain('prisma.user.create');
+    const { check, again, rows } = await scene(wrong);
+    expect(check.body.taken).toBe(false);
+    expect(again.status).toBe(201);
+    expect(rows).toEqual([{ username: 'mina.admin', phone: '010-7777-8888' }, { username: 'mina.admin2', phone: '01077778888' }]);
+  }, 60000);
+});
+
+describe('축 ⑥ 과제 [응용] — HTTP 없이 로그인 흐름 확인하기', () => {
+  it('다섯 줄을 차례로 찍고 끝난다', async () => {
+    await freshGate();
+    const dir = mkdtempSync(join(tmpdir(), 'p336-hw2-'));
+    for (const name of STUDENT_FILES) {
+      if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
+    }
+    symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+    const out = runScript(dir, 'lab/p3-36/homework2.js');
+    rmSync(dir, { recursive: true, force: true });
+    expect(out.code).toBe(0);
+    expect(out.out).toBe([
+      '로그인했어요 jaehoon 36',
+      '나는 누구 jaehoon',
+      '로그아웃했어요',
+      '나는 누구 401 로그인이 필요해요',
+      '없는 이름으로 로그인 401 그런 사용자는 없어요',
+      '',
+    ].join('\n'));
+  }, 60000);
+});

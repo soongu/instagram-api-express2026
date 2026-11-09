@@ -1,0 +1,14 @@
+### 관리자가 사람 만들기
+POST http://localhost:4011/admin/users
+Content-Type: application/json
+
+{"username": "mina.admin", "name": "최미나", "phone": "010-7777-8888"}
+
+### 하이픈 없이 번호 확인
+GET http://localhost:4011/admin/phones?phone=01077778888
+
+### 같은 번호로 한 번 더
+POST http://localhost:4011/admin/users
+Content-Type: application/json
+
+{"username": "mina.admin2", "name": "최미나", "phone": "01077778888"}

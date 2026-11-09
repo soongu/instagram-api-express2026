@@ -1,0 +1,17 @@
+### 해시태그 목록
+GET http://localhost:4001/api/tags
+
+### seoul 올리기
+POST http://localhost:4001/api/tags
+Content-Type: application/json
+
+{"name": "seoul"}
+
+### #Busan 올리기
+POST http://localhost:4001/api/tags
+Content-Type: application/json
+
+{"name": "#Busan"}
+
+### 해시태그 목록 다시 보기
+GET http://localhost:4001/api/tags
