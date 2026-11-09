@@ -1,0 +1,15 @@
+### 공지 목록
+GET http://localhost:4013/api/notices
+
+### 받아 둔 ETag로 다시 묻기
+GET http://localhost:4013/api/notices
+If-None-Match: "v1"
+
+### 1번 공지 제목 고치기
+PATCH http://localhost:4013/api/notices/1
+Content-Type: application/json
+
+{ "title": "서버 점검 시간 변경" }
+
+### 2번 공지 지우기
+DELETE http://localhost:4013/api/notices/2
