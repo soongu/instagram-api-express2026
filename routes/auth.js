@@ -15,10 +15,8 @@ const SEVEN_DAYS = 1000 * 60 * 60 * 24 * 7;
 router.post('/signup', validateBody(signupSchema), async (req, res) => {
   const { emailOrPhone, name, username } = req.body;
 
-  // 휴대폰 번호는 하이픈을 빼고 숫자만 저장한다 — 010-1234-5678 과 01012345678 은 같은 번호다.
-  const contact = PHONE.test(emailOrPhone)
-    ? { phone: emailOrPhone.replaceAll('-', '') }
-    : { email: emailOrPhone };
+  // 휴대폰 번호 모양이면 phone 에, 아니면 email 에 넣는다 — 번호를 맞추는 일은 서비스가 한다.
+  const contact = PHONE.test(emailOrPhone) ? { phone: emailOrPhone } : { email: emailOrPhone };
 
   // 비밀번호는 아직 저장하지 않는다 — 안전하게 저장하는 법은 서버에서 인증을 구현하는 구간에서 배운다.
   const user = await userService.createUser({ username, name, ...contact });
@@ -35,7 +33,7 @@ const TAKEN = {
 
 router.get('/check-duplicate', validateQuery(checkDuplicateSchema), async (req, res) => {
   const { type, value } = res.locals.query;
-  const taken = await userService.isTaken(type, type === 'phone' ? value.replaceAll('-', '') : value);
+  const taken = await userService.isTaken(type, value);
 
   res.json({ available: !taken, message: taken ? TAKEN[type] : '쓸 수 있어요' });
 });
