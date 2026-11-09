@@ -8,5 +8,6 @@ GET http://localhost:4001/photos/0b6f2c1e-6f1d-4a54-9a43-1f5b8f0c9d21.jpg
 GET http://localhost:4001/api/notices
 
 ### 내 정보
+# @no-cookie-jar
 GET http://localhost:4001/api/me
 Cookie: user=jaehoon

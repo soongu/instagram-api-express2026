@@ -526,3 +526,112 @@ describe('축 ⑥ — 과제 [응용]: 만료 시간이 있는 캐시(4012)', ()
     });
   }, 20000);
 });
+
+// ── 답안이 «흔한 실수 · 더 좋아요» 에서 주장하는 동작
+describe('축 ⑥ — 답안의 주장', () => {
+  it('🔴 [기초] 미들웨어를 라우트 아래에 두면 프로필 응답에도 라우트의 404 에도 Cache-Control 이 없다', async () => {
+    const src = LAB('homework1.js');
+    const mw = "// 프로필은 누가 보든 같다 — 공유 캐시에 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.\napp.use('/api', (req, res, next) => {\n  res.set('Cache-Control', 'public, no-cache');\n  next();\n});\n\n";
+    const moved = swap(src, mw, '').replace("app.listen(4011", `${mw}app.listen(4011`);
+    await withLab(moved, 4011, 3836, async (srv) => {
+      expect((await getRes(`${srv.base}/api/profiles/jaehoon`)).headers.get('cache-control')).toBeNull();
+      expect((await getRes(`${srv.base}/api/profiles/nobody`)).headers.get('cache-control')).toBeNull();
+    });
+  });
+  it('🔴 [기초] ETag 를 req.fresh 뒤(res.json 바로 위)에 정하면 304 는 res.send 가 보내지만 두 번 만든다 · 304 도 0.3초', async () => {
+    const src = LAB('homework1.js');
+    const set = "  res.set('ETag', `\"${profile.username}-${profile.version}\"`);\n";
+    const after = swap(swap(src, set, ''), '  res.json(await render(profile));', `${set}  res.json(await render(profile));`);
+    await withLab(after, 4011, 3836, async (srv) => {
+      expect((await getRes(`${srv.base}/api/profiles/jaehoon`)).headers.get('etag')).toBe('"jaehoon-1"');
+      expect((await getRes(`${srv.base}/api/profiles/jaehoon`, { headers: ask('"jaehoon-1"') })).status).toBe(304);
+      await sleep(200);
+      expect(lines(srv, /jaehoon 프로필을 만들었어요/g)).toBe(2);
+      expect(ms(logLine(srv, /GET \/api\/profiles\/jaehoon 304/)[0])).toBeGreaterThan(290);
+    });
+  });
+  it('🔴 [응용] 받을 때마다 센 시각을 새로 적으면 요청이 이어지는 동안 10초가 지나도 다시 세지 않는다', async () => {
+    const wrong = swap(LAB('homework2.js'), '  res.json(saved.hashtags);', '  saved.countedAt = Date.now();\n  res.json(saved.hashtags);');
+    await withLab(wrong, 4012, 3837, async (srv) => {
+      for (let turn = 0; turn < 6; turn += 1) {
+        await getRes(`${srv.base}/api/hashtags/popular`);
+        await sleep(2000);
+      }
+      expect(lines(srv, /인기 해시태그를 셌어요/g)).toBe(1);
+    });
+  }, 20000);
+  it('🔴 [응용] 만료된 뒤 요청 셋이 동시에 오면 셋 다 센다', async () => {
+    const short = swap(LAB('homework2.js'), 'const TEN_SECONDS = 10 * 1000;', 'const TEN_SECONDS = 1000;');
+    await withLab(short, 4012, 3837, async (srv) => {
+      await getRes(`${srv.base}/api/hashtags/popular`);
+      await sleep(1100);
+      await Promise.all([0, 1, 2].map(() => getRes(`${srv.base}/api/hashtags/popular`)));
+      await sleep(200);
+      expect(lines(srv, /인기 해시태그를 셌어요/g)).toBe(4);
+    });
+  });
+});
+
+const LECTURE = () => read(P('../../part3/6-api-design/p3-35-http-caching-lecture.md'));
+const ANSWERS = () => read(P('../../part3/6-api-design/p3-35-http-caching-answers.md'));
+/** 마크다운의 펜스를 차례대로 { lang, body, line } 으로 */
+const fences = (md) => {
+  const out = [];
+  let open = null;
+  md.split('\n').forEach((text, index) => {
+    const m = text.match(/^```(\S*)$/);
+    if (!m) { if (open) open.body.push(text); return; }
+    if (open) { out.push({ ...open, body: open.body.join('\n') }); open = null; } else open = { lang: m[1], body: [], line: index + 1 };
+  });
+  return out;
+};
+
+describe('축 ⑦ — 학생 파일과 교안 블록', () => {
+  it('🔴 code/p3-34 에서 바뀐 학생 파일', () => {
+    const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-34', ROUND.fromBookmark ? 'code/p3-35' : 'HEAD', '--', '.', ':(exclude)test', ':(exclude)lab', ':(exclude)snapshots'], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').sort();
+    expect(changed).toEqual(['app.js', 'middlewares/cache.js', 'requests/cache.http']);
+  });
+
+  it('🔴 교안의 코드 블록 — 줄마다 그 파일(또는 그 Step 의 판)에 실재한다', () => {
+    const owners = {
+      '// ~/instagram-api/app.js': [read(R('app.js')), read(P('snapshots/p3-35.step2-max-age.app.js'))],
+      '// ~/instagram-api/middlewares/cache.js': [read(R('middlewares/cache.js'))],
+      '// ~/instagram-api/node_modules/express/lib/response.js': [read(P('node_modules/express/lib/response.js'))],
+      '// ~/instagram-api/lab/p3-35/notices.js': [LAB('notices.js'), read(P('snapshots/p3-35.step5-start.notices.js')), read(P('snapshots/p3-35.step5.notices.js')), read(P('snapshots/p3-35.step6-forgot.notices.js'))],
+      '// ~/instagram-api/lab/p3-35/practice1.js': [LAB('practice1.js'), START('practice1.js')],
+      '// ~/instagram-api/lab/p3-35/practice2.js': [LAB('practice2.js'), START('practice2.js')],
+      '// ~/instagram-api/lab/p3-35/practice3.js': [LAB('practice3.js'), START('practice3.js')],
+      '// ~/instagram-api/lab/p3-35/homework1.js': [START('homework1.js')],
+      '// ~/instagram-api/lab/p3-35/homework2.js': [START('homework2.js')],
+    };
+    let seen = 0;
+    for (const f of fences(LECTURE()).filter((one) => one.lang === 'javascript')) {
+      const [head, ...rest] = f.body.split('\n');
+      expect(owners[head], `L${f.line}: ${head}`).toBeDefined();
+      seen += 1;
+      const hay = owners[head].join('\n');
+      for (const line of rest.filter((one) => one.trim() !== '')) expect(hay, `L${f.line}: ${line}`).toContain(line);
+    }
+    expect(seen).toBeGreaterThanOrEqual(20);
+    // 시작 판을 통째로 싣는 블록은 그 파일과 byte 같다
+    const whole = fences(LECTURE()).filter((f) => f.lang === 'javascript').map((f) => `${f.body}\n`);
+    for (const name of ['practice1.js', 'practice2.js', 'practice3.js', 'homework1.js', 'homework2.js']) expect(whole, name).toContain(START(name));
+    expect(whole).toContain(read(P('snapshots/p3-35.step5-start.notices.js')));
+    expect(whole).toContain(read(R('middlewares/cache.js')));
+  });
+
+  it('🔴 교안의 요청 블록은 .http 와 byte 같다 · bash 블록은 직접 해보기 1 의 사진 준비', () => {
+    const http = fences(LECTURE()).filter((f) => f.lang === 'http').map((f) => `${f.body}\n`);
+    expect(http).toEqual([read(R('requests/cache.http')), LAB('practice1.http'), LAB('notices.http'), LAB('practice2.http'), LAB('practice3.http'), LAB('homework1.http'), LAB('homework2.http')]);
+    const bash = fences(LECTURE()).filter((f) => f.lang === 'bash').map((f) => f.body);
+    expect(bash).toEqual([`mkdir -p lab/p3-35/avatars lab/p3-35/photos\ncp requests/photos/beach.jpg lab/p3-35/avatars/jaehoon.jpg\ncp requests/photos/forest.jpg lab/p3-35/photos/${PHOTO_ID}.jpg`]);
+  });
+});
+
+describe('축 ⑦ — 답안 블록', () => {
+  it('🔴 답안의 코드 블록은 과제 정답 파일과 byte 같고, 요청 블록은 .http 와 byte 같다', () => {
+    const blocks = fences(ANSWERS());
+    expect(blocks.filter((f) => f.lang === 'javascript').map((f) => `${f.body}\n`)).toEqual([LAB('homework1.js'), LAB('homework2.js')]);
+    expect(blocks.filter((f) => f.lang === 'http').map((f) => `${f.body}\n`)).toEqual([LAB('homework1.http'), LAB('homework2.http')]);
+  });
+});
