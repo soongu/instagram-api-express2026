@@ -22,31 +22,22 @@ GET {{api}}/posts?limit=0
 POST {{api}}/auth/signup
 Content-Type: application/json
 
-{
-  "emailOrPhone": "010-4242-7777",
-  "name": "한태양",
-  "username": "taeyang",
-  "password": "taeyang12"
-}
+{"emailOrPhone": "010-4242-7777", "name": "한태양", "username": "taeyang", "password": "taeyang12"}
 
 ### 같은 휴대폰 번호로 가입
 POST {{api}}/auth/signup
 Content-Type: application/json
 
-{
-  "emailOrPhone": "010-4242-7777",
-  "name": "한태양",
-  "username": "taeyang2",
-  "password": "taeyang12"
-}
+{"emailOrPhone": "010-4242-7777", "name": "한태양", "username": "taeyang2", "password": "taeyang12"}
 
 ### 이미 있는 사용자 이름으로 가입
 POST {{api}}/auth/signup
 Content-Type: application/json
 
-{
-  "emailOrPhone": "010-4242-8888",
-  "name": "김재훈",
-  "username": "jaehoon",
-  "password": "jaehoon12"
-}
+{"emailOrPhone": "010-4242-8888", "name": "김재훈", "username": "jaehoon", "password": "jaehoon12"}
+
+### 깨진 JSON으로 게시물 올리기
+POST {{api}}/posts
+Content-Type: application/json
+
+{"content":
