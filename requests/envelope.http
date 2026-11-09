@@ -1,0 +1,52 @@
+@api = http://localhost:3000/api
+
+### 게시물 하나
+GET {{api}}/posts/1
+
+### 게시물 목록
+GET {{api}}/posts?limit=2
+
+### 1번 게시물에 좋아요 누른 사람들
+GET {{api}}/posts/1/likes
+
+### 사용자 이름 중복 확인
+GET {{api}}/auth/check-duplicate?type=username&value=jaehoon
+
+### 없는 게시물
+GET {{api}}/posts/999
+
+### 규칙에 안 맞는 limit
+GET {{api}}/posts?limit=0
+
+### 휴대폰 번호로 가입
+POST {{api}}/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "010-4242-7777",
+  "name": "한태양",
+  "username": "taeyang",
+  "password": "taeyang12"
+}
+
+### 같은 휴대폰 번호로 가입
+POST {{api}}/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "010-4242-7777",
+  "name": "한태양",
+  "username": "taeyang2",
+  "password": "taeyang12"
+}
+
+### 이미 있는 사용자 이름으로 가입
+POST {{api}}/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "010-4242-8888",
+  "name": "김재훈",
+  "username": "jaehoon",
+  "password": "jaehoon12"
+}
