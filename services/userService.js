@@ -5,6 +5,13 @@ import { ConflictError } from '../errors.js';
 // 응답에 실어 보낼 컬럼만 고른다.
 const userFields = { id: true, username: true, profileImage: true };
 
+// UNIQUE 제약 이름 — 어느 컬럼이 이미 쓰이고 있는지에 따라 에러 코드가 다르다.
+const TAKEN = {
+  users_username_key: 'USERNAME_TAKEN',
+  users_email_key: 'EMAIL_TAKEN',
+  users_phone_key: 'PHONE_TAKEN',
+};
+
 // 휴대폰 번호는 하이픈을 빼고 숫자만 다룬다 — 010-1234-5678 과 01012345678 은 같은 번호다.
 const digitsOnly = (phone) => phone.replaceAll('-', '');
 
@@ -24,7 +31,11 @@ export async function createUser(data) {
     return await prisma.user.create({ data: user, select: userFields });
   } catch (error) {
     // 사용자 이름·이메일·휴대폰 번호 가운데 하나라도 이미 있으면 UNIQUE 제약이 막는다.
-    if (error.code === 'P2002') throw new ConflictError('이미 쓰고 있는 사용자 이름이나 연락처예요');
+    // 데이터베이스가 알려 준 제약 이름으로 어느 컬럼이 겹쳤는지 가른다.
+    if (error.code === 'P2002') {
+      const code = TAKEN[error.meta.driverAdapterError.cause.constraint.index];
+      if (code) throw new ConflictError(code);
+    }
     throw error;
   }
 }

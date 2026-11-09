@@ -7,7 +7,7 @@ export function validateBody(schema) {
     const result = schema.safeParse(req.body);
 
     if (!result.success) {
-      next(new BadRequestError('보낸 내용이 규칙에 안 맞아요', z.treeifyError(result.error)));
+      next(new BadRequestError('VALIDATION_FAILED', z.treeifyError(result.error)));
       return;
     }
 
@@ -21,7 +21,7 @@ export function validateQuery(schema) {
     const result = schema.safeParse(req.query);
 
     if (!result.success) {
-      next(new BadRequestError('보낸 내용이 규칙에 안 맞아요', z.treeifyError(result.error)));
+      next(new BadRequestError('VALIDATION_FAILED', z.treeifyError(result.error)));
       return;
     }
 

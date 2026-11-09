@@ -44,7 +44,7 @@ function decodeCursor(cursor) {
   try {
     return cursorSchema.parse(JSON.parse(Buffer.from(cursor, 'base64url').toString()));
   } catch {
-    throw new BadRequestError('커서 값이 올바르지 않아요');
+    throw new BadRequestError('INVALID_CURSOR');
   }
 }
 
@@ -104,7 +104,7 @@ export async function getPost(id) {
     select: postFields,
   });
 
-  if (!post) throw new NotFoundError('그런 게시물은 없어요');
+  if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
   return flatten(post);
 }
@@ -125,7 +125,7 @@ export async function createPost({ imageUrls, ...data }) {
 
     return flatten(post);
   } catch (error) {
-    if (error.code === 'P2003') throw new BadRequestError('그런 사용자는 없어요');
+    if (error.code === 'P2003') throw new BadRequestError('USER_NOT_FOUND');
     throw error;
   }
 }
@@ -140,8 +140,8 @@ export async function updatePost(id, data) {
 
     return flatten(post);
   } catch (error) {
-    if (error.code === 'P2025') throw new NotFoundError('그런 게시물은 없어요');
-    if (error.code === 'P2003') throw new BadRequestError('그런 사용자는 없어요');
+    if (error.code === 'P2025') throw new NotFoundError('POST_NOT_FOUND');
+    if (error.code === 'P2003') throw new BadRequestError('USER_NOT_FOUND');
     throw error;
   }
 }
@@ -169,7 +169,7 @@ export async function removePost(id) {
       select: postFields,
     });
   } catch (error) {
-    if (error.code === 'P2025') throw new NotFoundError('그런 게시물은 없어요');
+    if (error.code === 'P2025') throw new NotFoundError('POST_NOT_FOUND');
     throw error;
   }
 

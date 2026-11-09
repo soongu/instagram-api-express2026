@@ -2,15 +2,16 @@
 import * as authService from '../services/authService.js';
 import * as userService from '../services/userService.js';
 import { sendData } from '../responses.js';
+import { MESSAGES } from '../errors.js';
 
 // 로그인 쿠키를 남겨 둘 기간 — 7일(밀리초)
 const SEVEN_DAYS = 1000 * 60 * 60 * 24 * 7;
 
-// 이미 쓰고 있을 때 보여 줄 문장 — 무엇을 찾았는지에 따라 다르다.
+// 이미 쓰고 있을 때의 에러 코드 — 무엇을 찾았는지에 따라 다르다. 문장은 가입이 409 로 실패할 때와 같다.
 const TAKEN = {
-  email: '이미 가입한 이메일이에요',
-  phone: '이미 가입한 휴대폰 번호예요',
-  username: '이미 쓰고 있는 사용자 이름이에요',
+  email: 'EMAIL_TAKEN',
+  phone: 'PHONE_TAKEN',
+  username: 'USERNAME_TAKEN',
 };
 
 // 요청에 실려 온 세션 ID — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
@@ -36,7 +37,7 @@ export async function checkDuplicate(req, res) {
   const { type, value } = res.locals.query;
   const taken = await userService.isTaken(type, value);
 
-  sendData(res, { available: !taken, message: taken ? TAKEN[type] : '쓸 수 있어요' });
+  sendData(res, { available: !taken, message: taken ? MESSAGES[TAKEN[type]] : '쓸 수 있어요' });
 }
 
 export async function login(req, res) {

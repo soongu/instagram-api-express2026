@@ -16,7 +16,7 @@ export function signup({ emailOrPhone, name, username }) {
 export async function login(username) {
   const user = await userService.findUserByUsername(username);
 
-  if (!user) throw new UnauthorizedError('그런 사용자는 없어요');
+  if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 
   // 비밀번호 확인은 아직 없다 — 이름만 맞으면 세션을 만든다.
   const sessionId = sessionService.createSession(user.id);
@@ -29,11 +29,11 @@ export async function whoAmI(sessionId) {
   // 서버가 기억해 둔 세션에서 사람의 번호를 찾는다 — 모르는 세션 ID면 undefined.
   const userId = sessionService.getUserId(sessionId);
 
-  if (!userId) throw new UnauthorizedError('로그인이 필요해요');
+  if (!userId) throw new UnauthorizedError('LOGIN_REQUIRED');
 
   const user = await userService.findUserById(userId);
 
-  if (!user) throw new UnauthorizedError('로그인이 필요해요');
+  if (!user) throw new UnauthorizedError('LOGIN_REQUIRED');
 
   return user;
 }
