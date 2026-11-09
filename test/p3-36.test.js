@@ -526,3 +526,96 @@ describe('축 ⑥ 과제 [응용] — HTTP 없이 로그인 흐름 확인하기'
     ].join('\n'));
   }, 60000);
 });
+
+// ───────── 축 ⑦ 교안·답안의 코드 블록 ─────────
+const LECTURE = () => read(P('../../part3/7-express-auth/p3-36-mvc-service-layer-lecture.md'));
+const ANSWERS = () => read(P('../../part3/7-express-auth/p3-36-mvc-service-layer-answers.md'));
+const fences = (md) => {
+  const out = [];
+  let open = null;
+  md.split('\n').forEach((text, index) => {
+    const m = text.match(/^```(\S*)$/);
+    if (!m) { if (open) open.body.push(text); return; }
+    if (open) { out.push({ ...open, body: open.body.join('\n') }); open = null; } else open = { lang: m[1], body: [], line: index + 1 };
+  });
+  return out;
+};
+const SNAP3 = (name) => read(P(`snapshots/p3-36.${name}`));
+
+describe('축 ⑦ 교안·답안의 코드 블록', () => {
+  const owners = () => ({
+    '// ~/instagram-api/routes/auth.js': [read(B('routes/auth.js')), SNAP3('step2.auth.js'), read(R('routes/auth.js'))],
+    '// ~/instagram-api/services/userService.js': [read(R('services/userService.js'))],
+    '// ~/instagram-api/lab/p3-36/add-user.js': [read(R('lab/p3-36/add-user.js'))],
+    '// ~/instagram-api/controllers/postController.js': [read(R('controllers/postController.js'))],
+    '// ~/instagram-api/routes/posts.js': [read(R('routes/posts.js'))],
+    '// ~/instagram-api/services/authService.js': [read(R('services/authService.js'))],
+    '// ~/instagram-api/controllers/authController.js': [read(R('controllers/authController.js'))],
+    '// ~/instagram-api/errors.js': [read(R('errors.js'))],
+    '// ~/instagram-api/controllers/likeController.js': [read(R('controllers/likeController.js'))],
+    '// ~/instagram-api/routes/likes.js': [read(R('routes/likes.js'))],
+    '// ~/instagram-api/controllers/uploadController.js': [read(R('controllers/uploadController.js'))],
+    '// ~/instagram-api/routes/uploads.js': [read(R('routes/uploads.js'))],
+    '// ~/instagram-api/lab/p3-36/practice1.js': [read(R('lab/p3-36/practice1.js')), SNAP3('practice1-start.practice1.js')],
+    '// ~/instagram-api/lab/p3-36/practice2/services/tagService.js': [read(R('lab/p3-36/practice2/services/tagService.js'))],
+    '// ~/instagram-api/lab/p3-36/practice2/controllers/tagController.js': [read(R('lab/p3-36/practice2/controllers/tagController.js'))],
+    '// ~/instagram-api/lab/p3-36/practice2/routes/tags.js': [read(R('lab/p3-36/practice2/routes/tags.js'))],
+    '// ~/instagram-api/lab/p3-36/practice2/app.js': [read(R('lab/p3-36/practice2/app.js'))],
+    '// ~/instagram-api/lab/p3-36/practice3.js': [read(R('lab/p3-36/practice3.js')), SNAP3('practice3-start.practice3.js')],
+    '// ~/instagram-api/lab/p3-36/homework1.js': [read(R('lab/p3-36/homework1.js'))],
+    '// ~/instagram-api/lab/p3-36/homework2.js': [read(R('lab/p3-36/homework2.js'))],
+  });
+  const check = (md, min) => {
+    let seen = 0;
+    for (const f of fences(md).filter((one) => one.lang === 'javascript')) {
+      const [head, ...rest] = f.body.split('\n');
+      expect(owners()[head], `L${f.line}: ${head}`).toBeDefined();
+      seen += 1;
+      const hay = owners()[head].join('\n');
+      for (const line of rest.filter((one) => one.trim() !== '' && one !== '...')) expect(hay, `L${f.line}: ${line}`).toContain(line);
+    }
+    expect(seen).toBeGreaterThanOrEqual(min);
+  };
+
+  it('교안의 javascript 블록 — 줄마다 그 파일(또는 그 Step 의 판)에 실재한다', () => check(LECTURE(), 20));
+  it('답안의 javascript 블록 — 줄마다 그 파일에 실재한다', () => check(ANSWERS(), 2));
+
+  it('파일을 통째로 싣는 블록은 그 파일과 byte 같다', () => {
+    const whole = fences(LECTURE()).filter((f) => f.lang === 'javascript').map((f) => `${f.body}\n`);
+    for (const rel of ['lab/p3-36/add-user.js', 'controllers/postController.js', 'routes/posts.js', 'services/authService.js', 'routes/auth.js',
+      'controllers/likeController.js', 'routes/likes.js', 'controllers/uploadController.js', 'routes/uploads.js',
+      'lab/p3-36/practice2/services/tagService.js', 'lab/p3-36/practice2/controllers/tagController.js', 'lab/p3-36/practice2/routes/tags.js', 'lab/p3-36/practice2/app.js']) {
+      expect(whole, rel).toContain(read(R(rel)));
+    }
+    expect(whole).toContain(SNAP3('practice1-start.practice1.js'));
+    expect(whole).toContain(SNAP3('practice3-start.practice3.js'));
+    const answers = fences(ANSWERS()).filter((f) => f.lang === 'javascript').map((f) => `${f.body}\n`);
+    expect(answers).toEqual([read(R('lab/p3-36/homework1.js')), read(R('lab/p3-36/homework2.js'))]);
+  });
+
+  it('요청 블록은 .http 파일과 byte 같다', () => {
+    const http = fences(LECTURE()).filter((f) => f.lang === 'http').map((f) => `${f.body}\n`);
+    expect(http).toEqual([read(R('lab/p3-36/add-user.http')), read(R('lab/p3-36/practice1.http')), read(R('lab/p3-36/practice3.http')), read(R('lab/p3-36/homework1.http'))]);
+    expect(read(R('lab/p3-36/practice2.http'))).toBe(read(R('lab/p3-36/practice1.http')).replaceAll('4001', '4002'));
+  });
+
+  it('명령 블록 다음의 출력 블록은 학생 폴더에서 실제로 친 출력과 같다', () => {
+    const sh = (dir, cmd) => {
+      try { return execFileSync('/bin/sh', ['-c', cmd], { cwd: dir, encoding: 'utf8' }); } catch (e) { return e.stdout ?? ''; }
+    };
+    const bash = fences(LECTURE()).filter((f) => f.lang === 'bash');
+    const after = (cmd) => {
+      const i = bash.findIndex((f) => f.body === cmd);
+      expect(i, cmd).toBeGreaterThanOrEqual(0);
+      return bash[i + 1]?.body;
+    };
+    // Step 1 은 고치기 전 판(= code/p3-35)에서 친다
+    expect(after('grep -n "replaceAll" routes/auth.js')).toBe(sh(BEFORE.dir, '/usr/bin/grep -n "replaceAll" routes/auth.js').trimEnd());
+    expect(after('grep -n "^import" services/*.js')).toBe(sh(ROUND.dir, '/usr/bin/grep -n "^import" services/*.js').trimEnd());
+    expect(sh(ROUND.dir, '/usr/bin/grep -nwE "req|res" services/*.js')).toBe('');
+    // 폴더 안의 파일 차례는 컴퓨터마다 다르다 — 줄의 모음으로 대조한다
+    const map = after('grep -rcE "res\\..*(json|send)\\(" app.js routes controllers services middlewares').split('\n').sort();
+    expect(map).toEqual(sh(ROUND.dir, '/usr/bin/grep -rcE "res\\..*(json|send)\\(" app.js routes controllers services middlewares').trimEnd().split('\n').sort());
+    expect(after('node --env-file=.env lab/p3-36/add-user.js')).toBe("가입시켰어요 { id: 6, username: 'jiho', profileImage: null }");
+  });
+});
