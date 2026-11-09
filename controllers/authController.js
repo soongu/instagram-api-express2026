@@ -1,6 +1,7 @@
 // ~/instagram-api/controllers/authController.js
 import * as authService from '../services/authService.js';
 import * as userService from '../services/userService.js';
+import { sendData } from '../responses.js';
 
 // 로그인 쿠키를 남겨 둘 기간 — 7일(밀리초)
 const SEVEN_DAYS = 1000 * 60 * 60 * 24 * 7;
@@ -27,14 +28,15 @@ export async function signup(req, res) {
   const { emailOrPhone, name, username } = req.body;
   const user = await authService.signup({ emailOrPhone, name, username });
 
-  res.status(201).json({ message: '가입했어요', username: user.username });
+  res.status(201);
+  sendData(res, { message: '가입했어요', username: user.username });
 }
 
 export async function checkDuplicate(req, res) {
   const { type, value } = res.locals.query;
   const taken = await userService.isTaken(type, value);
 
-  res.json({ available: !taken, message: taken ? TAKEN[type] : '쓸 수 있어요' });
+  sendData(res, { available: !taken, message: taken ? TAKEN[type] : '쓸 수 있어요' });
 }
 
 export async function login(req, res) {
@@ -47,18 +49,18 @@ export async function login(req, res) {
     maxAge: SEVEN_DAYS,
   });
 
-  res.json(user);
+  sendData(res, user);
 }
 
 export async function me(req, res) {
   const user = await authService.whoAmI(readSessionId(req));
 
-  res.json(user);
+  sendData(res, user);
 }
 
 export function logout(req, res) {
   authService.logout(readSessionId(req));
 
   res.clearCookie('sessionId');
-  res.json({ message: '로그아웃했어요' });
+  sendData(res, { message: '로그아웃했어요' });
 }
