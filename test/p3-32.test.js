@@ -220,6 +220,51 @@ describe('축 ⑥ — Step 6: 주소는 있는데 그 HTTP 메서드를 안 받�
 describe('축 ⑦ — Step 7: 201 에 Location', () => {
   const NEW_POST = { authorId: 3, content: '새 글', imageUrls: ['https://picsum.photos/seed/p332/600/600'] };
 
+  // 학생 낭독(2026-11-09) — «Location 을 더하기 전과 뒤가 같아 보인다» 를 httpYac 으로 겪는다.
+  // rest.http(tip)의 «게시물 올리기 — Location 보기»(# @name created)와 «새 게시물 주소로 받기» 두 요청을 한 파일로 보낸다.
+  const chainHttp = (port) => {
+    const text = read(P('requests/rest.http'));
+    const at = text.indexOf('### 게시물 올리기 — Location 보기');
+    expect(at).toBeGreaterThan(-1);
+    const two = text.slice(at);
+    expect(two).toContain('# @name created');
+    expect(two).toContain('GET http://localhost:3000{{createdResponse.headers.location}}');
+    return two.replaceAll('localhost:3000', `localhost:${port}`);
+  };
+  const httpyac = (dir) => {
+    try {
+      return execFileSync(P('node_modules/.bin/httpyac'), ['send', 'chain.http', '--all'], { encoding: 'utf-8', cwd: dir });
+    } catch (e) {
+      return `${e.stdout}${e.stderr}`;
+    }
+  };
+
+  it('🔴 httpYac — 앞 판은 Location 이 없어 둘째 요청이 나가지 않는다 · 끝 판은 둘째 요청이 새 게시물 주소로 가서 200', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'p332-chain-'));
+    try {
+      reseed();
+      await withServer(PORT + 1, {}, async () => {
+        writeFileSync(join(dir, 'chain.http'), chainHttp(PORT + 1));
+        const out = httpyac(dir);
+        expect(out).toContain('Invalid URL');
+        expect(out).toContain('2 requests processed (1 succeeded, 1 errored)');
+      }, B);
+      reseed();
+      await withServer(PORT, {}, async (now) => {
+        writeFileSync(join(dir, 'chain.http'), chainHttp(PORT));
+        const out = httpyac(dir);
+        expect(out).toContain('2 requests processed (2 succeeded)');
+        const m = out.match(new RegExp(`GET http://localhost:${PORT}(/api/posts/(\\d+))`));
+        expect(m).not.toBeNull();
+        const again = await send(now.base, 'GET', m[1]);
+        expect(again.status).toBe(200);
+        expect(again.body.content).toBe('오늘은 API 설계를 배웠어요');
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30000);
+
   it('🔴 앞 판 — 201 인데 Location 이 없다', async () => {
     reseed();
     await withServer(PORT + 1, {}, async (before) => {
@@ -302,6 +347,7 @@ const withLab = async ({ src, labPort, port }, fn) => {
   mkdirSync(join(dir, 'middlewares'), { recursive: true });
   cpSync(R('errors.js'), join(dir, 'errors.js'));
   cpSync(R('middlewares/methods.js'), join(dir, 'middlewares', 'methods.js'));
+  cpSync(R('middlewares/logger.js'), join(dir, 'middlewares', 'logger.js'));
   writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
   symlinkSync(P('node_modules'), join(dir, 'node_modules'));
   writeFileSync(join(dir, 'lab', 'p3-32', 'server.js'), src.replaceAll(String(labPort), String(port)));
@@ -336,6 +382,11 @@ const sendAll = async (text, labPort, port) => {
   return out;
 };
 const statuses = (results) => results.map((r) => r.status);
+/** 실습 서버 창(stdout)에 로거가 찍은 줄의 «HTTP 메서드 주소 상태» — 걸린 시간은 뺀다. */
+const logLines = async (srv) => {
+  await sleep(200);
+  return srv.tail().split('\n').filter((l) => /^[A-Z]+ \/\S* \d{3} [\d.]+ms$/.test(l)).map((l) => l.replace(/ [\d.]+ms$/, ''));
+};
 
 describe('축 ⑩ — 직접 해보기 1: 공지 서버의 주소 고치기', () => {
   const P1 = 3771;
@@ -434,16 +485,26 @@ describe('축 ⑩ — 직접 해보기 2: 공지 서버에 405 붙이기', () =>
 
 describe('축 ⑩ — 직접 해보기 3: 상태 코드로 말하게 고치기', () => {
   const P3 = 3773;
-  it('🔴 처음 판 — 여섯 요청이 모두 200', async () => {
-    await withLab({ src: read(SNAP('practice3-start.practice3.js')), labPort: 4003, port: P3 }, async () => {
+  const P3_LINES = ['POST /api/notices', 'POST /api/notices', 'POST /api/notices', 'GET /api/notices/99', 'DELETE /api/notices/1', 'DELETE /api/notices/1'];
+  it('🔴 처음 판 — 여섯 요청이 모두 200 · 창 2 의 로거도 여섯 줄 모두 200(교안 Step 8 이 그 줄을 떠올린다)', async () => {
+    await withLab({ src: read(SNAP('practice3-start.practice3.js')), labPort: 4003, port: P3 }, async (srv) => {
       expect(statuses(await sendAll(lab('practice3.http'), 4003, P3))).toEqual([200, 200, 200, 200, 200, 200]);
+      expect(await logLines(srv)).toEqual(P3_LINES.map((l) => `${l} 200`));
     });
   });
 
+  it('🔴 처음 판과 정답 판은 맨 위 로거 두 줄(import · app.use)이 같다 — 처음 판에서 그대로 이어진다', () => {
+    for (const src of [read(SNAP('practice3-start.practice3.js')), lab('practice3.js')]) {
+      expect(src).toContain("import express from 'express';\nimport { logger } from '../../middlewares/logger.js';\n");
+      expect(src).toContain('app.use(logger);\napp.use(express.json());');
+    }
+  });
+
   it('🔴 정답 판 — 201 · 400 · 409 · 404 · 204 · 404 · Location /api/notices/3 · 본문은 공지 그대로 · 204 는 빈 본문', async () => {
-    await withLab({ src: lab('practice3.js'), labPort: 4003, port: P3 }, async () => {
+    await withLab({ src: lab('practice3.js'), labPort: 4003, port: P3 }, async (srv) => {
       const r = await sendAll(lab('practice3.http'), 4003, P3);
       expect(statuses(r)).toEqual([201, 400, 409, 404, 204, 404]);
+      expect(await logLines(srv)).toEqual(P3_LINES.map((l, i) => `${l} ${[201, 400, 409, 404, 204, 404][i]}`));
       expect(r[0].location).toBe('/api/notices/3');
       expect(r[0].body).toEqual({ id: 3, title: '스터디 모집' });
       expect(r[1].body).toEqual({ message: '제목을 적어 주세요' });
@@ -467,6 +528,16 @@ describe('축 ⑩ — 직접 해보기 3: 상태 코드로 말하게 고치기',
     });
   });
 
+  it('🔴 틀린 판 — nextId 를 올린 «뒤» 로 Location 을 지은 판은 location 이 /api/notices/4 · 본문 id 3 — 요구사항 5 의 «번호가 본문 id 와 같은지» 로만 갈린다', async () => {
+    const src = rep(lab('practice3.js'), 'res.status(201).location(`/api/notices/${notice.id}`).json(notice);', 'res.status(201).location(`/api/notices/${nextId}`).json(notice);');
+    await withLab({ src, labPort: 4003, port: P3 }, async () => {
+      const r = await sendAll(lab('practice3.http'), 4003, P3);
+      expect(statuses(r)).toEqual([201, 400, 409, 404, 204, 404]);
+      expect(r[0].location).toBe('/api/notices/4');
+      expect(r[0].body.id).toBe(3);
+    });
+  });
+
   it('🔴 해설의 주장 — 204 에 .json({ ok: true }) 를 남겨도 본문이 빈다', async () => {
     const src = rep(lab('practice3.js'), 'res.status(204).end();', 'res.status(204).json({ ok: true });');
     await withLab({ src, labPort: 4003, port: P3 }, async () => {
@@ -477,14 +548,15 @@ describe('축 ⑩ — 직접 해보기 3: 상태 코드로 말하게 고치기',
 
 describe('축 ⑩ — 과제 [기초]: 저장 API', () => {
   const H1 = 3774;
-  it('🔴 정답 판 — 아홉 요청 201 · 200 · 201 · 200 · 200 · 200 · 200 · 404 · 405 · 목록 [1, 3] → 첫 취소 뒤 [3]', async () => {
+  it('🔴 정답 판 — 열 요청 201 · 200 · 201 · 200 · 200 · 200 · 200 · 404 · 404 · 405 · 목록 [1, 3] → 첫 취소 뒤 [3] · 없는 게시물은 저장하기도 취소도 404', async () => {
     await withLab({ src: lab('homework1.js'), labPort: 4011, port: H1 }, async () => {
       const r = await sendAll(lab('homework1.http'), 4011, H1);
-      expect(statuses(r)).toEqual([201, 200, 201, 200, 200, 200, 200, 404, 405]);
+      expect(statuses(r)).toEqual([201, 200, 201, 200, 200, 200, 200, 404, 404, 405]);
       expect(r[3].body.map((p) => p.id)).toEqual([1, 3]);
       expect(r[5].body.map((p) => p.id)).toEqual([3]);
       expect(r[7].body).toEqual({ message: '그런 게시물은 없어요' });
-      expect(r[8].allow).toBe('PUT, DELETE');
+      expect(r[8]).toMatchObject({ title: '없는 게시물 저장 취소하기', body: { message: '그런 게시물은 없어요' } });
+      expect(r[9].allow).toBe('PUT, DELETE');
     });
   });
 
@@ -507,9 +579,17 @@ describe('축 ⑩ — 과제 [기초]: 저장 API', () => {
       "  const already = saves.some((save) => save.postId === post.id && save.userId === userId);\n  saves.push({ postId: post.id, userId });\n  res.status(already ? 200 : 201).json({ saved: true });");
     await withLab({ src: dup, labPort: 4011, port: H1 }, async () => {
       const r = await sendAll(lab('homework1.http'), 4011, H1);
-      expect(statuses(r)).toEqual([201, 200, 201, 200, 200, 200, 200, 404, 405]);
+      expect(statuses(r)).toEqual([201, 200, 201, 200, 200, 200, 200, 404, 404, 405]);
       expect(r[3].body.map((p) => p.id)).toEqual([1, 3]);
       expect(r[5].body.map((p) => p.id)).toEqual([1, 3]);
+    });
+    // 학생 낭독(2026-11-09)이 만든 판 — 취소에서 게시물을 찾지 않는다. 없는 게시물 취소(아홉째)만 200 으로 갈린다
+    const delNoCheck = rep(src,
+      "app.delete('/api/posts/:postId/saves/:userId', (req, res) => {\n  const post = findPost(req.params.postId);\n  const userId = Number(req.params.userId);\n  const index = saves.findIndex((save) => save.postId === post.id && save.userId === userId);",
+      "app.delete('/api/posts/:postId/saves/:userId', (req, res) => {\n  const postId = Number(req.params.postId);\n  const userId = Number(req.params.userId);\n  const index = saves.findIndex((save) => save.postId === postId && save.userId === userId);");
+    await withLab({ src: delNoCheck, labPort: 4011, port: H1 }, async () => {
+      const r = await sendAll(lab('homework1.http'), 4011, H1);
+      expect(statuses(r)).toEqual([201, 200, 201, 200, 200, 200, 200, 404, 200, 405]);
     });
   });
 });
@@ -602,7 +682,8 @@ describe('축 ⑫ — 교안·답안 코드 블록의 줄이 코드베이스에 
     });
 
     it(`🔴 ${name} — http 블록은 수업 requests/rest.http 나 실습 .http 파일에 그대로 있다`, () => {
-      const https = [read(R('requests/rest.http')), ...['practice1.http', 'practice2.http', 'practice3.http', 'homework1.http', 'homework2.http'].map(lab)];
+      // rest.http 는 북마크 판과 tip(main) 판을 함께 본다 — 2026-11-09 학생 검수가 tip 에 요청 하나를 더했다(북마크는 그대로).
+      const https = [read(R('requests/rest.http')), read(P('requests/rest.http')), ...['practice1.http', 'practice2.http', 'practice3.http', 'homework1.http', 'homework2.http'].map(lab)];
       const bad = fences(read(file), 'http').filter((b) => !https.some((h) => h.includes(b)));
       expect(bad).toEqual([]);
     });

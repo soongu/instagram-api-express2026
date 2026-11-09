@@ -1,8 +1,10 @@
 // ~/instagram-api/lab/p3-32/practice3.js
 import express from 'express';
+import { logger } from '../../middlewares/logger.js';
 
 const app = express();
 
+app.use(logger);
 app.use(express.json());
 
 const notices = [

@@ -22,5 +22,8 @@ DELETE http://localhost:4011/api/posts/1/saves/2
 ### 없는 게시물 저장하기
 PUT http://localhost:4011/api/posts/99/saves/2
 
+### 없는 게시물 저장 취소하기
+DELETE http://localhost:4011/api/posts/99/saves/2
+
 ### 저장을 POST로 보내기
 POST http://localhost:4011/api/posts/1/saves/2
