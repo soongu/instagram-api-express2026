@@ -1,0 +1,14 @@
+### 옛 주소의 1번
+GET http://localhost:4011/api/posts/1/likers
+
+### 새 주소의 1번
+GET http://localhost:4011/api/v2/posts/1/likers
+
+### 새 주소의 2번
+GET http://localhost:4011/api/v2/posts/2/likers
+
+### 새 주소의 9번
+GET http://localhost:4011/api/v2/posts/9/likers
+
+### 옛 주소의 9번
+GET http://localhost:4011/api/posts/9/likers

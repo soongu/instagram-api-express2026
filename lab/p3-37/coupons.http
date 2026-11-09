@@ -1,0 +1,14 @@
+### 1번 쿠폰 쓰기
+POST http://localhost:4002/api/coupons/1/use
+
+### 1번 쿠폰 한 번 더 쓰기
+POST http://localhost:4002/api/coupons/1/use
+
+### 기간이 지난 2번 쿠폰 쓰기
+POST http://localhost:4002/api/coupons/2/use
+
+### 없는 쿠폰 쓰기
+POST http://localhost:4002/api/coupons/9/use
+
+### 번호가 아닌 쿠폰 쓰기
+POST http://localhost:4002/api/coupons/abc/use

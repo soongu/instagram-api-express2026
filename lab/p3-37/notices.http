@@ -1,0 +1,47 @@
+### 새 주소로 목록
+GET http://localhost:4001/api/v2/notices
+
+### 새 주소로 목록 한 번 더
+GET http://localhost:4001/api/v2/notices
+
+### 옛 주소로 목록
+GET http://localhost:4001/api/notices
+
+### 새 주소로 공지 올리기
+POST http://localhost:4001/api/v2/notices
+Content-Type: application/json
+
+{"title": "연말 이벤트"}
+
+### 옛 주소로 목록 다시 보기
+GET http://localhost:4001/api/notices
+
+### 새 주소로 제목 없이 올리기
+POST http://localhost:4001/api/v2/notices
+Content-Type: application/json
+
+{}
+
+### 새 주소의 없는 주소
+GET http://localhost:4001/api/v2/notice
+
+### 새 주소로 깨진 JSON 보내기
+POST http://localhost:4001/api/v2/notices
+Content-Type: application/json
+
+{"title":
+
+### 옛 주소로 제목 없이 올리기
+POST http://localhost:4001/api/notices
+Content-Type: application/json
+
+{}
+
+### 옛 주소의 없는 주소
+GET http://localhost:4001/api/notice
+
+### 옛 주소로 깨진 JSON 보내기
+POST http://localhost:4001/api/notices
+Content-Type: application/json
+
+{"title":

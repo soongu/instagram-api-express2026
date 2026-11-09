@@ -753,3 +753,128 @@ describe('축 ⑨ 과제 [응용] — 에러 코드로 칸을 고르는 스크�
     }
   }, 90000);
 });
+
+// ───────── 축 ⑩ 교안 · 답안의 블록 — 코드베이스와 줄마다 같다 ─────────
+const LECTURE = () => read(P('../../part3/7-express-auth/p3-37-response-envelope-lecture.md'));
+const ANSWERS = () => read(P('../../part3/7-express-auth/p3-37-response-envelope-answers.md'));
+/** 마크다운의 펜스를 차례대로 { lang, body, line } 으로 */
+const fences = (md) => {
+  const out = [];
+  let open = null;
+  md.split('\n').forEach((text, index) => {
+    const m = text.match(/^```(\S*)$/);
+    if (!m) { if (open) open.body.push(text); return; }
+    if (open) { out.push({ ...open, body: open.body.join('\n') }); open = null; } else open = { lang: m[1], body: [], line: index + 1 };
+  });
+  return out;
+};
+const NEXT = (rel) => execFileSync('git', ['show', `cc/main:${rel}`], { cwd: P('../instagram-next'), encoding: 'utf8' });
+// Step 4·5 의 app.js — 앞 판에서 라우터를 두 주소에 붙인 판(에러 미들웨어는 아직 앞 판 그대로).
+const STEP4_APP = () => {
+  const before = read(B('app.js'));
+  const mounts = "app.use('/api', privateNoCache);\napp.use('/api/posts', postsRouter);\napp.use('/api/posts/:id/likes', likesRouter);\napp.use('/api/auth', authRouter);\napp.use('/api/uploads', uploadsRouter);\n";
+  expect(before).toContain(mounts);
+  const late = read(P('snapshots/p3-37.step7-version-late.app.js'));
+  const block = late.slice(late.indexOf('// API 라우터 넷을 라우터 하나로 모은다'), late.indexOf("app.use('/api', api);\n") + "app.use('/api', api);\n".length);
+  return before
+    .replace("import { privateNoCache } from './middlewares/cache.js';\n", "import { privateNoCache } from './middlewares/cache.js';\nimport { apiVersion } from './middlewares/version.js';\n")
+    .replace(`// API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.\n${mounts}`, block);
+};
+
+describe('축 ⑩ 교안 · 답안의 블록', () => {
+  it('🔴 자바스크립트 블록 — 줄마다 그 파일(또는 그 Step 의 판)에 실재한다', () => {
+    const owners = {
+      '// ~/instagram-api/app.js': [read(R('app.js')), read(P('snapshots/p3-37.step7-version-late.app.js')), read(B('app.js'))],
+      '// ~/instagram-api/middlewares/version.js': [read(R('middlewares/version.js'))],
+      '// ~/instagram-api/responses.js': [read(R('responses.js'))],
+      '// ~/instagram-api/controllers/postController.js': [read(R('controllers/postController.js'))],
+      '// ~/instagram-api/controllers/authController.js': [read(R('controllers/authController.js'))],
+      '// ~/instagram-api/middlewares/legacyCursor.js': [read(R('middlewares/legacyCursor.js'))],
+      '// ~/instagram-api/errors.js': [read(R('errors.js'))],
+      '// ~/instagram-api/middlewares/upload.js': [read(R('middlewares/upload.js'))],
+      '// ~/instagram-api/services/userService.js': [read(R('services/userService.js'))],
+      '// ~/instagram-api/lab/p3-37/which-key.js': [read(R('lab/p3-37/which-key.js'))],
+      '// ~/instagram-api/lab/p3-37/notices.js': [read(R('lab/p3-37/notices.js')), read(P('snapshots/p3-37.practice1-start.notices.js')), read(P('snapshots/p3-37.practice1-done.notices.js'))],
+      '// ~/instagram-api/lab/p3-37/coupons.js': [read(R('lab/p3-37/coupons.js')), read(P('snapshots/p3-37.practice2-start.coupons.js'))],
+      '// ~/instagram-api/lab/p3-37/homework1.js': [read(R('lab/p3-37/homework1.js'))],
+      '// ~/instagram-api/lab/p3-37/homework2.js': [read(R('lab/p3-37/homework2.js'))],
+      '// ~/instagram-next/services/api.js': [NEXT('services/api.js')],
+      '// ~/instagram-next/app/(auth)/_components/SignupForm.jsx': [NEXT('app/(auth)/_components/SignupForm.jsx')],
+    };
+    let seen = 0;
+    for (const [name, md] of [['교안', LECTURE()], ['답안', ANSWERS()]]) {
+      for (const f of fences(md).filter((one) => one.lang === 'javascript')) {
+        const [head, ...lines] = f.body.split('\n');
+        if (!head.startsWith('// ~/')) {
+          // 경로 주석이 없는 블록은 과제가 주는 데이터 · 호출 세 줄뿐이다 — 정답 파일에 그대로 있다.
+          expect(read(R('lab/p3-37/homework1.js')) + read(R('lab/p3-37/homework2.js')), `${name} L${f.line}`).toContain(f.body);
+          continue;
+        }
+        expect(owners[head], `${name} L${f.line}: ${head}`).toBeDefined();
+        seen += 1;
+        const hay = owners[head].join('\n');
+        for (const line of lines.filter((one) => one.trim() !== '' && one.trim() !== '...')) {
+          expect(hay, `${name} L${f.line}: ${line}`).toContain(line);
+        }
+      }
+    }
+    expect(seen).toBeGreaterThanOrEqual(20);
+  });
+
+  it('🔴 Step 4 의 «지금 네 줄» 은 앞 판에, «바꾼 블록» 은 Step 4 판(앞 판 + 두 주소)에 차례대로 있다', () => {
+    const blocks = fences(LECTURE()).filter((f) => f.lang === 'javascript' && f.body.startsWith('// ~/instagram-api/app.js'));
+    const strip = (body) => body.split('\n').slice(1).filter((l) => l.trim() !== '' && l !== '...').join('\n');
+    expect(read(B('app.js'))).toContain(strip(blocks[0].body));
+    // 두 번째 블록은 import 한 줄과 라우터 블록 두 덩어리 — 덩어리마다 Step 4 판에 연속으로 있다
+    const step4 = STEP4_APP();
+    for (const chunk of blocks[1].body.split('\n...\n').map((c) => c.replace(/^\/\/ ~\/instagram-api\/app\.js\n/, '').replace(/^\.\.\.\n|\n\.\.\.$/g, '')).filter((c) => c.trim())) {
+      expect(step4, chunk.slice(0, 40)).toContain(chunk);
+    }
+  });
+
+  it('🔴 요청 블록 — envelope.http 는 Step 1 블록 + Step 7 블록 · 실습 .http 는 블록을 이어 붙인 것과 byte 같다', () => {
+    const http = fences(LECTURE()).filter((f) => f.lang === 'http');
+    expect(read(R('requests/envelope.http'))).toBe(`${http[0].body}\n\n${http[3].body}\n`);
+    expect(read(R('lab/p3-37/notices.http'))).toBe(`${http[1].body}\n\n${http[4].body}\n`);
+    expect(read(R('lab/p3-37/coupons.http'))).toBe(`${http[2].body}\n`);
+    const ah = fences(ANSWERS()).filter((f) => f.lang === 'http');
+    expect(read(R('lab/p3-37/homework1.http'))).toBe(`${ah[0].body}\n`);
+  });
+
+  it('🔴 grep 출력 블록 — Step 5 는 Step 4 판 app.js 로, Step 6 은 앞 판과 이 판으로, Step 7 은 이 판으로 실제로 찍힌다', () => {
+    const bash = fences(LECTURE()).filter((f) => f.lang === 'bash');
+    const outOf = (cmd) => bash[bash.findIndex((f) => f.body === cmd) + 1].body.split('\n').sort();
+    const run = (dir, args) => execFileSync('/usr/bin/grep', args, { cwd: dir, encoding: 'utf8' }).trim().split('\n').sort();
+    const RES = 'grep -rnE "res\\..*(json|send)\\(" app.js responses.js routes controllers services middlewares';
+    const SENT = 'grep -rn "그런 게시물은 없어요" services middlewares controllers';
+    const SENT2 = 'grep -rn "그런 게시물은 없어요" errors.js services middlewares controllers';
+    const resArgs = ['-rnE', 'res\\..*(json|send)\\(', 'app.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares'];
+    // Step 5 — Step 4 판 app.js + 이 판의 컨트롤러 · legacyCursor · responses.js 의 sendData 까지
+    const dir = mkdtempSync(join(tmpdir(), 'p337-grep-'));
+    try {
+      for (const name of ['routes', 'controllers', 'services', 'middlewares']) cpSync(R(name), join(dir, name), { recursive: true });
+      writeFileSync(join(dir, 'app.js'), STEP4_APP());
+      const res = read(R('responses.js'));
+      writeFileSync(join(dir, 'responses.js'), res.slice(0, res.indexOf('\n// 실패 —') + 1));
+      // Step 5 에는 서비스·미들웨어가 아직 앞 판 문장 그대로다 — grep 대상(res.json 줄)에는 영향이 없다
+      expect(run(dir, resArgs)).toEqual(outOf(RES));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    expect(run(BEFORE.dir, ['-rn', '그런 게시물은 없어요', 'services', 'middlewares', 'controllers'])).toEqual(outOf(SENT));
+    expect(run(ROUND.dir, ['-rn', '그런 게시물은 없어요', 'errors.js', 'services', 'middlewares', 'controllers'])).toEqual(outOf(SENT2));
+    // Step 7 — 두 번째로 나오는 같은 명령
+    const second = bash.findIndex((f, i) => f.body === RES && i > bash.findIndex((g) => g.body === RES));
+    expect(run(ROUND.dir, resArgs)).toEqual(bash[second + 1].body.split('\n').sort());
+  });
+
+  it('🔴 which-key.js 출력 블록 — 실제 출력과 글자까지 같다', async () => {
+    await freshGate();
+    await withServer(R, async ({ base, dir }) => {
+      await getRes(`${base}/api/auth/signup`, json('POST', TAEYANG));
+      const out = runScript(dir, 'lab/p3-37/which-key.js');
+      const block = fences(LECTURE()).filter((f) => f.lang === 'bash').find((f) => f.body.startsWith('P2002 {'));
+      expect(out.out.trimEnd()).toBe(block.body);
+    });
+  }, 60000);
+});
