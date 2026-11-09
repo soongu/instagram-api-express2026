@@ -332,7 +332,9 @@ describe('축 ②·③ 같은 요청 54개 — 옛 주소와 새 주소', () => 
       expect(now.label).toBe(old.label);
       expect(now.status, old.label).toBe(old.status);
       // ETag 은 본문으로 계산한다 — 봉투가 더해져 값이 다르다. 있는지만 같으면 된다.
-      expect({ ...now.headers, etag: Boolean(now.headers.etag) }, old.label).toEqual({ ...old.headers, etag: Boolean(old.headers.etag) });
+      // Location 은 요청이 온 주소 아래를 가리킨다 — 새 주소로 만든 게시물은 새 주소(/api/v2/posts/…)를.
+      const expectLocation = old.headers.location && old.headers.location.replace('/api/posts/', '/api/v2/posts/');
+      expect({ ...now.headers, etag: Boolean(now.headers.etag) }, old.label).toEqual({ ...old.headers, location: expectLocation, etag: Boolean(old.headers.etag) });
       if (old.label === '뿌리 주소') {
         expect(now.body).toBe(old.body);
         continue;
@@ -424,6 +426,25 @@ describe('축 ⑥ Step 6 — 에러 코드와 문장 표', () => {
     for (const code of used) if (/(NOT_FOUND|TAKEN|FAILED|REQUIRED|INVALID|NO_|NOT_AN|IMAGE|ALLOWED|INTERNAL|UNEXPECTED)/.test(code)) expect(MESSAGES, code).toHaveProperty(code);
     for (const code of Object.keys(MESSAGES)) expect(used.has(code), code).toBe(true);
     expect(Object.keys(MESSAGES).length).toBe(19);
+  });
+
+  it('교안 Step 6 의 확인 grep — 이 판은 0줄 · 문장을 하나라도 남긴 판은 그 줄이 찍힌다', () => {
+    const args = ['-rnE', "Error\\('[^A-Z]", 'services', 'middlewares', 'controllers'];
+    const run = (dir) => {
+      try { return execFileSync('/usr/bin/grep', args, { cwd: dir, encoding: 'utf8' }); } catch (error) { if (error.status === 1) return ''; throw error; }
+    };
+    expect(run(ROUND.dir)).toBe('');
+    // 교안 Step 6 에 실린 명령이 이 명령과 같다
+    expect(read(P('../../part3/7-express-auth/p3-37-response-envelope-lecture.md'))).toContain('```bash\ngrep -rnE "Error\\(\'[^A-Z]" services middlewares controllers\n```');
+    const dir = mkdtempSync(join(tmpdir(), 'p337-miss-'));
+    try {
+      for (const name of ['services', 'middlewares', 'controllers']) cpSync(R(name), join(dir, name), { recursive: true });
+      const methods = join(dir, 'middlewares/methods.js');
+      writeFileSync(methods, read(methods).replace("new MethodNotAllowedError('METHOD_NOT_ALLOWED')", "new MethodNotAllowedError('이 주소는 그 HTTP 메서드를 받지 않아요')"));
+      expect(run(dir).trim().split('\n')).toEqual(["middlewares/methods.js:11:    next(new MethodNotAllowedError('이 주소는 그 HTTP 메서드를 받지 않아요'));"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('서비스와 미들웨어에는 사람이 읽을 문장이 없다 — 문장은 errors.js 표에만', () => {
@@ -676,10 +697,10 @@ describe('축 ⑨ 과제 [응용] 확인 절차 — 문장으로 칸을 고른 �
     const dir = mkdtempSync(join(tmpdir(), 'p337-msg2-'));
     try {
       for (const name of STUDENT_FILES) if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
-      writeFileSync(join(dir, 'errors.js'), read(R('errors.js')).replace("PHONE_TAKEN: '이미 가입한 휴대폰 번호예요'", "PHONE_TAKEN: '이미 쓰고 있는 휴대폰 번호예요'"));
+      writeFileSync(join(dir, 'errors.js'), read(R('errors.js')).replace("PHONE_TAKEN: '이미 가입한 휴대폰 번호예요'", "PHONE_TAKEN: 'This phone number is already registered'"));
       await withServer((rel) => join(dir, rel), async ({ base }) => {
         await getRes(`${base}/api/v2/auth/signup`, json('POST', TAEYANG));
-        expect(run(messageBased(), base).split('\n')[0]).toBe('[form] 이미 쓰고 있는 휴대폰 번호예요');
+        expect(run(messageBased(), base).split('\n')[0]).toBe('[form] This phone number is already registered');
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -743,10 +764,10 @@ describe('축 ⑨ 과제 [응용] — 에러 코드로 칸을 고르는 스크�
     const dir = mkdtempSync(join(tmpdir(), 'p337-msg-'));
     try {
       for (const name of STUDENT_FILES) if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
-      writeFileSync(join(dir, 'errors.js'), read(R('errors.js')).replace("PHONE_TAKEN: '이미 가입한 휴대폰 번호예요'", "PHONE_TAKEN: '이미 쓰고 있는 휴대폰 번호예요'"));
+      writeFileSync(join(dir, 'errors.js'), read(R('errors.js')).replace("PHONE_TAKEN: '이미 가입한 휴대폰 번호예요'", "PHONE_TAKEN: 'This phone number is already registered'"));
       await withServer((rel) => join(dir, rel), async ({ base, dir: srvDir }) => {
         await getRes(`${base}/api/v2/auth/signup`, json('POST', TAEYANG));
-        expect(runClient(srvDir, base).split('\n')[0]).toBe('[emailOrPhone] 이미 쓰고 있는 휴대폰 번호예요');
+        expect(runClient(srvDir, base).split('\n')[0]).toBe('[emailOrPhone] This phone number is already registered');
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });

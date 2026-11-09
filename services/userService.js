@@ -6,7 +6,7 @@ import { ConflictError } from '../errors.js';
 const userFields = { id: true, username: true, profileImage: true };
 
 // UNIQUE 제약 이름 — 어느 컬럼이 이미 쓰이고 있는지에 따라 에러 코드가 다르다.
-const TAKEN = {
+const TAKEN_BY_INDEX = {
   users_username_key: 'USERNAME_TAKEN',
   users_email_key: 'EMAIL_TAKEN',
   users_phone_key: 'PHONE_TAKEN',
@@ -33,7 +33,7 @@ export async function createUser(data) {
     // 사용자 이름·이메일·휴대폰 번호 가운데 하나라도 이미 있으면 UNIQUE 제약이 막는다.
     // 데이터베이스가 알려 준 제약 이름으로 어느 컬럼이 겹쳤는지 구분한다.
     if (error.code === 'P2002') {
-      const code = TAKEN[error.meta.driverAdapterError.cause.constraint.index];
+      const code = TAKEN_BY_INDEX[error.meta.driverAdapterError.cause.constraint.index];
       if (code) throw new ConflictError(code);
     }
     throw error;

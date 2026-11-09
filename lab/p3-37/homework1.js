@@ -9,6 +9,10 @@ const likers = {
   2: [],
 };
 
+const MESSAGES = {
+  POST_NOT_FOUND: '그런 게시물은 없어요',
+};
+
 // 새 주소로 온 요청이면 값은 data 에, 목록에 대한 정보는 meta 에 담는다. 옛 주소는 값만 보낸다.
 function sendData(res, data, meta) {
   if (res.locals.apiVersion === 2) {
@@ -18,13 +22,14 @@ function sendData(res, data, meta) {
   res.json(data);
 }
 
-function sendNotFound(res) {
-  res.status(404);
+// 새 주소면 { error: { code, message } }, 옛 주소면 { message }.
+function sendError(res, status, code) {
+  res.status(status);
   if (res.locals.apiVersion === 2) {
-    res.json({ error: { code: 'POST_NOT_FOUND', message: '그런 게시물은 없어요' } });
+    res.json({ error: { code, message: MESSAGES[code] } });
     return;
   }
-  res.json({ message: '그런 게시물은 없어요' });
+  res.json({ message: MESSAGES[code] });
 }
 
 const api = express.Router();
@@ -33,7 +38,7 @@ api.get('/posts/:id/likers', (req, res) => {
   const names = likers[req.params.id];
 
   if (names === undefined) {
-    sendNotFound(res);
+    sendError(res, 404, 'POST_NOT_FOUND');
     return;
   }
 

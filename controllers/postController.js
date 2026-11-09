@@ -26,8 +26,8 @@ export async function detail(req, res) {
 export async function create(req, res) {
   const newPost = await postService.createPost(req.body);
 
-  // 새 게시물을 가리키는 주소를 Location 헤더에 싣는다.
-  res.status(201).location(`/api/posts/${newPost.id}`);
+  // 새 게시물을 가리키는 주소를 Location 헤더에 싣는다 — 요청이 온 주소(/api/posts · /api/v2/posts) 아래에.
+  res.status(201).location(`${req.baseUrl}/${newPost.id}`);
   sendData(res, newPost);
 }
 
