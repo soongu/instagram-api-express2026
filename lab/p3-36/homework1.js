@@ -21,7 +21,7 @@ async function checkPhone(req, res) {
   res.json({ phone: req.query.phone, taken });
 }
 
-// 주소 지도 — 어느 주소로 오면 어느 컨트롤러 함수로 가는지만 적는다.
+// 라우트 정의 — 어느 주소로 오면 어느 컨트롤러 함수로 가는지만 적는다.
 app.post('/admin/users', createUser);
 app.get('/admin/phones', checkPhone);
 

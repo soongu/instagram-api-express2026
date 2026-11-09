@@ -451,7 +451,7 @@ describe('축 ⑥ 직접 해보기 3 — 서비스에 들어온 res 빼기', () 
     mkdirSync(join(dir, 'lab/p3-36'), { recursive: true });
     writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
     symlinkSync(P('node_modules'), join(dir, 'node_modules'));
-    writeFileSync(join(dir, 'lab/p3-36/practice3.js'), read(P('snapshots/p3-36.practice3-start.practice3.js')).replace('4003', String(LAB_PORT)));
+    writeFileSync(join(dir, 'lab/p3-36/practice3.js'), read(P('snapshots/p3-36.practice3-start.practice3.js')).replaceAll('4003', String(LAB_PORT)));
     const out = runScript(dir, 'lab/p3-36/practice3.js');
     rmSync(dir, { recursive: true, force: true });
     expect(out.code).not.toBe(0);
@@ -475,6 +475,41 @@ describe('축 ⑥ 직접 해보기 3 — 서비스에 들어온 res 빼기', () 
     const src = read(R('lab/p3-36/practice3.js'));
     const service = src.slice(src.indexOf('function removeTag'), src.indexOf("removeTag('test');"));
     expect(service).not.toMatch(/\bres\b/);
+  }, 30000);
+});
+
+describe('축 ⑥ 직접 해보기 3 요구사항 5 — 지우는 이름을 틀리게 적으면', () => {
+  const run = (src) => {
+    const dir = mkdtempSync(join(tmpdir(), 'p336-p3t-'));
+    mkdirSync(join(dir, 'lab/p3-36'), { recursive: true });
+    writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
+    cpSync(R('errors.js'), join(dir, 'errors.js'));
+    symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+    writeFileSync(join(dir, 'lab/p3-36/practice3.js'), src.replace("removeTag('test');", "removeTag('tset');").replaceAll('4003', String(LAB_PORT)));
+    return { dir, file: 'lab/p3-36/practice3.js' };
+  };
+  it('정답 판(에러를 던진다) — 서버가 뜨지 않고 NotFoundError: 그런 해시태그는 없어요', () => {
+    const { dir, file } = run(read(R('lab/p3-36/practice3.js')));
+    const out = runScript(dir, file);
+    rmSync(dir, { recursive: true, force: true });
+    expect(out.code).not.toBe(0);
+    expect(out.out).toContain('NotFoundError: 그런 해시태그는 없어요');
+    expect(out.out).not.toContain('기다리고 있어요');
+  });
+  it('null 판 — 네 요청의 응답은 같지만 틀린 이름에도 서버가 조용히 뜬다', async () => {
+    const src = read(R('lab/p3-36/practice3.js'))
+      .replace("    throw new NotFoundError('그런 해시태그는 없어요');", '    return null;')
+      .replace("  const removed = removeTag(req.params.name);\n\n  res.json({ removed });", "  const removed = removeTag(req.params.name);\n\n  if (removed === null) {\n    res.status(404).json({ message: '그런 해시태그는 없어요' });\n    return;\n  }\n\n  res.json({ removed });");
+    expect(src).toContain('return null;');
+    expect(src).toContain('if (removed === null)');
+    await withLab('lab/p3-36/practice3.js', src, 4003, async ({ base }) => {
+      const del = await getRes(`${base}/api/tags/nope`, { method: 'DELETE' });
+      expect(del.status).toBe(404);
+    });
+    const { dir } = run(src);
+    const srv = await boot(join(dir, 'lab/p3-36/practice3.js'), { port: LAB_PORT, cwd: dir, env, ready: `${LAB_PORT}번 포트에서` });
+    await Promise.race([srv.stop(), sleep(500)]);
+    rmSync(dir, { recursive: true, force: true });
   }, 30000);
 });
 
@@ -623,6 +658,7 @@ describe('축 ⑦ 교안·답안의 코드 블록', () => {
     // 폴더 안의 파일 차례는 컴퓨터마다 다르다 — 줄의 모음으로 대조한다
     const map = after('grep -rcE "res\\..*(json|send)\\(" app.js routes controllers services middlewares').split('\n').sort();
     expect(map).toEqual(sh(ROUND.dir, '/usr/bin/grep -rcE "res\\..*(json|send)\\(" app.js routes controllers services middlewares').trimEnd().split('\n').sort());
-    expect(after('node --env-file=.env lab/p3-36/add-user.js')).toBe("가입시켰어요 { id: 6, username: 'jiho', profileImage: null }");
+    // 번호는 학생 데이터베이스마다 다르다 — 교안은 «p3-35 를 마친 학생» 의 다음 번호(14)를 싣는다(낭독 리셋 reset-p3-36 의 사람 목록).
+    expect(after('node --env-file=.env lab/p3-36/add-user.js')).toBe("가입시켰어요 { id: 14, username: 'jiho', profileImage: null }");
   });
 });
