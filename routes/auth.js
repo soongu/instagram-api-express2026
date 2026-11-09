@@ -3,12 +3,49 @@ import express from 'express';
 import * as userService from '../services/userService.js';
 import * as sessionService from '../services/sessionService.js';
 import { validateBody } from '../middlewares/validate.js';
-import { loginSchema } from '../schemas/authSchema.js';
-import { UnauthorizedError } from '../errors.js';
+import { loginSchema, signupSchema, checkDuplicateSchema, PHONE } from '../schemas/authSchema.js';
+import { UnauthorizedError, BadRequestError } from '../errors.js';
+
+const router = express.Router();
 
 const SEVEN_DAYS = 1000 * 60 * 60 * 24 * 7;
 
-const router = express.Router();
+// 이미 쓰고 있을 때 보여 줄 문장 — 무엇을 찾았는지에 따라 다르다.
+const TAKEN = {
+  email: '이미 가입한 이메일이에요',
+  phone: '이미 가입한 휴대폰 번호예요',
+  username: '이미 쓰고 있는 사용자 이름이에요',
+};
+
+router.get('/check-duplicate', async (req, res) => {
+  // validateBody 는 req.body 를 보니, 쿼리 문자열은 여기서 직접 검사한다.
+  const result = checkDuplicateSchema.safeParse(req.query);
+
+  if (!result.success) {
+    throw new BadRequestError('보낸 내용이 규칙에 안 맞아요', z.treeifyError(result.error));
+  }
+
+  const { type, value } = result.data;
+  const taken = await userService.isTaken(type, type === 'phone' ? value.replaceAll('-', '') : value);
+
+  res.json({ available: !taken, message: taken ? TAKEN[type] : '쓸 수 있어요' });
+});
+
+
+router.post('/signup', validateBody(signupSchema), async (req, res) => {
+  const { emailOrPhone, name, username } = req.body;
+
+  // 휴대폰 번호는 하이픈을 빼고 숫자만 저장한다 — 010-1234-5678 과 01012345678 은 같은 번호다.
+  const contact = PHONE.test(emailOrPhone)
+    ? { phone: emailOrPhone.replaceAll('-', '') }
+    : { email: emailOrPhone };
+
+  // 비밀번호는 아직 저장하지 않는다 — 안전하게 저장하는 법은 서버에서 인증을 구현하는 구간에서 배운다.
+  const user = await userService.createUser({ username, name, ...contact });
+
+  res.status(201).json({ message: '가입했어요', username: user.username });
+});
+
 
 router.post('/login', validateBody(loginSchema), async (req, res) => {
   const user = await userService.findUserByUsername(req.body.username);
