@@ -481,6 +481,14 @@ describe('축 ⑧ Step 7 — 본문을 못 읽은 실패는 라우터에 닿기 
   };
   const broken = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":' };
 
+  it('중간 판은 이 판의 app.js 에서 버전 줄만 마운트 줄로 되돌린 것이다(파생 대조)', () => {
+    const final = read(R('app.js'));
+    const mark = "// 새 주소로 온 요청이라는 것을 본문을 읽기 전에 적어 둔다 — 본문을 못 읽은 실패도 새 형식으로 답하려고.\napp.use('/api/v2', apiVersion(2));\n";
+    const derived = final.replace(mark, '').replace("// 새 주소 — 버전은 위에서 적어 두었다.\napp.use('/api/v2', api);", "// 새 주소 — 버전 2 라고 적어 두고 같은 API 로 보낸다.\napp.use('/api/v2', apiVersion(2), api);");
+    expect(derived).not.toBe(final);
+    expect(read(P('snapshots/p3-37.step7-version-late.app.js'))).toBe(derived);
+  });
+
   it('중간 판(apiVersion(2) 가 /api/v2 마운트 줄에) — 깨진 JSON 만 옛 모양 · 없는 게시물은 새 모양', async () => {
     await freshGate();
     await withApp(P('snapshots/p3-37.step7-version-late.app.js'), async (base) => {
@@ -639,6 +647,64 @@ describe('축 ⑨ 직접 해보기 3 — 공지 서버의 실패 응답도 봉�
       expect(scene[0].body.error.code).toBe('TITLE_REQUIRED');
       expect(scene[1].body.error.code).toBe('ROUTE_NOT_FOUND');
       expect(scene[2]).toEqual({ status: 400, body: { message: '보낸 내용을 읽을 수 없어요' } });
+    });
+  }, 30000);
+});
+
+describe('축 ⑨ 과제 [응용] 확인 절차 — 문장으로 칸을 고른 판은 4번을 통과하고 5번에서 걸린다', () => {
+  const messageBased = () => read(R('lab/p3-37/homework2.js'))
+    .replace("const FIELD = {\n  USERNAME_TAKEN: 'username',\n  EMAIL_TAKEN: 'emailOrPhone',\n  PHONE_TAKEN: 'emailOrPhone',\n};",
+      "const FIELD = {\n  '이미 쓰고 있는 사용자 이름이에요': 'username',\n  '이미 가입한 이메일이에요': 'emailOrPhone',\n  '이미 가입한 휴대폰 번호예요': 'emailOrPhone',\n};")
+    .replace('FIELD[body.error.code]', 'FIELD[body.error.message]');
+  const run = (src, base) => {
+    const dir = mkdtempSync(join(tmpdir(), 'p337-cli-'));
+    try {
+      writeFileSync(join(dir, 'c.mjs'), src.replace('http://localhost:3000', base));
+      return execFileSync(process.execPath, [join(dir, 'c.mjs')], { encoding: 'utf8' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  it('문장 판 — 표의 문장을 바꾸기 전에는 정답 판과 같은 세 줄 · 바꾼 뒤에는 첫 줄이 [form]', async () => {
+    expect(messageBased()).toContain('FIELD[body.error.message]');
+    await freshGate();
+    await withServer(R, async ({ base }) => {
+      await getRes(`${base}/api/v2/auth/signup`, json('POST', TAEYANG));
+      expect(run(messageBased(), base)).toBe(run(read(R('lab/p3-37/homework2.js')), base));
+    });
+    await freshGate();
+    const dir = mkdtempSync(join(tmpdir(), 'p337-msg2-'));
+    try {
+      for (const name of STUDENT_FILES) if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
+      writeFileSync(join(dir, 'errors.js'), read(R('errors.js')).replace("PHONE_TAKEN: '이미 가입한 휴대폰 번호예요'", "PHONE_TAKEN: '이미 쓰고 있는 휴대폰 번호예요'"));
+      await withServer((rel) => join(dir, rel), async ({ base }) => {
+        await getRes(`${base}/api/v2/auth/signup`, json('POST', TAEYANG));
+        expect(run(messageBased(), base).split('\n')[0]).toBe('[form] 이미 쓰고 있는 휴대폰 번호예요');
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 90000);
+  it('옛 주소로 보낸 판 — 첫 실패에서 TypeError 로 멈춘다(옛 주소의 실패에는 error 가 없다)', async () => {
+    await freshGate();
+    await withServer(R, async ({ base }) => {
+      await getRes(`${base}/api/auth/signup`, json('POST', TAEYANG));
+      const src = read(R('lab/p3-37/homework2.js')).replace('/api/v2/auth/signup', '/api/auth/signup');
+      expect(() => run(src, base)).toThrow(/TypeError: Cannot read properties of undefined \(reading 'code'\)/);
+    });
+  }, 60000);
+});
+
+describe('축 ⑨ 직접 해보기 1 해설 — 봉투를 기억해 두면 옛 주소에도 봉투가 나간다', () => {
+  it('list 가 버전에 맞춘 본문을 cachedList 에 담는 판 — 새 주소 두 번 뒤 옛 주소가 { data }', async () => {
+    const wrong = read(P('snapshots/p3-37.practice1-done.notices.js'))
+      .replace("  cachedList = [...notices];\n  sendData(res, cachedList);", "  cachedList = res.locals.apiVersion === 2 ? { data: [...notices] } : [...notices];\n  res.json(cachedList);")
+      .replace('    sendData(res, cachedList);\n    return;', '    res.json(cachedList);\n    return;');
+    expect(wrong).toContain('{ data: [...notices] }');
+    await withLab(wrong, 4001, async (base) => {
+      const scene = await noticeScene(base);
+      expect(scene[0].body).toEqual({ data: TWO });
+      expect(scene[2].body).toEqual({ data: TWO });
     });
   }, 30000);
 });

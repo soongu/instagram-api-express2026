@@ -53,7 +53,7 @@ app.get('/api/openapi.json', (req, res) => {
 });
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
-// 어느 라우트도 답하지 않은 요청 — 에러 미들웨어에 넘겨 다른 실패와 같은 모양으로 답한다.
+// 어느 라우트도 답하지 않은 요청 — 에러 미들웨어에 넘겨 다른 실패와 같은 형식으로 답한다.
 app.use((req, res, next) => {
   next(new NotFoundError('ROUTE_NOT_FOUND'));
 });
