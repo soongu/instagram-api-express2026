@@ -846,7 +846,7 @@ describe('축 ⑬ — 학생 낭독 집중 검수 반영', () => {
     const lecture = read(LECTURE);
     const answers = read(ANSWERS);
     expect(lecture + answers).not.toContain('까닭');
-    expect(lecture).toContain('파일로 `hello.txt`를 고른 뒤');
+    expect(lecture).toContain('`hello.txt`를 골라 둔 뒤');
     expect(lecture).not.toMatch(/upload\.fields|upload\.none\(\)/);
     expect(lecture).toContain('`VITE_API_URL`');
     expect(lecture).toContain('### 사진과 사진이 아닌 파일을 함께 보내기');
