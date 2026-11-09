@@ -431,6 +431,32 @@ describe('축 ⑥ 직접 해보기 1 — 해시태그 이름을 서비스에서 
   });
 });
 
+describe('축 ⑥ 직접 해보기 1 요구사항 6 — 맞추는 함수 없이 한 줄 더 넣으면', () => {
+  const FOR = "for (const name of ['#Seoul', 'busan ', 'JEJU']) {\n  addTag(name);\n}\n";
+  const withDaegu = (src, forBlock) => src.replace(forBlock, `${forBlock}addTag('  #Daegu');\n`);
+  it("정답 판 — 맨 끝에 daegu", async () => {
+    const src = read(R('lab/p3-36/practice1.js'));
+    expect(src).toContain(FOR);
+    await withLab('lab/p3-36/practice1.js', withDaegu(src, FOR), 4001, async ({ base }) => {
+      expect((await getRes(`${base}/api/tags`)).body).toEqual(['seoul', 'busan', 'jeju', 'daegu']);
+    });
+  }, 30000);
+  it('틀린 판(맞추는 함수를 부르는 쪽마다 부른다) — 4번·5번은 통과하지만 6번에서 "  #Daegu"', async () => {
+    const forWrong = "for (const name of ['#Seoul', 'busan ', 'JEJU']) {\n  addTag(normalize(name));\n}\n";
+    const wrong = read(R('lab/p3-36/practice1.js'))
+      .replace('function addTag(rawName) {\n  const name = normalize(rawName);\n', 'function addTag(name) {\n')
+      .replace(FOR, forWrong)
+      .replace('const result = addTag(req.body.name);', 'const result = addTag(normalize(req.body.name));');
+    expect(wrong.split('toLowerCase').length - 1).toBe(1);
+    await withLab('lab/p3-36/practice1.js', wrong, 4001, async ({ base }) => {
+      expect(await tagScene(base)).toEqual(TAGS_DONE);
+    });
+    await withLab('lab/p3-36/practice1.js', withDaegu(wrong, forWrong), 4001, async ({ base }) => {
+      expect((await getRes(`${base}/api/tags`)).body).toEqual(['seoul', 'busan', 'jeju', '  #Daegu']);
+    });
+  }, 30000);
+});
+
 describe('축 ⑥ 직접 해보기 2 — 세 층 파일로 나누기', () => {
   it('practice2/app.js 는 practice1 정답 판과 같은 응답', async () => {
     await withLab('lab/p3-36/practice2/app.js', read(R('lab/p3-36/practice2/app.js')), 4002, async ({ base }) => {
