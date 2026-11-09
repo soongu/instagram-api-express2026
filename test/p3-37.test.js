@@ -184,6 +184,7 @@ const normalize = (value) => JSON.parse(JSON.stringify(value).replace(UUID, '<uu
 const HEADERS = ['content-type', 'location', 'allow', 'cache-control', 'deprecation', 'sunset', 'set-cookie', 'etag'];
 
 // 같은 요청을 주소 앞부분(/api · /api/v2)만 바꿔 보낸다 — `p3-36` 판정 축 ③ 의 54개 그대로.
+// 🚨 단 «게시물 올리기» 본문은 authorId 로 고쳤다 — p3-36 판은 username 을 보내 400 이었고, 그래서 201 · Location · 고치기 · 지우기를 실제로는 안 재고 있었다.
 const SCRIPT = async (base, api) => {
   const out = [];
   const photo = readFileSync(P('requests/photos/beach.jpg'));
@@ -210,7 +211,7 @@ const SCRIPT = async (base, api) => {
   await send('게시물 하나', '/api/posts/1');
   await send('숫자 아닌 번호', '/api/posts/abc');
   await send('없는 게시물', '/api/posts/999');
-  const created = await send('게시물 올리기', '/api/posts', json('POST', { username: 'jaehoon', content: '게이트', imageUrls: ['/images/post-8.jpg'] }));
+  const created = await send('게시물 올리기', '/api/posts', json('POST', { authorId: 2, content: '게이트', imageUrls: ['/images/post-8.jpg'] }));
   await send('규칙에 안 맞는 게시물', '/api/posts', json('POST', { username: 'jaehoon' }));
   await send('text/plain 게시물', '/api/posts', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'hi' });
   await send('깨진 JSON', '/api/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":' });
@@ -422,7 +423,7 @@ describe('축 ⑥ Step 6 — 에러 코드와 문장 표', () => {
     const used = new Set([...all.matchAll(/'([A-Z][A-Z_]+[A-Z])'/g)].map((m) => m[1]).filter((code) => /_/.test(code) || code in MESSAGES));
     for (const code of used) if (/(NOT_FOUND|TAKEN|FAILED|REQUIRED|INVALID|NO_|NOT_AN|IMAGE|ALLOWED|INTERNAL|UNEXPECTED)/.test(code)) expect(MESSAGES, code).toHaveProperty(code);
     for (const code of Object.keys(MESSAGES)) expect(used.has(code), code).toBe(true);
-    expect(Object.keys(MESSAGES).length).toBe(20);
+    expect(Object.keys(MESSAGES).length).toBe(19);
   });
 
   it('서비스와 미들웨어에는 사람이 읽을 문장이 없다 — 문장은 errors.js 표에만', () => {
@@ -435,7 +436,7 @@ describe('축 ⑥ Step 6 — 에러 코드와 문장 표', () => {
   it('같은 문장은 한 번만 — 앞 판에서 다섯 곳에 흩어져 있던 «그런 게시물은 없어요»', () => {
     const count = (from, files) => files.map((rel) => read(from(rel)).split('그런 게시물은 없어요').length - 1).reduce((a, b) => a + b, 0);
     const files = ['services/postService.js', 'services/likeService.js', 'middlewares/params.js', 'errors.js'];
-    expect(count(B, files)).toBe(6);
+    expect(count(B, files)).toBe(5);
     expect(count(R, files)).toBe(1);
   });
 });
@@ -459,4 +460,39 @@ describe('축 ⑦ 이 회차 학생 파일 — code/p3-36 에서 바뀐 파일',
     expect(lab.every((one) => one.startsWith('lab/p3-37/'))).toBe(true);
     expect(lab).toContain('lab/p3-37/which-key.js');
   });
+});
+
+// ───────── 축 ⑧ Step 7 중간 판 — 버전 표시가 express.json() 보다 늦으면 ─────────
+describe('축 ⑧ Step 7 — 본문을 못 읽은 실패는 라우터에 닿기 전에 난다', () => {
+  const withApp = async (src, fn) => {
+    const dir = mkdtempSync(join(tmpdir(), 'p337-mid-'));
+    for (const name of STUDENT_FILES) {
+      if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
+    }
+    symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+    cpSync(src, join(dir, 'app.js'));
+    const srv = await boot(join(dir, 'app.js'), { port: PORT, cwd: dir, env: { ...env, PORT: String(PORT) }, ready: `${PORT}번 포트에서` });
+    try {
+      await fn(`http://localhost:${PORT}`);
+    } finally {
+      await Promise.race([srv.stop(), sleep(500)]);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const broken = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":' };
+
+  it('중간 판(apiVersion(2) 가 /api/v2 마운트 줄에) — 깨진 JSON 만 옛 모양 · 없는 게시물은 새 모양', async () => {
+    await freshGate();
+    await withApp(P('snapshots/p3-37.step7-version-late.app.js'), async (base) => {
+      expect(await getRes(`${base}/api/v2/posts`, broken)).toMatchObject({ status: 400, body: { message: '보낸 내용을 읽을 수 없어요' } });
+      expect((await getRes(`${base}/api/v2/posts/999`)).body).toEqual({ error: { code: 'POST_NOT_FOUND', message: '그런 게시물은 없어요' } });
+    });
+  }, 60000);
+
+  it('이 판(express.json() 위에서 버전을 적는다) — 깨진 JSON 도 새 모양', async () => {
+    await freshGate();
+    await withApp(R('app.js'), async (base) => {
+      expect(await getRes(`${base}/api/v2/posts`, broken)).toMatchObject({ status: 400, body: { error: { code: 'INVALID_BODY', message: '보낸 내용을 읽을 수 없어요' } } });
+    });
+  }, 60000);
 });

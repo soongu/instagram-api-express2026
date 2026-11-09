@@ -7,7 +7,8 @@ import postsRouter from './routes/posts.js';
 import likesRouter from './routes/likes.js';
 import authRouter from './routes/auth.js';
 import uploadsRouter from './routes/uploads.js';
-import { HttpError } from './errors.js';
+import { HttpError, NotFoundError } from './errors.js';
+import { sendError } from './responses.js';
 import { logger } from './middlewares/logger.js';
 import { privateNoCache } from './middlewares/cache.js';
 import { apiVersion } from './middlewares/version.js';
@@ -21,6 +22,8 @@ const allowedOrigins = process.env.CORS_ORIGIN.split(',').map((one) => one.trim(
 app.use(logger);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: allowedOrigins }));
+// 새 주소로 온 요청이라는 것을 본문을 읽기 전에 적어 둔다 — 본문을 못 읽은 실패도 새 모양으로 답하려고.
+app.use('/api/v2', apiVersion(2));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -41,8 +44,8 @@ api.use('/uploads', uploadsRouter);
 
 // API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.
 app.use('/api', privateNoCache);
-// 새 주소 — 버전 2 라고 적어 두고 같은 API 로 보낸다.
-app.use('/api/v2', apiVersion(2), api);
+// 새 주소 — 버전은 위에서 적어 두었다.
+app.use('/api/v2', api);
 // 옛 주소 — 이미 나간 화면들이 쓰는 주소라 그대로 둔다.
 app.use('/api', api);
 
@@ -52,8 +55,9 @@ app.get('/api/openapi.json', (req, res) => {
 });
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
-app.use((req, res) => {
-  res.status(404).json({ message: '그런 주소는 없어요' });
+// 어느 라우트도 답하지 않은 요청 — 에러 미들웨어에 넘겨 다른 실패와 같은 모양으로 답한다.
+app.use((req, res, next) => {
+  next(new NotFoundError('ROUTE_NOT_FOUND'));
 });
 
 app.use((err, req, res, next) => {
@@ -63,19 +67,18 @@ app.use((err, req, res, next) => {
   }
 
   if (err instanceof HttpError) {
-    const body = { message: err.message };
-    if (err.details) body.details = err.details;
-    res.status(err.status).json(body);
+    sendError(res, err);
     return;
   }
 
+  // express.json() 이 본문을 읽지 못했다 — 상태 코드(400 · 413 …)는 그 에러에 들어 있다.
   if (err.status) {
-    res.status(err.status).json({ message: '보낸 내용을 읽을 수 없어요' });
+    sendError(res, new HttpError(err.status, 'INVALID_BODY'));
     return;
   }
 
   console.error(err);
-  res.status(500).json({ message: '서버에서 문제가 생겼어요' });
+  sendError(res, new HttpError(500, 'INTERNAL_ERROR'));
 });
 
 const PORT = process.env.PORT ?? 3000;
