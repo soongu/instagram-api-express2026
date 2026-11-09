@@ -589,7 +589,13 @@ const fences = (md) => {
 describe('축 ⑦ — 학생 파일과 교안 블록', () => {
   it('🔴 code/p3-34 에서 바뀐 학생 파일', () => {
     const changed = execFileSync('git', ['diff', '--name-only', 'code/p3-34', ROUND.fromBookmark ? 'code/p3-35' : 'HEAD', '--', '.', ':(exclude)test', ':(exclude)lab', ':(exclude)snapshots'], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').sort();
-    expect(changed).toEqual(['app.js', 'middlewares/cache.js', 'requests/cache.http']);
+    expect(changed).toEqual([
+      'app.js',
+      'middlewares/cache.js',
+      'requests/cache.http',
+      // requests/rest.http 는 p3-32 학생 낭독 집중 검수(2026-11-09 · 84f5d11)가 main 에서 고쳤다 — 이 회차의 변경이 아니다.
+      'requests/rest.http',
+    ]);
   });
 
   it('🔴 교안의 코드 블록 — 줄마다 그 파일(또는 그 Step 의 판)에 실재한다', () => {
