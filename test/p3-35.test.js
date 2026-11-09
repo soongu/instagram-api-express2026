@@ -132,14 +132,16 @@ describe('축 ① — Step 1: 앞 판은 Cache-Control 없이 ETag 만', () => {
   });
 });
 
-describe('축 ② — Step 2: 실험 판(max-age=60)', () => {
+describe('축 ② — Step 2: 실험 판(/api/posts 에 max-age=60)', () => {
   it('🔴 snapshots/p3-35.step2-max-age.app.js — 목록 응답에 Cache-Control: max-age=60', async () => {
     reseed();
     await withServer(PORT, { 'app.js': read(P('snapshots/p3-35.step2-max-age.app.js')) }, async (srv) => {
       const res = await getRes(`${srv.base}${LIST}`);
       expect(res.status).toBe(200);
       expect(res.headers.get('cache-control')).toBe('max-age=60');
-      // 사진은 /api 밖이라 실험 줄을 안 지난다
+      // «나는 누구» 는 /api/posts 밖이라 실험 줄을 안 지난다 — 서버가 다시 뜨면 화면이 로그인 화면으로 간다
+      expect((await getRes(`${srv.base}/api/auth/me`)).headers.get('cache-control')).toBeNull();
+      // 사진도 /api 밖이라 실험 줄을 안 지난다
       const url = await upload(srv.base);
       expect((await getRes(`${srv.base}${url}`)).headers.get('cache-control')).toBe('public, max-age=0');
     });

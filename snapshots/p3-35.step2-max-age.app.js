@@ -29,8 +29,8 @@ app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
 });
 
-// 실험 — 응답을 60초 동안 서버에 확인하지 않고 쓰게 해 본다(Step 3 에서 바꾼다).
-app.use('/api', (req, res, next) => {
+// 실험 — 게시물 응답을 60초 동안 서버에 확인하지 않고 쓰게 해 본다(Step 3 에서 바꾼다).
+app.use('/api/posts', (req, res, next) => {
   res.set('Cache-Control', 'max-age=60');
   next();
 });
