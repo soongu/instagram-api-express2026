@@ -1,9 +1,9 @@
 // ~/instagram-api/responses.js
 
 // 응답 본문의 바깥 형식은 이 파일에서만 정한다.
-//   새 주소(/api/v2) — 값을 data 에 담는다.
-//   옛 주소(/api)    — 이미 나간 화면이 읽는 모양 그대로, 값만 보낸다.
+// 새 주소(/api/v2)로 온 요청은 봉투에 담고, 옛 주소(/api)로 온 요청은 이미 나간 화면이 읽던 형식 그대로 보낸다.
 
+// 성공 — 새 주소는 { data }, 옛 주소는 값만
 export function sendData(res, data) {
   if (res.locals.apiVersion === 2) {
     res.json({ data });
@@ -13,8 +13,7 @@ export function sendData(res, data) {
   res.json(data);
 }
 
-//   새 주소(/api/v2) — 무엇이 잘못됐는지를 error 에 담는다. 화면은 code 를 보고, 사람은 message 를 읽는다.
-//   옛 주소(/api)    — { message } 그대로. 검사 실패는 details 가 함께 간다.
+// 실패 — 새 주소는 { error: { code, message, details } }, 옛 주소는 { message, details }
 export function sendError(res, error) {
   const { status, code, message, details } = error;
 
