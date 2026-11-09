@@ -1,0 +1,14 @@
+### 인기 해시태그
+GET http://localhost:4012/api/hashtags/popular
+
+### 맛집 게시물 두 개 더하기
+POST http://localhost:4012/api/posts
+Content-Type: application/json
+
+{ "hashtags": ["맛집"] }
+
+###
+POST http://localhost:4012/api/posts
+Content-Type: application/json
+
+{ "hashtags": ["맛집"] }

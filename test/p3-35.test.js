@@ -177,6 +177,21 @@ describe('축 ③ — Step 3: /api 응답은 private, no-cache', () => {
     });
   });
 
+  it('🔴 requests/cache.http — 첫 요청의 ETag 를 둘째 요청 자리에 붙이면 304', async () => {
+    reseed();
+    await withServer(PORT, {}, async (srv) => {
+      const http = read(R('requests/cache.http'));
+      expect(http.split(/^### /m).slice(1).map((chunk) => chunk.split('\n')[0])).toEqual(['게시물 목록', '받아 둔 ETag로 다시 묻기']);
+      const first = await getRes(`${srv.base}${LIST}`);
+      const etag = first.headers.get('etag');
+      expect(http).toContain(`GET http://localhost:3000${LIST}\nIf-None-Match: 위 응답의 ETag 값\n`);
+      // httpYac 은 손으로 적은 If-None-Match 를 그대로 보낸다(Cache-Control 을 덧붙이지 않는다 — 2026-11-09 실측)
+      const again = await getRes(`${srv.base}${LIST}`, { headers: ask(etag) });
+      expect(again.status).toBe(304);
+      expect(again.headers.get('etag')).toBe(etag);
+    });
+  });
+
   it('🔴 Swagger UI 정적 파일도 /api 아래라 private, no-cache(express.static 이 이미 있는 값을 안 덮어쓴다)', async () => {
     await withServer(PORT, {}, async (srv) => {
       const css = await getRes(`${srv.base}/api/docs/swagger-ui.css`);
@@ -208,12 +223,18 @@ describe('축 ④ — Step 4: 사진은 1년 + immutable', () => {
 
 // ── 실습 서버 — 학생 폴더 모양(lab/p3-35/ 아래 · middlewares/ 는 ../../)의 임시 폴더에 두고 포트만 바꿔 띄운다
 const LAB = (name) => read(R(`lab/p3-35/${name}`));
+const PHOTO_ID = '0b6f2c1e-6f1d-4a54-9a43-1f5b8f0c9d21';
 const withLab = async (src, labPort, port, fn) => {
   const dir = mkdtempSync(join(tmpdir(), 'p335-lab-'));
   symlinkSync(P('node_modules'), join(dir, 'node_modules'));
   cpSync(R('middlewares'), join(dir, 'middlewares'), { recursive: true });
   cpSync(R('package.json'), join(dir, 'package.json'));
   mkdirSync(join(dir, 'lab/p3-35'), { recursive: true });
+  // 직접 해보기 1 의 사진 — 교안이 cp 로 만들게 하는 두 파일
+  mkdirSync(join(dir, 'lab/p3-35/avatars'));
+  mkdirSync(join(dir, 'lab/p3-35/photos'));
+  cpSync(P('requests/photos/beach.jpg'), join(dir, 'lab/p3-35/avatars/jaehoon.jpg'));
+  cpSync(P('requests/photos/forest.jpg'), join(dir, `lab/p3-35/photos/${PHOTO_ID}.jpg`));
   const body = src.replaceAll(`listen(${labPort}`, `listen(${port}`).replaceAll(`${labPort}번 포트`, `${port}번 포트`);
   writeFileSync(join(dir, 'lab/p3-35/server.js'), body);
   const srv = await boot(join(dir, 'lab/p3-35/server.js'), { port, cwd: dir, ready: `${port}번 포트에서` });
@@ -322,4 +343,186 @@ describe('축 ⑤ — Step 6: 메모리 캐시와 무효화', () => {
     const extra = final.split('\n').filter((line) => !step5.split('\n').includes(line) && line.trim() !== '' && line.trim() !== '}');
     expect(extra.filter((line) => line.includes('cachedList'))).toHaveLength(5);
   });
+});
+
+const lines = (srv, re) => (srv.tail().match(re) ?? []).length;
+const START = (name) => read(P(`snapshots/p3-35.${name.replace('.js', '')}-start.${name}`));
+
+describe('축 ⑥ — 직접 해보기 1: 응답마다 Cache-Control 고르기(4001)', () => {
+  const heads = async (base) => {
+    const get = async (path, init) => (await getRes(`${base}${path}`, init)).headers.get('cache-control');
+    return {
+      avatar: await get('/avatars/jaehoon.jpg'),
+      photo: await get(`/photos/${PHOTO_ID}.jpg`),
+      notices: await get('/api/notices'),
+      me: await get('/api/me', { headers: { Cookie: 'user=jaehoon' } }),
+    };
+  };
+  it('🔴 시작 판 — 프로필 사진도 1년 · API 응답에는 Cache-Control 이 없다', async () => {
+    await withLab(START('practice1.js'), 4001, 3833, async (srv) => {
+      expect(await heads(srv.base)).toEqual({ avatar: 'public, max-age=31536000, immutable', photo: 'public, max-age=31536000, immutable', notices: null, me: null });
+    });
+  });
+  it('🔴 정답 판 — 프로필 사진은 매번 확인 · 게시물 사진은 1년 · 공지 no-cache · 내 정보 private, no-cache', async () => {
+    await withLab(LAB('practice1.js'), 4001, 3833, async (srv) => {
+      expect(await heads(srv.base)).toEqual({ avatar: 'public, max-age=0', photo: 'public, max-age=31536000, immutable', notices: 'no-cache', me: 'private, no-cache' });
+      expect((await getRes(`${srv.base}/api/me`, { headers: { Cookie: 'user=jaehoon' } })).body).toEqual({ username: 'jaehoon' });
+    });
+  });
+});
+
+describe('축 ⑥ — 직접 해보기 2: 글 하나 — 만들기 전에 비교(4002)', () => {
+  const OLD = '"1-1762650000000"';
+  const check = async (srv) => {
+    const first = await getRes(`${srv.base}/api/articles/1`);
+    const again = await getRes(`${srv.base}/api/articles/1`, { headers: ask(OLD) });
+    await sleep(200);
+    const builtBefore = lines(srv, /1번 글을 만들었어요/g);
+    await getRes(`${srv.base}/api/articles/1`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: '글을 조금 고쳤어요.' }) });
+    const after = await getRes(`${srv.base}/api/articles/1`, { headers: ask(OLD) });
+    return { firstEtag: first.headers.get('etag'), again: again.status, builtBefore, after: after.status, afterBody: after.body.body ?? null };
+  };
+  it('🔴 정답 판 — ETag "1-1762650000000" · 같으면 304 에 «만들었어요» 한 줄뿐 · 고친 뒤에는 200', async () => {
+    await withLab(LAB('practice2.js'), 4002, 3834, async (srv) => {
+      expect(await check(srv)).toEqual({ firstEtag: OLD, again: 304, builtBefore: 1, after: 200, afterBody: '글을 조금 고쳤어요.' });
+      expect((await getRes(`${srv.base}/api/articles/9`)).status).toBe(404);
+    });
+  });
+  it('🔴 시작 판 — 손으로 적은 ETag 가 Express 의 W/ 값과 달라 늘 200 · 두 번 만든다', async () => {
+    await withLab(START('practice2.js'), 4002, 3834, async (srv) => {
+      const got = await check(srv);
+      expect(got.firstEtag).toMatch(/^W\//);
+      expect(got.again).toBe(200);
+      expect(got.builtBefore).toBe(2);
+    });
+  });
+  it('🔴 틀린 판 — ETag 에 글 번호만 넣으면 고친 뒤에도 304(옛 글)', async () => {
+    const wrong = swap(LAB('practice2.js'), '`"${article.id}-${article.updatedAt}"`', '`"${article.id}"`');
+    await withLab(wrong, 4002, 3834, async (srv) => {
+      await getRes(`${srv.base}/api/articles/1`);
+      await getRes(`${srv.base}/api/articles/1`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: '글을 조금 고쳤어요.' }) });
+      expect((await getRes(`${srv.base}/api/articles/1`, { headers: ask('"1"') })).status).toBe(304);
+    });
+  });
+  it('🔴 틀린 판 — 304 뒤 return 을 빠뜨리면 304 는 가지만 «만들었어요» 가 찍힌다', async () => {
+    const wrong = swap(LAB('practice2.js'), '    res.status(304).end();\n    return;\n', '    res.status(304).end();\n');
+    await withLab(wrong, 4002, 3834, async (srv) => {
+      await getRes(`${srv.base}/api/articles/1`);
+      expect((await getRes(`${srv.base}/api/articles/1`, { headers: ask(OLD) })).status).toBe(304);
+      await sleep(600);
+      expect(lines(srv, /1번 글을 만들었어요/g)).toBe(2);
+    });
+  });
+});
+
+describe('축 ⑥ — 직접 해보기 3: 주소마다 담는 메모리 캐시(4003)', () => {
+  const PATCH = { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: '서버 점검 시간 변경' }) };
+  const views = async (base) => ({
+    all: (await getRes(`${base}/api/notices`)).body.map((n) => `${n.id}:${n.title}`),
+    pinned: (await getRes(`${base}/api/notices?pinned=true`)).body.map((n) => `${n.id}:${n.title}`),
+  });
+  it('🔴 정답 판 — 두 목록을 두 번씩 받아도 두 번만 만든다 · 고치면 두 목록 모두 새 제목', async () => {
+    await withLab(LAB('practice3.js'), 4003, 3835, async (srv) => {
+      expect(await views(srv.base)).toEqual({ all: ['1:서버 점검 안내', '2:새 기능 소개', '3:이용 약관 변경'], pinned: ['1:서버 점검 안내', '3:이용 약관 변경'] });
+      await views(srv.base);
+      await sleep(200);
+      expect(lines(srv, /목록을 만들었어요/g)).toBe(2);
+      await getRes(`${srv.base}/api/notices/1`, PATCH);
+      expect(await views(srv.base)).toEqual({ all: ['1:서버 점검 시간 변경', '2:새 기능 소개', '3:이용 약관 변경'], pinned: ['1:서버 점검 시간 변경', '3:이용 약관 변경'] });
+    });
+  });
+  it('🔴 시작 판 — 받을 때마다 만든다(넷)', async () => {
+    await withLab(START('practice3.js'), 4003, 3835, async (srv) => {
+      await views(srv.base);
+      await views(srv.base);
+      await sleep(200);
+      expect(lines(srv, /목록을 만들었어요/g)).toBe(4);
+    });
+  });
+  it('🔴 틀린 판 — PATCH 에서 cache.delete(req.originalUrl) 이면 지우는 키가 /api/notices/1 이라 두 목록 모두 옛 제목', async () => {
+    await withLab(swap(LAB('practice3.js'), 'cache.clear();', 'cache.delete(req.originalUrl);'), 4003, 3835, async (srv) => {
+      await views(srv.base);
+      await getRes(`${srv.base}/api/notices/1`, PATCH);
+      const after = await views(srv.base);
+      expect(after.all[0]).toBe('1:서버 점검 안내');
+      expect(after.pinned[0]).toBe('1:서버 점검 안내');
+    });
+  });
+  it('🔴 틀린 판 — 키를 req.path 로 잡으면 먼저 받은 목록이 다른 주소에도 간다', async () => {
+    await withLab(swap(LAB('practice3.js'), 'const key = req.originalUrl;', 'const key = req.path;'), 4003, 3835, async (srv) => {
+      const got = await views(srv.base);
+      expect(got.pinned).toEqual(got.all);
+    });
+  });
+});
+
+describe('축 ⑥ — 과제 [기초]: 프로필의 버전과 304(4011)', () => {
+  const OLD = '"jaehoon-1"';
+  const check = async (srv) => {
+    const first = await getRes(`${srv.base}/api/profiles/jaehoon`);
+    const again = await getRes(`${srv.base}/api/profiles/jaehoon`, { headers: ask(OLD) });
+    await sleep(200);
+    const builtBefore = lines(srv, /jaehoon 프로필을 만들었어요/g);
+    await getRes(`${srv.base}/api/profiles/jaehoon/follow`, { method: 'POST' });
+    const after = await getRes(`${srv.base}/api/profiles/jaehoon`, { headers: ask(OLD) });
+    const none = await getRes(`${srv.base}/api/profiles/nobody`);
+    return { cc: first.headers.get('cache-control'), etag: first.headers.get('etag'), again: again.status, builtBefore, after: after.status, count: after.body.followerCount ?? null, noneCc: none.headers.get('cache-control'), none: none.status };
+  };
+  it('🔴 정답 판', async () => {
+    await withLab(LAB('homework1.js'), 4011, 3836, async (srv) => {
+      expect(await check(srv)).toEqual({ cc: 'public, no-cache', etag: OLD, again: 304, builtBefore: 1, after: 200, count: 121, noneCc: 'public, no-cache', none: 404 });
+    });
+  });
+  it('🔴 시작 판 — Cache-Control 이 없고 손으로 적은 ETag 로는 200 · 두 번 만든다', async () => {
+    await withLab(START('homework1.js'), 4011, 3836, async (srv) => {
+      const got = await check(srv);
+      expect([got.cc, got.again, got.builtBefore]).toEqual([null, 200, 2]);
+    });
+  });
+  it('🔴 틀린 판 — 팔로우에서 version 을 안 올리면 팔로워가 늘어도 304(옛 숫자)', async () => {
+    await withLab(swap(LAB('homework1.js'), '  profile.version += 1;\n', ''), 4011, 3836, async (srv) => {
+      expect((await check(srv)).after).toBe(304);
+    });
+  });
+});
+
+describe('축 ⑥ — 과제 [응용]: 만료 시간이 있는 캐시(4012)', () => {
+  const add = (base) => getRes(`${base}/api/posts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hashtags: ['맛집'] }) });
+  const top = async (base) => (await getRes(`${base}/api/hashtags/popular`)).body[0];
+  it('🔴 정답 판 — public, max-age=10 · 10초 안에는 한 번만 센다 · 새 게시물은 10초 뒤에 반영', async () => {
+    await withLab(LAB('homework2.js'), 4012, 3837, async (srv) => {
+      const first = await getRes(`${srv.base}/api/hashtags/popular`);
+      expect(first.headers.get('cache-control')).toBe('public, max-age=10');
+      expect(first.body).toEqual([{ name: '여행', count: 2 }, { name: '바다', count: 2 }, { name: '맛집', count: 1 }]);
+      await add(srv.base);
+      await add(srv.base);
+      expect(await top(srv.base)).toEqual({ name: '여행', count: 2 });
+      await sleep(200);
+      expect(lines(srv, /인기 해시태그를 셌어요/g)).toBe(1);
+      await sleep(10000);
+      expect(await top(srv.base)).toEqual({ name: '맛집', count: 3 });
+      await sleep(200);
+      expect(lines(srv, /인기 해시태그를 셌어요/g)).toBe(2);
+    });
+  }, 20000);
+  it('🔴 시작 판 — 받을 때마다 센다 · Cache-Control 이 없다 · 새 게시물이 바로 보인다', async () => {
+    await withLab(START('homework2.js'), 4012, 3837, async (srv) => {
+      const first = await getRes(`${srv.base}/api/hashtags/popular`);
+      expect(first.headers.get('cache-control')).toBeNull();
+      await add(srv.base);
+      await add(srv.base);
+      expect(await top(srv.base)).toEqual({ name: '맛집', count: 3 });
+      await sleep(200);
+      expect(lines(srv, /인기 해시태그를 셌어요/g)).toBe(2);
+    });
+  });
+  it('🔴 틀린 판 — 시각을 안 보면 10초가 지나도 옛 결과', async () => {
+    await withLab(swap(LAB('homework2.js'), 'saved === null || Date.now() - saved.countedAt >= TEN_SECONDS', 'saved === null'), 4012, 3837, async (srv) => {
+      await getRes(`${srv.base}/api/hashtags/popular`);
+      await add(srv.base);
+      await add(srv.base);
+      await sleep(10300);
+      expect(await top(srv.base)).toEqual({ name: '여행', count: 2 });
+    });
+  }, 20000);
 });

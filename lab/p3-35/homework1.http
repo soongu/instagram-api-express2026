@@ -1,0 +1,12 @@
+### jaehoon 프로필
+GET http://localhost:4011/api/profiles/jaehoon
+
+### 받아 둔 ETag로 다시 묻기
+GET http://localhost:4011/api/profiles/jaehoon
+If-None-Match: "jaehoon-1"
+
+### jaehoon 팔로우
+POST http://localhost:4011/api/profiles/jaehoon/follow
+
+### 없는 사람
+GET http://localhost:4011/api/profiles/nobody
