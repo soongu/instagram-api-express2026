@@ -31,7 +31,7 @@ export async function createUser(data) {
     return await prisma.user.create({ data: user, select: userFields });
   } catch (error) {
     // 사용자 이름·이메일·휴대폰 번호 가운데 하나라도 이미 있으면 UNIQUE 제약이 막는다.
-    // 데이터베이스가 알려 준 제약 이름으로 어느 컬럼이 겹쳤는지 가른다.
+    // 데이터베이스가 알려 준 제약 이름으로 어느 컬럼이 겹쳤는지 구분한다.
     if (error.code === 'P2002') {
       const code = TAKEN[error.meta.driverAdapterError.cause.constraint.index];
       if (code) throw new ConflictError(code);
