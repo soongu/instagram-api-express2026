@@ -9,6 +9,7 @@ import authRouter from './routes/auth.js';
 import uploadsRouter from './routes/uploads.js';
 import { HttpError } from './errors.js';
 import { logger } from './middlewares/logger.js';
+import { privateNoCache } from './middlewares/cache.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 
@@ -29,6 +30,8 @@ app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
 });
 
+// API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 물어보게 한다.
+app.use('/api', privateNoCache);
 app.use('/api/posts', postsRouter);
 app.use('/api/posts/:id/likes', likesRouter);
 app.use('/api/auth', authRouter);
