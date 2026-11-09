@@ -22,7 +22,7 @@ const allowedOrigins = process.env.CORS_ORIGIN.split(',').map((one) => one.trim(
 app.use(logger);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: allowedOrigins }));
-// 새 주소로 온 요청이라는 것을 본문을 읽기 전에 적어 둔다 — 본문을 못 읽은 실패도 새 모양으로 답하려고.
+// 새 주소로 온 요청이라는 것을 본문을 읽기 전에 적어 둔다 — 본문을 못 읽은 실패도 새 형식으로 답하려고.
 app.use('/api/v2', apiVersion(2));
 app.use(express.json());
 app.use(cookieParser());
