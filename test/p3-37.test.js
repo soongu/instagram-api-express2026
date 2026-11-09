@@ -14,7 +14,7 @@
 // 축 ⑥ Step 6 — 던지는 코드는 모두 표에 있고, 표의 코드는 모두 어딘가에서 쓴다 · 서비스에는 문장이 없다
 // 축 ⑦ 이 회차 학생 파일 — code/p3-36 에서 바뀐 파일
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -495,4 +495,195 @@ describe('축 ⑧ Step 7 — 본문을 못 읽은 실패는 라우터에 닿기 
       expect(await getRes(`${base}/api/v2/posts`, broken)).toMatchObject({ status: 400, body: { error: { code: 'INVALID_BODY', message: '보낸 내용을 읽을 수 없어요' } } });
     });
   }, 60000);
+});
+
+// ───────── 축 ⑨ 직접 해보기 · 과제 — 정답 판과 시작 판(틀린 판)을 확인 절차가 가려낸다 ─────────
+// 🚨 실습 포트(4001~4003 · 4011)는 다른 세션의 실습 서버가 쥐고 있을 수 있어 사본의 포트 숫자를 판정 포트로 바꿔 띄운다.
+//    listen(…) 과 «…번 포트에서» 두 곳이 모두 바뀌어야 boot 가 준비된 줄을 알아본다 — replaceAll.
+const LAB_PORT = 3881;
+const withLab = async (src, labPort, fn) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p337-lab-'));
+  symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+  cpSync(P('package.json'), join(dir, 'package.json'));
+  const file = join(dir, 'lab.js');
+  writeFileSync(file, src.replaceAll(String(labPort), String(LAB_PORT)));
+  const srv = await boot(file, { port: LAB_PORT, cwd: dir, env, ready: `${LAB_PORT}번 포트에서` });
+  try {
+    await fn(`http://localhost:${LAB_PORT}`);
+  } finally {
+    await Promise.race([srv.stop(), sleep(500)]);
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+const pick = ({ status, body }) => ({ status, body });
+
+const noticeScene = async (base) => [
+  pick(await getRes(`${base}/api/v2/notices`)),
+  pick(await getRes(`${base}/api/v2/notices`)),
+  pick(await getRes(`${base}/api/notices`)),
+  pick(await getRes(`${base}/api/v2/notices`, json('POST', { title: '연말 이벤트' }))),
+  pick(await getRes(`${base}/api/notices`)),
+];
+const TWO = [{ id: 1, title: '서버 점검 안내' }, { id: 2, title: '새 기능 소개' }];
+const THREE = [...TWO, { id: 3, title: '연말 이벤트' }];
+
+describe('축 ⑨ 직접 해보기 1 — 공지 서버에 새 주소와 성공 봉투', () => {
+  it('시작 판 — /api/v2 가 없다(404)', async () => {
+    await withLab(read(P('snapshots/p3-37.practice1-start.notices.js')), 4001, async (base) => {
+      expect((await noticeScene(base))[0]).toEqual({ status: 404, body: { message: '그런 주소는 없어요' } });
+    });
+  }, 30000);
+  it('정답 판 — 새 주소는 두 번째 목록(기억해 둔 목록)까지 봉투 · 옛 주소는 배열 그대로', async () => {
+    await withLab(read(P('snapshots/p3-37.practice1-done.notices.js')), 4001, async (base) => {
+      expect(await noticeScene(base)).toEqual([
+        { status: 200, body: { data: TWO } },
+        { status: 200, body: { data: TWO } },
+        { status: 200, body: TWO },
+        { status: 201, body: { data: { id: 3, title: '연말 이벤트' } } },
+        { status: 200, body: THREE },
+      ]);
+    });
+  }, 30000);
+  it('틀린 판(listCache 를 안 고쳤다) — 첫 목록은 봉투, 두 번째 목록은 배열 그대로', async () => {
+    const wrong = read(P('snapshots/p3-37.practice1-done.notices.js')).replace('    sendData(res, cachedList);\n    return;', '    res.json(cachedList);\n    return;');
+    expect(wrong).not.toBe(read(P('snapshots/p3-37.practice1-done.notices.js')));
+    await withLab(wrong, 4001, async (base) => {
+      const scene = await noticeScene(base);
+      expect(scene[0].body).toEqual({ data: TWO });
+      expect(scene[1].body).toEqual(TWO);
+    });
+  }, 30000);
+});
+
+const couponScene = async (base) => {
+  const use = (id) => getRes(`${base}/api/coupons/${id}/use`, { method: 'POST' });
+  return [pick(await use(1)), pick(await use(1)), pick(await use(2)), pick(await use(9)), pick(await use('abc'))];
+};
+
+describe('축 ⑨ 직접 해보기 2 — 쿠폰 서버의 에러 코드와 문장 표', () => {
+  it('시작 판 — 409 둘이 문장으로만 다르다 · code 가 없다', async () => {
+    await withLab(read(P('snapshots/p3-37.practice2-start.coupons.js')), 4002, async (base) => {
+      expect(await couponScene(base)).toEqual([
+        { status: 200, body: { data: { id: 1, used: true, expiresAt: '2099-12-31' } } },
+        { status: 409, body: { error: { message: '이미 쓴 쿠폰이에요' } } },
+        { status: 409, body: { error: { message: '기간이 지난 쿠폰이에요' } } },
+        { status: 404, body: { error: { message: '그런 쿠폰은 없어요' } } },
+        { status: 404, body: { error: { message: '그런 쿠폰은 없어요' } } },
+      ]);
+    });
+  }, 30000);
+  it('정답 판 — 409 둘이 코드로 갈린다 · 같은 문장은 표에 한 번', async () => {
+    const src = read(R('lab/p3-37/coupons.js'));
+    expect(src.split('그런 쿠폰은 없어요').length - 1).toBe(1);
+    expect(src.split('그런 쿠폰은 없어요').length - 1).toBeLessThan(read(P('snapshots/p3-37.practice2-start.coupons.js')).split('그런 쿠폰은 없어요').length - 1);
+    await withLab(src, 4002, async (base) => {
+      expect(await couponScene(base)).toEqual([
+        { status: 200, body: { data: { id: 1, used: true, expiresAt: '2099-12-31' } } },
+        { status: 409, body: { error: { code: 'COUPON_ALREADY_USED', message: '이미 쓴 쿠폰이에요' } } },
+        { status: 409, body: { error: { code: 'COUPON_EXPIRED', message: '기간이 지난 쿠폰이에요' } } },
+        { status: 404, body: { error: { code: 'COUPON_NOT_FOUND', message: '그런 쿠폰은 없어요' } } },
+        { status: 404, body: { error: { code: 'COUPON_NOT_FOUND', message: '그런 쿠폰은 없어요' } } },
+      ]);
+    });
+  }, 30000);
+  it('요구사항 — 표의 문장 하나를 바꾸면 그 문장만 바뀌고 코드는 그대로', async () => {
+    const changed = read(R('lab/p3-37/coupons.js')).replace("COUPON_ALREADY_USED: '이미 쓴 쿠폰이에요'", "COUPON_ALREADY_USED: '이미 사용한 쿠폰이에요'");
+    await withLab(changed, 4002, async (base) => {
+      const scene = await couponScene(base);
+      expect(scene[1]).toEqual({ status: 409, body: { error: { code: 'COUPON_ALREADY_USED', message: '이미 사용한 쿠폰이에요' } } });
+    });
+  }, 30000);
+});
+
+const errorScene = async (base) => {
+  const broken = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"title":' };
+  return [
+    pick(await getRes(`${base}/api/v2/notices`, json('POST', {}))),
+    pick(await getRes(`${base}/api/v2/notice`)),
+    pick(await getRes(`${base}/api/v2/notices`, broken)),
+    pick(await getRes(`${base}/api/notices`, json('POST', {}))),
+    pick(await getRes(`${base}/api/notice`)),
+    pick(await getRes(`${base}/api/notices`, broken)),
+  ];
+};
+const OLD_ERRORS = [
+  { status: 400, body: { message: '제목을 적어 주세요' } },
+  { status: 404, body: { message: '그런 주소는 없어요' } },
+  { status: 400, body: { message: '보낸 내용을 읽을 수 없어요' } },
+];
+
+describe('축 ⑨ 직접 해보기 3 — 공지 서버의 실패 응답도 봉투에', () => {
+  it('정답 판 — 새 주소의 실패 셋이 모두 { error: { code, message } } · 옛 주소는 그대로', async () => {
+    await withLab(read(R('lab/p3-37/notices.js')), 4001, async (base) => {
+      expect(await errorScene(base)).toEqual([
+        { status: 400, body: { error: { code: 'TITLE_REQUIRED', message: '제목을 적어 주세요' } } },
+        { status: 404, body: { error: { code: 'ROUTE_NOT_FOUND', message: '그런 주소는 없어요' } } },
+        { status: 400, body: { error: { code: 'INVALID_BODY', message: '보낸 내용을 읽을 수 없어요' } } },
+        ...OLD_ERRORS,
+      ]);
+      // 성공 응답은 직접 해보기 1 그대로
+      expect(await noticeScene(base)).toEqual([
+        { status: 200, body: { data: TWO } }, { status: 200, body: { data: TWO } }, { status: 200, body: TWO },
+        { status: 201, body: { data: { id: 3, title: '연말 이벤트' } } }, { status: 200, body: THREE },
+      ]);
+    });
+  }, 30000);
+  it('틀린 판(버전 표시를 마운트 줄에 둔 채) — 깨진 JSON 만 옛 모양', async () => {
+    const final = read(R('lab/p3-37/notices.js'));
+    const wrong = final
+      .replace("// 새 주소로 온 요청이라는 것을 본문을 읽기 전에 적어 둔다.\napp.use('/api/v2', (req, res, next) => {\n  res.locals.apiVersion = 2;\n  next();\n});\n", '')
+      .replace("app.use('/api/v2', api);", "app.use('/api/v2', (req, res, next) => {\n  res.locals.apiVersion = 2;\n  next();\n}, api);");
+    expect(wrong).not.toContain('본문을 읽기 전에');
+    await withLab(wrong, 4001, async (base) => {
+      const scene = await errorScene(base);
+      expect(scene[0].body.error.code).toBe('TITLE_REQUIRED');
+      expect(scene[1].body.error.code).toBe('ROUTE_NOT_FOUND');
+      expect(scene[2]).toEqual({ status: 400, body: { message: '보낸 내용을 읽을 수 없어요' } });
+    });
+  }, 30000);
+});
+
+describe('축 ⑨ 과제 [기초] — 배열 응답 옆에 meta', () => {
+  it('옛 주소는 배열 · 새 주소는 { data, meta: { count } } · 없는 게시물은 두 모양의 404', async () => {
+    await withLab(read(R('lab/p3-37/homework1.js')), 4011, async (base) => {
+      expect(pick(await getRes(`${base}/api/posts/1/likers`))).toEqual({ status: 200, body: ['jaehoon', 'minji', 'dahye'] });
+      expect(pick(await getRes(`${base}/api/v2/posts/1/likers`))).toEqual({ status: 200, body: { data: ['jaehoon', 'minji', 'dahye'], meta: { count: 3 } } });
+      expect(pick(await getRes(`${base}/api/v2/posts/2/likers`))).toEqual({ status: 200, body: { data: [], meta: { count: 0 } } });
+      expect(pick(await getRes(`${base}/api/v2/posts/9/likers`))).toEqual({ status: 404, body: { error: { code: 'POST_NOT_FOUND', message: '그런 게시물은 없어요' } } });
+      expect(pick(await getRes(`${base}/api/posts/9/likers`))).toEqual({ status: 404, body: { message: '그런 게시물은 없어요' } });
+    });
+  }, 30000);
+});
+
+describe('축 ⑨ 과제 [응용] — 에러 코드로 칸을 고르는 스크립트', () => {
+  const runClient = (dir, base) => {
+    const file = join(dir, 'client.mjs');
+    writeFileSync(file, read(R('lab/p3-37/homework2.js')).replace('http://localhost:3000', base));
+    return execFileSync(process.execPath, [file], { encoding: 'utf8' });
+  };
+  it('Step 2 의 번호가 있으면 세 줄 · 표의 문장을 바꿔도 칸은 그대로', async () => {
+    await freshGate();
+    await withServer(R, async ({ base, dir }) => {
+      await getRes(`${base}/api/v2/auth/signup`, json('POST', TAEYANG));
+      expect(runClient(dir, base)).toBe([
+        '[emailOrPhone] 이미 가입한 휴대폰 번호예요',
+        '[username] 이미 쓰고 있는 사용자 이름이에요',
+        '[form] 보낸 내용이 규칙에 안 맞아요',
+        '',
+      ].join('\n'));
+    });
+    // 문장을 바꾼 판 — 칸은 그대로 · 문장만 바뀐다
+    await freshGate();
+    const dir = mkdtempSync(join(tmpdir(), 'p337-msg-'));
+    try {
+      for (const name of STUDENT_FILES) if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
+      writeFileSync(join(dir, 'errors.js'), read(R('errors.js')).replace("PHONE_TAKEN: '이미 가입한 휴대폰 번호예요'", "PHONE_TAKEN: '이미 쓰고 있는 휴대폰 번호예요'"));
+      await withServer((rel) => join(dir, rel), async ({ base, dir: srvDir }) => {
+        await getRes(`${base}/api/v2/auth/signup`, json('POST', TAEYANG));
+        expect(runClient(srvDir, base).split('\n')[0]).toBe('[emailOrPhone] 이미 쓰고 있는 휴대폰 번호예요');
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 90000);
 });
