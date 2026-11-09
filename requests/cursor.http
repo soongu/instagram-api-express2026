@@ -7,8 +7,12 @@ GET http://localhost:3000/api/posts?limit=2
 # @name second
 GET http://localhost:3000/api/posts?limit=2&cursor={{first.nextCursor}}
 
-### 셋째 페이지 — 게시물이 5개라 여기가 끝이다
+### 셋째 페이지
+# @name third
 GET http://localhost:3000/api/posts?limit=2&cursor={{second.nextCursor}}
+
+### 넷째 페이지 — 게시물이 7개라 여기가 끝이다
+GET http://localhost:3000/api/posts?limit=2&cursor={{third.nextCursor}}
 
 ### 커서가 아닌 값을 보내면
 GET http://localhost:3000/api/posts?limit=2&cursor=abc

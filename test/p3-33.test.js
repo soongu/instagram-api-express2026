@@ -130,6 +130,28 @@ describe('축 ⑥ — Step 6: 끝 판의 목록 계약', () => {
     });
   });
 
+  // 2026-11-09 학생 낭독 집중 검수 — 지난 시간 Step 7(«게시물 올리기 — Location 보기» 를 두 번)을 따라온 학생의
+  // 수업 데이터베이스에는 게시물이 7개다(6번은 그 앞 회차에 만들었다 지웠다). 교안 Step 6 표가 이 상태를 말한다.
+  it('🔴 학생 상태 — 지난 시간에 올린 7·8번이 있으면 Step 6 표대로 네 요청 · 첫 커서는 7번 · 요청 파일이 넷째까지', async () => {
+    reseed();
+    await db.query("SELECT setval('posts_id_seq', 6)");
+    await withServer(PORT, {}, async (now) => {
+      const post = { authorId: 3, imageUrls: ['/images/post-8.jpg'], postAlt: '주소 규칙을 정리한 노트', content: '오늘은 API 설계를 배웠어요' };
+      for (const id of [7, 8]) expect((await send(now.base, 'POST', '/api/posts', { json: post })).body.id).toBe(id);
+      const pages = await walk(now.base);
+      expect(pages.map((page) => page.items.map((one) => one.id))).toEqual([[8, 7], [1, 2], [3, 4], [5]]);
+      expect(pages.map((page) => page.hasNext)).toEqual([true, true, true, false]);
+      expect(JSON.parse(Buffer.from(pages[0].nextCursor, 'base64url').toString()).id).toBe(7);
+      const table = fences(LECTURE()).find((f) => f.lang === '' && f.body.includes('요청         items')).body.split('\n').slice(2);
+      expect(table.map((line) => [...line.matchAll(/(\d+)번/g)].map((m) => Number(m[1])))).toEqual([[8, 7], [1, 2], [3, 4], [5]]);
+      expect(table.map((line) => line.match(/ (true|false) /)[1])).toEqual(['true', 'true', 'true', 'false']);
+      expect(table.at(-1).trimEnd().endsWith('null')).toBe(true);
+    });
+    const step6 = fences(LECTURE()).find((f) => f.lang === 'http' && f.body.includes('# @name first')).body;
+    expect(step6.match(/cursor=\{\{(\w+)\.nextCursor\}\}/g)).toEqual(['cursor={{first.nextCursor}}', 'cursor={{second.nextCursor}}', 'cursor={{third.nextCursor}}']);
+    expect(LECTURE()).toMatch(/"id":7\}/);
+  });
+
   it('🔴 커서는 base64url 글자이고, 풀면 그 페이지 마지막 게시물의 시각과 번호다', async () => {
     reseed();
     await withServer(PORT, {}, async (now) => {
@@ -396,6 +418,22 @@ describe('축 ② — Step 2~6: 교안의 실행 계획', () => {
     }
   });
 
+  it('🔴 Step 5·6 — 99980번 · 50000번의 시각은 교안이 알려 준 SELECT 로 찾은 값과 같다', async () => {
+    const lecture = LECTURE();
+    for (const id of [99980, 50000]) {
+      expect(lecture).toContain(`SELECT created_at FROM posts WHERE id = ${id};`);
+      expect(lecture).toContain(`'${await timeOf(id)}'`);
+    }
+  });
+
+  it('🔴 Step 6 — 고치기 전 커서 SQL 은 없는 번호(100006)면 행이 하나도 없다 · 있는 번호면 21행', async () => {
+    const block = fences(LECTURE()).find((f) => f.lang === 'sql' && f.body.includes('id = 100006'));
+    expect(block).toBeDefined();
+    expect((await lab.query('SELECT count(*)::int AS n FROM posts WHERE id = 100006')).rows[0].n).toBe(0);
+    expect((await lab.query(block.body)).rows).toEqual([]);
+    expect((await lab.query(block.body.replaceAll('100006', '99980'))).rows).toHaveLength(21);
+  });
+
   it('🔴 Step 4 — 정렬이 id 한 칸이면 Prisma 꼴의 커서도 Index Cond 로 22행', async () => {
     const plan = await planText(`${E}SELECT * FROM posts WHERE id <= (SELECT id FROM posts WHERE id = 99980) ORDER BY id DESC LIMIT 21 OFFSET 1`);
     expect(plan).toMatch(/Index Scan Backward using posts_pkey on posts \(actual time=\S+ rows=22\.00/);
@@ -455,6 +493,21 @@ describe('축 ② — Step 2~6: 교안의 실행 계획', () => {
     for (const wrong of ['(author_id)', '(author_id, created_at DESC)', '(author_id, created_at DESC, id ASC)']) {
       expect((await second(wrong)).noSort, wrong).toBe(false);
     }
+  });
+
+  it('🔴 직접 해보기 1 해설 — 두 정렬 컬럼을 모두 오름차순으로 만든 판도 확인 셋을 통과한다(거꾸로 읽는다)', async () => {
+    const q = 'SELECT * FROM posts WHERE author_id = 5 ORDER BY created_at DESC, id DESC LIMIT 20';
+    await lab.query('CREATE INDEX lab_try ON posts (author_id, created_at, id)');
+    await planText(`EXPLAIN (ANALYZE, COSTS OFF) ${q}`);
+    const plan = await planText(`EXPLAIN (ANALYZE, COSTS OFF) ${q}`);
+    await lab.query('DROP INDEX lab_try');
+    expect(plan).toContain('Index Scan Backward using lab_try');
+    expect(plan).not.toContain('Rows Removed by Filter');
+    expect(plan).not.toContain('Sort');
+    expect(Number(plan.match(/Limit[^\n]*\n\s+Buffers: shared hit=(\d+)/)[1])).toBeLessThan(30);
+    const answer = LECTURE().split('### 직접 해보기 1')[1].split('## Step 4')[0];
+    expect(answer).toContain('`(author_id, created_at, id)`');
+    expect(answer).toContain('Index Scan Backward');
   });
 
   it('🔴 직접 해보기 2 — 시각만 비교하면 49개가 사라진다 · 행 비교식은 2049번부터 · 되돌리면 그대로', async () => {
@@ -545,6 +598,25 @@ describe('축 ② — Step 2~6: 교안의 실행 계획', () => {
         expect(tied.second.items.map((c) => c.id)).toEqual([5, 6]);
         expect(tied.second).toMatchObject({ hasNext: false, nextCursor: null });
         await undo();
+      });
+    });
+
+    it('🔴 요구사항 7 의 되돌리기 문장 — 실행하면 6번 요구사항의 결과(4·5 / 6·7)로 돌아온다', async () => {
+      await withLab({ name: 'practice3.js', port: 4003 }, async (base) => {
+        const undo = await tieReset();
+        try {
+          await tie();
+          expect((await walk2(base)).first.items.map((c) => c.id)).toEqual([7, 4]);
+          const revert = fences(LECTURE()).filter((f) => f.lang === 'sql' && f.body.startsWith('-- 시각을 되돌린다') && f.body.includes('UPDATE comments'));
+          expect(revert).toHaveLength(1);
+          for (const statement of revert[0].body.split(';').map((s) => s.trim()).filter(Boolean)) await lab.query(statement);
+          const back = await walk2(base);
+          expect(back.first.items.map((c) => c.id)).toEqual([4, 5]);
+          expect(back.second.items.map((c) => c.id)).toEqual([6, 7]);
+          expect(back.second).toMatchObject({ hasNext: false, nextCursor: null });
+        } finally {
+          await undo();
+        }
       });
     });
 
@@ -653,6 +725,16 @@ describe('축 ② — Step 2~6: 교안의 실행 계획', () => {
       expect((await lab.query('SELECT like_count FROM posts WHERE id = 75000')).rows[0].like_count).toBe(25000);
       const row = await planText(`${E}SELECT * FROM posts WHERE (like_count, id) < (25000, 75000) ORDER BY like_count DESC, id DESC LIMIT 20`);
       expect(row).toContain('Index Cond: (ROW(like_count, id) < ROW(25000, 75000))');
+    });
+
+    it('🔴 요구사항 5 — OR 하나로만 적은 SQL 은 lab_popular 를 쓰지만 Index Cond 가 없고 많이 버린다 · 요구사항이 그 두 줄을 보라고 한다', async () => {
+      const plan = await planText(`${E}SELECT * FROM posts WHERE like_count < 25000 OR (like_count = 25000 AND id < 75000) ORDER BY like_count DESC, id DESC LIMIT 21`);
+      expect(plan).toContain('Index Scan using lab_popular');
+      expect(plan).not.toContain('Index Cond');
+      expect(removed(plan)).toBeGreaterThan(10000);
+      const req5 = LECTURE().split('### [응용]')[1].split('\n').find((line) => line.startsWith('5. '));
+      expect(req5).toContain('`Filter`가 아니라 `Index Cond`');
+      expect(req5).toContain('`Rows Removed by Filter`');
     });
 
     it('🔴 정답 판 — 첫 페이지 세 게시물 · 좋아요를 낮추면 둘째 페이지에 또 나온다 · 400 둘', async () => {
@@ -791,11 +873,13 @@ describe('축 ⑨ — 학생 파일', () => {
     expect(seen).toBeGreaterThanOrEqual(6);
   });
 
-  it('🔴 요청 파일 — Step 6 블록 + Step 7 이 더한 요청이 파일과 byte 같다', () => {
+  // 🔀 2026-11-09 학생 낭독 집중 검수가 넷째 페이지 요청을 더했다 — main 에만 있다(북마크 code/p3-33 은 셋째 페이지까지).
+  // main 의 파일은 p3-34 가 끝에 두 요청을 더한 판이라 «앞부분이 같다» 로 본다.
+  it('🔴 요청 파일 — Step 6 블록 + Step 7 이 더한 요청이 main 파일의 앞부분과 byte 같다', () => {
     const http = fences(LECTURE()).filter((f) => f.lang === 'http');
     const step6 = http.find((f) => f.body.includes('# @name first')).body;
     const step7 = http.find((f) => f.body.startsWith('### 2번 게시물 지우기')).body;
-    expect(read(R('requests/cursor.http'))).toBe(`${step6}\n\n${step7}\n`);
+    expect(read(P('requests/cursor.http')).startsWith(`${step6}\n\n${step7}\n`)).toBe(true);
   });
 
   it('🔴 답안 — 코드 블록 줄 실재 · 요청 파일 byte 같다 · 실행 계획은 축 ⑧ 에서 잰 값', () => {
