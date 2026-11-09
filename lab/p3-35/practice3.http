@@ -1,0 +1,11 @@
+### 공지 목록
+GET http://localhost:4003/api/notices
+
+### 고정 공지 목록
+GET http://localhost:4003/api/notices?pinned=true
+
+### 1번 공지 제목 고치기
+PATCH http://localhost:4003/api/notices/1
+Content-Type: application/json
+
+{ "title": "서버 점검 시간 변경" }

@@ -1,0 +1,12 @@
+### 1번 글
+GET http://localhost:4002/api/articles/1
+
+### 받아 둔 ETag로 다시 묻기
+GET http://localhost:4002/api/articles/1
+If-None-Match: "1-1762650000000"
+
+### 1번 글 고치기
+PATCH http://localhost:4002/api/articles/1
+Content-Type: application/json
+
+{ "body": "글을 조금 고쳤어요." }
