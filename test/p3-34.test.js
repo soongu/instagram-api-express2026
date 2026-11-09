@@ -600,7 +600,11 @@ describe('축 ⑦ — 학생 파일과 교안 블록', () => {
     for (const f of fences(LECTURE()).filter((one) => one.lang === 'javascript')) {
       const [head, ...lines] = f.body.split('\n');
       if (!head.startsWith('// ~/')) {
-        // 경로 주석이 없는 블록은 실습 데이터 배열 둘뿐이다
+        // 경로 주석이 없는 블록은 실습 데이터 배열 둘과, 파트2 화면의 Console 에 치는 지우기 한 줄 둘(Step 2 — 축 ⑧)뿐이다
+        if (f.body.startsWith('fetch(')) {
+          expect(f.body, `L${f.line}`).toMatch(/^fetch\('\/api\/posts\/\d+', \{ method: 'DELETE' \}\);$/);
+          continue;
+        }
         expect(f.body.startsWith('const members = ['), `L${f.line}`).toBe(true);
         expect(LAB('practice1.js') + LAB('practice2.js'), `L${f.line}`).toContain(f.body);
         continue;
@@ -662,5 +666,179 @@ describe('축 ⑦ — 답안 블록', () => {
     expect(seen).toBe(3);
     const http = blocks.filter((f) => f.lang === 'http').map((f) => `${f.body}\n`);
     expect(http).toEqual([LAB('homework1.http'), LAB('homework2.http')]);
+  });
+});
+
+// ── 축 ⑧ — 학생 상태(2026-11-09 학생 낭독 집중 검수)
+// 지난 시간까지 교안을 따라온 학생의 수업 DB 에는 p3-32 Step 7 이 올린 게시물 7·8번이 있다(최신순 8·7·1·2·3·4·5).
+// 교안의 번호·로그 줄은 이 상태로 적는다 — 시드 상태(1~5)로 적은 판은 학생 화면과 갈렸다(학생 낭독 FAIL 2).
+const httpBody = (file, title) => {
+  const block = read(P(`requests/${file}`)).split('\n### ').find((one) => one.replace(/^### /, '').startsWith(`${title}\n`));
+  return JSON.parse(block.slice(block.indexOf('{'), block.lastIndexOf('}') + 1));
+};
+/** 교안 언어 없는 펜스 중 needle 이 든 것의 줄을 «HTTP 메서드 · 주소 · 상태» 로 */
+const logLines = (needle) => {
+  const block = fences(LECTURE()).find((f) => f.lang === '' && f.body.includes(needle));
+  expect(block, needle).toBeDefined();
+  return block.body.split('\n').map((line) => line.split(' ').slice(0, 3).join(' '));
+};
+const studentState = async (base) => {
+  await db.query("SELECT setval('posts_id_seq', 6)");
+  const post = httpBody('rest.http', '게시물 올리기 — Location 보기');
+  for (let n = 0; n < 2; n += 1) expect((await send(base, 'POST', '/api/posts', { json: post })).status).toBe(201);
+};
+/** 옛 화면이 «마지막 카드의 번호» 로 이어 가는 차례를 커서에서부터 끝까지 따라간다 */
+const walkFrom = async (base, cursor) => {
+  const pages = [];
+  let next = cursor;
+  while (next !== null) {
+    const path = `/api/posts?limit=2&cursor=${next}`;
+    const res = await send(base, 'GET', path);
+    pages.push({ line: `GET ${path} ${res.status}`, ids: res.body.items.map((post) => post.id) });
+    next = res.body.hasNext ? res.body.items.at(-1).id : null;
+  }
+  return pages;
+};
+
+describe('축 ⑧ — 학생 상태: 지난 시간까지 따라온 수업 DB 는 최신순 8·7·1·2·3·4·5', () => {
+  it('🔴 오프닝·Step 1 — 앞 판에서 첫 페이지는 8·7 이고 옛 화면은 cursor=7 을 보내 400 · 교안 로그와 Network 문장이 그 번호', async () => {
+    reseed();
+    await withServer(PORT, {}, async (before) => {
+      await studentState(before.base);
+      const pages = await walkOld(before.base);
+      expect(pages.map((page) => page.status)).toEqual([200, 400]);
+      expect(pages[0].body.items.map((post) => post.id)).toEqual([8, 7]);
+      expect(logLines('GET /api/posts?limit=2 200')).toEqual(['GET /api/posts?limit=2 200', 'GET /api/posts?limit=2&cursor=7 400']);
+    }, B);
+    const lecture = LECTURE();
+    expect(lecture).toContain('`posts?limit=2&cursor=7` 요청이 빨간색 400');
+    expect(lecture).not.toContain('시드 그대로라면');
+  });
+
+  it('🔴 Step 2 첫 판 — 옛 화면이 끝까지 내려가면 cursor=7·2·4 세 줄 · 999 에는 8번과 7번', async () => {
+    reseed();
+    await withServer(PORT, { 'middlewares/legacyCursor.js': read(P('snapshots/p3-34.step2-first.legacyCursor.js')) }, async (now) => {
+      await studentState(now.base);
+      const pages = await walkOld(now.base);
+      expect(ids(pages)).toEqual([8, 7, 1, 2, 3, 4, 5]);
+      const logs = pages.slice(1).map((page, index) => `GET /api/posts?limit=2&cursor=${pages[index].body.items.at(-1).id} ${page.status}`);
+      expect(logLines('&cursor=2 200')).toEqual(logs);
+      expect((await send(now.base, 'GET', '/api/posts?limit=2&cursor=2')).body.items.map((post) => post.id)).toEqual([3, 4]);
+      expect((await send(now.base, 'GET', '/api/posts?limit=2&cursor=999')).body.items.map((post) => post.id)).toEqual([8, 7]);
+    });
+    expect(LECTURE()).toContain('999번 게시물은 없는데, 8번과 7번 게시물이 와요.');
+  });
+
+  it('🔴 Step 2 첫 판 — 둘째 카드(7번)를 지우고 내리면 8번이 한 번 더 붙어 게시물 6개에 카드 8장 · 교안 로그가 그 차례', async () => {
+    reseed();
+    await withServer(PORT, { 'middlewares/legacyCursor.js': read(P('snapshots/p3-34.step2-first.legacyCursor.js')) }, async (now) => {
+      await studentState(now.base);
+      const held = (await send(now.base, 'GET', '/api/posts?limit=2')).body.items.map((post) => post.id);
+      expect(held).toEqual([8, 7]);
+      expect((await send(now.base, 'DELETE', '/api/posts/7')).status).toBe(200);
+      const pages = await walkFrom(now.base, 7);
+      expect(pages.map((page) => page.ids)).toEqual([[8, 1], [2, 3], [4, 5]]);
+      const cards = [...held, ...pages.flatMap((page) => page.ids)];
+      // 화면의 카드는 8장(지워진 7번은 받아 둔 그대로 남는다) · 8번이 두 번 · DB 의 게시물은 6개
+      expect(cards).toEqual([8, 7, 8, 1, 2, 3, 4, 5]);
+      expect((await db.query('SELECT count(*)::int AS n FROM posts')).rows[0].n).toBe(6);
+      expect(logLines('DELETE /api/posts/7 200')).toEqual(['DELETE /api/posts/7 200', ...pages.map((page) => page.line)]);
+    });
+    const lecture = LECTURE();
+    expect(lecture).toContain("fetch('/api/posts/7', { method: 'DELETE' });");
+    expect(lecture).toContain('게시물은 6개인데 카드는 8장이에요.');
+  });
+
+  it('🔴 Step 2 끝 판 — 9번을 올리고 둘째 카드(8번)를 지우고 내리면 cursor=8 한 줄이 빈 목록 · 교안 로그가 그 차례', async () => {
+    reseed();
+    await withServer(PORT, {}, async (now) => {
+      await studentState(now.base);
+      expect((await send(now.base, 'DELETE', '/api/posts/7')).status).toBe(200);
+      const created = await send(now.base, 'POST', '/api/posts', { json: httpBody('posts.http', '게시물 올리기') });
+      expect([created.status, created.body.id, created.body.content]).toEqual([201, 9, '제주 왔어요 🌊']);
+      expect((await send(now.base, 'GET', '/api/posts?limit=2')).body.items.map((post) => post.id)).toEqual([9, 8]);
+      expect((await send(now.base, 'DELETE', '/api/posts/8')).status).toBe(200);
+      const pages = await walkFrom(now.base, 8);
+      expect(pages).toEqual([{ line: 'GET /api/posts?limit=2&cursor=8 200', ids: [] }]);
+      expect(logLines('DELETE /api/posts/8 200')).toEqual(['DELETE /api/posts/8 200', pages[0].line]);
+      // Step 3 의 «옛 화면처럼 게시물 번호를 커서로 보내면» 은 이 상태(9·1·2·3·4·5)에서도 3번과 4번
+      expect((await send(now.base, 'GET', '/api/posts?limit=2&cursor=2')).body.items.map((post) => post.id)).toEqual([3, 4]);
+    });
+    expect(LECTURE()).toContain("fetch('/api/posts/8', { method: 'DELETE' });");
+  });
+
+  it('🔴 Step 4 — v1.use 를 라우트 아래에 두면 v1 응답에 헤더가 안 붙는다 · 교안이 «라우트보다 위» 를 말한다', async () => {
+    const block = "// v1 으로 온 요청에는 모두 알린다 — 이 라우터로 들어온 요청은 라우트보다 먼저 여기를 지난다.\nv1.use((req, res, next) => {\n  res.set('Deprecation', '@1796083200');\n  res.set('Sunset', 'Mon, 01 Mar 2027 00:00:00 GMT');\n  next();\n});\n";
+    const below = swap(swap(LAB('notices.js'), block, ''), "app.use('/api/v1', v1);", `${block}\napp.use('/api/v1', v1);`);
+    await withLab(below, 4010, 3812, async (srv) => {
+      const res = await send(srv.base, 'GET', '/api/v1/notices');
+      expect([res.status, res.headers.get('deprecation')]).toEqual([200, null]);
+    });
+    expect(LECTURE()).toContain('`v1.use`는 라우트보다 위에 둬요.');
+  });
+
+  it('🔴 직접 해보기 2 틀린 판 — app.use(\'/api\', v1) 을 맨 위에 두면 v2 응답에도 Deprecation · 요구사항 7 이 v2 헤더를 보게 한다', async () => {
+    const top = swap(swap(LAB('practice2.js'), "app.use('/api', v1);\n", ''), "app.use('/api/v1', v1);", "app.use('/api', v1);\napp.use('/api/v1', v1);");
+    await withLab(top, 4002, 3814, async (srv) => {
+      const v2 = await send(srv.base, 'GET', '/api/v2/members/2');
+      expect(v2.body).toEqual({ id: 2, username: 'minji', name: { family: '이', given: '민지' } });
+      expect(v2.headers.get('deprecation')).toBe(DEP);
+      expect((await send(srv.base, 'GET', '/api/members/2')).headers.get('deprecation')).toBe(DEP);
+    });
+    expect(LECTURE()).toContain('v2 응답에는 없는지까지 봐야 확인한 거예요.');
+  });
+
+  it('🔴 직접 해보기 1 — || 판도 요구사항 2~5 를 통과하고 ?keyword=&q=min 하나만 갈린다 · 해설이 그 사실을 말한다', async () => {
+    const or = swap(LAB('practice1.js'), 'req.query.keyword ?? req.query.q', 'req.query.keyword || req.query.q');
+    for (const [src, empty] of [[LAB('practice1.js'), 400], [or, 200]]) {
+      await withLab(src, 4001, 3813, async (srv) => {
+        const names = async (q) => (await send(srv.base, 'GET', `/api/members/search${q}`)).body.map((m) => m.username);
+        expect(await names('?keyword=min')).toEqual(['minji', 'minsu']);
+        expect(await names('?q=min')).toEqual(['minji', 'minsu']);
+        expect(await names('?keyword=dahye&q=min')).toEqual(['dahye']);
+        expect((await send(srv.base, 'GET', '/api/members/search')).status).toBe(400);
+        expect((await send(srv.base, 'GET', '/api/members/search?keyword=&q=min')).status).toBe(empty);
+      });
+    }
+    expect(LECTURE()).toContain('`?keyword=&q=min`');
+  });
+
+  it('🔴 Step 7 — 올리기 본문의 authorId 는 (0, 9007199254740991] · JSON 의 $schema 는 첫 키 · 교안이 Swagger UI 의 «맨 아래» 와 그 범위를 말한다', async () => {
+    reseed();
+    await withServer(PORT, {}, async (now) => {
+      const { body: doc } = await send(now.base, 'GET', '/api/openapi.json');
+      const body = doc.paths['/api/posts'].post.requestBody.content['application/json'].schema;
+      expect(body.properties.authorId).toEqual({ type: 'integer', exclusiveMinimum: 0, maximum: 9007199254740991 });
+      expect(Object.keys(body)[0]).toBe('$schema');
+    });
+    const lecture = LECTURE();
+    expect(lecture).toContain('맨 아래의 `$schema` 줄');
+    expect(lecture).toContain('`(0, 9007199254740991]`');
+  });
+
+  it('🔴 과제 [기초] 틀린 판 — body 를 .optional() 로 두고 parse 뒤에 붙이면 확인 넷은 같고 문서의 필수 필드에서만 갈린다 · 요구사항 5 가 필수(*)를 보게 한다', async () => {
+    const withMemo = swap(LAB('homework1.js'), "{ id: 1, title: '서버 점검 안내', content:", "{ id: 1, memo: '관리자만 보는 메모', title: '서버 점검 안내', content:");
+    const loose = swap(swap(withMemo,
+      "  body: z.string().meta(", "  body: z.string().optional().meta("),
+      'res.json(noticeSchema.parse({ ...notice, body: notice.content }));', 'res.json({ ...noticeSchema.parse(notice), body: notice.content });');
+    await withLab(loose, 4011, 3816, async (srv) => {
+      const res = await send(srv.base, 'GET', '/api/notices/1');
+      expect(Object.keys(res.body)).toEqual(['id', 'title', 'content', 'body']);
+      expect((await send(srv.base, 'GET', '/api/notices/9')).status).toBe(404);
+      const { body: doc } = await send(srv.base, 'GET', '/openapi.json');
+      const schema = doc.paths['/api/notices/{id}'].get.responses[200].content['application/json'].schema;
+      expect(schema.properties.body.deprecated).toBe(true);
+      expect(schema.required).toEqual(['id', 'title', 'content']);
+    });
+    expect(LECTURE()).toContain('네 필드가 모두 필수(`*`)인지');
+  });
+
+  it('🔴 앞 회차 잇기 · 주제 1 — L219 는 지난 시간 없는 번호 100006 에 · 봉투 예시는 p3-37 결정의 { data }·{ error }', () => {
+    const lecture = LECTURE();
+    const before = read(P('../../part3/6-api-design/p3-33-cursor-pagination-lecture.md'));
+    expect(before).toContain('번호만 99980 대신 없는 번호인 100006으로 바꿔');
+    expect(lecture).toContain('100006');
+    expect(lecture).not.toContain('{ success, data }');
+    expect(ANSWERS()).not.toContain('{ success, data }');
   });
 });
