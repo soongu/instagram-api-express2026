@@ -406,6 +406,13 @@ describe('축 ⑥ — 직접 해보기 2: 글 하나 — 만들기 전에 비교
       expect((await getRes(`${srv.base}/api/articles/1`, { headers: ask('"1"') })).status).toBe(304);
     });
   });
+  it('🔴 틀린 판 — 글 번호만 넣으면 .http 의 손으로 적은 "1-1762650000000" 과 달라 둘째 요청부터 200 · 첫 etag 가 "1"', async () => {
+    const wrong = swap(LAB('practice2.js'), '`"${article.id}-${article.updatedAt}"`', '`"${article.id}"`');
+    await withLab(wrong, 4002, 3834, async (srv) => {
+      expect((await getRes(`${srv.base}/api/articles/1`)).headers.get('etag')).toBe('"1"');
+      expect((await getRes(`${srv.base}/api/articles/1`, { headers: ask(OLD) })).status).toBe(200);
+    });
+  });
   it('🔴 틀린 판 — 304 뒤 return 을 빠뜨리면 304 는 가지만 «만들었어요» 가 찍힌다', async () => {
     const wrong = swap(LAB('practice2.js'), '    res.status(304).end();\n    return;\n', '    res.status(304).end();\n');
     await withLab(wrong, 4002, 3834, async (srv) => {
@@ -479,6 +486,12 @@ describe('축 ⑥ — 과제 [기초]: 프로필의 버전과 304(4011)', () => 
     await withLab(START('homework1.js'), 4011, 3836, async (srv) => {
       const got = await check(srv);
       expect([got.cc, got.again, got.builtBefore]).toEqual([null, 200, 2]);
+    });
+  });
+  it('🔴 틀린 판 — 사용자 이름만 넣으면 첫 etag 가 "jaehoon" 이고 손으로 적은 "jaehoon-1" 에는 200', async () => {
+    await withLab(swap(LAB('homework1.js'), '`"${profile.username}-${profile.version}"`', '`"${profile.username}"`'), 4011, 3836, async (srv) => {
+      expect((await getRes(`${srv.base}/api/profiles/jaehoon`)).headers.get('etag')).toBe('"jaehoon"');
+      expect((await getRes(`${srv.base}/api/profiles/jaehoon`, { headers: ask(OLD) })).status).toBe(200);
     });
   });
   it('🔴 틀린 판 — 팔로우에서 version 을 안 올리면 팔로워가 늘어도 304(옛 숫자)', async () => {
@@ -606,6 +619,7 @@ describe('축 ⑦ — 학생 파일과 교안 블록', () => {
       '// ~/instagram-api/middlewares/cache.js': [read(R('middlewares/cache.js'))],
       '// ~/instagram-api/node_modules/express/lib/response.js': [read(P('node_modules/express/lib/response.js'))],
       '// ~/instagram-api/lab/p3-35/notices.js': [LAB('notices.js'), read(P('snapshots/p3-35.step5-start.notices.js')), read(P('snapshots/p3-35.step5.notices.js')), read(P('snapshots/p3-35.step6-forgot.notices.js'))],
+      '// ~/instagram-api/lab/p3-31/peek.js': [read(R('lab/p3-31/peek.js'))],
       '// ~/instagram-api/lab/p3-35/practice1.js': [LAB('practice1.js'), START('practice1.js')],
       '// ~/instagram-api/lab/p3-35/practice2.js': [LAB('practice2.js'), START('practice2.js')],
       '// ~/instagram-api/lab/p3-35/practice3.js': [LAB('practice3.js'), START('practice3.js')],
