@@ -9,7 +9,7 @@ export const loginSchema = z.object({
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const PHONE = /^010-?\d{4}-?\d{4}$/;
 
-// 비밀번호도 받아서 규칙을 검사한다. 저장할 때는 해시로 바꾼다(authService).
+// 비밀번호도 받아서 규칙을 검사한다. 저장할 때는 userService 가 해시로 바꾼다.
 export const signupSchema = z.object({
   emailOrPhone: z
     .string()
