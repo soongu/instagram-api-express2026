@@ -1,17 +1,17 @@
 // p3-40 「로그인과 비밀번호 확인」 게이트 — 백엔드
 //
 // `7-express-auth` 다섯째 회차다(`curriculum.md` 「`p3-40` 착수 결정」 — `p3-39` 에서 나눴다).
-// Step 1~7 본문은 수업 백엔드, 실습·과제는 `lab/p3-40/`. 화면(가입 화면의 72바이트)은 `instagram-next/.verify` 가 본다.
+// Step 1~8 본문은 수업 백엔드, 실습·과제는 `lab/p3-40/`. 화면(가입 화면의 72바이트)은 `instagram-next/.verify` 가 본다.
 // Step 마다의 판은 커밋 제목의 «(Step N)» 표식으로 꺼낸다(그 커밋을 임시 폴더에 풀어 띄운다).
 //
 // 축 ① Step 1 — code/p3-39: 틀린 비밀번호로도 200 · 검사를 지나면 password 가 사라진다
 // 축 ② Step 2 — 맞는 비밀번호 200 · 틀리면 401 · 해시가 NULL 인 사람은 500(«data and hash arguments required») · 응답에 해시가 없다
-// 축 ③ Step 3 — NULL 은 401(compare 전에 끝나 빠르다) · 관리자 스크립트로 정하면 200 · 없는 이름이면 USER_NOT_FOUND
-// 축 ④ Step 3 — 시드: 다섯 명 모두 $2b$12$ · «이름1234» 와 맞는다 · 출력 두 줄
-// 축 ⑤ Step 4 — 문장이 하나로(옛 주소·새 주소) · timing.js: 없는 이름·비밀번호가 없는 사람은 빠르고 틀린 비밀번호만 느리다
-// 축 ⑥ Step 5 — timing.js: 셋이 비슷하다 · 가짜 해시와 비교한 경우는 실패
-// 축 ⑦ Step 6 — 고치기 전: 긴 비밀번호로 가입 → 앞 24자만 같아도 200 · 고친 뒤: 가입 400(문장) · 이미 가입한 사람은 그대로 · 문서의 설명
-// 축 ⑧ Step 7 — cost 를 13 으로 올리면 맞는 로그인 한 번에 해시가 $2b$13$ · 다시 12 로 내려도 13 그대로
+// 축 ③ Step 3·4 — NULL 은 401(compare 전에 끝나 빠르다) · 관리자 스크립트로 정하면 200 · 없는 이름이면 USER_NOT_FOUND
+// 축 ④ Step 4 — 시드: 다섯 명 모두 $2b$12$ · «이름1234» 와 맞는다 · 출력은 한 줄 그대로
+// 축 ⑤ Step 5 — 문장이 하나로(옛 주소·새 주소) · timing.js: 없는 이름·비밀번호가 없는 사람은 빠르고 틀린 비밀번호만 느리다
+// 축 ⑥ Step 6 — timing.js: 셋이 비슷하다 · 가짜 해시와 비교한 경우는 실패
+// 축 ⑦ Step 7 — 고치기 전: 긴 비밀번호로 가입 → 앞 24자만 같아도 200 · 고친 뒤: 가입 400(문장) · 이미 가입한 사람은 그대로 · 문서의 설명
+// 축 ⑧ Step 8 — cost 를 13 으로 올리면 맞는 로그인 한 번에 해시가 $2b$13$ · 다시 12 로 내려도 13 그대로
 // 축 ⑨ auth.http 전체를 tip 서버에 차례로 보낸 상태 코드
 // 축 ⑩ 직접 해보기 1 — 비밀번호 바꾸기(틀린 판 셋)
 // 축 ⑪ 직접 해보기 2 — 비밀번호 찾기(시작 판 · 정답 판 · 문장만 바꾼 판)
@@ -243,11 +243,20 @@ describe('축 ② Step 2 — 해시와 비교', () => {
   });
 });
 
-describe('축 ③ Step 3 — 비밀번호가 없는 사람', () => {
-  it('🔴 NULL 이면 401(빠르다) · 관리자 스크립트로 정하면 200 · 없는 이름이면 USER_NOT_FOUND', async () => {
+describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
+  it('🔴 Step 3 판은 NULL 처리만 — setPassword · set-password.js · 새 시드는 Step 4 에 든다', () => {
     const S3 = stepDir(3);
+    const src = read(S3('services/userService.js'));
+    expect(src).toContain('  if (!user || user.passwordHash === null) return null;');
+    expect(src).not.toContain('setPassword');
+    expect(existsSync(S3('lab/p3-40/set-password.js'))).toBe(false);
+    expect(read(S3('seed.js'))).not.toContain('userService');
+  });
+
+  it('🔴 NULL 이면 401(빠르다) · 관리자 스크립트로 정하면 200 · 없는 이름이면 USER_NOT_FOUND', async () => {
+    const S4 = stepDir(4);
     await freshGate();
-    await withServer(S3, async ({ base, dir }) => {
+    await withServer(S4, async ({ base, dir }) => {
       await post(base, '/api/v2/auth/login', { username: 'hana', password: 'hana1234' }); // 서버가 막 떠서 느린 첫 DB 요청을 걸러 낸다
       const before = await post(base, '/api/v2/auth/login', { username: 'jaehoon', password: 'jaehoon1234' });
       expect(before.status).toBe(401);
@@ -268,16 +277,16 @@ describe('축 ③ Step 3 — 비밀번호가 없는 사람', () => {
   });
 
   it('🔴 시드 — 다섯 명 모두 $2b$12$ 이고 «이름1234» 와 맞는다 · 출력은 한 줄 그대로', async () => {
-    const S3 = stepDir(3);
+    const S4 = stepDir(4);
     await admin(async (client) => client.query(`CREATE DATABASE ${SEED_DB}`));
     const url = `postgresql://postgres:postgres@localhost:5432/${SEED_DB}`;
     const db = new pg.Client({ ...ADMIN, database: SEED_DB });
     await db.connect();
     try {
-      for (const dir of readdirSync(S3('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
-        await db.query(read(S3(`prisma/migrations/${dir}/migration.sql`)));
+      for (const dir of readdirSync(S4('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
+        await db.query(read(S4(`prisma/migrations/${dir}/migration.sql`)));
       }
-      const dir = studentDir(S3);
+      const dir = studentDir(S4);
       dirs.push(dir);
       const { code, out } = run(dir, 'seed.js', { DATABASE_URL: url });
       expect(code).toBe(0);
@@ -295,13 +304,13 @@ describe('축 ③ Step 3 — 비밀번호가 없는 사람', () => {
   }, 60000);
 });
 
-describe('축 ⑤ Step 4 — 문장은 하나 · 시간은 다르다', () => {
+describe('축 ⑤ Step 5 — 문장은 하나 · 시간은 다르다', () => {
   it('🔴 옛 주소·새 주소 모두 «사용자 이름이나 비밀번호가 맞지 않아요» · USER_NOT_FOUND 문장은 그대로', async () => {
-    const S4 = stepDir(4);
-    expect(read(S4('errors.js'))).toContain("  LOGIN_FAILED: '사용자 이름이나 비밀번호가 맞지 않아요',\n");
-    expect(read(S4('errors.js'))).toContain("  USER_NOT_FOUND: '그런 사용자는 없어요',\n");
+    const S5 = stepDir(5);
+    expect(read(S5('errors.js'))).toContain("  LOGIN_FAILED: '사용자 이름이나 비밀번호가 맞지 않아요',\n");
+    expect(read(S5('errors.js'))).toContain("  USER_NOT_FOUND: '그런 사용자는 없어요',\n");
     await freshGate();
-    await withServer(S4, async ({ base }) => {
+    await withServer(S5, async ({ base }) => {
       const v2 = await post(base, '/api/v2/auth/login', { username: 'hana', password: 'hana1234' });
       expect(v2.body).toEqual({ error: { code: 'LOGIN_FAILED', message: '사용자 이름이나 비밀번호가 맞지 않아요' } });
       const old = await post(base, '/api/auth/login', { username: 'hana', password: 'hana1234' });
@@ -311,11 +320,11 @@ describe('축 ⑤ Step 4 — 문장은 하나 · 시간은 다르다', () => {
   });
 
   it('🔴 timing.js — 없는 이름·비밀번호가 없는 사람은 0.1초 안쪽 · 틀린 비밀번호만 0.15초를 넘는다', async () => {
-    const S4 = stepDir(4);
+    const S5 = stepDir(5);
     await freshGate();
-    await withServer(S4, async ({ base }) => {
+    await withServer(S5, async ({ base }) => {
       await signupSeoyeon(base);
-      const [nobody, nullUser, wrong] = timing(S4, PORT);
+      const [nobody, nullUser, wrong] = timing(S5, PORT);
       expect(nobody).toBeLessThan(100);
       expect(nullUser).toBeLessThan(100);
       expect(wrong).toBeGreaterThan(150);
@@ -323,33 +332,33 @@ describe('축 ⑤ Step 4 — 문장은 하나 · 시간은 다르다', () => {
   }, 30000);
 });
 
-describe('축 ⑥ Step 5 — 가짜 해시', () => {
+describe('축 ⑥ Step 6 — 가짜 해시', () => {
   it('🔴 timing.js — 셋 다 0.15초를 넘고 서로 0.06초 안쪽', async () => {
-    const S5 = stepDir(5);
+    const S6 = stepDir(6);
     await freshGate();
-    await withServer(S5, async ({ base }) => {
+    await withServer(S6, async ({ base }) => {
       await signupSeoyeon(base);
-      timing(S5, PORT); // 서버가 막 떠서 느린 첫 요청을 걸러 낸다
-      const ms = timing(S5, PORT);
+      timing(S6, PORT); // 서버가 막 떠서 느린 첫 요청을 걸러 낸다
+      const ms = timing(S6, PORT);
       for (const value of ms) expect(value).toBeGreaterThan(150);
       expect(Math.max(...ms) - Math.min(...ms)).toBeLessThan(60);
     });
   }, 60000);
 
   it('🔴 가짜 해시와 비교한 경우는 무엇이 맞든 실패 — 조건에 user.passwordHash === null', () => {
-    const src = read(stepDir(5)('services/userService.js'));
+    const src = read(stepDir(6)('services/userService.js'));
     expect(src).toContain('const DUMMY_HASH = await bcrypt.hash(randomUUID(), PASSWORD_COST);');
     expect(src).toContain('  const matched = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);');
     expect(src).toContain('  if (!user || user.passwordHash === null || !matched) return null;');
   });
 });
 
-describe('축 ⑦ Step 6 — 72바이트', () => {
-  it('🔴 고치기 전(Step 5 판) — 긴 비밀번호로 가입 201 · 앞 24자만 같은 비밀번호로 200 · 앞 24자만 쳐도 200', async () => {
+describe('축 ⑦ Step 7 — 72바이트', () => {
+  it('🔴 고치기 전(Step 6 판) — 긴 비밀번호로 가입 201 · 앞 24자만 같은 비밀번호로 200 · 앞 24자만 쳐도 200', async () => {
     expect(new TextEncoder().encode(LONG).length).toBe(81);
     expect(LONG.length).toBe(27);
     await freshGate();
-    await withServer(stepDir(5), async ({ base }) => {
+    await withServer(stepDir(6), async ({ base }) => {
       expect((await post(base, '/api/v2/auth/signup', { emailOrPhone: 'jiwon@example.com', name: '김지원', username: 'jiwon', password: LONG })).status).toBe(201);
       expect((await post(base, '/api/v2/auth/login', { username: 'jiwon', password: SAME24 })).status).toBe(200);
       expect((await post(base, '/api/v2/auth/login', { username: 'jiwon', password: LONG.slice(0, 24) })).status).toBe(200);
@@ -359,10 +368,10 @@ describe('축 ⑦ Step 6 — 72바이트', () => {
 
   it('🔴 고친 뒤 — 같은 가입은 400(비밀번호 문장) · 이미 가입한 jiwon 은 여전히 200 · 짧게 저장한 사람은 긴 입력과 안 맞는다', async () => {
     await freshGate();
-    await withServer(stepDir(5), async ({ base }) => {
+    await withServer(stepDir(6), async ({ base }) => {
       await post(base, '/api/v2/auth/signup', { emailOrPhone: 'jiwon@example.com', name: '김지원', username: 'jiwon', password: LONG });
     });
-    await withServer(stepDir(6), async ({ base }) => {
+    await withServer(stepDir(7), async ({ base }) => {
       const again = await post(base, '/api/v2/auth/signup', { emailOrPhone: 'jiwon2@example.com', name: '김지원', username: 'jiwon2', password: LONG });
       expect(again.status).toBe(400);
       expect(again.body.error.details.properties.password.errors).toEqual(['비밀번호가 너무 길어요. 영문은 72자, 한글은 24자까지 쓸 수 있어요']);
@@ -373,12 +382,12 @@ describe('축 ⑦ Step 6 — 72바이트', () => {
       const schema = docs.paths['/api/v2/auth/signup'].post.requestBody.content['application/json'].schema;
       expect(schema.properties.password).toEqual({ type: 'string', minLength: 8, description: '8자 이상, 72바이트까지(영문 72자, 한글 24자)' });
     });
-    const { loginSchema } = await import(stepDir(6)('schemas/authSchema.js'));
+    const { loginSchema } = await import(stepDir(7)('schemas/authSchema.js'));
     expect(loginSchema.safeParse({ username: 'jiwon', password: LONG }).success).toBe(true);
   });
 });
 
-describe('축 ⑧ Step 7 — cost 올리기', () => {
+describe('축 ⑧ Step 8 — cost 올리기', () => {
   it('🔴 13 으로 올리면 맞는 로그인 한 번에 $2b$13$ · 다시 12 로 내려도 13 그대로 · 틀린 로그인은 안 바꾼다', async () => {
     await freshGate();
     const to13 = (dir) => {
@@ -652,10 +661,10 @@ describe('축 ⑮ 교안·답안의 코드 블록은 줄마다 그 파일에 실
     }
   };
   const SNAP = { 'lab/p3-40/practice1.js': 'p3-40.practice1-start.practice1.js', 'lab/p3-40/practice2.js': 'p3-40.practice2-start.practice2.js', 'lab/p3-40/practice3.js': 'p3-40.practice3-start.practice3.js' };
-  // 그 블록이 실재할 수 있는 판 — 최종 파일 · Step 2~7 커밋의 판 · 직접 해보기 시작 판
+  // 그 블록이 실재할 수 있는 판 — 최종 파일 · Step 2~8 커밋의 판 · 직접 해보기 시작 판
   const versions = (rel) => [
     existsSync(R(rel)) ? read(R(rel)) : null,
-    ...[2, 3, 4, 5, 6, 7].map((n) => showAt(commitOf(n), rel)),
+    ...[2, 3, 4, 5, 6, 7, 8].map((n) => showAt(commitOf(n), rel)),
     SNAP[rel] ? read(P(`snapshots/${SNAP[rel]}`)) : null,
   ].filter(Boolean);
 
@@ -667,9 +676,9 @@ describe('축 ⑮ 교안·답안의 코드 블록은 줄마다 그 파일에 실
       const lines = b.filter((l) => l.trim() !== '' && l.trim() !== '...');
       expect(versions(rel).some((text) => lines.every((l) => text.split('\n').includes(l))), `${rel}\n${lines.join('\n')}`).toBe(true);
     }
-  });
+  }, 30000);
 
-  it('🔴 http 블록 — auth.http 의 Step 2·6 요청 · practice1·homework1·homework2.http 통째', () => {
+  it('🔴 http 블록 — auth.http 의 Step 2·7 요청 · practice1·homework1·homework2.http 통째', () => {
     const [lecture] = DOCS.map(read);
     const blocks = fences(DOCS[0], 'http');
     expect(blocks).toHaveLength(5);
