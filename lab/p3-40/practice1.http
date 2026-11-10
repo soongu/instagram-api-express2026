@@ -1,0 +1,35 @@
+### 지금 비밀번호를 틀리게 보내기
+PATCH http://localhost:4001/members/bomi@example.com/password
+Content-Type: application/json
+
+{
+  "currentPassword": "club2025!",
+  "newPassword": "spring2026!"
+}
+
+### 비밀번호 바꾸기
+PATCH http://localhost:4001/members/bomi@example.com/password
+Content-Type: application/json
+
+{
+  "currentPassword": "club2026!",
+  "newPassword": "spring2026!"
+}
+
+### 옛 비밀번호로 로그인
+POST http://localhost:4001/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "club2026!"
+}
+
+### 새 비밀번호로 로그인
+POST http://localhost:4001/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "spring2026!"
+}
