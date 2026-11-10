@@ -1,4 +1,5 @@
 // ~/instagram-api/services/userService.js
+import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db.js';
 import { ConflictError, NotFoundError } from '../errors.js';
@@ -19,6 +20,10 @@ const digitsOnly = (phone) => phone.replaceAll('-', '');
 // 비밀번호를 해시할 때의 cost — 하나 올리면 해시 한 번에 걸리는 시간이 두 배가 된다.
 const PASSWORD_COST = 12;
 
+// 비교할 해시가 없을 때 대신 비교할 가짜 해시 — 서버가 뜰 때 한 번만 만든다.
+// 원래 글자는 아무도 모르는 무작위 값이라, 이 해시와 맞는 비밀번호는 없다고 봐도 된다.
+const DUMMY_HASH = await bcrypt.hash(randomUUID(), PASSWORD_COST);
+
 export function findUserById(id) {
   return prisma.user.findUnique({ where: { id }, select: userFields });
 }
@@ -31,12 +36,12 @@ export async function checkPassword(username, password) {
     select: { ...userFields, passwordHash: true },
   });
 
-  // 비밀번호가 없는 사람(password_hash 가 NULL)은 비밀번호로 로그인할 수 없다.
-  if (!user || user.passwordHash === null) return null;
+  // 사람이 없거나 비밀번호가 없어도(password_hash 가 NULL) 가짜 해시와 비교한다.
+  // 실패의 이유와 상관없이 compare 를 한 번씩 거쳐서, 응답이 오기까지 걸리는 시간이 같아진다.
+  const matched = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
 
-  const matched = await bcrypt.compare(password, user.passwordHash);
-
-  if (!matched) return null;
+  // 가짜 해시와 비교했으면 결과와 상관없이 실패다.
+  if (!user || user.passwordHash === null || !matched) return null;
 
   const { passwordHash, ...found } = user;
   return found;
