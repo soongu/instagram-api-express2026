@@ -12,7 +12,7 @@
 // 축 ⑦ 직접 해보기 2 — 0.25초를 넘지 않는 가장 큰 cost
 // 축 ⑧ Step 6 — 가입이 해시를 저장한다(NULL 인 사람 · 받은 글자는 DB 어디에도 없다 · 응답에는 안 나간다)
 // 축 ⑨ 같은 요청 54개 — code/p3-38 과 같다(옛 주소 · 새 주소)
-// 축 ⑩ 직접 해보기 3 — 관리자 스크립트(시작 판은 NULL · 정답 판은 해시)
+// 축 ⑩ 직접 해보기 3 — 관리자 스크립트(비밀번호를 주면 해시 · 빼면 NULL — 해시는 userService.createUser 가 한다)
 // 축 ⑪ 과제 [기초] · [응용]
 // 축 ⑫ 이 회차 학생 파일 — code/p3-38 에서 바뀐 파일
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -491,26 +491,33 @@ describe('축 ⑨ 같은 요청 54개 — code/p3-38 과 같다', () => {
 describe('축 ⑩ 직접 해보기 3 — 관리자 스크립트', () => {
   beforeAll(freshGate);
 
-  it('🔴 시작 판은 해시가 없는 사람을 만들고, 정답 판은 $2b$12$ 해시를 넣는다', async () => {
+  it('🔴 비밀번호를 주면 $2b$12$ 해시가 들어가고, password 줄을 빼고 이름만 바꿔 한 번 더 실행하면 그 사람은 NULL', async () => {
     const dir = studentDir(R);
     try {
-      writeFileSync(join(dir, 'lab/p3-39/practice3.js'), read(P('snapshots/p3-39.practice3-start.practice3.js')));
-      const start = run(join(dir, 'lab/p3-39'), 'practice3.js', env);
-      expect(start.code).toBe(0);
-      expect(start.out).toContain("가입시켰어요 { id: 6, username: 'admin.hong', profileImage: null }");
-      expect(await gate("SELECT password_hash FROM users WHERE username = 'admin.hong'")).toEqual([{ password_hash: null }]);
-      await gate("DELETE FROM users WHERE username = 'admin.hong'");
-      cpSync(LAB('practice3.js'), join(dir, 'lab/p3-39/practice3.js'));
       const done = run(join(dir, 'lab/p3-39'), 'practice3.js', env);
       expect(done.code).toBe(0);
-      expect(done.out).toContain("username: 'admin.hong'");
+      expect(done.out).toContain("가입시켰어요 { id: 6, username: 'admin.hong', profileImage: null }");
       const [{ password_hash: hash }] = await gate("SELECT password_hash FROM users WHERE username = 'admin.hong'");
       expect(hash.startsWith('$2b$12$')).toBe(true);
       expect(await bcrypt.compare('admin1234!', hash)).toBe(true);
+      const again = run(join(dir, 'lab/p3-39'), 'practice3.js', env);
+      expect(again.code).not.toBe(0);
+      expect(again.out).toContain("code: 'USERNAME_TAKEN'");
+      const answer = read(LAB('practice3.js'));
+      const noPassword = answer.replace("  password: 'admin1234!',\n", '').replace("username: 'admin.hong'", "username: 'admin.kim'").replace("phone: '010-7777-1234'", "phone: '010-7777-5678'");
+      expect(noPassword).not.toContain('password');
+      writeFileSync(join(dir, 'lab/p3-39/practice3.js'), noPassword);
+      expect(run(join(dir, 'lab/p3-39'), 'practice3.js', env).code).toBe(0);
+      expect(await gate("SELECT password_hash FROM users WHERE username = 'admin.kim'")).toEqual([{ password_hash: null }]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30000);
+
+  it('🔴 해시는 userService.createUser 한 곳에서 — authService 에는 bcrypt 가 없다', () => {
+    expect(read(R('services/userService.js'))).toContain("await bcrypt.hash(password, PASSWORD_COST)");
+    expect(read(R('services/authService.js'))).not.toContain('bcrypt');
+  });
 });
 
 describe('축 ⑪ 과제', () => {
@@ -567,6 +574,7 @@ describe('축 ⑫ 이 회차 학생 파일 — code/p3-38 에서 바뀐 파일',
       'requests/auth.http',
       'schemas/authSchema.js',
       'services/authService.js',
+      'services/userService.js',
     ]);
     expect(JSON.parse(read(R('package.json'))).dependencies.bcrypt).toBe('^6.0.0');
   });
