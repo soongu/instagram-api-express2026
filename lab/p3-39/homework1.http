@@ -1,0 +1,38 @@
+### 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "club2026!"
+}
+
+### 같은 비밀번호로 한 사람 더 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "gaeun@example.com",
+  "password": "club2026!"
+}
+
+### 이미 가입한 이메일
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "another2026"
+}
+
+### 짧은 비밀번호
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "hyein@example.com",
+  "password": "1234"
+}
+
+### 회원 목록
+GET http://localhost:4011/members
