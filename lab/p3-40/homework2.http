@@ -1,0 +1,35 @@
+### 가입
+POST http://localhost:4012/members
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "club2026!"
+}
+
+### 틀린 비밀번호로 로그인
+POST http://localhost:4012/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "club2025!"
+}
+
+### 맞는 비밀번호로 로그인
+POST http://localhost:4012/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "club2026!"
+}
+
+### 다른 이메일로 로그인
+POST http://localhost:4012/login
+Content-Type: application/json
+
+{
+  "email": "gaeun@example.com",
+  "password": "club2026!"
+}
