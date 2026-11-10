@@ -12,6 +12,7 @@ import { sendError } from './responses.js';
 import { logger } from './middlewares/logger.js';
 import { privateNoCache } from './middlewares/cache.js';
 import { apiVersion } from './middlewares/version.js';
+import { oldApiNotice } from './middlewares/deprecation.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 
@@ -22,8 +23,21 @@ const allowedOrigins = process.env.CORS_ORIGIN.split(',').map((one) => one.trim(
 app.use(logger);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: allowedOrigins }));
+
+// API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.
+app.use('/api', privateNoCache);
+
+// API 문서 — 사람은 /api/docs 화면으로, 프로그램은 /api/openapi.json 으로 읽는다.
+// 버전과 상관없는 주소라 버전을 적는 줄보다 먼저 답한다.
+app.get('/api/openapi.json', (req, res) => {
+  res.json(openapi);
+});
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
+
 // 새 주소로 온 요청이라는 것을 본문을 읽기 전에 적어 둔다 — 본문을 못 읽은 실패도 새 형식으로 답하려고.
 app.use('/api/v2', apiVersion(2));
+// 옛 주소로 온 요청에는 언제까지 받을지 알린다 — 본문을 못 읽은 실패에도 붙게 이것도 본문을 읽기 전에.
+app.use('/api', oldApiNotice);
 app.use(express.json());
 app.use(cookieParser());
 
@@ -42,18 +56,10 @@ api.use('/posts/:id/likes', likesRouter);
 api.use('/auth', authRouter);
 api.use('/uploads', uploadsRouter);
 
-// API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.
-app.use('/api', privateNoCache);
 // 새 주소 — 버전은 위에서 적어 두었다.
 app.use('/api/v2', api);
 // 옛 주소 — 이미 나간 화면들이 쓰는 주소라 그대로 둔다.
 app.use('/api', api);
-
-// API 문서 — 사람은 /api/docs 화면으로, 프로그램은 /api/openapi.json 으로 읽는다.
-app.get('/api/openapi.json', (req, res) => {
-  res.json(openapi);
-});
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
 // 어느 라우트도 답하지 않은 요청 — 에러 미들웨어에 넘겨 다른 실패와 같은 형식으로 답한다.
 app.use((req, res, next) => {
