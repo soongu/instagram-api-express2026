@@ -15,6 +15,7 @@
 // 축 ⑩ 직접 해보기 3 — 관리자 스크립트(비밀번호를 주면 해시 · 빼면 NULL — 해시는 userService.createUser 가 한다)
 // 축 ⑪ 과제 [기초] · [응용]
 // 축 ⑫ 이 회차 학생 파일 — code/p3-38 에서 바뀐 파일
+// 축 ⑬ 교안·답안의 코드 블록은 줄마다 그 파일에 실재한다 · 매번 같은 출력(hash.js)은 글자 그대로
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -605,5 +606,51 @@ describe('축 ⑫ 이 회차 학생 파일 — code/p3-38 에서 바뀐 파일',
       'services/userService.js',
     ]);
     expect(JSON.parse(read(R('package.json'))).dependencies.bcrypt).toBe('^6.0.0');
+  });
+});
+
+// ───────── 축 ⑬ 교안·답안의 코드 블록 ─────────
+describe('축 ⑬ 교안·답안의 코드 블록은 줄마다 그 파일에 실재한다', () => {
+  const TRACK_DIR = new URL('../../', ROOT).pathname;
+  const DOCS = ['part3/7-express-auth/p3-39-signup-hashing-lecture.md', 'part3/7-express-auth/p3-39-signup-hashing-answers.md'].map((f) => join(TRACK_DIR, f));
+  const fences = (file, lang) => {
+    const out = [];
+    let open = null;
+    for (const line of read(file).split('\n')) {
+      if (line.startsWith('```')) {
+        if (open) { out.push(open); open = null; } else if (line === `\`\`\`${lang}`) open = [];
+      } else if (open) open.push(line);
+    }
+    return out;
+  };
+  // 그 블록이 실재할 수 있는 판 — 최종 파일 · 직접 해보기 1 시작 판 · 과제 [기초] 답안의 «더 좋아요» 판
+  const versions = (rel) => [R(rel), rel === 'lab/p3-39/practice1.js' ? P('snapshots/p3-39.practice1-start.practice1.js') : null].filter(Boolean).map(read);
+
+  it('🔴 javascript 블록마다 한 판에 줄이 모두 있다(경로 주석이 없는 블록은 «더 좋아요» 판)', () => {
+    const all = DOCS.flatMap((d) => fences(d, 'javascript'));
+    expect(all.length).toBe(22);
+    for (const b of all) {
+      const head = b[0] ?? '';
+      const lines = b.filter((l) => l.trim() !== '' && l.trim() !== '...' && !l.startsWith('// ~/'));
+      const texts = head.startsWith('// ~/instagram-api/') ? versions(head.replace('// ~/instagram-api/', '')) : [read(P('snapshots/p3-39.homework1-recheck.js'))];
+      expect(texts.some((text) => lines.every((l) => text.includes(l))), `${head}\n${lines.join('\n')}`).toBe(true);
+    }
+  });
+
+  it('🔴 http · prisma · sql 블록 — auth.http 끝 두 요청 · homework1.http 통째 · User 모델 · migration.sql', () => {
+    const [lecture] = DOCS.map(read);
+    const http = read(R('requests/auth.http'));
+    expect(lecture).toContain(`\`\`\`http\n${http.slice(http.indexOf('### 해시로 저장되는지 볼 가입'))}\`\`\``);
+    expect(lecture).toContain(`\`\`\`http\n${read(LAB('homework1.http'))}\`\`\``);
+    expect(lecture).toContain(`\`\`\`prisma\n${read(R('prisma/schema.prisma')).match(/model User \{.*?\n\}/s)[0]}\n\`\`\``);
+    const [dir] = readdirSync(R('prisma/migrations')).filter((name) => name.endsWith('_add_user_password_hash'));
+    expect(lecture).toContain(`\`\`\`sql\n${read(R(`prisma/migrations/${dir}/migration.sql`))}\`\`\``);
+    expect(lecture).toContain(`Applying migration \`${dir}\``);
+  });
+
+  it('🔴 hash.js 의 출력 블록은 실제 출력과 글자 그대로', () => {
+    const lecture = read(DOCS[0]);
+    const { out } = run(LAB('.'), 'hash.js');
+    expect(lecture).toContain(`\`\`\`\n${out}\`\`\``);
   });
 });
