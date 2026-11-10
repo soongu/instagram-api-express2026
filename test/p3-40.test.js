@@ -630,3 +630,61 @@ describe('축 ⑭ 이 회차 학생 파일', () => {
     ]);
   });
 });
+
+describe('축 ⑮ 교안·답안의 코드 블록은 줄마다 그 파일에 실재한다', () => {
+  const TRACK_DIR = new URL('../../', ROOT).pathname;
+  const DOCS = ['part3/7-express-auth/p3-40-login-password-check-lecture.md', 'part3/7-express-auth/p3-40-login-password-check-answers.md'].map((f) => join(TRACK_DIR, f));
+  const fences = (file, lang) => {
+    const out = [];
+    let open = null;
+    for (const line of read(file).split('\n')) {
+      if (line.startsWith('```')) {
+        if (open) { out.push(open); open = null; } else if (line === `\`\`\`${lang}`) open = [];
+      } else if (open) open.push(line);
+    }
+    return out;
+  };
+  const showAt = (ref, rel) => {
+    try {
+      return execFileSync('git', ['show', `${ref}:${rel}`], { cwd: P('.'), encoding: 'utf8', stdio: 'pipe' });
+    } catch {
+      return null;
+    }
+  };
+  const SNAP = { 'lab/p3-40/practice1.js': 'p3-40.practice1-start.practice1.js', 'lab/p3-40/practice2.js': 'p3-40.practice2-start.practice2.js', 'lab/p3-40/practice3.js': 'p3-40.practice3-start.practice3.js' };
+  // 그 블록이 실재할 수 있는 판 — 최종 파일 · Step 2~7 커밋의 판 · 직접 해보기 시작 판
+  const versions = (rel) => [
+    existsSync(R(rel)) ? read(R(rel)) : null,
+    ...[2, 3, 4, 5, 6, 7].map((n) => showAt(commitOf(n), rel)),
+    SNAP[rel] ? read(P(`snapshots/${SNAP[rel]}`)) : null,
+  ].filter(Boolean);
+
+  it('🔴 javascript 블록마다 한 판에 줄이 모두 있다(수업 화면 블록은 instagram-next/.verify 가 본다)', () => {
+    const all = DOCS.flatMap((d) => fences(d, 'javascript')).filter((b) => (b[0] ?? '').startsWith('// ~/instagram-api/'));
+    expect(all.length).toBe(23);
+    for (const b of all) {
+      const rel = b[0].replace('// ~/instagram-api/', '');
+      const lines = b.filter((l) => l.trim() !== '' && l.trim() !== '...');
+      expect(versions(rel).some((text) => lines.every((l) => text.split('\n').includes(l))), `${rel}\n${lines.join('\n')}`).toBe(true);
+    }
+  });
+
+  it('🔴 http 블록 — auth.http 의 Step 2·6 요청 · practice1·homework1·homework2.http 통째', () => {
+    const [lecture] = DOCS.map(read);
+    const blocks = fences(DOCS[0], 'http');
+    expect(blocks).toHaveLength(5);
+    const http = read(R('requests/auth.http')).split('\n');
+    for (const b of blocks.filter((x) => ['### 로그인', '### 긴 비밀번호로 가입'].includes(x[0]))) for (const l of b.filter((x) => x.trim() !== '...')) expect(http, l).toContain(l);
+    for (const f of ['practice1.http', 'homework1.http', 'homework2.http']) expect(lecture).toContain(`\`\`\`http\n${read(LAB(f))}\`\`\``);
+  });
+
+  it('🔴 실행 출력 — practice3 일곱 줄은 글자 그대로 · timing·확인 스크립트 출력은 그 파일의 라벨 그대로', () => {
+    const [lecture, answers] = DOCS.map(read);
+    expect(lecture).toContain(`\`\`\`\n${run(LAB('.'), 'practice3.js').out}\`\`\``);
+    const labels = (file) => [...read(LAB(file)).matchAll(/console\.log\('([^']*)',/g)].map((m) => m[1]);
+    for (const l of labels('timing.js')) expect(lecture).toMatch(new RegExp(`\n${l} \\d+ ms\n`));
+    for (const l of labels('practice2-check.js')) expect(lecture).toContain(`\n${l} 200 `);
+    for (const l of labels('homework1-timing.js')) expect(answers).toMatch(new RegExp(`\n${l} \\d+ ms\n`));
+    expect(lecture).toContain('비밀번호를 정했어요 {\n  id: 2,\n  username: \'jaehoon\',\n  profileImage: \'https://picsum.photos/seed/jaehoon/40/40\'\n}');
+  });
+});
