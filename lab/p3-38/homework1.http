@@ -1,0 +1,8 @@
+### API 문서
+GET http://localhost:4011/api/openapi.json
+
+### 옛 주소로 목록
+GET http://localhost:4011/api/notices
+
+### 새 주소로 목록
+GET http://localhost:4011/api/v2/notices

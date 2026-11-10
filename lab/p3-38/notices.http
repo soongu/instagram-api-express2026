@@ -1,0 +1,17 @@
+### 옛 주소로 목록
+GET http://localhost:4003/api/notices
+
+### 새 주소로 목록
+GET http://localhost:4003/api/v2/notices
+
+### 옛 주소의 없는 주소
+GET http://localhost:4003/api/notice
+
+### 새 주소의 없는 주소
+GET http://localhost:4003/api/v2/notice
+
+### 옛 주소로 깨진 JSON 보내기
+POST http://localhost:4003/api/notices
+Content-Type: application/json
+
+{"title":
