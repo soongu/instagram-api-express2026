@@ -8,6 +8,7 @@
 // 축 ② Step 2 — 맞는 비밀번호 200 · 틀리면 401 · 해시가 NULL 인 사람은 500(«data and hash arguments required») · 응답에 해시가 없다
 // 축 ③ Step 3·4 — NULL 은 401(compare 전에 끝나 빠르다) · 관리자 스크립트로 정하면 200 · 없는 이름이면 USER_NOT_FOUND
 // 축 ④ Step 4 — 시드: 다섯 명 모두 $2b$12$ · «이름1234» 와 맞는다 · 출력은 한 줄 그대로
+//        교안의 두 명령(확인용 DB instagram_seed)을 이름만 바꿔 그대로 — DB 를 만든다 · 시드 한 줄 · DATABASE_URL 이 .env 를 이긴다 · SQL 결과 표
 // 축 ⑤ Step 5 — 문장이 하나로(옛 주소·새 주소) · timing.js: 없는 이름·비밀번호가 없는 사람은 빠르고 틀린 비밀번호만 느리다
 // 축 ⑥ Step 6 — timing.js: 셋이 비슷하다 · 가짜 해시와 비교한 경우는 실패
 // 축 ⑦ Step 7 — 고치기 전: 긴 비밀번호로 가입 → 앞 24자만 같아도 200 · 고친 뒤: 가입 400(문장) · 이미 가입한 사람은 그대로 · 문서의 설명
@@ -21,7 +22,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
@@ -37,6 +38,9 @@ const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'post
 const TPL_DB = 'p340_tpl';
 const GATE_DB = 'p340_gate';
 const SEED_DB = 'p340_seed';
+// 교안의 두 명령을 그대로 돌리는 확인용 DB · 일부러 .env 에 적는 다른 이름(명령 앞 DATABASE_URL 이 지면 이 DB 가 생긴다)
+const SEED_CMD_DB = 'p340_seedcmd';
+const ENVFILE_DB = 'p340_envfile';
 const GATE_URL = `postgresql://postgres:postgres@localhost:5432/${GATE_DB}`;
 const PORT = 3910;
 const LAB_PORT = 3912;
@@ -162,7 +166,7 @@ const SAME24 = `${LONG.slice(0, 24)}람이에요`;
 
 beforeAll(async () => {
   await admin(async (client) => {
-    for (const name of [GATE_DB, TPL_DB, SEED_DB]) {
+    for (const name of [GATE_DB, TPL_DB, SEED_DB, SEED_CMD_DB, ENVFILE_DB]) {
       await kick(client, name);
       await client.query(`DROP DATABASE IF EXISTS ${name}`);
     }
@@ -183,7 +187,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await admin(async (client) => {
-    for (const name of [GATE_DB, TPL_DB, SEED_DB]) {
+    for (const name of [GATE_DB, TPL_DB, SEED_DB, SEED_CMD_DB, ENVFILE_DB]) {
       await kick(client, name);
       await client.query(`DROP DATABASE IF EXISTS ${name}`);
     }
@@ -302,6 +306,45 @@ describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
       await db.end();
     }
   }, 60000);
+
+  it('🔴 시드 — 교안의 두 명령 그대로(DB 이름만 바꿔) · 확인용 DB 를 만든다 · 시드 한 줄 · 명령 앞 DATABASE_URL 이 .env 를 이긴다 · SQL 결과 표', async () => {
+    const S4 = stepDir(4);
+    const lecture = read(join(new URL('../../', ROOT).pathname, 'part3/7-express-auth/p3-40-login-password-check-lecture.md'));
+    const fence = lecture.split('```bash\n').slice(1).map((b) => b.split('\n```')[0]).find((b) => b.includes('instagram_seed'));
+    expect(fence.split('\n')).toEqual([
+      'DATABASE_URL="postgresql://postgres:postgres@localhost:5432/instagram_seed" npx prisma migrate deploy',
+      'DATABASE_URL="postgresql://postgres:postgres@localhost:5432/instagram_seed" npm run seed',
+    ]);
+    const dir = studentDir(S4);
+    dirs.push(dir);
+    cpSync(S4('prisma'), join(dir, 'prisma'), { recursive: true });
+    cpSync(S4('prisma.config.js'), join(dir, 'prisma.config.js'));
+    // 학생의 .env 는 수업 DB 를 가리킨다 — 판정은 다른 이름을 둬서, 명령 앞의 값이 지면 그 DB 가 생겨 드러나게 한다.
+    writeFileSync(join(dir, '.env'), `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/${ENVFILE_DB}"\n`);
+    const cmdEnv = { HOME: process.env.HOME, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, npm_config_update_notifier: 'false' };
+    const outs = fence.replaceAll('instagram_seed', SEED_CMD_DB).split('\n')
+      .map((cmd) => execFileSync('/bin/bash', ['-c', `${cmd} 2>&1`], { cwd: dir, encoding: 'utf8', env: cmdEnv }));
+    expect(outs[0]).toContain(`PostgreSQL database ${SEED_CMD_DB} created at localhost:5432`);
+    expect(outs[0]).toContain('All migrations have been successfully applied.');
+    expect(outs[1].trimEnd().split('\n').at(-1)).toBe('사람 5명, 게시물 5개, 사진 8장, 댓글 9개, 답글 3개를 넣었어요.');
+    const made = await admin(async (client) => (await client.query(
+      'SELECT datname FROM pg_database WHERE datname = ANY($1) ORDER BY datname', [[SEED_CMD_DB, ENVFILE_DB]])).rows.map((row) => row.datname));
+    expect(made).toEqual([SEED_CMD_DB]);
+    // 교안의 쿼리를 그대로 보내 결과 표(머리글 두 줄 아래)와 맞댄다
+    const query = 'SELECT username, left(password_hash, 7) AS password_hash FROM users ORDER BY id;';
+    expect(lecture).toContain(`\`\`\`sql\n${query}\n\`\`\``);
+    const table = lecture.split(`${query}\n\`\`\`\n\n\`\`\`\n`)[1].split('\n```')[0].split('\n');
+    expect(table.slice(0, 2)).toEqual([' username   password_hash', ' ========   =============']);
+    const db = new pg.Client({ ...ADMIN, database: SEED_CMD_DB });
+    await db.connect();
+    try {
+      const { rows } = await db.query(query);
+      expect(table.slice(2).map((line) => line.trim().split(/\s+/))).toEqual(rows.map((row) => [row.username, row.password_hash]));
+      expect(table[2]).toBe(' dahye      $2b$12$');
+    } finally {
+      await db.end();
+    }
+  }, 120000);
 });
 
 describe('축 ⑤ Step 5 — 문장은 하나 · 시간은 다르다', () => {
