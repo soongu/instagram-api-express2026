@@ -294,11 +294,16 @@ describe('축 ⑥ — requests/auth.http 를 httpYac 으로', () => {
 describe('축 ⑦ — Step 6: 화면이 막은 값을 `.http` 로 보내면 서버가 400 으로 막는다(main 의 auth.http 끝)', () => {
   const NAME = '### 규칙에 안 맞는 값으로 가입';
 
-  it('🔴 교안의 요청 블록이 main 의 `requests/auth.http` 맨 끝 요청과 글자까지 같다', () => {
+  // 🚨 2026-11-10 p3-39 — 그 회차가 auth.http 끝에 가입 요청 둘을 더했다. «맨 끝» 이라는 위치 대신 «그 이름의 요청 하나가 통째로 같은가» 를 본다.
+  it('🔴 교안의 요청 블록이 main 의 `requests/auth.http` 의 그 요청과 글자까지 같다', () => {
     const block = lectureFence('http', NAME);
     expect(block, '교안 Step 6 에 그 요청 블록이 없다').not.toBeNull();
     const file = read(P('requests/auth.http'));
-    expect(file.endsWith(`${block.join('\n')}\n`)).toBe(true);
+    const joined = `${block.join('\n')}\n`;
+    const at = file.indexOf(joined);
+    expect(at, 'auth.http 에 그 요청이 없다').toBeGreaterThan(-1);
+    const rest = file.slice(at + joined.length);
+    expect(rest === '' || rest.startsWith('\n### ')).toBe(true);
   });
 
   it('🔴 httpYac 으로 보내면 400 · 본문이 교안의 400 블록과 같다 · 행은 안 생긴다', async () => {
