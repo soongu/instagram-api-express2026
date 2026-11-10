@@ -20,7 +20,7 @@ started = performance.now();
 for (const password of passwords) sha256(salted[0].salt + password);
 const saltedMs = performance.now() - started;
 
-// bcrypt 는 20번만 해시해 보고 10만 번으로 늘려 짐작한다. 솔트가 해시 안에 들어 있어 이것도 사람마다 따로다.
+// bcrypt 는 20번만 해시해 보고 10만 번으로 늘려 짐작한다. bcrypt 도 해시할 때마다 솔트를 새로 만드니 이것도 사람마다 따로다.
 started = performance.now();
 for (const password of passwords.slice(0, 20)) await bcrypt.hash(password, 12);
 const bcryptMs = ((performance.now() - started) / 20) * passwords.length;
