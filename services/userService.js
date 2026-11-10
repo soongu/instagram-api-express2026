@@ -19,12 +19,26 @@ const digitsOnly = (phone) => phone.replaceAll('-', '');
 // 비밀번호를 해시할 때의 cost — 하나 올리면 해시 한 번에 걸리는 시간이 두 배가 된다.
 const PASSWORD_COST = 12;
 
-export function findUserByUsername(username) {
-  return prisma.user.findUnique({ where: { username }, select: userFields });
-}
-
 export function findUserById(id) {
   return prisma.user.findUnique({ where: { id }, select: userFields });
+}
+
+// 로그인 — 사용자 이름과 비밀번호가 맞으면 그 사람을, 아니면 null 을 돌려준다.
+// 해시는 이 함수 안에서만 꺼내 쓰고, 돌려줄 때는 응답에 실을 컬럼만 남긴다.
+export async function checkPassword(username, password) {
+  const user = await prisma.user.findUnique({
+    where: { username },
+    select: { ...userFields, passwordHash: true },
+  });
+
+  if (!user) return null;
+
+  const matched = await bcrypt.compare(password, user.passwordHash);
+
+  if (!matched) return null;
+
+  const { passwordHash, ...found } = user;
+  return found;
 }
 
 export async function createUser({ password, ...data }) {

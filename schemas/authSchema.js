@@ -1,9 +1,10 @@
 // ~/instagram-api/schemas/authSchema.js
 import { z } from 'zod';
 
-// 로그인은 아직 비밀번호를 확인하지 않는다 — 이름 하나만 받는다.
+// 로그인은 사용자 이름과 비밀번호를 함께 받는다.
 export const loginSchema = z.object({
   username: z.string().min(1),
+  password: z.string().min(1),
 });
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
