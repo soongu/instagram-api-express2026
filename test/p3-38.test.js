@@ -532,3 +532,195 @@ describe('축 ⑧ 교안·답안의 백엔드 코드 블록은 줄마다 그 파
     }
   });
 });
+
+// ───────── 축 ⑨ 학생 낭독 집중 검수(2026-11-10) — 학생 상태에서 따라 한 결과 ─────────
+// 학생 상태 — 게시물 최신순 9·1·2·3·4·5 · 9번은 HTTP 캐싱 회차에 jaehoon(2번)이 눌러 둔 하트 · 다음 사람 37.
+describe('축 ⑨ 학생 낭독 집중 검수', () => {
+  const TRACK_DIR = new URL('../../', ROOT).pathname;
+  const LEC = () => read(join(TRACK_DIR, 'part3/7-express-auth/p3-38-screen-to-v2-lecture.md'));
+  const ANS = () => read(join(TRACK_DIR, 'part3/7-express-auth/p3-38-screen-to-v2-answers.md'));
+  const bodyOnly = (md) => md.replace(/<details>[\s\S]*?<\/details>/g, '');
+  const prior = (rel) => bodyOnly(read(join(TRACK_DIR, rel)));
+  const raw = (rel) => read(join(TRACK_DIR, rel));
+  const NEXT_REPO = P('../instagram-next');
+  const nextFile = (rel) => execFileSync('git', ['-C', NEXT_REPO, 'show', `code/p3-38:${rel}`], { encoding: 'utf8' });
+
+  it('Step 2 하트 — 맨 위 카드가 이미 누른 하트면 처음은 DELETE(1 → 0) · 다시 누르면 PUT(0 → 1)', async () => {
+    await freshGate();
+    await withServer(R, async ({ base }) => {
+      const made = await getRes(`${base}/api/v2/posts`, json('POST', { authorId: 3, content: '제주 왔어요 🌊', imageUrls: ['/images/post-8.jpg'] }));
+      const id = made.body.data.id;
+      await getRes(`${base}/api/v2/posts/${id}/likes/2`, { method: 'PUT' });
+      const top = (await getRes(`${base}/api/v2/posts?userId=2&limit=2`)).body.data.items[0];
+      expect([top.id, top.liked, top.likeCount]).toEqual([id, true, 1]);
+      expect((await getRes(`${base}/api/v2/posts/${id}/likes/2`, { method: 'DELETE' })).body).toEqual({ data: { liked: false, likeCount: 0 } });
+      expect((await getRes(`${base}/api/v2/posts/${id}/likes/2`, { method: 'PUT' })).body).toEqual({ data: { liked: true, likeCount: 1 } });
+    });
+    // 9번 하트를 누른 것은 HTTP 캐싱 회차 본문이다.
+    expect(prior('part3/6-api-design/p3-35-http-caching-lecture.md')).toContain('맨 위 카드(지난 시간에 올린 9번 게시물)의 빈 하트를 눌러 볼게요.');
+    const md = LEC();
+    expect(md).not.toContain('하트를 눌러 보면 `PUT /api/v2/posts/…/likes/2`가 가고');
+    expect(md).toContain('누르면 `DELETE /api/v2/posts/9/likes/2`가 가고 좋아요 수가 1에서 0으로 바뀌어요. 한 번 더 누르면 `PUT /api/v2/posts/9/likes/2`가 가고 1로 돌아와요.');
+  }, 60000);
+
+  it('Step 2 끝 — 고친 것은 성공 쪽뿐이라는 말이 있다(로그인 실패 문장은 Step 4 까지 «(401)»)', () => {
+    expect(LEC()).toContain('실패한 응답을 읽는 쪽은 아직 옛 형식을 찾아요');
+  });
+
+  it('Step 4 표 — «5곳» 은 상태 코드나 서버 문장을 읽는 곳 · 그 기준을 말한다', () => {
+    const md = LEC();
+    expect(md).toContain('실패한 응답에서 상태 코드나 서버 문장을 읽는 곳을 모아 보면 5곳이고');
+    // 응답에서 아무것도 안 읽고 실패만 다루는 곳 — 피드의 고정 문장 · 좋아요 되돌리기 · error.js
+    expect(nextFile('components/FeedList.jsx')).toContain('게시물을 불러오지 못했습니다.');
+    expect(nextFile('hooks/useLikePost.js')).toContain('onError');
+    expect(md).toContain('응답에서 아무것도 읽지 않으니 빼고 셌어요');
+  });
+
+  it('Step 5 사용자 이름 장면 — 교안이 준 값으로 하면 창 B 201 · 창 A 409 USERNAME_TAKEN', async () => {
+    const md = LEC();
+    expect(md).toContain('창 A는 `010-5151-0003`과 `yuri03`으로, 창 B는 번호는 `010-5151-0004`로 다르게, 사용자 이름은 `yuri03`으로 같게 해서');
+    await freshGate();
+    await withServer(R, async ({ base }) => {
+      const b = await getRes(`${base}/api/v2/auth/signup`, json('POST', { emailOrPhone: '010-5151-0004', name: '한다른', username: 'yuri03', password: 'other1234' }));
+      expect(b.status).toBe(201);
+      const a = await getRes(`${base}/api/v2/auth/signup`, json('POST', { emailOrPhone: '010-5151-0003', name: '최유리', username: 'yuri03', password: 'yuri1234' }));
+      expect([a.status, a.body.error.code, a.body.error.message]).toEqual([409, 'USERNAME_TAKEN', '이미 쓰고 있는 사용자 이름이에요']);
+    });
+  }, 60000);
+
+  it('Step 6 legacyCursor — 날짜 상수 둘 위의 주석도 지운다 · import 줄을 더한다', () => {
+    const before = read(B('middlewares/legacyCursor.js'));
+    const after = read(R('middlewares/legacyCursor.js'));
+    const COMMENT = '// 옛 커서를 언제부터 쓰지 말라고 했는지와, 언제부터 받지 않을지.';
+    expect(before).toContain(`${COMMENT}\nconst DEPRECATED_AT`);
+    expect(after).not.toContain(COMMENT);
+    expect(after).toContain("import { setDeprecation } from './deprecation.js';");
+    expect(LEC()).toContain('날짜 상수 둘과 그 위 주석 한 줄을 지우고');
+  });
+
+  it('Step 6 — 고치기 전에 적어 둔 옛 주소 «게시물 목록» 의 ETag 가 고친 뒤에도 같다(헤더 셋만 더해진다)', async () => {
+    await freshGate();
+    let was;
+    await withServer(B, async ({ base }) => {
+      const res = await getRes(`${base}/api/posts?limit=2`);
+      was = { etag: res.headers.get('etag'), body: res.body, notice: noticeOf(res) };
+    });
+    await withServer(R, async ({ base }) => {
+      const res = await getRes(`${base}/api/posts?limit=2`);
+      expect(res.headers.get('etag')).toBe(was.etag);
+      expect(res.body).toEqual(was.body);
+      expect([was.notice, noticeOf(res)]).toEqual([NONE, NOTICE]);
+    });
+    expect(read(R('requests/envelope.http'))).toContain('### 게시물 목록\nGET {{api}}/posts?limit=2');
+    const md = LEC();
+    expect(md).toContain('«게시물 목록»을 보내, 응답 헤더의 `ETag` 값을 적어 두세요');
+    expect(md).toContain('`ETag`는 적어 둔 값과 같아요');
+  }, 60000);
+
+  it('Step 6 🙋 — 문서 두 줄만 올리고 privateNoCache 를 아래에 두면 문서 응답에서 Cache-Control 이 빠진다 · 함께 올리면 붙는다', async () => {
+    const app = read(R('app.js'));
+    const CACHE = "// API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.\napp.use('/api', privateNoCache);\n\n";
+    expect(app).toContain(CACHE);
+    const wrong = app.replace(CACHE, '').replace('// 새 주소 — 버전은 위에서 적어 두었다.', `${CACHE}// 새 주소 — 버전은 위에서 적어 두었다.`);
+    expect(wrong).not.toBe(app);
+    const tmp = mkdtempSync(join(tmpdir(), 'p338-cache-'));
+    writeFileSync(join(tmp, 'app.js'), wrong);
+    try {
+      await freshGate();
+      await withServer((name) => (name === 'app.js' ? join(tmp, 'app.js') : R(name)), async ({ base }) => {
+        expect((await getRes(`${base}/api/openapi.json`)).headers.get('cache-control')).toBeNull();
+        expect((await getRes(`${base}/api/posts?limit=2`)).headers.get('cache-control')).toBe('private, no-cache');
+      });
+      await withServer(R, async ({ base }) => {
+        expect((await getRes(`${base}/api/openapi.json`)).headers.get('cache-control')).toBe('private, no-cache');
+      });
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+    expect(LEC()).toContain('문서 두 줄만 올리고 이 줄을 아래에 두면 문서 응답에서 `Cache-Control`이 빠져요.');
+  }, 60000);
+
+  it('Step 7 — 새 주소 게시물 400 의 에러 코드를 교안이 말한다(블록에 못 실은 넷째)', () => {
+    const doc = read(R('docs/openapi.js'));
+    expect(doc).toContain("errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')");
+    expect(doc).toContain("errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'USER_NOT_FOUND')");
+    const md = LEC();
+    expect(md).toContain('목록의 400은 `VALIDATION_FAILED`와 깨진 커서의 `INVALID_CURSOR`');
+    expect(md).toContain('`USER_NOT_FOUND`');
+  });
+
+  it('Step 7 — 가입 409 의 Enum 세 값은 FIELD 의 키 셋과 같다(빠뜨린 코드도 이 대조에서 드러난다)', () => {
+    const doc = read(R('docs/openapi.js'));
+    const enum409 = doc.match(/409: \{[^\n]*errorOf\(([^)]*)\)/)[1].match(/'([A-Z_]+)'/g).map((s) => s.slice(1, -1));
+    const form = nextFile('app/(auth)/_components/SignupForm.jsx');
+    const field = form.slice(form.indexOf('const FIELD = {'), form.indexOf('};', form.indexOf('const FIELD = {'))).match(/^ {2}([A-Z_]+):/gm).map((s) => s.trim().slice(0, -1));
+    expect([...field].sort()).toEqual([...enum409].sort());
+    expect(LEC()).toContain('`FIELD`에 적은 키 셋과 같은지');
+  });
+
+  it('Step 7 — Object.hasOwn 의 뜻 · 계약 테스트의 뜻을 그 자리에서 준다', () => {
+    const md = LEC();
+    expect(md).toContain('`Object.hasOwn(객체, 키)`는 그 객체에 그 키가 있는지 알려 줘요.');
+    expect(raw('part3/6-api-design/p3-34-versioning-docs-answers.md')).toContain('계약 테스트(contract test)라고 불러요');
+    expect(md).not.toContain('버저닝을 배울 때 이야기한 계약 테스트');
+    expect(md).toContain('실제 응답을 문서의 스키마로 검사하는 테스트');
+  });
+
+  it('과제 [기초] — 옛 주소의 성공 응답은 배열 그대로 · 확인 6 이 그 스키마를 본다', async () => {
+    await runLab(read(R('lab/p3-38/homework1.js')), LAB_PORT, async (base) => {
+      const doc = (await getRes(`${base}/api/openapi.json`)).body;
+      expect(doc.paths['/api/notices'].get.responses[200].content['application/json'].schema.type).toBe('array');
+      expect(doc.paths['/api/v2/notices'].get.responses[200].content['application/json'].schema.required).toEqual(['data']);
+    });
+    const md = LEC();
+    expect(md).toContain('옛 주소의 성공 응답은 지금 보내는 대로 배열 그대로 적어요');
+    expect(md).toContain('`"type": "array"`');
+  }, 30000);
+
+  it('과제 [응용] — 확인 5 에 «버튼이 켜져 있고 400» · «별명만 어긴 값» · 답안에 extend 와 z.object', () => {
+    const md = LEC();
+    expect(md).toContain('«구독하기» 버튼은 켜져 있어야 하고');
+    expect(md).toContain('별명만 규칙을 어긴 채 다시 눌러요');
+    expect(md).toContain('`subscribeSchema.extend({ … })`');
+    expect(ANS()).toContain('`z.object`로 두 필드를 다시 적어도 돼요');
+  });
+
+  it('잇기 — 앞 회차 본문(토글 밖)에 있는 것을 받는다', () => {
+    const md = LEC();
+    // p3-24 Step 7 — axios 와 나란히 놓고 «본문 안을 한 번 더 열어 볼 필요도 없어요»
+    expect(prior('part3/4-react-auth/p3-24-fetch-wrapper-lecture.md')).toContain('그 본문 안을 한 번 더 열어 볼 필요도 없어요');
+    expect(md).toContain('«그 본문 안을 한 번 더 열어 볼 필요도 없어요»');
+    // p3-22 Step 8 — 그때는 같은 사용자 이름 · p3-37 Step 2 — 코드로 짚은 그 장면
+    expect(prior('part3/4-react-auth/p3-22-signup-lecture.md')).toContain('`haneul.lee@example.com`·`이하늘`·`haneul`·`haneul1234`로 먼저 가입해요');
+    expect(md).not.toContain('같은 번호로 먼저 가입하는 장면을 만들어요');
+    expect(md).toContain('그때는 사용자 이름이 겹쳤는데');
+    expect(prior('part3/7-express-auth/p3-37-response-envelope-lecture.md')).toContain('화면이 요청을 두 번 더 보내서 알아내는 셈이에요.');
+    expect(md).toContain('지난 시간 Step 2에서 코드로만 짚은 장면이에요.');
+    // p3-34 Step 4 — /api/v2/zzz 의 404 에도 v1 헤더
+    expect(prior('part3/6-api-design/p3-34-versioning-docs-lecture.md')).toContain('`/api/v2/zzz`처럼 없는 주소로 온 요청도 v1 라우터를 지나가서, 그 404에도 두 헤더가 붙어요.');
+    expect(md).toContain('`/api/v2/zzz`의 404에까지');
+    // Step 3 — 복사가 아니라 옮기는 이유
+    expect(md).toContain('같은 검색에 형식이 다른 주소가 둘 생기기 때문이에요');
+  });
+
+  it('잇기 — 토글·답안·과제에만 있던 것은 출처를 밝힌다', () => {
+    const md = LEC();
+    // p3-37 🤔 해설 — 기준 문장과 로그인 실패 합치기는 토글 안에만 있다
+    const p337 = raw('part3/7-express-auth/p3-37-response-envelope-lecture.md');
+    expect(p337).toContain('**기준은 «받는 쪽이 그 코드를 보고 다른 일을 하는가»예요.**');
+    expect(bodyOnly(p337)).not.toContain('**기준은 «받는 쪽이 그 코드를 보고 다른 일을 하는가»예요.**');
+    expect(md).toContain('지난 시간 «같이 생각해보기»에서 에러 코드를 얼마나 잘게 나눌지 이야기하면서');
+    expect(md).toContain('지난 시간 «같이 생각해보기»에서 비밀번호가 생기면');
+    // p3-24 🤔 해설 — 서버가 문장도 지어 보낸다
+    expect(md).toContain('서버가 보낸 문장을 그대로 보여 줘도 될지 이야기하면서');
+    // p3-37 생각해볼 주제 1 해설 — 섞어 쓰기
+    expect(raw('part3/7-express-auth/p3-37-response-envelope-answers.md')).toContain('실무에서는 둘을 섞는 경우가 많아요.');
+    expect(md).toContain('지난 시간 생각해볼 주제 1의 해설이 실무에서 많이 쓴다고 소개한 방식');
+    // p3-34 과제 [응용] — 한 문서에 두 버전
+    expect(raw('part3/6-api-design/p3-34-versioning-docs-lecture.md')).toContain('### [응용] 버전 둘의 문서');
+    expect(md).toContain('버저닝을 배운 시간의 과제 [응용]에서');
+    // 생각해볼 주제 1 · 3 — 앞 회차 주제를 받는다
+    expect(md).toContain('지난 시간 생각해볼 주제 1에서');
+    expect(ANS()).toContain('버저닝을 배울 때 생각해볼 주제 1');
+  });
+});
