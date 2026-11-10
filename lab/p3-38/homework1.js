@@ -81,8 +81,8 @@ const data = (schema) => ({ type: 'object', required: ['data'], properties: { da
 // 그 응답이 보낼 수 있는 에러 코드만 적는다 — MESSAGES 에 없는 코드를 적으면 서버가 뜨지 않는다.
 function errorOf(...codes) {
   for (const code of codes) {
-    if (!(code in MESSAGES)) {
-      throw new Error(`MESSAGES 에 없는 에러 코드예요: ${code}`);
+    if (!Object.hasOwn(MESSAGES, code)) {
+      throw new Error(`MESSAGES에 없는 에러 코드예요: ${code}`);
     }
   }
 
@@ -99,7 +99,7 @@ function errorOf(...codes) {
   };
 }
 
-const OLD = `옛 주소예요. ${SUNSET_AT.toISOString().slice(0, 10)}에 끝나요. /api/v2/notices 로 옮기세요.`;
+const OLD = `옛 주소예요. ${SUNSET_AT.toISOString().slice(0, 10)}에 끝나요. /api/v2/notices 주소로 옮기세요.`;
 const titleBody = { required: true, content: json({ type: 'object', properties: { title: { type: 'string' } } }) };
 
 const openapi = {

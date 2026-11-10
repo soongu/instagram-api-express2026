@@ -368,7 +368,7 @@ describe('축 ⑤ MESSAGES 에 없는 코드를 문서에 적으면', () => {
       writeFileSync(docs, src.replace("errorOf('USERNAME_TAKEN', 'EMAIL_TAKEN', 'PHONE_TAKEN')", "errorOf('USERNAME_TAKEN', 'EMAIL_TAKEN', 'PHONE_TAKN')"));
       const out = runScript(dir, 'app.js');
       expect(out.code).not.toBe(0);
-      expect(out.out).toContain('Error: MESSAGES 에 없는 에러 코드예요: PHONE_TAKN');
+      expect(out.out).toContain('Error: MESSAGES에 없는 에러 코드예요: PHONE_TAKN');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -464,7 +464,7 @@ describe('축 ⑦ 과제 [기초] — 공지 서버의 문서', () => {
       expect(Object.keys(doc.body.paths)).toEqual(['/api/v2/notices', '/api/notices']);
       expect(doc.body.paths['/api/v2/notices'].post.responses[400].content['application/json'].schema.properties.error.properties.code.enum).toEqual(['TITLE_REQUIRED', 'INVALID_BODY']);
       expect(doc.body.paths['/api/notices'].get.deprecated).toBe(true);
-      expect(doc.body.paths['/api/notices'].get.description).toBe('옛 주소예요. 2027-03-01에 끝나요. /api/v2/notices 로 옮기세요.');
+      expect(doc.body.paths['/api/notices'].get.description).toBe('옛 주소예요. 2027-03-01에 끝나요. /api/v2/notices 주소로 옮기세요.');
       expect(doc.body.components.schemas.ErrorCode.enum).toEqual(['TITLE_REQUIRED', 'INVALID_BODY', 'ROUTE_NOT_FOUND', 'INTERNAL_ERROR']);
       expect(noticeOf(await getRes(`${base}/api/notices`))).toEqual(LAB_NOTICE);
       expect(noticeOf(await getRes(`${base}/api/docs/`))).toEqual(NONE);
@@ -478,4 +478,57 @@ describe('축 ⑦ 과제 [기초] — 공지 서버의 문서', () => {
     expect(wrong).not.toBe(src);
     await runLab(wrong, LAB_PORT, async (base) => expect(noticeOf(await getRes(`${base}/api/openapi.json`))).toEqual(LAB_NOTICE));
   }, 30000);
+});
+
+// ───────── 축 ⑧ 교안·답안의 백엔드 코드 블록 ─────────
+describe('축 ⑧ 교안·답안의 백엔드 코드 블록은 줄마다 그 파일에 실재한다', () => {
+  const TRACK_DIR = new URL('../../', ROOT).pathname;
+  const DOCS = ['part3/7-express-auth/p3-38-screen-to-v2-lecture.md', 'part3/7-express-auth/p3-38-screen-to-v2-answers.md'].map((f) => join(TRACK_DIR, f));
+  const blocks = (file) => {
+    const out = [];
+    let open = null;
+    for (const line of read(file).split('\n')) {
+      if (line.startsWith('```')) {
+        if (open) { out.push(open); open = null; } else if (line === '```javascript') open = [];
+      } else if (open) open.push(line);
+    }
+    return out.filter((b) => (b[0] ?? '').startsWith('// ~/instagram-api/'));
+  };
+  // 그 블록이 실재할 수 있는 판 — 최종 파일 · Step 6 중간 판(app.js) · 직접 해보기 3 시작 판(notices.js)
+  const versions = (rel) => [R(rel), rel === 'app.js' ? P('snapshots/p3-38.step6-docs-below.app.js') : null,
+    rel === 'lab/p3-38/notices.js' ? P('snapshots/p3-38.practice3-start.notices.js') : null].filter(Boolean).map(read);
+
+  it('블록마다 한 판에 줄이 모두 있다', () => {
+    const all = DOCS.flatMap(blocks);
+    expect(all.length).toBe(11);
+    for (const b of all) {
+      const rel = b[0].replace('// ~/instagram-api/', '');
+      const lines = b.slice(1).filter((l) => l.trim() !== '' && l.trim() !== '...');
+      expect(versions(rel).some((text) => lines.every((l) => text.includes(l))), `${b[0]}\n${lines.join('\n')}`).toBe(true);
+    }
+  });
+
+  it('deprecation.js 블록은 파일 통째 · requests/deprecation.http 블록은 byte 그대로', () => {
+    const lecture = read(DOCS[0]);
+    const dep = read(R('middlewares/deprecation.js'));
+    expect(lecture).toContain(`\`\`\`javascript\n${dep}\`\`\``);
+    expect(lecture).toContain(`\`\`\`http\n${read(R('requests/deprecation.http'))}\`\`\``);
+  });
+
+  it('Step 7 의 서버가 멈추는 출력 — 교안 블록의 줄이 실제 출력에 있다', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'p338-typo2-'));
+    try {
+      for (const name of STUDENT_FILES) if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
+      symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+      const docs = join(dir, 'docs/openapi.js');
+      writeFileSync(docs, read(docs).replace("'EMAIL_TAKEN', 'PHONE_TAKEN')", "'EMAIL_TAKEN', 'PHONE_TAKN')"));
+      const out = runScript(dir, 'app.js').out.replaceAll(`file://${dir}`, 'file:///Users/hong/instagram-api').replaceAll(`file:///private${dir}`, 'file:///Users/hong/instagram-api');
+      const lecture = read(DOCS[0]);
+      const i = lecture.indexOf('```bash\nfile:///Users/hong/instagram-api/docs/openapi.js:20');
+      const block = lecture.slice(i + 8, lecture.indexOf('```', i + 8)).split('\n').filter((l) => l !== '' && l !== '...' && !l.startsWith('Failed running'));
+      for (const l of block) expect(out, l).toContain(l);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

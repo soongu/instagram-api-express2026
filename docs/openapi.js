@@ -16,8 +16,8 @@ const data = (schema) => ({ type: 'object', required: ['data'], properties: { da
 // MESSAGES 에 없는 코드를 적으면 문서를 만들다가 에러를 던진다 — 서버가 뜨지 않으니 바로 알아챈다.
 function errorOf(...codes) {
   for (const code of codes) {
-    if (!(code in MESSAGES)) {
-      throw new Error(`MESSAGES 에 없는 에러 코드예요: ${code}`);
+    if (!Object.hasOwn(MESSAGES, code)) {
+      throw new Error(`MESSAGES에 없는 에러 코드예요: ${code}`);
     }
   }
 
@@ -72,7 +72,7 @@ export const openapi = {
   info: {
     title: '인스타그램 API',
     version: '2.0.0',
-    description: `새 주소 /api/v2 는 성공을 { data }, 실패를 { error: { code, message, details } } 로 보내요. ${OLD}`,
+    description: `새 주소 /api/v2 는 성공을 { data }, 실패를 { error: { code, message, details } } 로 보내요. 버전 없는 옛 주소 /api 는 ${SUNSET_AT.toISOString().slice(0, 10)}에 끝나요.`,
   },
   paths: {
     '/api/v2/posts': {
