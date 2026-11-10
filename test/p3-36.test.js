@@ -679,6 +679,10 @@ describe('축 ⑦ 교안·답안의 코드 블록', () => {
     };
     // Step 1 은 고치기 전 판(= code/p3-35)에서 친다
     expect(after('grep -n "replaceAll" routes/auth.js')).toBe(sh(BEFORE.dir, '/usr/bin/grep -n "replaceAll" routes/auth.js').trimEnd());
+    // Step 1 끝에 세어 두는 라우터 네 파일의 응답 줄(2026-11-10 학생 검수) — 5 · 5 · 3 · 1 = 14
+    const routesBefore = after('grep -rcE "res\\..*(json|send)\\(" routes').split('\n').sort();
+    expect(routesBefore).toEqual(sh(BEFORE.dir, '/usr/bin/grep -rcE "res\\..*(json|send)\\(" routes').trimEnd().split('\n').sort());
+    expect(routesBefore.reduce((sum, line) => sum + Number(line.split(':')[1]), 0)).toBe(14);
     expect(after('grep -n "^import" services/*.js')).toBe(sh(ROUND.dir, '/usr/bin/grep -n "^import" services/*.js').trimEnd());
     expect(sh(ROUND.dir, '/usr/bin/grep -nwE "req|res" services/*.js')).toBe('');
     // 폴더 안의 파일 차례는 컴퓨터마다 다르다 — 줄의 모음으로 대조한다
@@ -686,5 +690,254 @@ describe('축 ⑦ 교안·답안의 코드 블록', () => {
     expect(map).toEqual(sh(ROUND.dir, '/usr/bin/grep -rcE "res\\..*(json|send)\\(" app.js routes controllers services middlewares').trimEnd().split('\n').sort());
     // 번호는 학생 데이터베이스마다 다르다 — 교안은 «p3-35 를 마친 학생» 의 다음 번호(14)를 싣는다(낭독 리셋 reset-p3-36 의 사람 목록).
     expect(after('node --env-file=.env lab/p3-36/add-user.js')).toBe("가입시켰어요 { id: 14, username: 'jiho', profileImage: null }");
+    // 서비스를 고친 뒤 두 번째로 친 같은 명령 — 14·15번을 지운 다음이라 16(축 ⑧ 이 실제로 돈다)
+    const runs = bash.map((f, i) => (f.body === 'node --env-file=.env lab/p3-36/add-user.js' ? bash[i + 1].body : null)).filter(Boolean);
+    expect(runs).toEqual([
+      "가입시켰어요 { id: 14, username: 'jiho', profileImage: null }",
+      "가입시켰어요 { id: 16, username: 'jiho', profileImage: null }",
+    ]);
+  });
+});
+
+// ───────── 축 ⑧ 학생 상태와 앞 회차 잇기(2026-11-10 학생 낭독 집중 검수) ─────────
+/** <details> 토글을 뺀 본문 */
+const bodyOnly = (md) => md.replace(/<details>[\s\S]*?<\/details>/g, '');
+const prior = (rel) => bodyOnly(read(P(`../../${rel}`)));
+// 교안을 처음부터 따라온 학생의 수업 DB 는 사람 번호가 13 까지 쓰였다(낭독 리셋 reset-p3-36 과 같은 SQL).
+const STUDENT_USERS = `
+  INSERT INTO users (username, email, name) VALUES ('sora', 'sora@example.com', '한소라');
+  SELECT nextval('users_id_seq'); SELECT nextval('users_id_seq');
+  INSERT INTO users (username, email, name) VALUES ('yuna', 'yuna@example.com', '김유나');
+  INSERT INTO users (username, email, name) VALUES ('haneul', 'haneul.lee@example.com', '이하늘');
+  SELECT nextval('users_id_seq');
+  INSERT INTO users (username, email, name) VALUES ('haneul2', 'haneul2@example.com', '이하늘');
+  INSERT INTO users (username, email, name) VALUES ('dain', 'dain@example.com', '김다인');`;
+/** .http 파일에서 제목이 title 인 요청 하나의 JSON 본문 */
+const httpBody = (file, title) => {
+  const src = read(file);
+  const start = src.indexOf(`### ${title}\n`);
+  expect(start, title).toBeGreaterThanOrEqual(0);
+  const end = src.indexOf('\n###', start + 4);
+  const block = src.slice(start, end < 0 ? undefined : end);
+  // 본문은 머리글 다음 빈 줄 뒤다(주소의 {{created.id}} 는 본문이 아니다)
+  return JSON.parse(block.slice(block.indexOf('\n\n')).trim());
+};
+/** 그 판의 학생 파일을 깐 임시 폴더에 몇 파일만 바꿔 넣은 판 — withServer 의 from 으로 쓴다 */
+const variant = (from, files) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p336-var-'));
+  for (const name of STUDENT_FILES) {
+    if (existsSync(from(name))) cpSync(from(name), join(dir, name), { recursive: true });
+  }
+  for (const [rel, src] of Object.entries(files)) {
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    writeFileSync(join(dir, rel), src);
+  }
+  return { from: (rel) => join(dir, rel), dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+};
+
+describe('축 ⑧ — 학생 상태의 번호: 다음 사람 14 에서 교안 차례대로', () => {
+  it('🔴 Step 2 jiho 14 → 지우고 다시 16 · Step 5 의 409 둘까지 번호를 쓰고 · 과제 [기초] mina.admin 20', async () => {
+    await freshGate();
+    await query(STUDENT_USERS);
+    expect(await query("SELECT last_value FROM users_id_seq")).toEqual([{ last_value: '13' }]);
+    // Step 2 앞 판 — 스크립트 14 · 가입 15
+    await withServer(B, async ({ dir, base }) => {
+      expect(runScript(dir, 'lab/p3-36/add-user.js').out).toContain("가입시켰어요 { id: 14, username: 'jiho', profileImage: null }");
+      expect((await getRes(`${base}/api/auth/signup`, json('POST', httpBody(R('lab/p3-36/add-user.http'), '그 번호로 가입')))).status).toBe(201);
+    });
+    await query("DELETE FROM users WHERE username IN ('jiho', 'jiho.kim')");
+    // Step 2 이 판 — 다시 실행하면 16 · 가입은 409(17 을 쓴다) · Step 5 auth.http 의 «회원가입»·«이미 있는 사용자 이름으로 가입» 은 409(18 · 19)
+    await withServer(R, async ({ dir, base }) => {
+      expect(runScript(dir, 'lab/p3-36/add-user.js').out).toContain("가입시켰어요 { id: 16, username: 'jiho', profileImage: null }");
+      expect((await getRes(`${base}/api/auth/signup`, json('POST', httpBody(R('lab/p3-36/add-user.http'), '그 번호로 가입')))).status).toBe(409);
+      for (const title of ['회원가입', '이미 있는 사용자 이름으로 가입']) {
+        expect((await getRes(`${base}/api/auth/signup`, json('POST', httpBody(R('requests/auth.http'), title)))).status, title).toBe(409);
+      }
+    });
+    await withLab('lab/p3-36/homework1.js', read(R('lab/p3-36/homework1.js')), 4011, async ({ base }) => {
+      const made = await getRes(`${base}/admin/users`, json('POST', httpBody(R('lab/p3-36/homework1.http'), '관리자가 사람 만들기')));
+      expect(made.body).toEqual({ id: 20, username: 'mina.admin', profileImage: null });
+    });
+    const lecture = LECTURE();
+    const answers = ANSWERS();
+    expect(lecture).not.toContain('여러분마다 달라요');
+    expect(answers).not.toContain('여러분마다 달라요');
+    expect(lecture).toContain('지난 시간까지 따라왔다면 `id`는 14예요.');
+    expect(lecture).toContain('14번과 15번을 지웠는데도 16번이에요.');
+    expect(answers).toContain('`{"id":20,"username":"mina.admin","profileImage":null}`');
+    expect(prior('part2/5-db-prisma/p2-26-relational-table-lecture.md')).toContain('검사에서 걸려도 이미 나간 번호는 되돌려주지 않거든요.');
+  }, 120000);
+});
+
+describe('축 ⑧ — Step 2 의 틀린 판: create 에 data 를 그대로 넘기면', () => {
+  it('가입은 409 · 한 행이지만 중복 확인은 «쓸 수 있어요» · 번호는 하이픈째 — 교안은 409 가 아니라 중복 확인과 phone 을 증거로 댄다', async () => {
+    const src = read(R('services/userService.js'));
+    const wrongSrc = src.replace('prisma.user.create({ data: user, select: userFields })', 'prisma.user.create({ data, select: userFields })');
+    expect(wrongSrc).not.toBe(src);
+    const wrong = variant(R, { 'services/userService.js': wrongSrc });
+    try {
+      await freshGate();
+      await withServer(wrong.from, async ({ dir, base }) => {
+        expect(runScript(dir, 'lab/p3-36/add-user.js').code).toBe(0);
+        const check = await getRes(`${base}/api/auth/check-duplicate?type=phone&value=010-5555-1234`);
+        const signup = await getRes(`${base}/api/auth/signup`, json('POST', httpBody(R('lab/p3-36/add-user.http'), '그 번호로 가입')));
+        expect(check.body).toEqual({ available: true, message: '쓸 수 있어요' });
+        expect(signup.status).toBe(409);
+        expect(await query(`SELECT username, phone FROM users WHERE username LIKE 'jiho%' ORDER BY id`)).toEqual([{ username: 'jiho', phone: '010-5555-1234' }]);
+      });
+    } finally { wrong.cleanup(); }
+    const lecture = LECTURE();
+    expect(lecture).toContain('가입은 409로 막혀도 중복 확인이 «쓸 수 있어요»로 답하면 이 줄을 빠뜨린 거예요.');
+    expect(lecture).toContain('**409만 보고 고쳐졌다고 판단하면 안 돼요.** 고쳐졌다는 증거는 중복 확인의 «이미 가입한 휴대폰 번호예요»와 하이픈 없는 `phone`이에요.');
+  }, 60000);
+});
+
+describe('축 ⑧ — Step 5 «세션을 데이터베이스에 저장하게 바꾸면»', () => {
+  it('logout 은 async 가 아니라 await 만 붙이면 SyntaxError · async 를 붙여야 하고 컨트롤러의 logout 도 async 가 아니다', () => {
+    const svc = read(R('services/authService.js'));
+    const awaited = svc
+      .replace('const sessionId = sessionService.createSession(user.id);', 'const sessionId = await sessionService.createSession(user.id);')
+      .replace('const userId = sessionService.getUserId(sessionId);', 'const userId = await sessionService.getUserId(sessionId);')
+      .replace('  sessionService.deleteSession(sessionId);', '  await sessionService.deleteSession(sessionId);');
+    expect(awaited.split('await sessionService.').length - 1).toBe(3);
+    const dir = mkdtempSync(join(tmpdir(), 'p336-await-'));
+    const check = (src) => {
+      writeFileSync(join(dir, 'authService.mjs'), src);
+      try { execFileSync(process.execPath, ['--check', join(dir, 'authService.mjs')], { stdio: 'pipe' }); return 'ok'; } catch (e) { return String(e.stderr); }
+    };
+    expect(check(awaited)).toContain('SyntaxError');
+    expect(check(awaited.replace('export function logout(sessionId) {', 'export async function logout(sessionId) {'))).toBe('ok');
+    rmSync(dir, { recursive: true, force: true });
+    expect(svc).toContain('export function logout(sessionId) {');
+    expect(read(R('controllers/authController.js'))).toContain('export function logout(req, res) {\n  authService.logout(readSessionId(req));');
+    const lecture = LECTURE();
+    expect(lecture).not.toContain('authService에는 await만');
+    expect(lecture).not.toContain('컨트롤러와 라우터는 그대로예요');
+    expect(lecture).toContain('`logout`은 `async`가 아니라서 `authService`의 `logout`과 그것을 부르는 컨트롤러의 `logout`에 `async`와 `await`을 함께 붙여야 해요.');
+  });
+});
+
+describe('축 ⑧ — Step 4 컨트롤러 다섯을 지나는 다섯 요청', () => {
+  it('목록 · 하나 · 올리기 · 하트 수 고치기 · 지우기 — 200·200·201·200·200 이고 끝나면 목록이 처음 그대로', async () => {
+    const posts = R('requests/posts.http');
+    const titles = ['게시물 목록', '목록의 첫 게시물 하나', '게시물 올리기', '방금 올린 게시물의 하트 수 고치기', '방금 올린 게시물 지우기'];
+    for (const title of titles) expect(read(posts), title).toContain(`### ${title}\n`);
+    await freshGate();
+    await withServer(R, async ({ base }) => {
+      const list = await getRes(`${base}/api/posts`);
+      const one = await getRes(`${base}/api/posts/${list.body.items[0].id}`);
+      const made = await getRes(`${base}/api/posts`, json('POST', httpBody(posts, '게시물 올리기')));
+      const patched = await getRes(`${base}/api/posts/${made.body.id}`, json('PATCH', httpBody(posts, '방금 올린 게시물의 하트 수 고치기')));
+      const removed = await getRes(`${base}/api/posts/${made.body.id}`, { method: 'DELETE' });
+      const again = await getRes(`${base}/api/posts`);
+      expect([list, one, made, patched, removed].map((r) => r.status)).toEqual([200, 200, 201, 200, 200]);
+      expect(made.headers.get('location')).toBe(`/api/posts/${made.body.id}`);
+      expect(again.body.items.map((p) => p.id)).toEqual(list.body.items.map((p) => p.id));
+    });
+    expect(LECTURE()).toContain('«게시물 목록», «목록의 첫 게시물 하나», «게시물 올리기», «방금 올린 게시물의 하트 수 고치기», «방금 올린 게시물 지우기»를 차례로 보내 보세요. 컨트롤러 함수 다섯 개를 하나씩 지나가는 요청이에요.');
+  }, 60000);
+});
+
+describe('축 ⑧ — 직접 해보기 2·3 · 과제 [기초] 의 새 확인 절차가 가려내는 판', () => {
+  it('직접 해보기 2 — tags 를 app.js 에 두고 컨트롤러가 ../app.js 를 부르는 판은 응답이 같지만 7번 찾기에 app.js 가 나온다', async () => {
+    const base2 = 'lab/p3-36/practice2';
+    const files = {
+      [`${base2}/app.js`]: read(R(`${base2}/app.js`))
+        .replace("import { addTag } from './services/tagService.js';", "import { addTag } from './services/tagService.js';\n\nexport const tags = [];")
+        .replace('  addTag(name);', '  addTag(tags, name);'),
+      [`${base2}/services/tagService.js`]: read(R(`${base2}/services/tagService.js`))
+        .replace('const tags = [];\n\n', '')
+        .replace('export function addTag(rawName) {', 'export function addTag(tags, rawName) {')
+        .replace('export function listTags() {', 'export function listTags(tags) {'),
+      [`${base2}/controllers/tagController.js`]: read(R(`${base2}/controllers/tagController.js`))
+        .replace("import * as tagService from '../services/tagService.js';", "import * as tagService from '../services/tagService.js';\nimport { tags } from '../app.js';")
+        .replace('tagService.listTags()', 'tagService.listTags(tags)')
+        .replace('tagService.addTag(req.body.name)', 'tagService.addTag(tags, req.body.name)'),
+    };
+    expect(files[`${base2}/services/tagService.js`]).not.toContain('const tags');
+    const dir = mkdtempSync(join(tmpdir(), 'p336-p2w-'));
+    for (const name of STUDENT_FILES) if (existsSync(R(name))) cpSync(R(name), join(dir, name), { recursive: true });
+    for (const [rel, src] of Object.entries(files)) writeFileSync(join(dir, rel), src.replaceAll('4002', String(LAB_PORT)));
+    symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+    const srv = await boot(join(dir, `${base2}/app.js`), { port: LAB_PORT, cwd: dir, env, ready: `${LAB_PORT}번 포트에서` });
+    try {
+      expect(await tagScene(`http://localhost:${LAB_PORT}`)).toEqual(TAGS_DONE);
+    } finally {
+      await Promise.race([srv.stop(), sleep(500)]);
+      rmSync(dir, { recursive: true, force: true });
+    }
+    // 7번 — 정답 판의 서비스·컨트롤러에는 app.js 가 없고, 이 판의 컨트롤러에는 있다
+    for (const rel of ['services/tagService.js', 'controllers/tagController.js']) expect(read(R(`${base2}/${rel}`)), rel).not.toContain('app.js');
+    expect(files[`${base2}/controllers/tagController.js`]).toContain('app.js');
+    expect(LECTURE()).toContain('7. 서비스 파일과 컨트롤러 파일에서 `app.js`도 찾아요.');
+  }, 30000);
+
+  it('직접 해보기 3 — 서비스가 { removed } 객체를 돌려주는 판도 네 요청의 응답이 같다(틀려 보이지만 맞는 판)', async () => {
+    const src = read(R('lab/p3-36/practice3.js'))
+      .replace('  tags.splice(index, 1);\n  return name;', '  tags.splice(index, 1);\n  return { removed: name };')
+      .replace("  const removed = removeTag(req.params.name);\n\n  res.json({ removed });", '  res.json(removeTag(req.params.name));');
+    expect(src).toContain('return { removed: name };');
+    expect(src).toContain('res.json(removeTag(req.params.name));');
+    await withLab('lab/p3-36/practice3.js', src, 4003, async ({ base }) => {
+      const out = [await getRes(`${base}/api/tags`), await getRes(`${base}/api/tags/busan`, { method: 'DELETE' }),
+        await getRes(`${base}/api/tags/nope`, { method: 'DELETE' }), await getRes(`${base}/api/tags`)];
+      expect(out.map(({ status, body }) => ({ status, body }))).toEqual([
+        { status: 200, body: ['seoul', 'busan', 'jeju'] },
+        { status: 200, body: { removed: 'busan' } },
+        { status: 404, body: { message: '그런 해시태그는 없어요' } },
+        { status: 200, body: ['seoul', 'jeju'] },
+      ]);
+    });
+    expect(LECTURE()).toContain('`removeTag`가 `{ removed: name }` 객체를 돌려주고 라우트 함수가 그 값을 그대로 `res.json()`에 넘겨도 네 요청의 응답은 같아요.');
+  }, 30000);
+
+  it('과제 [기초] — 컨트롤러가 하이픈을 직접 빼는 판은 결과가 같지만 6번 찾기에 replaceAll 이 나온다', async () => {
+    const right = read(R('lab/p3-36/homework1.js'));
+    const wrong = right.replace('const user = await userService.createUser({ username, name, phone });', "const user = await userService.createUser({ username, name, phone: phone.replaceAll('-', '') });");
+    expect(wrong).not.toBe(right);
+    await freshGate();
+    await withLab('lab/p3-36/homework1.js', wrong, 4011, async ({ base }) => {
+      const made = await getRes(`${base}/admin/users`, json('POST', { username: 'mina.admin', name: '최미나', phone: '010-7777-8888' }));
+      const check = await getRes(`${base}/admin/phones?phone=01077778888`);
+      const again = await getRes(`${base}/admin/users`, json('POST', { username: 'mina.admin2', name: '최미나', phone: '01077778888' }));
+      expect([made.status, check.body.taken, again.status]).toEqual([201, true, 409]);
+    });
+    expect(right).not.toContain('replaceAll');
+    expect(wrong).toContain('replaceAll');
+    expect(LECTURE()).toContain('6. VS Code의 찾기로 `homework1.js`에서 `replaceAll`을 찾아요. 한 번도 나오지 않아야 해요.');
+  }, 60000);
+});
+
+describe('축 ⑧ — 앞 회차에 잇는 문장: 그 회차 «본문»(토글 밖)에 그 사실이 있다', () => {
+  it('컨트롤러·MVC 이름(p3-30) · 3계층(p2-31) · 서버 없이 서비스 부르기(p2-31 Step 7 · 과제 [응용] · 10.1초) · 403 물음(p2-31 주제 2) · NotFoundError(p2-32)', () => {
+    expect(prior('part3/5-express-core/p3-30-router-structure-lecture.md')).toContain('그것이 «컨트롤러(controller)»예요. 컨트롤러는 MVC(Model · View · Controller)라는 구조에서 온 이름이에요.');
+    const p231 = prior('part2/5-db-prisma/p2-31-layers-lecture.md');
+    expect(p231).toContain('오늘처럼 셋으로 나눈 구조는 3계층이라고 말하고요.');
+    expect(p231).toContain('### 하나 더 — 서비스는 서버 없이도 쓸 수 있어요');
+    expect(p231).toContain('### [응용] 서버 없이 서비스 부르기');
+    expect(p231).toContain('### 2. 서비스가 HTTP를 몰라야 한다는 규칙은 얼마나 지켜야 할까요');
+    const p231a = read(P('../../part2/5-db-prisma/p2-31-layers-answers.md'));
+    expect(p231a).toContain('$disconnect() 없이      10.1 초');
+    expect(p231a).toContain('서비스가 상태 코드 숫자를 절대 모르게 두고');
+    const p232 = prior('part2/5-db-prisma/p2-32-validation-lecture.md');
+    expect(p232).toContain('**서비스가 직접 `NotFoundError`를 던지게** 하는 거예요.');
+    expect(p232).toContain('라우터 세 곳의 `if (!post)`·`if (!deleted)`가 통째로 사라졌어요.');
+    const lecture = LECTURE();
+    expect(lecture).toContain('라우터를 정리하던 시간 끝에서, 라우트 함수들만 따로 모은 파일을 컨트롤러라고 부르고 그 이름이 MVC라는 구조에서 왔다고 했죠.');
+    expect(lecture).toContain('층을 처음 나누던 시간에는 라우터 · 서비스 · Prisma Client로 나눈 구조를 3계층이라고 불렀죠.');
+    expect(lecture).toContain('층을 처음 나누던 시간의 과제에서 `postService`를 바로 불러 본 것처럼 서비스 함수를 불러요.');
+    expect(lecture).toContain('층을 처음 나누던 시간의 생각해볼 주제에서도 비슷한 것을 물었어요.');
+    expect(ANSWERS()).toContain('층을 처음 나누던 시간의 과제에서 겪은 그 10초예요.');
+  });
+
+  it('오프닝은 구간의 회차 수를 말하지 않고 · Step 3 의 Spring·NestJS 는 토글 안 · 다음 회차 표에 구글 로그인 줄', () => {
+    const lecture = LECTURE();
+    expect(lecture.split('\n')[2]).not.toMatch(/\d+회차/);
+    expect(lecture).not.toContain('7회차');
+    expect(bodyOnly(lecture)).not.toContain('@RestController');
+    expect(bodyOnly(lecture)).not.toContain('NestJS는 컨트롤러와 서비스를 처음부터');
+    expect(lecture).toContain('NestJS는 컨트롤러와 서비스를 처음부터');
+    expect(lecture).toMatch(/\n 구글 계정으로 로그인하기 +\S/);
+    expect(lecture).toContain('Step 1에서 라우터 네 파일에 있던 14줄이 이제 컨트롤러 네 파일로 모두 옮겨 갔어요.');
   });
 });
