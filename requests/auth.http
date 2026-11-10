@@ -68,3 +68,25 @@ Content-Type: application/json
   "username": "so ra",
   "password": "1234"
 }
+
+### 해시로 저장되는지 볼 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "seoyeon@example.com",
+  "name": "박서연",
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### 같은 비밀번호로 한 사람 더 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "doyun@example.com",
+  "name": "최도윤",
+  "username": "doyun",
+  "password": "instagram1234"
+}
