@@ -21,6 +21,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
+import { applyMigrationsAfter } from './helpers/tip-schema.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -88,6 +89,9 @@ beforeAll(async () => {
   for (const dir of readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
     await db.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // 🚨 2026-11-10 p3-39 — 작업트리 스키마에 users.password_hash 가 생겼다. 시드가 작업트리 클라이언트로 돌아 그 칸까지 고르므로
+  //    (P2022) 이 회차의 마이그레이션 뒤로 tip 의 것을 얹는다. 이 회차의 학생 파일은 그 칸을 읽지도 쓰지도 않는다(test/helpers/tip-schema.js).
+  await applyMigrationsAfter(db, '20261106135135_add_posts_feed_index');
   reseed();
 }, 120000);
 
