@@ -1,5 +1,6 @@
 // ~/instagram-api/seed.js
 import { prisma } from './db.js';
+import * as userService from './services/userService.js';
 import { posts } from './data/posts.js';
 import { comments } from './data/comments.js';
 
@@ -26,12 +27,15 @@ for (const row of [...posts, ...comments, ...replies]) {
 
 names.sort();
 
-await prisma.user.createMany({
-  data: names.map((username) => ({
+// 시드도 사람이 들어오는 길(userService.createUser)로 넣는다 — 비밀번호를 해시로 바꾸는 일은 거기서 한다.
+// 개발용 비밀번호는 «사용자 이름 + 1234» 다(jaehoon → jaehoon1234).
+for (const username of names) {
+  await userService.createUser({
     username,
     profileImage: posts.find((post) => post.username === username)?.profileImage ?? null,
-  })),
-});
+    password: `${username}1234`,
+  });
+}
 
 const users = await prisma.user.findMany();
 const idOf = (username) => users.find((user) => user.username === username).id;
