@@ -41,7 +41,8 @@ export async function checkDuplicate(req, res) {
 }
 
 export async function login(req, res) {
-  const { user, sessionId } = await authService.login(req.body.username);
+  const { username, password } = req.body;
+  const { user, sessionId } = await authService.login(username, password);
 
   // 쿠키에는 그 세션 ID만 담아 준다.
   res.cookie('sessionId', sessionId, {

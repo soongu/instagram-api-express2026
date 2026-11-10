@@ -3,7 +3,8 @@ POST http://localhost:3000/api/auth/login
 Content-Type: application/json
 
 {
-  "username": "jaehoon"
+  "username": "jaehoon",
+  "password": "jaehoon1234"
 }
 
 ### 나는 누구
@@ -14,7 +15,26 @@ POST http://localhost:3000/api/auth/login
 Content-Type: application/json
 
 {
-  "username": "hana"
+  "username": "hana",
+  "password": "hana1234"
+}
+
+### 비밀번호를 저장한 사람으로 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### 틀린 비밀번호로 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1235"
 }
 
 ### 쿠키를 고쳐서 보내면

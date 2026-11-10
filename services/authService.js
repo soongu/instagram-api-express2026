@@ -12,13 +12,12 @@ export function signup({ emailOrPhone, name, username, password }) {
   return userService.createUser({ username, name, ...contact, password });
 }
 
-// 로그인 — 이름으로 사람을 찾고, 세션을 만들어 그 ID 를 사람과 함께 돌려준다.
-export async function login(username) {
-  const user = await userService.findUserByUsername(username);
+// 로그인 — 사용자 이름과 비밀번호를 확인하고, 세션을 만들어 그 ID 를 사람과 함께 돌려준다.
+export async function login(username, password) {
+  const user = await userService.checkPassword(username, password);
 
   if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 
-  // 비밀번호 확인은 아직 없다 — 이름만 맞으면 세션을 만든다.
   const sessionId = sessionService.createSession(user.id);
 
   return { user, sessionId };
