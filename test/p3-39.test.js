@@ -4,10 +4,10 @@
 // Step 1~5 본문은 실습 `lab/p3-39/`, Step 6 은 수업 백엔드(`password_hash` 마이그레이션 · `authService.signup` 이 bcrypt).
 //
 // 축 ① Step 1 — hash.js: 같은 글자 → 같은 해시 · 한 글자 → 다른 해시 · 늘 64글자
-// 축 ② Step 2 — leaked.js 의 해시는 적어 둔 비밀번호의 SHA-256 · 사전 10만 개 · crack.js 가 넷을 푼다
-// 축 ③ Step 3 — 솔트: 같은 비밀번호도 해시가 다르다 · crack-salted 는 50만 개 · 같은 넷
+// 축 ② Step 2 — users-sha256.js 의 해시는 적어 둔 비밀번호의 SHA-256(같은 비밀번호 둘은 같은 해시) · 예시 10만 개 · cost-sha256
+// 축 ③ Step 3 — 솔트: 같은 비밀번호도 해시가 다르다 · cost-salted 는 사람 수만큼 50만 번
 // 축 ④ 직접 해보기 1 — checkPassword · 시작 판(빈칸)도 문법은 통과 · 틀린 판 둘이 걸린다
-// 축 ⑤ Step 4 — cost 와 시간(두 배씩) · 해시 글자에 cost 가 든다 · leaked-bcrypt 는 cost 12 · 사전 전체 짐작
+// 축 ⑤ Step 4 — cost 와 시간(두 배씩) · 해시 글자에 cost 가 든다 · cost-bcrypt 가 10만 번을 짐작
 // 축 ⑥ Step 5 — hashSync 동안 /ping 이 기다리고 hash 는 안 기다린다 · 다섯을 한꺼번에 보내면 다섯째가 한 번 더
 // 축 ⑦ 직접 해보기 2 — 0.25초를 넘지 않는 가장 큰 cost
 // 축 ⑧ Step 6 — 가입이 해시를 저장한다(NULL 인 사람 · 받은 글자는 DB 어디에도 없다 · 응답에는 안 나간다)
@@ -49,9 +49,8 @@ const env = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:3001' };
 const STUDENT_FILES = ['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'docs', 'package.json', 'requests', 'lab/p3-39'];
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
-// 유출 목록에 적어 둔 사람들의 «진짜» 비밀번호 — 교안이 말하는 것과 같아야 한다.
+// 예시 테이블에 적어 둔 사람들의 비밀번호 — 교안이 말하는 것과 같아야 한다(파일에는 해시만 있다).
 const PASSWORDS = { jaehoon: 'jaehoon1234', minji: 'minji2000', dahye: 'qwer1234', seungwoo: 'qwer1234', nayeon: 'n@Y30n-summer!27' };
-const CRACKED = ['dahye의 비밀번호는 qwer1234', 'jaehoon의 비밀번호는 jaehoon1234', 'minji의 비밀번호는 minji2000', 'seungwoo의 비밀번호는 qwer1234'];
 
 const admin = async (fn) => {
   const client = new pg.Client(ADMIN);
@@ -166,29 +165,26 @@ describe('축 ① Step 1 — hash.js', () => {
   });
 });
 
-describe('축 ② Step 2 — 솔트 없는 SHA-256 은 사전으로 풀린다', () => {
-  it('🔴 leaked.js 의 해시는 적어 둔 비밀번호의 SHA-256 · dahye 와 seungwoo 는 같은 해시', async () => {
-    const { leaked } = await import(LAB('leaked.js'));
-    expect(leaked.map((user) => user.username)).toEqual(Object.keys(PASSWORDS));
-    for (const user of leaked) expect(user.hash).toBe(sha256(PASSWORDS[user.username]));
-    expect(leaked.find((u) => u.username === 'dahye').hash).toBe(leaked.find((u) => u.username === 'seungwoo').hash);
+describe('축 ② Step 2 — 솔트 없는 SHA-256', () => {
+  it('🔴 users-sha256.js 의 해시는 적어 둔 비밀번호의 SHA-256 · dahye 와 seungwoo 는 같은 해시', async () => {
+    const { users } = await import(LAB('users-sha256.js'));
+    expect(users.map((user) => user.username)).toEqual(Object.keys(PASSWORDS));
+    for (const user of users) expect(user.hash).toBe(sha256(PASSWORDS[user.username]));
+    expect(users.find((u) => u.username === 'dahye').hash).toBe(users.find((u) => u.username === 'seungwoo').hash);
+    expect(read(LAB('users-sha256.js'))).not.toContain('qwer1234');
   });
 
-  it('🔴 사전은 겹치지 않는 10만 개 · 넷의 비밀번호는 사전에 있고 nayeon 은 없다', async () => {
-    const { candidates } = await import(LAB('words.js'));
-    const words = [...candidates()];
-    expect(words).toHaveLength(100000);
-    expect(new Set(words).size).toBe(100000);
-    for (const name of ['jaehoon', 'minji', 'dahye', 'seungwoo']) expect(words).toContain(PASSWORDS[name]);
-    expect(words).not.toContain(PASSWORDS.nayeon);
+  it('🔴 예시 비밀번호는 겹치지 않는 10만 개', async () => {
+    const { samplePasswords } = await import(LAB('words.js'));
+    const passwords = [...samplePasswords()];
+    expect(passwords).toHaveLength(100000);
+    expect(new Set(passwords).size).toBe(100000);
   });
 
-  it('🔴 crack.js — 넷을 풀고 10만 개를 해 본다(1초 안쪽)', () => {
-    const { code, out } = run(LAB('.'), 'crack.js');
+  it('🔴 cost-sha256.js — 10만 번 해시하는 데 1초 안쪽', () => {
+    const { code, out } = run(LAB('.'), 'cost-sha256.js');
     expect(code).toBe(0);
-    const all = lines(out);
-    expect(all.slice(0, -1).sort()).toEqual(CRACKED);
-    const [, ms] = all.at(-1).match(/^100000개를 해 보는 데 (\d+)ms 걸렸어요\.$/);
+    const [, ms] = out.trim().match(/^SHA-256 으로 100000번 해시하는 데 (\d+)ms 걸렸어요\.$/);
     expect(Number(ms)).toBeLessThan(1000);
   });
 });
@@ -204,19 +200,17 @@ describe('축 ③ Step 3 — 솔트', () => {
     for (const { salt, hash } of pairs) expect(hash).toBe(sha256(salt + 'qwer1234'));
   });
 
-  it('🔴 leaked-salted.js — 솔트가 다섯 다 다르고 dahye 와 seungwoo 의 해시도 다르다', async () => {
-    const { leaked } = await import(LAB('leaked-salted.js'));
-    expect(new Set(leaked.map((u) => u.salt)).size).toBe(5);
-    for (const user of leaked) expect(user.hash).toBe(sha256(user.salt + PASSWORDS[user.username]));
-    expect(leaked.find((u) => u.username === 'dahye').hash).not.toBe(leaked.find((u) => u.username === 'seungwoo').hash);
+  it('🔴 users-salted.js — 솔트가 다섯 다 다르고 dahye 와 seungwoo 의 해시도 다르다', async () => {
+    const { users } = await import(LAB('users-salted.js'));
+    expect(new Set(users.map((u) => u.salt)).size).toBe(5);
+    for (const user of users) expect(user.hash).toBe(sha256(user.salt + PASSWORDS[user.username]));
+    expect(users.find((u) => u.username === 'dahye').hash).not.toBe(users.find((u) => u.username === 'seungwoo').hash);
   });
 
-  it('🔴 crack-salted.js — 같은 넷을 풀지만 사람마다 사전 전체라 50만 개', () => {
-    const { code, out } = run(LAB('.'), 'crack-salted.js');
+  it('🔴 cost-salted.js — 다섯 사람 몫이라 50만 번', () => {
+    const { code, out } = run(LAB('.'), 'cost-salted.js');
     expect(code).toBe(0);
-    const all = lines(out);
-    expect(all.slice(0, -1).sort()).toEqual(CRACKED);
-    expect(all.at(-1)).toMatch(/^500000개를 해 보는 데 \d+ms 걸렸어요\.$/);
+    expect(out.trim()).toMatch(/^5명의 솔트를 붙여 500000번 해시하는 데 \d+ms 걸렸어요\.$/);
   });
 });
 
@@ -267,22 +261,13 @@ describe('축 ⑤ Step 4 — bcrypt', () => {
     expect(ms[2]).toBeGreaterThan(80);
   }, 30000);
 
-  it('🔴 leaked-bcrypt.js — 다섯 다 cost 12 · 적어 둔 비밀번호로 compare 가 true · 같은 비밀번호 둘도 해시가 다르다', async () => {
-    const { leaked } = await import(LAB('leaked-bcrypt.js'));
-    for (const user of leaked) {
-      expect(user.hash.startsWith('$2b$12$')).toBe(true);
-      expect(await bcrypt.compare(PASSWORDS[user.username], user.hash)).toBe(true);
-    }
-    expect(leaked.find((u) => u.username === 'dahye').hash).not.toBe(leaked.find((u) => u.username === 'seungwoo').hash);
-  }, 30000);
-
-  it('🔴 crack-bcrypt.js — 20개로 한 번 시간을 재고 사전 전체를 몇 시간으로 짐작한다', () => {
-    const { code, out } = run(LAB('.'), 'crack-bcrypt.js');
+  it('🔴 cost-bcrypt.js — 20번 해시한 시간으로 10만 번을 몇 시간으로 짐작한다', () => {
+    const { code, out } = run(LAB('.'), 'cost-bcrypt.js');
     expect(code).toBe(0);
     const [first, second] = lines(out);
     expect(lines(out)).toHaveLength(2);
-    const [, each] = first.match(/^20개를 해 보니 한 번에 (\d+)ms 걸렸어요\.$/);
-    const [, hours] = second.match(/^사전 10만 개를 jaehoon 한 사람에게 다 해 보려면 (\d+\.\d)시간쯤 걸려요\.$/);
+    const [, each] = first.match(/^bcrypt\(cost 12\)로 20번 해시해 보니 한 번에 (\d+)ms 걸렸어요\.$/);
+    const [, hours] = second.match(/^같은 방식으로 10만 번 해시하려면 (\d+\.\d)시간쯤 걸려요\.$/);
     expect(Math.abs(Number(hours) - (Number(each) * 100000) / 3600000)).toBeLessThan(0.2);
   }, 30000);
 });
