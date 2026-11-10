@@ -1,7 +1,7 @@
 // ~/instagram-api/services/userService.js
 import bcrypt from 'bcrypt';
 import { prisma } from '../db.js';
-import { ConflictError } from '../errors.js';
+import { ConflictError, NotFoundError } from '../errors.js';
 
 // 응답에 실어 보낼 컬럼만 고른다.
 const userFields = { id: true, username: true, profileImage: true };
@@ -70,4 +70,17 @@ export async function isTaken(type, value) {
   });
 
   return user !== null;
+}
+
+// 이미 있는 사람의 비밀번호를 새로 정한다 — 관리자 스크립트가 부른다.
+export async function setPassword(username, password) {
+  const passwordHash = await bcrypt.hash(password, PASSWORD_COST);
+
+  try {
+    return await prisma.user.update({ where: { username }, data: { passwordHash }, select: userFields });
+  } catch (error) {
+    // 그 사용자 이름의 사람이 없으면 바꿀 행이 없다.
+    if (error.code === 'P2025') throw new NotFoundError('USER_NOT_FOUND');
+    throw error;
+  }
 }
