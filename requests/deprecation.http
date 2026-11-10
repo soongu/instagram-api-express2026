@@ -1,0 +1,14 @@
+### 옛 주소로 게시물 목록
+GET http://localhost:3000/api/posts?limit=2
+
+### 새 주소로 게시물 목록
+GET http://localhost:3000/api/v2/posts?limit=2
+
+### 옛 주소의 없는 주소
+GET http://localhost:3000/api/nope
+
+### 새 주소의 없는 주소
+GET http://localhost:3000/api/v2/nope
+
+### API 문서
+GET http://localhost:3000/api/openapi.json
