@@ -547,6 +547,34 @@ describe('축 ⑪ 과제', () => {
     });
   }, 30000);
 
+  it('🔴 [기초] 답안 «이렇게 하면 더 좋아요» — 같은 이메일 둘을 한꺼번에 보내면 원래 판은 둘 다 201, 넣기 직전에 다시 보는 판은 201 하나 · 409 하나', async () => {
+    const twice = async (file) => {
+      let statuses;
+      await withLabServer(file, HW_PORT, async () => {
+        const send = () => fetch(`http://localhost:${HW_PORT}/members`, json('POST', { email: 'same@example.com', password: 'club2026!' })).then((r) => r.status);
+        statuses = (await Promise.all([send(), send()])).sort();
+      });
+      return statuses;
+    };
+    expect(await twice('homework1.js')).toEqual([201, 201]);
+    const recheck = read(P('snapshots/p3-39.homework1-recheck.js'));
+    expect(recheck.replace(/  \/\/ 해시를 기다리는[^\n]*\n  if \(members\.some[^\n]*\n[^\n]*\n  \}\n/, '')).toBe(read(LAB('homework1.js')));
+    const dir = mkdtempSync(join(tmpdir(), 'p339-recheck-'));
+    try {
+      writeFileSync(join(dir, 'homework1.js'), recheck.replaceAll('4011', String(HW_PORT)));
+      symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+      const srv = await boot(join(dir, 'homework1.js'), { port: HW_PORT, cwd: dir, ready: `${HW_PORT}번 포트에서` });
+      try {
+        const send = () => fetch(`http://localhost:${HW_PORT}/members`, json('POST', { email: 'same@example.com', password: 'club2026!' })).then((r) => r.status);
+        expect((await Promise.all([send(), send()])).sort()).toEqual([201, 409]);
+      } finally {
+        await Promise.race([srv.stop(), sleep(500)]);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30000);
+
   it('🔴 [응용] homework2.js — 세 줄 · 솔트 없음은 다섯 사람도 같은 시간 · bcrypt 는 다섯 사람이 한 사람의 5배', () => {
     const { code, out } = run(LAB('.'), 'homework2.js');
     expect(code).toBe(0);
