@@ -1,7 +1,7 @@
 // ~/instagram-api/schemas/authSchema.js
 import { z } from 'zod';
 
-// 아직 비밀번호가 없다 — 이름 하나만 받는다.
+// 로그인은 아직 비밀번호를 확인하지 않는다 — 이름 하나만 받는다.
 export const loginSchema = z.object({
   username: z.string().min(1),
 });
@@ -9,7 +9,7 @@ export const loginSchema = z.object({
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const PHONE = /^010-?\d{4}-?\d{4}$/;
 
-// 비밀번호도 받아서 규칙을 검사하지만, 저장은 하지 않는다.
+// 비밀번호도 받아서 규칙을 검사한다. 저장할 때는 해시로 바꾼다(authService).
 export const signupSchema = z.object({
   emailOrPhone: z
     .string()
