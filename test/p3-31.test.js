@@ -124,7 +124,9 @@ const dropGate = async () => {
   await admin.query(`DROP DATABASE IF EXISTS ${GATE_DB}`);
   return admin;
 };
-const reseed = () => execFileSync(process.execPath, [P('seed.js')], { cwd: P('.'), encoding: 'utf8', env: { ...process.env, ...env } });
+// 🚨 2026-11-10 p3-40 — 작업트리 seed.js 는 시드 다섯의 비밀번호를 bcrypt 로 해시해 1초 넘게 더 걸린다(이 회차는 비밀번호가 없다).
+//    여러 번 다시 넣는 축 ⑬ 이 5초 제한을 넘어서, 이 회차 북마크의 seed.js 로 넣는다.
+const reseed = () => execFileSync(process.execPath, [R('seed.js')], { cwd: ROUND.dir, encoding: 'utf8', env: { ...process.env, ...env } });
 
 beforeAll(async () => {
   const admin = await dropGate();
