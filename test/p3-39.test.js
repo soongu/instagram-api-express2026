@@ -184,7 +184,7 @@ describe('축 ② Step 2 — 솔트 없는 SHA-256', () => {
   it('🔴 cost-sha256.js — 10만 번 해시하는 데 1초 안쪽', () => {
     const { code, out } = run(LAB('.'), 'cost-sha256.js');
     expect(code).toBe(0);
-    const [, ms] = out.trim().match(/^SHA-256 으로 100000번 해시하는 데 (\d+)ms 걸렸어요\.$/);
+    const [, ms] = out.trim().match(/^SHA-256으로 100000번 해시하는 데 (\d+)ms 걸렸어요\.$/);
     expect(Number(ms)).toBeLessThan(1000);
   });
 });

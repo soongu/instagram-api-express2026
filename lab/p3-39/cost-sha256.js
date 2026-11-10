@@ -13,4 +13,4 @@ for (const password of samplePasswords()) {
   count += 1;
 }
 
-console.log(`SHA-256 으로 ${count}번 해시하는 데 ${Math.round(performance.now() - started)}ms 걸렸어요.`);
+console.log(`SHA-256으로 ${count}번 해시하는 데 ${Math.round(performance.now() - started)}ms 걸렸어요.`);
