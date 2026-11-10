@@ -21,4 +21,5 @@ const saved = hashPassword('qwer1234');
 
 console.log(checkPassword('qwer1234', saved));
 console.log(checkPassword('qwer1235', saved));
-console.log(checkPassword('qwer1234', hashPassword('qwer1234')));
+// 같은 비밀번호를 두 번 해시하면 솔트가 달라서 해시도 달라야 한다.
+console.log(hashPassword('qwer1234').hash !== hashPassword('qwer1234').hash);
