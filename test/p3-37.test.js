@@ -899,3 +899,210 @@ describe('축 ⑩ 교안 · 답안의 블록', () => {
     });
   }, 60000);
 });
+
+// ───────── 축 ⑪ 학생 낭독 집중 검수(2026-11-10) — 학생 상태에서 글자 그대로 따라 한 결과 ─────────
+const bodyOnly = (md) => md.replace(/<details>[\s\S]*?<\/details>/g, '');
+const prior = (rel) => bodyOnly(read(P(`../../${rel}`)));
+const grepLines = (dir, args) => {
+  try { return execFileSync('/usr/bin/grep', args, { cwd: dir, encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort(); } catch (error) { if (error.status === 1) return []; throw error; }
+};
+/** 펜스 하나 바로 뒤에 오는 펜스 */
+const fenceAfter = (all, body, nth = 0) => {
+  const idx = all.map((f, i) => (f.body === body ? i : -1)).filter((i) => i >= 0)[nth];
+  expect(idx, body).toBeGreaterThanOrEqual(0);
+  return all[idx + 1];
+};
+
+describe('축 ⑪ 학생 낭독 집중 검수 — 지시를 글자 그대로 따른 판', () => {
+  it('Step 4 — 교안이 «지우라» 고 보인 줄을 지우고 블록을 넣으면 Step 5 grep 의 app.js 줄 번호가 교안과 같다(주석이 두 번 남지 않는다)', () => {
+    const md = LECTURE();
+    const blocks = fences(md).filter((f) => f.lang === 'javascript' && f.body.startsWith('// ~/instagram-api/app.js'));
+    const shown = blocks[0].body.split('\n').slice(1).filter((l) => l !== '...');
+    expect(shown.length).toBe(6);
+    expect(md).toContain('주석을 포함한 이 여섯 줄을 지우고');
+    const chunks = blocks[1].body.split('\n...\n').map((c) => c.replace(/^\/\/ ~\/instagram-api\/app\.js\n/, '').replace(/^\.\.\.\n|\n\.\.\.$/g, '')).filter((c) => c.trim());
+    const importLine = chunks.find((c) => c.startsWith('import '));
+    const block = chunks.find((c) => c.startsWith('// API 라우터 넷을'));
+    let lines = read(B('app.js')).split('\n');
+    const at = lines.findIndex((l, i) => shown.every((s, k) => lines[i + k] === s));
+    expect(at).toBeGreaterThanOrEqual(0);
+    lines = [...lines.slice(0, at), ...block.split('\n'), ...lines.slice(at + shown.length)];
+    const lastImport = lines.reduce((acc, l, i) => (l.startsWith('import ') ? i : acc), -1);
+    lines.splice(lastImport + 1, 0, importLine);
+    expect(lines.filter((l) => l === '// API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.')).toHaveLength(1);
+    const appLines = lines.map((l, i) => (/res\..*(json|send)\(/.test(l) ? `app.js:${i + 1}:${l}` : null)).filter(Boolean);
+    const bash = fences(md).filter((f) => f.lang === 'bash');
+    const RES = 'grep -rnE "res\\..*(json|send)\\(" app.js responses.js routes controllers services middlewares';
+    const out = bash[bash.findIndex((f) => f.body === RES) + 1].body.split('\n').filter((l) => l.startsWith('app.js:'));
+    expect(appLines).toEqual(out);
+  });
+
+  it('Step 6 — 고치기 전에 문장을 넘기는 줄을 먼저 찾는다(19줄) · 고친 뒤 같은 명령은 0줄', () => {
+    const all = fences(LECTURE());
+    const CMD = 'grep -rnE "Error\\(\'[^A-Z]" services middlewares controllers';
+    const first = fenceAfter(all, CMD, 0);
+    expect(first.lang).toBe('bash');
+    // Step 6 을 시작할 때 — 서비스·미들웨어는 앞 판, 컨트롤러는 Step 5 판(sendData import 가 한 줄 더 있다)
+    const dir = mkdtempSync(join(tmpdir(), 'p337-s6-'));
+    try {
+      for (const name of ['services', 'middlewares']) cpSync(B(name), join(dir, name), { recursive: true });
+      cpSync(R('controllers'), join(dir, 'controllers'), { recursive: true });
+      const up = join(dir, 'controllers/uploadController.js');
+      writeFileSync(up, read(up).replace("'NO_IMAGES'", "'올릴 사진을 골라 주세요'"));
+      const got = grepLines(dir, ['-rnE', "Error\\('[^A-Z]", 'services', 'middlewares', 'controllers']);
+      expect(got).toHaveLength(19);
+      expect(got).toEqual(first.body.split('\n').sort());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    expect(LECTURE()).toContain('19줄이 찍혀요');
+    expect(grepLines(ROUND.dir, ['-rnE', "Error\\('[^A-Z]", 'services', 'middlewares', 'controllers'])).toEqual([]);
+  });
+
+  it('Step 6 — 중복 확인의 문장도 errors.js 한 곳 · 옛 TAKEN(문장 셋)을 남긴 판은 그 grep 이 두 줄을 찍는다', () => {
+    const all = fences(LECTURE());
+    const CMD = 'grep -rn "이미 가입한 휴대폰 번호예요" errors.js services middlewares controllers';
+    const out = fenceAfter(all, CMD, 0);
+    const args = ['-rn', '이미 가입한 휴대폰 번호예요', 'errors.js', 'services', 'middlewares', 'controllers'];
+    expect(grepLines(ROUND.dir, args)).toEqual(out.body.split('\n').sort());
+    const dir = mkdtempSync(join(tmpdir(), 'p337-taken-'));
+    try {
+      for (const name of ['errors.js', 'services', 'middlewares', 'controllers']) cpSync(R(name), join(dir, name), { recursive: true });
+      const ctl = join(dir, 'controllers/authController.js');
+      const old = read(B('controllers/authController.js'));
+      const oldTaken = old.slice(old.indexOf('const TAKEN = {'), old.indexOf('};', old.indexOf('const TAKEN = {')) + 2);
+      const now = read(ctl);
+      writeFileSync(ctl, now.slice(0, now.indexOf('const TAKEN = {')) + oldTaken + now.slice(now.indexOf('};', now.indexOf('const TAKEN = {')) + 2));
+      const got = grepLines(dir, args);
+      expect(got).toHaveLength(2);
+      expect(got.some((l) => l.startsWith('controllers/authController.js:'))).toBe(true);
+      // 그 판도 Step 6 의 확인 grep(문장을 넘기는 줄)은 0줄이다 — 그래서 이 grep 이 따로 필요하다
+      expect(grepLines(dir, ['-rnE', "Error\\('[^A-Z]", 'services', 'middlewares', 'controllers'])).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('Step 6 — 하위 클래스의 매개변수 이름을 그대로 둬도 동작은 같다(교안이 그 사실과 바꾸는 이유를 함께 말한다)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'p337-cls-'));
+    try {
+      const src = read(R('errors.js'))
+        .replace('export class UnauthorizedError extends HttpError {\n  constructor(code) {\n    super(401, code);', 'export class UnauthorizedError extends HttpError {\n  constructor(message) {\n    super(401, message);')
+        .replace('export class ConflictError extends HttpError {\n  constructor(code) {\n    super(409, code);', 'export class ConflictError extends HttpError {\n  constructor(message) {\n    super(409, message);')
+        .replace('export class MethodNotAllowedError extends HttpError {\n  constructor(code) {\n    super(405, code);', 'export class MethodNotAllowedError extends HttpError {\n  constructor(message) {\n    super(405, message);');
+      expect(src.match(/constructor\(message\)/g)).toHaveLength(3);
+      writeFileSync(join(dir, 'errors.mjs'), src);
+      const old = await import(join(dir, 'errors.mjs'));
+      const now = await import(R('errors.js'));
+      for (const [cls, code] of [['UnauthorizedError', 'LOGIN_REQUIRED'], ['ConflictError', 'PHONE_TAKEN'], ['MethodNotAllowedError', 'METHOD_NOT_ALLOWED']]) {
+        const a = new old[cls](code);
+        const b = new now[cls](code);
+        expect([a.status, a.code, a.message]).toEqual([b.status, b.code, b.message]);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    expect(LECTURE()).toMatch(/매개변수 이름을 그대로 둬도[^\n]*동작은 같아요/);
+  });
+
+  it('옛 주소의 «그대로» 를 ETag 로 확인한다 — 실패 응답에도 ETag 가 붙고, 여섯 요청의 ETag 는 앞 판과 같다', async () => {
+    const md = LECTURE();
+    const step = (n) => md.slice(md.indexOf(`## Step ${n}:`), md.indexOf(`## Step ${n + 1}:`) > 0 ? md.indexOf(`## Step ${n + 1}:`) : md.indexOf('## 마무리'));
+    expect(step(1)).toMatch(/`ETag`/);
+    expect(step(5)).toMatch(/Step 1에서 적어 둔/);
+    expect(step(7)).toMatch(/Step 1에서 적어 둔/);
+    const six = ['/posts/1', '/posts?limit=2', '/posts/1/likes', '/auth/check-duplicate?type=username&value=jaehoon', '/posts/999', '/posts?limit=0'];
+    const etags = async (from) => {
+      await freshGate();
+      const out = [];
+      await withServer(from, async ({ base }) => {
+        for (const path of six) {
+          const res = await fetch(`${base}/api${path}`);
+          out.push([res.status, res.headers.get('etag')]);
+        }
+      });
+      return out;
+    };
+    const before = await etags(B);
+    const after = await etags(R);
+    expect(before.map(([, tag]) => tag).every((tag) => /^W\/"/.test(tag))).toBe(true);
+    expect(before.map(([s]) => s)).toEqual([200, 200, 200, 200, 404, 400]);
+    expect(after).toEqual(before);
+  }, 90000);
+
+  it('직접 해보기 2 · 과제 둘 — 확인이 못 가리던 판을 요구사항과 찾기 단계가 막는다', () => {
+    const md = LECTURE();
+    const p2 = md.slice(md.indexOf('### 직접 해보기 2'), md.indexOf('### 🤔 같이 생각해보기 — 에러 코드는 얼마나 잘게'));
+    expect(bodyOnly(p2)).toContain('`INTERNAL_ERROR`');
+    expect(bodyOnly(p2)).toContain('`서버에서 문제가 생겼어요`');
+    expect(read(R('lab/p3-37/coupons.js')).split('서버에서 문제가 생겼어요').length - 1).toBe(1);
+    expect(read(R('lab/p3-37/coupons.js')).split('그런 쿠폰은 없어요').length - 1).toBe(1);
+    const hw = md.slice(md.indexOf('## 과제'), md.indexOf('## 생각해볼 주제'));
+    const basic = hw.slice(0, hw.indexOf('### [응용]'));
+    const applied = hw.slice(hw.indexOf('### [응용]'));
+    expect(basic).toMatch(/찾기[^\n]*`그런 게시물은 없어요`[^\n]*\n?[^\n]*한 곳에서만/);
+    for (const code of ['USERNAME_TAKEN', 'EMAIL_TAKEN', 'PHONE_TAKEN']) expect(applied, code).toContain(`\`${code}\``);
+    // 답안의 정답 판은 문장을 한 번만 적고, 가입 409 코드 셋을 모두 칸으로 보낸다
+    expect(read(R('lab/p3-37/homework1.js')).split('그런 게시물은 없어요').length - 1).toBe(1);
+    const hw2 = read(R('lab/p3-37/homework2.js'));
+    for (const code of ['USERNAME_TAKEN', 'EMAIL_TAKEN', 'PHONE_TAKEN']) expect(hw2, code).toContain(`${code}:`);
+    expect(ANSWERS()).toContain('[form] 이미 가입한 이메일이에요');
+  });
+
+  it('과제 [응용] — EMAIL_TAKEN 을 빠뜨린 판은 4·5번을 통과하고, 이메일이 겹치는 가입에서 [form] 을 찍는다(답안의 흔한 실수)', async () => {
+    await freshGate();
+    await withServer(R, async ({ base, dir }) => {
+      await getRes(`${base}/api/auth/signup`, json('POST', TAEYANG));
+      const db = new pg.Client({ ...ADMIN, database: GATE_DB });
+      await db.connect();
+      try { await db.query("INSERT INTO users (username, email, name) VALUES ('sora', 'sora@example.com', '한소라') ON CONFLICT DO NOTHING"); } finally { await db.end(); }
+      const src = read(R('lab/p3-37/homework2.js')).replaceAll('http://localhost:3000', base);
+      const missing = src.replace("  EMAIL_TAKEN: 'emailOrPhone',\n", '');
+      expect(missing).not.toContain('EMAIL_TAKEN');
+      const run = (code) => { writeFileSync(join(dir, 'lab/p3-37/hw2-probe.js'), code); return runScript(dir, 'lab/p3-37/hw2-probe.js').out.trim().split('\n'); };
+      expect(run(missing)).toEqual(['[emailOrPhone] 이미 가입한 휴대폰 번호예요', '[username] 이미 쓰고 있는 사용자 이름이에요', '[form] 보낸 내용이 규칙에 안 맞아요']);
+      const email = "\nawait signup({ emailOrPhone: 'sora@example.com', name: '한소라', username: 'sora.new', password: 'sora1234' });\n";
+      expect(run(missing + email).at(-1)).toBe('[form] 이미 가입한 이메일이에요');
+      expect(run(src + email).at(-1)).toBe('[emailOrPhone] 이미 가입한 이메일이에요');
+    });
+  }, 90000);
+
+  it('앞 회차에 잇는 문장 — 그 회차 «본문»(토글 밖)에 그 사실이 있다', () => {
+    const md = LECTURE();
+    // Step 2 — 가입 API 회차: 터미널에 찍힌 제약 이름 · 409 는 «어딘가 겹쳤다» 까지 · 창 둘 장면
+    const p322 = prior('part3/4-react-auth/p3-22-signup-lecture.md');
+    expect(p322).toContain('Unique constraint failed on the constraint: `users_username_key`');
+    expect(p322).toContain('어느 값이 겹쳤는지는 다음 Step에서 만들 중복 확인 API가 입력칸마다 알려 줘요.');
+    expect(p322).toContain('409는 «어딘가 겹쳤다»까지만 말하지만, 다시 물어본 중복 확인이 어느 입력칸인지 알려 줘요.');
+    expect(md).toContain('가입 API를 처음 만들 때도 터미널의 Prisma 에러에 `users_username_key`가 찍혔죠.');
+    expect(md).toContain('창 둘을 나란히 놓고');
+    expect(md).toContain('**가입 API를 만들 때 걱정했던 일도 이렇게 막혀요.**');
+    // Step 3·4 — 버저닝 회차: 첫머리의 깨진 피드 · 생각해볼 주제 1 · 없는 주소가 v1 까지 지나감 / 라우터 회차: 마운트
+    const p334 = prior('part3/6-api-design/p3-34-versioning-docs-lecture.md');
+    expect(p334).toContain('아래로 내리는 순간 피드가 통째로 사라지고');
+    expect(p334).toContain('응답 봉투(response envelope)를 쓰기로 했다고 해 볼게요');
+    expect(p334).toContain('`/api/v2/zzz`처럼 없는 주소로 온 요청도 v1 라우터를 지나가서');
+    expect(read(P('../../part3/6-api-design/p3-34-versioning-docs-answers.md'))).toContain('새 버전에서만 감싸기');
+    expect(prior('part3/5-express-core/p3-30-router-structure-lecture.md')).toContain('라우터를 이렇게 주소에 붙이는 것을 마운트(mount)한다고 해요.');
+    expect(md).toContain('피드가 통째로 사라지는 것을 봤죠');
+    expect(md).toContain('`/api/v2/zzz`처럼 없는 주소로 온 요청이');
+    expect(md).toContain('라우터를 주소에 붙이는 일을 마운트(mount)라고 불렀죠');
+    expect(md).not.toContain('마운트(mount)라고도 해요');
+    // 낱말 · 인용 — 앞 회차의 «바깥 모양» · 백엔드 첫 회차 답안의 면접 멘트 · API 설계 회차의 «목록의 정보»
+    expect(prior('part3/7-express-auth/p3-36-mvc-service-layer-lecture.md')).toContain('응답의 바깥 모양');
+    expect(md).toContain('«바깥 모양»이라고 한 것과 같은 말이에요');
+    expect(read(P('../../part2/4-node-backend/p2-22-express-start-answers.md'))).toContain('상태 코드를 기준으로 두고 봉투는 부가 정보만');
+    expect(md).toContain('생각해볼 주제 답안에서 «상태 코드를 기준으로 두고 봉투는 부가 정보만»');
+    expect(prior('part3/6-api-design/p3-32-rest-uri-design-lecture.md')).toContain('«다음 페이지가 있는지»라는 목록의 정보');
+    expect(md).toContain('«다음 페이지가 있는지»를 싣는 형식');
+    // HTTP 캐싱 회차 — ETag 는 본문으로 계산한다
+    expect(prior('part3/6-api-design/p3-35-http-caching-lecture.md')).toContain('그 글자로 `ETag`를 계산한 뒤에야');
+  });
+
+  it('Step 3 — 다른 API 규칙 비교표는 🙋 토글 안(본문에는 «success 를 두지 않는다» 한 줄)', () => {
+    const md = LECTURE();
+    expect(md).toContain('| JSON:API 1.1 |');
+    expect(bodyOnly(md)).not.toContain('| JSON:API 1.1 |');
+    expect(bodyOnly(md)).toContain('널리 쓰이는 API 규칙들도 `success`를 두지 않아요.');
+  });
+});
