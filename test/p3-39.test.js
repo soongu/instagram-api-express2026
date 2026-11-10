@@ -134,8 +134,10 @@ beforeAll(async () => {
     await tpl.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
   await tpl.end();
-  execFileSync(process.execPath, [P('seed.js')], {
-    cwd: P('.'), encoding: 'utf8',
+  // 🚨 2026-11-10 p3-40 — 작업트리 seed.js 는 시드 다섯에게 비밀번호를 준다(userService.createUser). 이 회차의 시드 다섯은
+  //    비밀번호가 없어야 하니(축 ⑧ «다른 사람은 NULL») 이 회차 북마크의 seed.js 로 넣는다.
+  execFileSync(process.execPath, [R('seed.js')], {
+    cwd: ROUND.dir, encoding: 'utf8',
     env: { ...process.env, DATABASE_URL: `postgresql://postgres:postgres@localhost:5432/${TPL_DB}` },
   });
 }, 120000);
