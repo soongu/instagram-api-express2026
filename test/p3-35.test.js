@@ -11,6 +11,7 @@
 // 축 ⑤ Step 5~6 — 실습 서버 lab/p3-35/notices.js(만들기 전에 비교 · 메모리 캐시와 무효화)
 // 축 ⑥ 직접 해보기 · 과제 — 정답 판 · 틀린 판
 // 축 ⑦ 학생 파일 — code/p3-34 에서 바뀐 파일 · 교안 코드 블록 줄 실재
+// 축 ⑧ 학생 상태(최신순 9·1·2·3·4·5)와 앞 회차 잇기 — 2026-11-10 학생 낭독 집중 검수
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -617,6 +618,7 @@ describe('축 ⑦ — 학생 파일과 교안 블록', () => {
     const owners = {
       '// ~/instagram-api/app.js': [read(R('app.js')), read(P('snapshots/p3-35.step2-max-age.app.js'))],
       '// ~/instagram-api/middlewares/cache.js': [read(R('middlewares/cache.js'))],
+      '// ~/instagram-api/services/postService.js': [read(P('snapshots/p3-35.step1-log.postService.js'))],
       '// ~/instagram-api/node_modules/express/lib/response.js': [read(P('node_modules/express/lib/response.js'))],
       '// ~/instagram-api/lab/p3-35/notices.js': [LAB('notices.js'), read(P('snapshots/p3-35.step5-start.notices.js')), read(P('snapshots/p3-35.step5.notices.js')), read(P('snapshots/p3-35.step6-forgot.notices.js'))],
       '// ~/instagram-api/lab/p3-31/peek.js': [read(R('lab/p3-31/peek.js'))],
@@ -655,5 +657,201 @@ describe('축 ⑦ — 답안 블록', () => {
     const blocks = fences(ANSWERS());
     expect(blocks.filter((f) => f.lang === 'javascript').map((f) => `${f.body}\n`)).toEqual([LAB('homework1.js'), LAB('homework2.js')]);
     expect(blocks.filter((f) => f.lang === 'http').map((f) => `${f.body}\n`)).toEqual([LAB('homework1.http'), LAB('homework2.http')]);
+  });
+});
+
+// ── 축 ⑧ — 학생 상태와 앞 회차 잇기(2026-11-10 학생 낭독 집중 검수)
+// 지난 시간까지 교안을 따라온 학생의 수업 DB 는 최신순 9·1·2·3·4·5다 — p3-32 Step 7 이 7·8번을 올리고, p3-34 Step 2 가
+// 7번을 지운 뒤 posts.http «게시물 올리기» 로 9번을 올리고 8번을 지웠다. jaehoon(2번)은 1번 게시물에 좋아요를 눌러 두었다.
+// 교안의 개수·커서·ETag 는 이 상태로 적는다(시드 다섯 판으로 적었던 것이 학생 낭독 FAIL).
+const send = (base, method, path, json) => getRes(`${base}${path}`, json === undefined
+  ? { method }
+  : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(json) });
+const httpBody = (file, name) => {
+  const block = read(P(`requests/${file}`)).split('\n### ').find((one) => one.replace(/^### /, '').startsWith(`${name}\n`));
+  return JSON.parse(block.slice(block.indexOf('{'), block.lastIndexOf('}') + 1));
+};
+// 학생 파일의 «게시물 올리기» 는 p3-16 Step 6 이 사진 주소를 picsum 으로 바꾼 판이다(본문 길이가 ETag 앞부분을 정한다).
+const PICSUM = ['https://picsum.photos/seed/post8/600/600', 'https://picsum.photos/seed/post9/600/600'];
+const studentState = async (base) => {
+  reseed();
+  await db.query("SELECT setval('posts_id_seq', 6)");
+  expect((await send(base, 'PUT', '/api/posts/1/likes/2')).status).toBe(200);
+  const rest = httpBody('rest.http', '게시물 올리기 — Location 보기');
+  for (let n = 0; n < 2; n += 1) expect((await send(base, 'POST', '/api/posts', rest)).status).toBe(201);
+  expect((await send(base, 'DELETE', '/api/posts/7')).status).toBe(200);
+  const nine = await send(base, 'POST', '/api/posts', { ...httpBody('posts.http', '게시물 올리기'), imageUrls: PICSUM });
+  expect([nine.status, nine.body.id]).toEqual([201, 9]);
+  expect((await send(base, 'DELETE', '/api/posts/8')).status).toBe(200);
+};
+const decode = (cursor) => JSON.parse(Buffer.from(cursor, 'base64url').toString());
+/** 화면처럼 첫 페이지부터 nextCursor 를 따라 끝까지 — { path, res } */
+const walk = async (base) => {
+  const pages = [];
+  let cursor = null;
+  do {
+    const path = `${LIST}${cursor ? `&cursor=${cursor}` : ''}`;
+    const res = await getRes(`${base}${path}`);
+    pages.push({ path, res });
+    cursor = res.body.nextCursor;
+  } while (cursor);
+  return pages;
+};
+/** <details> 토글을 뺀 본문 */
+const bodyOnly = (md) => md.replace(/<details>[\s\S]*?<\/details>/g, '');
+const prior = (rel) => bodyOnly(read(P(`../../${rel}`)));
+const kind = (line) => {
+  if (line === '게시물 목록을 만들었어요') return 'built';
+  if (/^GET \/api\/auth\/me 304 [\d.]+ms$/.test(line)) return 'me304';
+  const m = line.match(/^GET \/api\/posts\?userId=2&limit=2(?:&cursor=(\S+))? 304 [\d.]+ms$/);
+  if (m) return m[1] ? `page${decode(m[1]).id}` : 'page';
+  return line;
+};
+
+describe('축 ⑧ — 학생 상태: 지난 시간까지 따라온 수업 DB 는 최신순 9·1·2·3·4·5', () => {
+  it('🔴 오프닝·Step 1 — 게시물 6개를 2개씩 3페이지 · 다음 커서를 풀면 1번·3번 · 첫 페이지 ETag 는 W/"3b6- · 교안 로그·헤더가 그 값', async () => {
+    await withServer(PORT, {}, async (before) => {
+      await studentState(before.base);
+      const pages = await walk(before.base);
+      expect(pages.map(({ res }) => res.body.items.map((post) => post.id))).toEqual([[9, 1], [2, 3], [4, 5]]);
+      expect(pages.slice(0, 2).map(({ res }) => decode(res.body.nextCursor).id)).toEqual([1, 3]);
+      expect(pages[0].res.body.items.map((post) => post.liked)).toEqual([false, true]);
+      expect(pages[0].res.headers.get('etag')).toMatch(/^W\/"3b6-/);
+    }, B);
+    const lecture = LECTURE();
+    expect(lecture).not.toContain('시드 그대로라면');
+    expect(lecture).toContain('지난 시간에 9번을 올리고 7번과 8번을 지웠으니 6개예요.');
+    expect(lecture).toContain('게시물 6개를 2개씩 받으니 목록은 3페이지예요');
+    expect(lecture).toContain('맨 위 카드(지난 시간에 올린 9번 게시물)의 빈 하트를 눌러 볼게요.');
+    // 교안 로그 펜스의 커서는 모두 1번·3번 게시물을 가리킨다(오프닝 · Step 1 확인용 줄 · Step 3)
+    const cursors = [...lecture.matchAll(/cursor=(eyJ[A-Za-z0-9_-]+)/g)].map((m) => decode(m[1]).id);
+    expect(cursors).toEqual([1, 3, 1, 3, 1, 3]);
+    expect(lecture).not.toMatch(/W\/"3c9-/);
+    expect(lecture).toContain('etag: W/"3b6-');
+    expect(prior('part3/6-api-design/p3-34-versioning-docs-lecture.md')).toContain("fetch('/api/posts/8', { method: 'DELETE' });");
+  });
+
+  it('🔴 Step 1 확인용 줄 — getPosts 맨 앞의 console.log 가 304 로 끝난 목록 요청마다 찍힌다 · 교안의 로그 펜스가 그 차례', async () => {
+    const snap = read(P('snapshots/p3-35.step1-log.postService.js'));
+    const base = read(B('services/postService.js')).split('\n');
+    expect(snap.split('\n').filter((line) => !base.includes(line))).toEqual([
+      '  // 확인용 — 목록을 만들 때마다 터미널에 찍는다(Step 2 에서 지운다).',
+      "  console.log('게시물 목록을 만들었어요');",
+    ]);
+    await withServer(PORT, { 'services/postService.js': snap }, async (srv) => {
+      await studentState(srv.base);
+      const pages = await walk(srv.base);
+      await sleep(200);
+      const from = srv.tail().length;
+      // 탭에 돌아오면 화면은 세 페이지를 차례로 다시 받고, 브라우저는 받아 둔 ETag 를 싣는다
+      const again = [];
+      for (const { path, res } of pages) again.push((await getRes(`${srv.base}${path}`, { headers: ask(res.headers.get('etag')) })).status);
+      await sleep(200);
+      expect(again).toEqual([304, 304, 304]);
+      const fresh = srv.tail().slice(from).split('\n').filter((line) => line !== '').map(kind);
+      expect(fresh).toEqual(['built', 'page', 'built', 'page1', 'built', 'page3']);
+    }, B);
+    const lecture = LECTURE();
+    const block = fences(lecture).find((f) => f.lang === '' && f.body.includes('게시물 목록을 만들었어요'));
+    expect(block).toBeDefined();
+    // «나는 누구» 는 첫 페이지와 함께 출발해 첫 확인용 줄 뒤에 끝난다(헤드리스 크롬으로 탭을 다섯 번 다녀와 늘 이 차례였다)
+    expect(block.body.split('\n').map(kind)).toEqual(['built', 'me304', 'page', 'built', 'page1', 'built', 'page3']);
+    expect(lecture).toContain('**목록 요청 3개가 모두 304로 끝났는데, «게시물 목록을 만들었어요»도 세 번 찍혔어요.**');
+    expect(lecture).toContain('먼저 Step 1에서 `getPosts`에 넣은 확인용 두 줄을 지우고,');
+    expect(lecture).not.toContain('304 줄의 시간을 보면 200 줄과 크게 다르지 않아요');
+  });
+
+  it('🔴 Step 4 — 따라온 학생의 peek.js 에는 p3-31 Step 8 이 시킨 사진 파일 이름이 들어 있다 · 교안은 임시 이름이라고 하지 않는다', () => {
+    expect(prior('part3/5-express-core/p3-31-file-upload-lecture.md')).toContain('`올린-파일-이름.jpg`는 방금 응답에 온 첫 사진의 파일 이름으로 바꿔 적어요.');
+    const lecture = LECTURE();
+    expect(lecture).not.toContain('임시 이름이 들어 있어요');
+    expect(lecture).not.toContain('없다면 `requests/uploads.http`');
+    expect(lecture).toContain('그 사진은 지금도 `uploads` 폴더에 있어요.');
+  });
+
+  it('🔴 «취소할 수 없다» 는 «그 응답만 골라» 로 좁힌다 · Clear-Site-Data 는 🙋 토글에서만', () => {
+    const lecture = LECTURE();
+    expect(lecture).not.toContain('`max-age`를 취소할 수 없어요');
+    expect(lecture).not.toContain('서버가 취소할 수 없으니');
+    expect(lecture).toContain('**서버는 한 번 내보낸 `max-age`를 그 응답만 골라 취소할 수 없어요.**');
+    expect(lecture).not.toContain('서버가 그 응답만 골라 취소할 수 없으니');
+    expect(lecture).toContain('### 이미 내보낸 60초는 브라우저가 지켜요');
+    expect(bodyOnly(lecture)).not.toContain('Clear-Site-Data');
+    expect(lecture).toContain('`Clear-Site-Data: "cache"`');
+  });
+});
+
+describe('축 ⑧ — 앞 회차에 잇는 문장: 그 회차 «본문»(토글 밖)에 그 사실이 있다', () => {
+  it('🔴 stale·fresh 는 React Query 를 배울 때 부른 말 그대로 — 오늘 교안·답안에 «신선»·«낡» 이 없다', () => {
+    expect(prior('part3/2-react-query/p3-12-why-react-query-lecture.md')).toContain('«오래된(stale)»');
+    expect(prior('part3/2-react-query/p3-13-use-mutation-lecture.md')).toContain('`Fresh` — 오래되지 않은 데이터예요.');
+    for (const md of [LECTURE(), ANSWERS()]) expect(md).not.toMatch(/신선|낡/);
+    expect(LECTURE()).toContain('React Query를 배울 때 받은 데이터를 «오래된(stale)» 데이터와 «오래되지 않은(fresh)» 데이터로 나눴죠.');
+  });
+
+  it('🔴 서버 쪽 캐시와 무효화는 Next.js 의 캐시를 배울 때 — "use cache" · updateTag · cacheLife', () => {
+    const p311 = prior('part3/1-nextjs/p3-11-cache-components-lecture.md');
+    expect(p311).toContain('이 일을 무효화(invalidation)라고 부르고');
+    expect(p311).toContain('**그 태그가 붙은 캐시를 곧바로 버려요.**');
+    expect(p311).toContain('## Step 4: 얼마나 오래 쓸까요 — `cacheLife`');
+    const lecture = LECTURE();
+    expect(lecture).toContain('Next.js에서 `updateTag`로 캐시를 비운 일도');
+    expect(lecture).toContain('서버 쪽 캐시는 Next.js의 캐시를 배울 때');
+    expect(lecture).toContain('`cacheLife`로 시간을 정한 것과 같은 방법이에요.');
+  });
+
+  it('🔴 사진의 304 는 파일 업로드를 배울 때 · 빌드 파일 이름의 글자는 React 웹 개발을 시작할 때', () => {
+    expect(prior('part3/5-express-core/p3-31-file-upload-lecture.md')).toContain('`Cache-Control: public, max-age=0`은 «저장해 둬도 되지만, 쓸 때마다 서버에 아직 같은지 물어보라»는 뜻이라');
+    expect(prior('part2/1-react-start/p2-06-render-deploy-lecture.md')).toContain('파일 내용에서 계산한 값이라 내용이 바뀌면 이름도 바뀌고, 그래서 브라우저가 옛날 파일을 계속 쓰는 일이 안 생겨요.');
+    const lecture = LECTURE();
+    expect(lecture).toContain('그때 사진을 새로고침하며 본 그 304예요.');
+    expect(lecture).toContain('`index-B0_TG7A5.js`');
+    expect(lecture).not.toMatch(/`Cache-Control`도 `Last-Modified`도/);
+    expect(lecture).toContain('`Last-Modified`(마지막으로 고친 시각)도 없어서');
+  });
+
+  it('🔴 «프록시» 는 오늘 말하는 저장하는 쪽과 수업 프로젝트의 넘겨주는 쪽을 가른다 · private·public 을 안 적어도 공유 캐시는 저장할 수 있다', () => {
+    const lecture = LECTURE();
+    expect(lecture).toContain('수업 프로젝트의 `rewrites`나 `proxy.js`처럼');
+    expect(lecture).toContain('둘 다 적지 않아도 공유 캐시는 응답을 저장할 수 있어요');
+    // Vary 두 문단은 🙋 토글 안으로
+    expect(bodyOnly(lecture)).not.toContain('Vary: Cookie');
+    expect(lecture).toContain('`Vary: Cookie`');
+  });
+});
+
+describe('축 ⑧ — 직접 해보기 2 · 과제 [응용] 답안', () => {
+  const OLD = '"1-1762650000000"';
+  const check = async (srv) => {
+    const first = await getRes(`${srv.base}/api/articles/1`);
+    const again = await getRes(`${srv.base}/api/articles/1`, { headers: ask(OLD) });
+    await sleep(200);
+    const builtBefore = lines(srv, /1번 글을 만들었어요/g);
+    await getRes(`${srv.base}/api/articles/1`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: '글을 조금 고쳤어요.' }) });
+    const after = await getRes(`${srv.base}/api/articles/1`, { headers: ask(OLD) });
+    return { firstEtag: first.headers.get('etag'), again: again.status, builtBefore, after: after.status, afterBody: after.body.body ?? null };
+  };
+  it('🔴 글자를 직접 비교한 판도 요구사항을 통과한다 · W/ 를 붙인 요청은 둘 다 304 지만 그 판은 만든 뒤 304 · 해설이 그 사실을 말한다', async () => {
+    const strict = swap(LAB('practice2.js'), '  if (req.fresh) {', "  if (req.get('If-None-Match') === res.get('ETag')) {");
+    const weak = async (srv) => {
+      const before = lines(srv, /1번 글을 만들었어요/g);
+      const res = await getRes(`${srv.base}/api/articles/1`, { headers: ask('W/"1-1762650000000"') });
+      await sleep(400);
+      return { status: res.status, built: lines(srv, /1번 글을 만들었어요/g) - before };
+    };
+    await withLab(strict, 4002, 3834, async (srv) => {
+      expect(await weak(srv)).toEqual({ status: 304, built: 1 });
+    });
+    await withLab(strict, 4002, 3834, async (srv) => {
+      expect(await check(srv)).toEqual({ firstEtag: OLD, again: 304, builtBefore: 1, after: 200, afterBody: '글을 조금 고쳤어요.' });
+    });
+    await withLab(LAB('practice2.js'), 4002, 3834, async (srv) => {
+      expect(await weak(srv)).toEqual({ status: 304, built: 0 });
+    });
+    expect(LECTURE()).toContain('글자 그대로 비교해도(`req.get(\'If-None-Match\')`) 요구사항은 모두 통과해요.');
+  });
+
+  it('🔴 과제 [응용] 답안 — 몇 번째 요청에서 다시 세는지는 말하지 않는다', () => {
+    expect(ANSWERS()).not.toContain('다섯 번은');
   });
 });
