@@ -44,6 +44,12 @@ export async function checkPassword(username, password) {
   if (!user || user.passwordHash === null || !matched) return null;
 
   const { passwordHash, ...found } = user;
+
+  // 지금보다 낮은 cost 로 만든 해시면, 맞는 비밀번호를 받은 김에 지금 cost 로 다시 만들어 둔다.
+  if (bcrypt.getRounds(passwordHash) < PASSWORD_COST) {
+    await setPassword(username, password);
+  }
+
   return found;
 }
 
@@ -77,7 +83,7 @@ export async function isTaken(type, value) {
   return user !== null;
 }
 
-// 이미 있는 사람의 비밀번호를 새로 정한다 — 관리자 스크립트가 부른다.
+// 이미 있는 사람의 비밀번호를 새로 정한다 — 관리자 스크립트가 부르고, cost 를 올린 뒤에는 로그인도 부른다.
 export async function setPassword(username, password) {
   const passwordHash = await bcrypt.hash(password, PASSWORD_COST);
 
