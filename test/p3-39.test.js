@@ -224,7 +224,7 @@ describe('축 ④ 직접 해보기 1 — checkPassword', () => {
     return result;
   };
 
-  it('🔴 정답 판 — true · false · true', () => {
+  it('🔴 정답 판 — true · false · true(셋째 줄은 같은 비밀번호의 두 해시가 다른가)', () => {
     expect(lines(run(LAB('.'), 'practice1.js').out)).toEqual(['true', 'false', 'true']);
   });
 
@@ -237,7 +237,14 @@ describe('축 ④ 직접 해보기 1 — checkPassword', () => {
     expect(answer).toMatch(new RegExp(`^${pattern}$`, 's'));
   });
 
-  it('🔴 틀린 판 — 솔트를 빼고 다시 해시하면 · 솔트를 새로 만들면 첫 줄이 false', () => {
+  it('🔴 틀린 판 — 둘 다 솔트를 빼거나 고정 솔트면 셋째 줄이 false · 확인만 솔트를 빼거나 새로 만들면 첫 줄이 false', () => {
+    const base = read(LAB('practice1.js'));
+    const noSaltBoth = base.replace("return { salt, hash: sha256(salt + password) };", "return { salt, hash: sha256(password) };").replace('const hash = sha256(saved.salt + password);', 'const hash = sha256(password);');
+    const fixedSalt = base.replace("const salt = randomBytes(16).toString('hex');", "const salt = 'abc';");
+    expect(noSaltBoth).not.toBe(base);
+    expect(fixedSalt).not.toBe(base);
+    expect(lines(variant(noSaltBoth).out)).toEqual(['true', 'false', 'false']);
+    expect(lines(variant(fixedSalt).out)).toEqual(['true', 'false', 'false']);
     const answer = read(LAB('practice1.js'));
     const noSalt = answer.replace('const hash = sha256(saved.salt + password);', 'const hash = sha256(password);');
     const newSalt = answer.replace('const hash = sha256(saved.salt + password);', 'const { hash } = hashPassword(password);');
@@ -522,7 +529,7 @@ describe('축 ⑩ 직접 해보기 3 — 관리자 스크립트', () => {
 });
 
 describe('축 ⑪ 과제', () => {
-  it('🔴 [기초] homework1.http — 201 · 201 · 409 · 400 · 목록은 이메일만 · 서버 기록의 두 해시는 다르다', async () => {
+  it('🔴 [기초] homework1.http — 201 · 201 · 409 · 400 · 400 · 200 · 목록은 이메일만 · 서버 기록의 두 해시는 다르다', async () => {
     await withLabServer('homework1.js', HW_PORT, async ({ dir, srv }) => {
       const http = read(join(dir, 'homework1.http'));
       const requests = http.split(/^### /m).slice(1).map((block) => {
@@ -532,7 +539,7 @@ describe('축 ⑪ 과제', () => {
         const body = rest.join('\n').split('\n\n')[1]?.trim();
         return { title, method, url, body };
       });
-      expect(requests.map((r) => r.title)).toEqual(['가입', '같은 비밀번호로 한 사람 더 가입', '이미 가입한 이메일', '짧은 비밀번호', '회원 목록']);
+      expect(requests.map((r) => r.title)).toEqual(['가입', '같은 비밀번호로 한 사람 더 가입', '이미 가입한 이메일', '이메일이 숫자인 가입', '짧은 비밀번호', '회원 목록']);
       const statuses = [];
       let list;
       for (const r of requests) {
@@ -540,7 +547,7 @@ describe('축 ⑪ 과제', () => {
         statuses.push(res.status);
         list = res.body;
       }
-      expect(statuses).toEqual([201, 201, 409, 400, 200]);
+      expect(statuses).toEqual([201, 201, 409, 400, 400, 200]);
       expect(list).toEqual([{ email: 'bomi@example.com' }, { email: 'gaeun@example.com' }]);
       const hashes = [...srv.tail().matchAll(/passwordHash: '(\$2b\$12\$[./A-Za-z0-9]{53})'/g)].map((m) => m[1]);
       expect(hashes).toHaveLength(2);
