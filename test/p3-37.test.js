@@ -789,7 +789,7 @@ const fences = (md) => {
   });
   return out;
 };
-const NEXT = (rel) => execFileSync('git', ['show', `cc/main:${rel}`], { cwd: P('../instagram-next'), encoding: 'utf8' });
+const NEXT = (rel) => execFileSync('git', ['show', `code/p3-33:${rel}`], { cwd: P('../instagram-next'), encoding: 'utf8' });
 // Step 4·5 의 app.js — 앞 판에서 라우터를 두 주소에 붙인 판(에러 미들웨어는 아직 앞 판 그대로).
 const STEP4_APP = () => {
   const before = read(B('app.js'));
