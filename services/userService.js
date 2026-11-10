@@ -31,7 +31,8 @@ export async function checkPassword(username, password) {
     select: { ...userFields, passwordHash: true },
   });
 
-  if (!user) return null;
+  // 비밀번호가 없는 사람(password_hash 가 NULL)은 비밀번호로 로그인할 수 없다.
+  if (!user || user.passwordHash === null) return null;
 
   const matched = await bcrypt.compare(password, user.passwordHash);
 
