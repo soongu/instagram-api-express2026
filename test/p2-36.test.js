@@ -346,7 +346,8 @@ describe('Step 7 — 좋아요 장면의 숫자가 교안 그대로다', () => {
     expect(await 누른사람()).toEqual([]);
 
     // 직접 해보기 3 — `.http` 의 그 요청 그대로 보낸 뒤, 화면에서 jaehoon 이 누른다.
-    const http = read(P('requests/posts.http'));
+    // 🚨 (p3-41) 그 회차가 `posts.http` 의 dahye 두 요청을 지우고 좋아요 주소를 `/likes/me` 로 바꿨다 — 직전 판 `code/p3-40` 을 읽는다.
+    const http = execFileSync('git', ['show', 'code/p3-40:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
     const 줄 = http.split('### 1번 게시물에 dahye가 좋아요\n')[1].split('\n')[0];
     expect(줄).toBe('PUT http://localhost:3000/api/posts/1/likes/1');
     const dahye = await fetch(줄.replace('PUT http://localhost:3000', server.base), { method: 'PUT' });
@@ -566,7 +567,8 @@ describe('인용이 코드베이스와 맞는가', () => {
     // 🚨 초판은 이미 파일에 있는 요청(`### 최신 두 개만` · `### 1번 게시물에 dahye가 좋아요`)을
     //    «새로 적으라» 고 했고, 봉투로 바뀐 뒤 깨지는 `{{list[0].id}}` 를 말하지 않았다(2026-09-22 낭독).
     const lec = read(LECTURE);
-    const http = read(P('requests/posts.http'));
+    // 🚨 (p3-41) 그 회차가 `posts.http` 의 dahye 두 요청을 지우고 좋아요 주소를 `/likes/me` 로 바꿨다 — 직전 판 `code/p3-40` 을 읽는다.
+    const http = execFileSync('git', ['show', 'code/p3-40:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
     for (const q of blocksOf(LECTURE, 'http')) {
       expect(http, q.split('\n')[0]).toContain(q.trim());
     }
