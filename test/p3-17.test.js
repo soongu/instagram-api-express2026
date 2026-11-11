@@ -205,7 +205,8 @@ describe('축 ⑤ — 다른 응답에도 liked: false', () => {
 });
 
 describe('축 ⑥ — requests/posts.http', () => {
-  const http = read(P('requests/posts.http'));
+  // 🚨 (p3-41) 그 회차가 `?userId=` 두 요청을 지웠다(목록의 «보는 사람» 은 로그인 정보로) — 이 회차 북마크의 판을 읽는다.
+  const http = execFileSync('git', ['show', 'code/p3-17:requests/posts.http'], { cwd: P('.'), encoding: 'utf8' });
   it('🔴 jaehoon 이 보는 목록 · dahye 가 보는 목록 두 요청이 끝에 있다', () => {
     expect(http.trimEnd().endsWith([
       '### jaehoon(2번)이 보는 최신 두 개',
