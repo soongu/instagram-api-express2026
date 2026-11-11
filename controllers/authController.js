@@ -3,9 +3,7 @@ import * as authService from '../services/authService.js';
 import * as userService from '../services/userService.js';
 import { sendData } from '../responses.js';
 import { MESSAGES } from '../errors.js';
-
-// 로그인 쿠키를 남겨 둘 기간 — 7일(밀리초)
-const SEVEN_DAYS = 1000 * 60 * 60 * 24 * 7;
+import { SESSION_LIFETIME } from '../services/sessionService.js';
 
 // 이미 쓰고 있을 때의 에러 코드 — 무엇을 찾았는지에 따라 다르다. 문장은 가입이 409 로 실패할 때와 같다.
 const TAKEN = {
@@ -48,7 +46,7 @@ export async function login(req, res) {
   res.cookie('sessionId', sessionId, {
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: SEVEN_DAYS,
+    maxAge: SESSION_LIFETIME,
   });
 
   sendData(res, user);
