@@ -29,6 +29,7 @@ import {
 import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
+import { roundDir } from './helpers/round.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -41,6 +42,8 @@ const GATE_DB = 'p238_gate';
 const GATE_URL = `postgresql://postgres:postgres@localhost:5432/${GATE_DB}`;
 const ENV = { DATABASE_URL: GATE_URL };
 const PORT = 3468;
+// 🚨 (p3-41) 그 회차부터 게시물 목록은 로그인한 사람만 받는다 — 목록을 물어보는 서버는 직전 판 `code/p3-40` 을 띄운다.
+const PIN = roundDir('code/p3-40');
 
 const read = (p) => readFileSync(p, 'utf8');
 const FRONT = (rel) => read(P(`../instagram-react/${rel}`));
@@ -87,6 +90,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await server?.stop();
   await db?.end();
+  PIN.cleanup();
 });
 
 describe('축 ① — 빈 데이터베이스가 «명령 두 줄» 로 쓸 수 있게 된다', () => {
@@ -186,6 +190,7 @@ describe('축 ④ — `npm start` 는 `--env-file` 없이 뜬다', () => {
   it('환경변수만 주면 서버가 뜨고 시드한 데이터를 준다', async () => {
     server = await boot('app.js', {
       port: PORT,
+      cwd: PIN.dir,
       env: { ...ENV, PORT: String(PORT), CORS_ORIGIN: OURS },
       ready: `${PORT}번 포트에서`,
     });
@@ -496,6 +501,7 @@ describe('축 ⑬ — 서버는 첫 요청 때 SSL 경고를 한 번 찍는다',
   it('뜰 때의 출력에는 없고, 첫 요청 뒤에 한 번 생기며, 두 번째 요청에는 더 안 찍힌다', async () => {
     const s = await boot('app.js', {
       port: 포트,
+      cwd: PIN.dir,
       env: { DATABASE_URL: `${GATE_URL}?sslmode=require`, PORT: String(포트), CORS_ORIGIN: OURS },
       ready: `${포트}번 포트에서`,
     });
