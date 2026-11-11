@@ -60,8 +60,8 @@ export async function me(req, res) {
   sendData(res, user);
 }
 
-export function logout(req, res) {
-  authService.logout(readSessionId(req));
+export async function logout(req, res) {
+  await authService.logout(readSessionId(req));
 
   res.clearCookie('sessionId');
   sendData(res, { message: '로그아웃했어요' });
