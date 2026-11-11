@@ -68,22 +68,16 @@ Content-Type: application/json
   "authorId": 3
 
 ### 좋아요 누르기
-PUT http://localhost:3000/api/posts/3/likes/2
+PUT http://localhost:3000/api/posts/3/likes/me
 
 ### 좋아요 취소
-DELETE http://localhost:3000/api/posts/3/likes/2
+DELETE http://localhost:3000/api/posts/3/likes/me
 
 ### 좋아요 누른 사람들
 GET http://localhost:3000/api/posts/3/likes
 
 ### 1번 게시물 지금 상태
 GET http://localhost:3000/api/posts/1
-
-### 1번 게시물에 dahye가 좋아요
-PUT http://localhost:3000/api/posts/1/likes/1
-
-### 1번 게시물에 dahye가 누른 좋아요 취소
-DELETE http://localhost:3000/api/posts/1/likes/1
 
 ### 1번 게시물 좋아요 누른 사람들
 GET http://localhost:3000/api/posts/1/likes
@@ -93,9 +87,3 @@ GET http://localhost:3000/api/posts?limit=2&cursor=2
 
 ### 4번 다음부터
 GET http://localhost:3000/api/posts?limit=2&cursor=4
-
-### jaehoon(2번)이 보는 최신 두 개
-GET http://localhost:3000/api/posts?userId=2&limit=2
-
-### dahye(1번)가 보는 최신 두 개
-GET http://localhost:3000/api/posts?userId=1&limit=2

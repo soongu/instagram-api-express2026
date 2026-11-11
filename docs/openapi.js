@@ -62,12 +62,8 @@ function queryParameters(schema) {
   }));
 }
 
-// 게시물 목록의 쿼리 — 두 버전이 같다.
-const listParameters = [
-  ...queryParameters(postListQuerySchema),
-  // userId 는 검사 스키마 밖에서 읽는 값이라 손으로 적는다.
-  { name: 'userId', in: 'query', description: '보는 사람의 번호 — 그 사람이 누른 좋아요가 liked 로 온다(숫자가 아니면 세지 않는다)', schema: { type: 'integer' } },
-];
+// 게시물 목록의 쿼리 — 두 버전이 같다. 보는 사람은 로그인 정보로 정해서 쿼리에 없다.
+const listParameters = queryParameters(postListQuerySchema);
 
 export const openapi = {
   openapi: '3.2.0',
@@ -84,6 +80,7 @@ export const openapi = {
         responses: {
           200: { description: '게시물 한 페이지', content: json(data(ref('PostPage'))) },
           400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않음', content: json(errorOf('LOGIN_REQUIRED')) },
         },
       },
       post: {
@@ -92,6 +89,7 @@ export const openapi = {
         responses: {
           201: { description: '만든 게시물 — Location 헤더에 그 게시물의 주소', content: json(data(ref('Post'))) },
           400: { description: '보낸 내용이 규칙에 안 맞거나, 글쓴이가 없음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'USER_NOT_FOUND')) },
+          401: { description: '로그인하지 않음', content: json(errorOf('LOGIN_REQUIRED')) },
         },
       },
     },
@@ -118,6 +116,7 @@ export const openapi = {
         responses: {
           200: { description: '게시물 한 페이지', content: json(ref('PostPage')) },
           400: { description: '쿼리 값이 규칙에 안 맞음', content: json(ref('Error')) },
+          401: { description: '로그인하지 않음', content: json(ref('Error')) },
         },
       },
       post: {
@@ -128,6 +127,7 @@ export const openapi = {
         responses: {
           201: { description: '만든 게시물 — Location 헤더에 그 게시물의 주소', content: json(ref('Post')) },
           400: { description: '보낸 내용이 규칙에 안 맞음', content: json(ref('Error')) },
+          401: { description: '로그인하지 않음', content: json(ref('Error')) },
         },
       },
     },

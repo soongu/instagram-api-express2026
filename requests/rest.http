@@ -8,7 +8,7 @@ GET http://localhost:3000/api/posts/1/
 HEAD http://localhost:3000/api/posts/1
 
 ### 좋아요를 POST로 누르기
-POST http://localhost:3000/api/posts/1/likes/2
+POST http://localhost:3000/api/posts/1/likes/me
 
 ### 게시물 올리기 — Location 보기
 # @name created
