@@ -671,8 +671,10 @@ describe('축 ⑦ — 답안 블록', () => {
 const send = (base, method, path, json) => getRes(`${base}${path}`, json === undefined
   ? { method }
   : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(json) });
+// 🚨 (p3-41) 그 회차가 posts.http «게시물 올리기» 의 authorId 줄을 지웠다(글쓴이는 로그인 정보로) — 이 회차 학생이 보낸 판(code/p3-40)을 읽는다.
 const httpBody = (file, name) => {
-  const block = read(P(`requests/${file}`)).split('\n### ').find((one) => one.replace(/^### /, '').startsWith(`${name}\n`));
+  const text = execFileSync('git', ['show', `code/p3-40:requests/${file}`], { cwd: P('.'), encoding: 'utf8' });
+  const block = text.split('\n### ').find((one) => one.replace(/^### /, '').startsWith(`${name}\n`));
   return JSON.parse(block.slice(block.indexOf('{'), block.lastIndexOf('}') + 1));
 };
 // 학생 파일의 «게시물 올리기» 는 p3-16 Step 6 이 사진 주소를 picsum 으로 바꾼 판이다(본문 길이가 ETag 앞부분을 정한다).
