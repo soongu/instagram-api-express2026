@@ -54,3 +54,10 @@ export async function logout(req, res) {
   res.clearCookie('sessionId');
   sendData(res, { message: '로그아웃했어요' });
 }
+
+export async function logoutAll(req, res) {
+  await authService.logoutAll(res.locals.userId);
+
+  res.clearCookie('sessionId');
+  sendData(res, { message: '모든 기기에서 로그아웃했어요' });
+}

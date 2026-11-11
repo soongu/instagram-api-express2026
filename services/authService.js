@@ -41,3 +41,8 @@ export async function whoAmI(sessionId) {
 export async function logout(sessionId) {
   await sessionService.deleteSession(sessionId);
 }
+
+// 모든 기기에서 로그아웃 — 그 사람의 세션을 테이블에서 모두 지운다. 지운 세션 수를 돌려준다.
+export function logoutAll(userId) {
+  return sessionService.deleteUserSessions(userId);
+}
