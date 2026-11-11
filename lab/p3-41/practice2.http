@@ -1,0 +1,20 @@
+### 공지 목록 — 로그인하지 않은 사람
+# @no-cookie-jar
+GET http://localhost:4002/notices
+
+### 공지 올리기
+POST http://localhost:4002/notices
+Content-Type: application/json
+
+{
+  "title": "다음 주 스터디는 쉬어요"
+}
+
+### 로그인하지 않고 공지 올리기
+# @no-cookie-jar
+POST http://localhost:4002/notices
+Content-Type: application/json
+
+{
+  "title": "아무나 올려 볼게요"
+}
