@@ -1,0 +1,38 @@
+### 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi1234"
+}
+
+### 로그인하지 않고 회원 목록
+# @no-cookie-jar
+GET http://localhost:4011/members
+
+### 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi1234"
+}
+
+### 회원 목록
+GET http://localhost:4011/members
+
+### 나는 누구
+GET http://localhost:4011/me
+
+### 로그아웃
+POST http://localhost:4011/logout
+
+### 로그아웃한 뒤 회원 목록
+GET http://localhost:4011/members
+
+### 복사해 둔 쿠키로 회원 목록
+# @no-cookie-jar
+GET http://localhost:4011/members
+Cookie: clubSession=로그인 응답에서 복사한 값
