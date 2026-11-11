@@ -13,6 +13,7 @@ export const MESSAGES = {
   UPLOAD_FAILED: '사진을 받지 못했어요',
   LOGIN_FAILED: '사용자 이름이나 비밀번호가 맞지 않아요',
   LOGIN_REQUIRED: '로그인이 필요해요',
+  NOT_POST_AUTHOR: '내가 쓴 게시물만 고치거나 지울 수 있어요',
   POST_NOT_FOUND: '그런 게시물은 없어요',
   USER_NOT_FOUND: '그런 사용자는 없어요',
   POST_OR_USER_NOT_FOUND: '그런 게시물이나 사용자는 없어요',
@@ -48,6 +49,12 @@ export class BadRequestError extends HttpError {
 export class UnauthorizedError extends HttpError {
   constructor(code) {
     super(401, code);
+  }
+}
+
+export class ForbiddenError extends HttpError {
+  constructor(code) {
+    super(403, code);
   }
 }
 

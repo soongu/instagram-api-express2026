@@ -86,7 +86,7 @@ export const openapi = {
         requestBody: { required: true, content: json(toSchema(postCreateSchema)) },
         responses: {
           201: { description: '만든 게시물 — Location 헤더에 그 게시물의 주소', content: json(data(ref('Post'))) },
-          400: { description: '보낸 내용이 규칙에 안 맞거나, 글쓴이가 없음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'USER_NOT_FOUND')) },
+          400: { description: '보낸 내용이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY')) },
           401: { description: '로그인하지 않음', content: json(errorOf('LOGIN_REQUIRED')) },
         },
       },
