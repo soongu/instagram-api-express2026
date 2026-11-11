@@ -10,17 +10,23 @@ import { readdirSync, readFileSync } from 'node:fs';
 
 const MIG = new URL('../../prisma/migrations/', import.meta.url);
 
-/** 폴더 이름이 `after` 보다 뒤인 마이그레이션을 차례로 모두 적용한다. */
-export async function applyMigrationsAfter(client, after) {
+/** 폴더 이름이 `after` 보다 뒤인(그리고 `before` 를 주면 그보다 앞인) 마이그레이션을 차례로 모두 적용한다. */
+// 🚨 2026-11-11 `p3-41` — `sessions` 테이블이 `users` 를 가리키게 됐다. 그 테이블이 있는 DB 에서는
+//    `sessions` 를 비우는 목록에 없는 옛 회차의 `seed.js`(북마크 판)가 `TRUNCATE … users` 에서 0A000 으로 멈춘다.
+//    옛 시드를 그대로 쓰는 판정은 `before: SESSIONS_MIGRATION` 으로 그 앞까지만 얹는다(그 회차 학생 파일은 세션을 메모리에 둔다).
+export async function applyMigrationsAfter(client, after, before = null) {
   const dirs = readdirSync(MIG, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
 
-  for (const dir of dirs.filter((name) => name > after)) {
+  for (const dir of dirs.filter((name) => name > after && (before === null || name < before))) {
     await client.query(readFileSync(new URL(`${dir}/migration.sql`, MIG), 'utf8'));
   }
 }
 
 /** `p2-34` 의 마지막 마이그레이션 — 그 뒤로는 `p3-22` 가 처음 스키마를 바꿨다. */
 export const P234_LAST = '20261001144541_add_post_likes';
+
+/** `p3-41` 의 `sessions` 테이블 — 이것이 생기면 `sessions` 를 모르는 옛 시드는 `users` 를 비우지 못한다. */
+export const SESSIONS_MIGRATION = '20261111043902_add_sessions';

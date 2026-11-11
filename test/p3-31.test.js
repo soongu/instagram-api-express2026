@@ -27,7 +27,7 @@ import pg from 'pg';
 import express from 'express';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
-import { applyMigrationsAfter } from './helpers/tip-schema.js';
+import { applyMigrationsAfter, SESSIONS_MIGRATION } from './helpers/tip-schema.js';
 import { P235_MIGRATIONS } from '../sql/p2-36/setup.mjs';
 
 const ROOT = new URL('../', import.meta.url);
@@ -139,7 +139,8 @@ beforeAll(async () => {
   }
   // 🚨 2026-11-10 p3-39 — 작업트리 스키마에 users.password_hash 가 생겼다. 시드가 작업트리 클라이언트로 돌아 그 칸까지 고르므로
   //    (P2022) 이 회차의 마이그레이션 뒤로 tip 의 것을 얹는다. 이 회차의 학생 파일은 그 칸을 읽지도 쓰지도 않는다(test/helpers/tip-schema.js).
-  await applyMigrationsAfter(db, SIGNUP_MIGRATION);
+  // 🚨 2026-11-11 p3-41 — 이 회차 북마크의 seed.js 는 sessions 를 비우는 목록에 없다 — sessions 테이블 앞까지만 얹는다.
+  await applyMigrationsAfter(db, SIGNUP_MIGRATION, SESSIONS_MIGRATION);
   reseed();
 }, 120000);
 
