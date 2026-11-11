@@ -130,3 +130,6 @@ Content-Type: application/json
   "username": "jiwon",
   "password": "우리집첫째강아지이름은초코이고둘째강아지이름은보람이에요"
 }
+
+### 모든 기기에서 로그아웃
+POST http://localhost:3000/api/auth/logout-all
