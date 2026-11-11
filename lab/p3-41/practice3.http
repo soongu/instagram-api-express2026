@@ -1,0 +1,14 @@
+### 댓글 목록
+GET http://localhost:4003/comments
+
+### 내 게시물에 minji가 단 댓글 지우기
+DELETE http://localhost:4003/comments/1
+
+### minji 게시물에 내가 단 댓글 지우기
+DELETE http://localhost:4003/comments/2
+
+### minji 게시물에 nayeon이 단 댓글 지우기
+DELETE http://localhost:4003/comments/3
+
+### 없는 댓글 지우기
+DELETE http://localhost:4003/comments/99
