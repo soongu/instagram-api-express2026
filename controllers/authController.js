@@ -4,6 +4,7 @@ import * as userService from '../services/userService.js';
 import { sendData } from '../responses.js';
 import { MESSAGES } from '../errors.js';
 import { SESSION_LIFETIME } from '../services/sessionService.js';
+import { readSessionId } from '../middlewares/auth.js';
 
 // 이미 쓰고 있을 때의 에러 코드 — 무엇을 찾았는지에 따라 다르다. 문장은 가입이 409 로 실패할 때와 같다.
 const TAKEN = {
@@ -11,17 +12,6 @@ const TAKEN = {
   phone: 'PHONE_TAKEN',
   username: 'USERNAME_TAKEN',
 };
-
-// 요청에 실려 온 세션 ID — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
-function readSessionId(req) {
-  const header = req.headers.authorization;
-
-  if (header && header.startsWith('Bearer ')) {
-    return header.slice('Bearer '.length);
-  }
-
-  return req.cookies.sessionId;
-}
 
 export async function signup(req, res) {
   const { emailOrPhone, name, username, password } = req.body;

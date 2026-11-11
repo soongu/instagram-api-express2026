@@ -13,6 +13,7 @@ import { logger } from './middlewares/logger.js';
 import { privateNoCache } from './middlewares/cache.js';
 import { apiVersion } from './middlewares/version.js';
 import { oldApiNotice } from './middlewares/deprecation.js';
+import { requireLogin } from './middlewares/auth.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 
@@ -51,9 +52,12 @@ app.get('/', (req, res) => {
 
 // API 라우터 넷을 라우터 하나로 모은다 — 같은 API 를 두 주소에 붙이려고.
 const api = express.Router();
+// 로그인하러 오는 주소 — 로그인 확인보다 «위» 에 둔다.
+api.use('/auth', authRouter);
+// 여기부터는 로그인한 사람만 지나간다.
+api.use(requireLogin);
 api.use('/posts', postsRouter);
 api.use('/posts/:id/likes', likesRouter);
-api.use('/auth', authRouter);
 api.use('/uploads', uploadsRouter);
 
 // 새 주소 — 버전은 위에서 적어 두었다.

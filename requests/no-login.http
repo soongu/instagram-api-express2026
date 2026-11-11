@@ -1,0 +1,11 @@
+### 로그인하지 않고 게시물 목록
+# @no-cookie-jar
+GET http://localhost:3000/api/posts?limit=1
+
+### 로그인하지 않고 minji 이름으로 좋아요
+# @no-cookie-jar
+PUT http://localhost:3000/api/posts/1/likes/3
+
+### 로그인하지 않고 minji 이름으로 누른 좋아요 취소
+# @no-cookie-jar
+DELETE http://localhost:3000/api/posts/1/likes/3
