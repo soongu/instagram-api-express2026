@@ -2,7 +2,7 @@
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '../db.js';
-import { BadRequestError, NotFoundError } from '../errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { cursorSchema } from '../schemas/postSchema.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
@@ -130,7 +130,17 @@ export async function createPost({ imageUrls, ...data }) {
   }
 }
 
-export async function updatePost(id, data) {
+// 쓴 사람만 고치고 지울 수 있다 — 게시물이 없으면 404, 있는데 쓴 사람이 아니면 403.
+async function checkAuthor(id, userId) {
+  const post = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
+
+  if (!post) throw new NotFoundError('POST_NOT_FOUND');
+  if (post.authorId !== userId) throw new ForbiddenError('NOT_POST_AUTHOR');
+}
+
+export async function updatePost(id, userId, data) {
+  await checkAuthor(id, userId);
+
   try {
     const post = await prisma.post.update({
       where: { id },
@@ -141,7 +151,6 @@ export async function updatePost(id, data) {
     return flatten(post);
   } catch (error) {
     if (error.code === 'P2025') throw new NotFoundError('POST_NOT_FOUND');
-    if (error.code === 'P2003') throw new BadRequestError('USER_NOT_FOUND');
     throw error;
   }
 }
@@ -161,7 +170,9 @@ async function removeUploadedFiles(imageUrls) {
   }
 }
 
-export async function removePost(id) {
+export async function removePost(id, userId) {
+  await checkAuthor(id, userId);
+
   let post;
   try {
     post = await prisma.post.delete({

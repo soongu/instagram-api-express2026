@@ -26,7 +26,6 @@ POST http://localhost:3000/api/posts
 Content-Type: application/json
 
 {
-  "authorId": 3,
   "imageUrls": ["/images/post-8.jpg", "/images/post-9.jpg"],
   "postAlt": "제주도 바다 사진",
   "content": "제주 왔어요 🌊"
@@ -37,16 +36,6 @@ POST http://localhost:3000/api/posts
 Content-Type: application/json
 
 {
-  "authorId": 3
-}
-
-### 없는 사람 번호로 올리기
-POST http://localhost:3000/api/posts
-Content-Type: application/json
-
-{
-  "authorId": 999,
-  "imageUrls": ["/images/post-8.jpg"]
 }
 
 ### 방금 올린 게시물의 하트 수 고치기
@@ -59,6 +48,17 @@ Content-Type: application/json
 
 ### 방금 올린 게시물 지우기
 DELETE http://localhost:3000/api/posts/{{created.id}}
+
+### 남의 게시물 고치기
+PATCH http://localhost:3000/api/posts/2
+Content-Type: application/json
+
+{
+  "content": "제가 고쳐 볼게요"
+}
+
+### 남의 게시물 지우기
+DELETE http://localhost:3000/api/posts/2
 
 ### 깨진 몸통 보내기
 POST http://localhost:3000/api/posts
