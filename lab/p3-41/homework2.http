@@ -1,0 +1,40 @@
+### 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{ "emailOrPhone": "hojun@example.com", "name": "정호준", "username": "hojun", "password": "hojun1234" }
+
+### 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "username": "hojun", "password": "hojun1234" }
+
+### 지금 비밀번호를 틀리게 보내면
+PATCH http://localhost:4012/me/password
+Content-Type: application/json
+
+{ "currentPassword": "hojun0000", "newPassword": "hojun5678" }
+
+### 비밀번호 바꾸기
+PATCH http://localhost:4012/me/password
+Content-Type: application/json
+
+{ "currentPassword": "hojun1234", "newPassword": "hojun5678" }
+
+### 나는 누구 — 비밀번호를 바꾼 이 기기
+GET http://localhost:3000/api/auth/me
+
+### 옛 비밀번호로 로그인
+# @no-cookie-jar
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "username": "hojun", "password": "hojun1234" }
+
+### 새 비밀번호로 로그인
+# @no-cookie-jar
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{ "username": "hojun", "password": "hojun5678" }
