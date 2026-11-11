@@ -12,15 +12,3 @@ export function parseId(req, res, next) {
   req.postId = id;
   next();
 }
-
-export function parseUserId(req, res, next) {
-  const userId = Number(req.params.userId);
-
-  if (!Number.isInteger(userId)) {
-    next(new NotFoundError('USER_NOT_FOUND'));
-    return;
-  }
-
-  req.userId = userId;
-  next();
-}

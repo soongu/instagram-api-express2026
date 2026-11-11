@@ -8,8 +8,8 @@ export async function list(req, res) {
   const { limit, cursor, username } = res.locals.query;
   const page = await postService.getPosts({
     username,
-    // 서버가 로그인 정보를 쓰기 전까지는 «누가 보는지» 를 주소에 실어 받는다.
-    userId: Number(req.query.userId) || undefined,
+    // 보는 사람은 로그인 정보로 정한다 — 그 사람이 누른 좋아요가 liked 로 간다.
+    userId: res.locals.userId,
     limit,
     cursor,
   });
