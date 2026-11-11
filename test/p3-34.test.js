@@ -676,8 +676,10 @@ describe('축 ⑦ — 답안 블록', () => {
 // ── 축 ⑧ — 학생 상태(2026-11-09 학생 낭독 집중 검수)
 // 지난 시간까지 교안을 따라온 학생의 수업 DB 에는 p3-32 Step 7 이 올린 게시물 7·8번이 있다(최신순 8·7·1·2·3·4·5).
 // 교안의 번호·로그 줄은 이 상태로 적는다 — 시드 상태(1~5)로 적은 판은 학생 화면과 갈렸다(학생 낭독 FAIL 2).
+// 🚨 (p3-41) 그 회차가 posts.http «게시물 올리기» 의 authorId 줄을 지웠다(글쓴이는 로그인 정보로) — 이 회차 학생이 보낸 판(code/p3-40)을 읽는다.
 const httpBody = (file, title) => {
-  const block = read(P(`requests/${file}`)).split('\n### ').find((one) => one.replace(/^### /, '').startsWith(`${title}\n`));
+  const text = execFileSync('git', ['show', `code/p3-40:requests/${file}`], { cwd: P('.'), encoding: 'utf8' });
+  const block = text.split('\n### ').find((one) => one.replace(/^### /, '').startsWith(`${title}\n`));
   return JSON.parse(block.slice(block.indexOf('{'), block.lastIndexOf('}') + 1));
 };
 /** 교안 언어 없는 펜스 중 needle 이 든 것의 줄을 «HTTP 메서드 · 주소 · 상태» 로 */
