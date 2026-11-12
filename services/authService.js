@@ -26,6 +26,14 @@ export async function login(username, password) {
   return { user, accessToken, refreshToken };
 }
 
+// 소셜 로그인 — 제공자가 확인해 준 사람(profile)에 이어진 우리 사람을 찾고, 처음 온 사람이면 만든다.
+// 이메일이 같은 사람이 이미 있어도 그 사람에게 잇지 않는다 — 찾는 기준은 «어느 제공자의 누구» 뿐이다.
+export async function findOrCreateSocialUser(profile) {
+  const user = await userService.findUserBySocialAccount(profile.provider, profile.id);
+
+  return user ?? userService.createSocialUser(profile);
+}
+
 // 새 토큰 받기 — Refresh 토큰을 새것으로 바꾸고, 그 사람을 다시 찾아 «지금» 역할로 Access 토큰을 만든다.
 // 사람을 지우면 그 사람의 기록도 함께 지워지니(Cascade), 기록이 있으면 사람도 있다.
 export async function reissue(refreshToken) {
