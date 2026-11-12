@@ -60,3 +60,39 @@ POST http://localhost:4011/auth/logout
 # @no-cookie-jar
 POST http://localhost:4011/auth/refresh
 Cookie: clubRefresh=LOGGED_OUT_REFRESH
+
+### dami 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "dami@example.com",
+  "password": "dami12345"
+}
+
+### dami로 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "email": "dami@example.com",
+  "password": "dami12345"
+}
+
+### dami를 내보내려고 bomi로 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi12345"
+}
+
+### bomi가 dami 내보내기
+DELETE http://localhost:4011/members/2
+
+### 내보낸 dami의 Refresh 토큰으로 새 토큰 받기
+# «dami로 로그인» 응답의 set-cookie 에서 clubRefresh= 뒤의 값으로 DAMI_REFRESH 를 바꾼다
+# @no-cookie-jar
+POST http://localhost:4011/auth/refresh
+Cookie: clubRefresh=DAMI_REFRESH

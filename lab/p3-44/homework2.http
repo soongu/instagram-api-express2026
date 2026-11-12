@@ -18,6 +18,9 @@ DELETE http://localhost:4012/sessions/OTHER_SESSION
 # SQL 로 찾은 다른 사람의 기록 id 로 SOMEONE_ELSE 를 바꾼다
 DELETE http://localhost:4012/sessions/SOMEONE_ELSE
 
+### 없는 로그인 기록 내보내기
+DELETE http://localhost:4012/sessions/00000000-0000-0000-0000-000000000000
+
 ### 로그인 없이 내 로그인 기기
 # @no-cookie-jar
 GET http://localhost:4012/sessions

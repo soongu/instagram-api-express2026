@@ -35,6 +35,9 @@ const HW_PORT2 = 3955;
 const ROUND = roundDir('code/p3-44');
 const R = (rel) => join(ROUND.dir, rel);
 const LAB = (rel) => R(`lab/p3-44/${rel}`);
+// 2026-11-12 학생 낭독 집중 검수가 main 에서만 고친 실습·과제 파일 — 북마크 code/p3-44 는 옛 판이라 작업트리에서 읽는다.
+//   practice1.js(로그아웃도 실려 온 쿠키를 돌려준다) · homework1.http(내보낸 회원 요청 다섯) · homework2.http(없는 기록 내보내기)
+const MAIN_LAB = ['practice1.js', 'homework1.http', 'homework2.http'];
 
 const SECRET = 'q2Xh0v9bGm4RkT7sYp1wLc8nZf3uJd6eHa5iVo0rQyE';
 const CLUB_SECRET = 'Zk3p9QvL0sYb7Rt2Nw5xHc8mJd1fGa6eUo4iTy0rPqE';
@@ -655,8 +658,9 @@ const withLab = async (file, port, source, fn, { from = stepDir(7), labPort, ext
     await stop(srv);
   }
 };
-const LAB_SRC = (name) => read(LAB(name));
-const SNAP = (name) => read(R(`snapshots/p3-44.${name}`));
+const LAB_SRC = (name) => read(MAIN_LAB.includes(name) ? P(`lab/p3-44/${name}`) : LAB(name));
+// 스냅숏은 판정 파일이라 작업트리에서 — 시작 판 practice1 은 학생 검수가 로그아웃 응답에 쿠키를 더했다.
+const SNAP = (name) => read(P(`snapshots/p3-44.${name}`));
 const sendAll = async (blocks, jar, port, opts = {}) => {
   const out = [];
   for (const block of blocks) out.push(await sendBlock(block, jar, { port, ...opts }));
@@ -677,10 +681,17 @@ describe('축 ⑧ 직접 해보기 1 — 쿠키의 path', () => {
     return got;
   };
   it('🔴 시작 코드는 labRefresh 가 모든 주소에 실린다 · path 를 /auth 로 주면 /authors 에도 안 실린다 · 지울 때 path 를 빼면 남는다', async () => {
-    expect(await run(SNAP('practice1-start.practice1.js'))).toEqual([200, 'labAccess,labRefresh', 'labAccess,labRefresh', 'labAccess,labRefresh', 200, '']);
-    expect(await run(LAB_SRC('practice1.js'))).toEqual([200, 'labAccess', 'labAccess', 'labRefresh,labAccess', 200, '']);
+    const AR = 'labAccess,labRefresh';
+    expect(await run(SNAP('practice1-start.practice1.js'))).toEqual([200, AR, AR, AR, AR, '']);
+    expect(await run(LAB_SRC('practice1.js'))).toEqual([200, 'labAccess', 'labAccess', 'labRefresh,labAccess', 'labRefresh,labAccess', '']);
     const half = LAB_SRC('practice1.js').replace("res.clearCookie('labRefresh', { path: '/auth' });", "res.clearCookie('labRefresh');");
-    expect(await run(half)).toEqual([200, 'labAccess', 'labAccess', 'labRefresh,labAccess', 200, 'labRefresh']);
+    expect(await run(half)).toEqual([200, 'labAccess', 'labAccess', 'labRefresh,labAccess', 'labRefresh,labAccess', 'labRefresh']);
+  });
+  it('🔴 학생 검수 — path 를 /auth/refresh 로 더 좁게 준 판은 로그아웃에 labRefresh 가 안 실려 다섯째에서 드러난다', async () => {
+    const narrow = LAB_SRC('practice1.js').replaceAll("path: '/auth' }", "path: '/auth/refresh' }");
+    // 만들 때 · 지울 때 둘을 바꿨다(새 토큰 받는 라우트 줄에 원래 하나가 있다)
+    expect(narrow.split("'/auth/refresh'")).toHaveLength(4);
+    expect(await run(narrow)).toEqual([200, 'labAccess', 'labAccess', 'labRefresh,labAccess', 'labAccess', '']);
   });
 });
 
@@ -733,6 +744,7 @@ describe('축 ⑪ 과제 [기초] — 동아리 서버에 Refresh', () => {
   const run = async (source) => {
     let statuses;
     let expiredBody;
+    let loginCookies;
     await withLab('lab/p3-44/homework1.js', HW_PORT, source, async ({ dir, base }) => {
       const tok = node(dir, 'lab/p3-44/homework1-expired-token.js', { CLUB_SECRET }).out.trim();
       const blocks = httpBlocks(LAB_SRC('homework1.http'));
@@ -746,18 +758,32 @@ describe('축 ⑪ 과제 [기초] — 동아리 서버에 Refresh', () => {
         if (block.title === 'bomi로 로그인') {
           swap.COPIED_REFRESH = cookieLine(r, 'clubRefresh').split(';')[0].slice('clubRefresh='.length);
           swap.FORGED_REFRESH = `${swap.COPIED_REFRESH.split('.')[0]}.guess`;
+          loginCookies = r.setCookies;
         }
         if (block.title === '다시 bomi로 로그인') swap.LOGGED_OUT_REFRESH = cookieLine(r, 'clubRefresh').split(';')[0].slice('clubRefresh='.length);
+        if (block.title === 'dami로 로그인') swap.DAMI_REFRESH = cookieLine(r, 'clubRefresh').split(';')[0].slice('clubRefresh='.length);
         if (block.title === '기한이 지난 토큰으로 내 정보') expiredBody = r.body;
       }
       statuses = res.map((r) => r.status);
     }, { labPort: 4011, extraEnv: { CLUB_SECRET } });
-    return { statuses, expiredBody };
+    // «bomi로 로그인» 응답 헤더 — 요구사항 9 의 확인(Path=/auth · 둘 다 7일 · 토큰은 5분)
+    const refreshLine = loginCookies.find((l) => l.startsWith('clubRefresh='));
+    const tokenLine = loginCookies.find((l) => l.startsWith('clubToken='));
+    const [, payload] = parts(tokenLine.split(';')[0].slice('clubToken='.length));
+    const headers = {
+      refreshPath: /; Path=\/auth(;|$)/.test(refreshLine),
+      maxAges: [tokenLine, refreshLine].map((l) => /Max-Age=(\d+)/.exec(l)[1]),
+      lifetime: payload.exp - payload.iat,
+    };
+    return { statuses, expiredBody, headers };
   };
-  it('🔴 상태 코드 201 · 200 · 200 · 401 · 200 · 401 · 401 · 200 · 401 · 200 · 401 · 기한만 지난 토큰은 code TOKEN_EXPIRED', async () => {
+  const SEQ = [201, 200, 200, 401, 200, 401, 401, 200, 401, 200, 401, 201, 200, 200, 200, 401];
+  const HEADERS = { refreshPath: true, maxAges: ['604800', '604800'], lifetime: 300 };
+  it('🔴 상태 코드 201 · 200 · 200 · 401 · 200 · 401 · 401 · 200 · 401 · 200 · 401 · 201 · 200 · 200 · 200 · 401 · 기한만 지난 토큰은 code TOKEN_EXPIRED · 로그인 헤더(Path=/auth · 7일 · 5분)', async () => {
     const ok = await run(LAB_SRC('homework1.js'));
-    expect(ok.statuses).toEqual([201, 200, 200, 401, 200, 401, 401, 200, 401, 200, 401]);
+    expect(ok.statuses).toEqual(SEQ);
     expect(ok.expiredBody).toEqual({ code: 'TOKEN_EXPIRED', message: '토큰의 기한이 지났어요' });
+    expect(ok.headers).toEqual(HEADERS);
   });
   it('🔴 틀린 판 다섯을 가린다 — 회전 없음(6번째 200) · 재사용에도 안 지움(7번째 200) · 지어낸 값에도 지움(5번째 401) · 로그아웃이 기록을 안 지움(11번째 200) · 만료를 안 가름(code 없음)', async () => {
     const src = LAB_SRC('homework1.js');
@@ -774,15 +800,30 @@ describe('축 ⑪ 과제 [기초] — 동아리 서버에 Refresh', () => {
     const noCode = src.replace("      return res.status(401).json({ code: 'TOKEN_EXPIRED', message: '토큰의 기한이 지났어요' });", "      return res.status(401).json({ message: '로그인이 필요해요' });");
     expect((await run(noCode)).expiredBody.code).toBeUndefined();
   }, 60_000);
-  it('🔴 답안 «확인하지 못하는 요구사항» — 끝나는 때 확인과 내보낸 회원 확인을 빼도 상태 코드 열한 개가 같다', async () => {
+  it('🔴 학생 검수 — 내보낸 회원 확인을 빼면 마지막 요청이 401 이 아니다 · path 를 빼거나 30분 그대로 둔 판은 로그인 헤더가 가린다', async () => {
     const src = LAB_SRC('homework1.js');
-    const noExpiry = src.replace('  if (!login || login.expiresAt <= Date.now()) {', '  if (!login) {');
-    expect(noExpiry).not.toBe(src);
-    expect((await run(noExpiry)).statuses).toEqual([201, 200, 200, 401, 200, 401, 401, 200, 401, 200, 401]);
     const noMember = src.replace("  if (!member) {\n    logins.delete(loginId);\n    return res.status(401).json({ message: '다시 로그인해 주세요' });\n  }\n\n  const nextSecret", '  const nextSecret');
     expect(noMember).not.toBe(src);
-    expect((await run(noMember)).statuses).toEqual([201, 200, 200, 401, 200, 401, 401, 200, 401, 200, 401]);
+    expect((await run(noMember)).statuses).toEqual([...SEQ.slice(0, 15), 500]);
+    const noPath = src.replace("{ httpOnly: true, sameSite: 'lax', path: '/auth', maxAge: LOGIN_LIFETIME }", "{ httpOnly: true, sameSite: 'lax', maxAge: LOGIN_LIFETIME }");
+    expect(noPath).not.toBe(src);
+    expect((await run(noPath)).headers.refreshPath).toBe(false);
+    const thirty = src.replace('const ACCESS_LIFETIME = 1000 * 60 * 5;', 'const ACCESS_LIFETIME = 1000 * 60 * 30;');
+    expect(thirty).not.toBe(src);
+    expect((await run(thirty)).headers.lifetime).toBe(1800);
   }, 60_000);
+  it('🔴 답안 «확인하지 못하는 요구사항» — 끝나는 때 확인 · 7일로 미루기 · 지금 역할을 빼도 상태 코드 열여섯 개와 로그인 헤더가 같다', async () => {
+    const src = LAB_SRC('homework1.js');
+    const noExpiry = src.replace('  if (!login || login.expiresAt <= Date.now()) {', '  if (!login) {');
+    const noSlide = src.replace('  login.expiresAt = Date.now() + LOGIN_LIFETIME;\n', '');
+    const oldRole = src.replace('  setTokens(res, member, loginId, nextSecret);', '  setTokens(res, { ...member, role: jwt.decode(req.cookies.clubToken)?.role ?? member.role }, loginId, nextSecret);');
+    for (const wrong of [noExpiry, noSlide, oldRole]) {
+      expect(wrong).not.toBe(src);
+      const r = await run(wrong);
+      expect(r.statuses).toEqual(SEQ);
+      expect(r.headers).toEqual(HEADERS);
+    }
+  }, 90_000);
 });
 
 describe('축 ⑫ 과제 [응용] — 로그인한 기기 목록과 내보내기', () => {
@@ -805,13 +846,16 @@ describe('축 ⑫ 과제 [응용] — 로그인한 기기 목록과 내보내기
         const delB = await fetch(`${base}/sessions/${sidB}`, { method: 'DELETE', headers: toLab(a) });
         const reissueB = await b.send('POST', '/api/v2/auth/reissue');
         const delC = await fetch(`${base}/sessions/${sidC}`, { method: 'DELETE', headers: toLab(a) });
+        // 학생 검수 — 없는 기록 id(homework2.http «없는 로그인 기록 내보내기»)
+        const delNone = await fetch(`${base}/sessions/00000000-0000-0000-0000-000000000000`, { method: 'DELETE', headers: toLab(a) });
         const noLogin = await fetch(`${base}/sessions`);
+        const noLoginText = await noLogin.text();
         result = {
           list: list.map((s) => [s.id === sidA ? 'A' : s.id === sidB ? 'B' : '?', s.current]),
           endsAt: list.every((s) => typeof s.endsAt === 'string'),
-          delB: delB.status, reissueB: reissueB.status, delC: delC.status,
+          delB: delB.status, reissueB: reissueB.status, delC: delC.status, delNone: delNone.status,
           adminRows: (await gate('SELECT count(*)::int AS n FROM sessions WHERE user_id = 45'))[0].n,
-          noLogin: [noLogin.status, await noLogin.json()],
+          noLogin: [noLogin.status, (() => { try { return JSON.parse(noLoginText); } catch { return noLoginText.slice(0, 15); } })()],
         };
       }, { labPort: 4012 });
     });
@@ -819,7 +863,7 @@ describe('축 ⑫ 과제 [응용] — 로그인한 기기 목록과 내보내기
   };
   it('🔴 목록은 내 기록만 최근부터 · 지금 기기만 current · 다른 기기를 내보내면 그 기기는 새 토큰 401 · 남의 기록은 404 · 로그인 없이 401', async () => {
     expect(await run(LAB_SRC('homework2.js'))).toEqual({
-      list: [['B', false], ['A', true]], endsAt: true, delB: 200, reissueB: 401, delC: 404, adminRows: 1,
+      list: [['B', false], ['A', true]], endsAt: true, delB: 200, reissueB: 401, delC: 404, delNone: 404, adminRows: 1,
       noLogin: [401, { message: '로그인이 필요해요' }],
     });
   });
@@ -828,6 +872,40 @@ describe('축 ⑫ 과제 [응용] — 로그인한 기기 목록과 내보내기
     const r = await run(wrong);
     expect(r.delC).toBe(200);
     expect(r.adminRows).toBe(0);
+  });
+  it('🔴 학생 검수 — findUnique 뒤 null 확인을 빼면 없는 기록에 500 · 에러 미들웨어를 빼면 401 본문이 HTML', async () => {
+    const src = LAB_SRC('homework2.js');
+    const del = "  const { count } = await prisma.session.deleteMany({ where: { id: req.params.id, userId: res.locals.userId } });\n\n  if (count === 0) {\n    return res.status(404).json({ message: '그런 로그인 기록은 없어요' });\n  }\n";
+    expect(src.split(del)).toHaveLength(2);
+    const noNull = src.replace(del, "  const found = await prisma.session.findUnique({ where: { id: req.params.id } });\n\n  if (found.userId !== res.locals.userId) {\n    return res.status(404).json({ message: '그런 로그인 기록은 없어요' });\n  }\n\n  await prisma.session.delete({ where: { id: req.params.id } });\n");
+    const r = await run(noNull);
+    expect([r.delB, r.delC, r.delNone]).toEqual([200, 404, 500]);
+    const mw = "app.use((err, req, res, next) => {\n  res.status(err.status ?? 500).json({ message: err.message });\n});\n";
+    expect(src.split(mw)).toHaveLength(2);
+    const noMw = await run(src.replace(mw, ''));
+    expect(noMw.noLogin[0]).toBe(401);
+    expect(noMw.noLogin[1]).toBe('<!DOCTYPE html>');
+  });
+  it('🔴 학생 검수 — 처음 로그인을 25일 당긴 기록의 endsAt 은 createdAt 의 30일 뒤 · expires_at 만 보는 판은 7일 뒤', async () => {
+    const endsOf = async (source) => {
+      await freshGate();
+      let row;
+      await withServer(stepDir(7), async ({ base: apiBase }) => {
+        await withLab('lab/p3-44/homework2.js', HW_PORT2, source, async ({ base }) => {
+          const a = device(apiBase);
+          await a.login('jaehoon');
+          await gate("UPDATE sessions SET created_at = now() - interval '25 days' WHERE id = $1", [a.cookie('refreshToken').split('.')[0]]);
+          const [first] = await (await fetch(`${base}/sessions`, { headers: { Cookie: `accessToken=${a.cookie('accessToken')}` } })).json();
+          row = (Date.parse(first.endsAt) - Date.parse(first.createdAt)) / (24 * 60 * 60 * 1000);
+        }, { labPort: 4012 });
+      });
+      return Math.round(row);
+    };
+    const src = LAB_SRC('homework2.js');
+    expect(await endsOf(src)).toBe(30);
+    const expiresOnly = src.replace('endsAt: new Date(Math.min(session.expiresAt.getTime(), session.createdAt.getTime() + SESSION_MAX_LIFETIME)),', 'endsAt: session.expiresAt,');
+    expect(expiresOnly).not.toBe(src);
+    expect(await endsOf(expiresOnly)).toBe(32);
   });
 });
 
@@ -908,5 +986,45 @@ describe('축 ⑭ Step 6 겪기 · Step 7 다른 비밀키', () => {
       expect(res.status).toBe(401);
       expect(res.body.error.code).toBe('LOGIN_REQUIRED');
     });
+  });
+});
+
+// 축 ⑮ 학생 낭독 집중 검수(2026-11-12) — 교안·답안이 적은 확인이 고친 실습·과제 파일과 같다
+const DOCS = ['p3-44-access-token-reissue-lecture.md', 'p3-44-access-token-reissue-answers.md']
+  .map((name) => join(new URL('../../', ROOT).pathname, `part3/7-express-auth/${name}`));
+const fences = (file, lang) => {
+  const out = [];
+  let cur = null;
+  for (const line of read(file).split('\n')) {
+    if (line.startsWith('```')) {
+      if (cur === null) cur = { lang: line.slice(3), body: [] };
+      else { if (cur.lang === lang) out.push(cur.body.join('\n')); cur = null; }
+    } else if (cur) cur.body.push(line);
+  }
+  return out;
+};
+
+describe('축 ⑮ 학생 검수 — 교안의 실습·과제 블록과 확인 차례', () => {
+  it('🔴 직접 해보기 1 의 시작 코드·해설 코드 · 과제 둘의 .http 블록은 곧 그 파일이다', () => {
+    const js = fences(DOCS[0], 'javascript').filter((b) => b.startsWith('// ~/instagram-api/lab/p3-44/practice1.js'));
+    expect(js).toHaveLength(2);
+    expect(`${js[0]}\n`).toBe(SNAP('practice1-start.practice1.js'));
+    expect(`${js[1]}\n`).toBe(LAB_SRC('practice1.js'));
+    const http = fences(DOCS[0], 'http');
+    for (const [file, port] of [['practice1.http', 4001], ['homework1.http', 4011], ['homework2.http', 4012]]) {
+      const hit = http.filter((b) => b.includes(`localhost:${port}/`));
+      expect(hit, file).toHaveLength(1);
+      expect(`${hit[0]}\n`, file).toBe(LAB_SRC(file));
+    }
+  });
+  it('🔴 교안·답안이 적은 확인 차례가 위 실행과 같다', () => {
+    const [lecture, answers] = DOCS.map(read);
+    expect(lecture).toContain('`["labAccess"]` · `["labAccess"]` · `["labRefresh","labAccess"]` · `["labRefresh","labAccess"]` · `[]`');
+    for (const seq of ['201 · 200 · 200 · 401 · 200 · 401 · 401 · 200 · 401 · 200 · 401 · 201 · 200 · 200 · 200 · 401', '200 · 200 · 200 · 404 · 404 · 401']) {
+      expect(lecture, seq).toContain(seq);
+      expect(answers, seq).toContain(seq);
+    }
+    expect(lecture).toContain('{ "message": "로그인이 필요해요" }');
+    expect(lecture).toContain('Path=/auth');
   });
 });
