@@ -26,6 +26,33 @@ Content-Type: application/json
   "name": ""
 }
 
+### 31자 이름으로 고치기
+# 이름이 31자예요 — «김재훈» 열 번에 느낌표 하나
+PATCH http://localhost:4001/me
+Content-Type: application/json
+
+{
+  "name": "김재훈김재훈김재훈김재훈김재훈김재훈김재훈김재훈김재훈김재훈!"
+}
+
+### 이름 없이 소개만 고치기
+PATCH http://localhost:4001/me
+Content-Type: application/json
+
+{
+  "bio": "안녕하세요"
+}
+
+### 151자 소개로 고치기
+# 소개가 151자예요 — «안녕하세요» 서른 번에 느낌표 하나
+PATCH http://localhost:4001/me
+Content-Type: application/json
+
+{
+  "name": "김재훈3",
+  "bio": "안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요!"
+}
+
 ### 번호와 사용자 이름까지 실어 고치기
 PATCH http://localhost:4001/me
 Content-Type: application/json
