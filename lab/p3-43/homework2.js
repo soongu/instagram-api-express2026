@@ -41,9 +41,27 @@ function requireToken(req, res, next) {
   }
 }
 
-// 관리자만 다음으로 보낸다 — 막힌 시도도 기록에 남긴다.
-function requireAdmin(req, res, next) {
+// 관리자만 다음으로 보낸다 — 직접 해보기 3 처럼 지금 역할을 다시 보고, 막힌 시도도 기록에 남긴다.
+async function requireAdmin(req, res, next) {
   if (res.locals.role !== 'ADMIN') {
+    record(res, `${req.method} ${req.path}`, 'DENIED');
+    res.status(403).json({ message: '관리자만 할 수 있어요' });
+    return;
+  }
+
+  let role;
+  try {
+    const response = await fetch('http://localhost:3000/api/v2/auth/me', {
+      headers: { Authorization: req.headers.authorization },
+    });
+    role = response.ok ? (await response.json()).data.role : undefined;
+  } catch {
+    // 수업 서버가 꺼져 있으면 지금 역할을 알 수 없다 — 모르면 막는다.
+    res.status(503).json({ message: '지금은 관리자인지 확인할 수 없어요' });
+    return;
+  }
+
+  if (role !== 'ADMIN') {
     record(res, `${req.method} ${req.path}`, 'DENIED');
     res.status(403).json({ message: '관리자만 할 수 있어요' });
     return;
@@ -58,7 +76,7 @@ app.get('/notices', (req, res) => {
   res.json(notices.filter((notice) => !notice.hidden));
 });
 
-// 공지 숨기기 — 관리자만, 이유를 함께 받는다.
+// 공지 숨기기 — 관리자만, 이유를 함께 받는다. 공백만 적은 이유는 빈 것으로 본다.
 app.patch('/notices/:id/hide', adminOnly, (req, res) => {
   const reason = req.body?.reason;
 
