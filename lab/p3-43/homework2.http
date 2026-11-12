@@ -1,0 +1,37 @@
+### jaehoon이 공지 숨기기
+# JAEHOON_TOKEN 은 수업 백엔드에서 jaehoon으로 로그인한 응답의 accessToken 값으로 바꾼다
+PATCH http://localhost:4012/notices/1/hide
+Authorization: Bearer JAEHOON_TOKEN
+Content-Type: application/json
+
+{
+  "reason": "그냥요"
+}
+
+### 이유 없이 공지 숨기기
+# ADMIN_TOKEN 은 수업 백엔드에서 admin.hong으로 로그인한 응답의 accessToken 값으로 바꾼다
+PATCH http://localhost:4012/notices/1/hide
+Authorization: Bearer ADMIN_TOKEN
+Content-Type: application/json
+
+{}
+
+### 이유를 적어 공지 숨기기
+PATCH http://localhost:4012/notices/1/hide
+Authorization: Bearer ADMIN_TOKEN
+Content-Type: application/json
+
+{
+  "reason": "점검이 끝나 지난 안내가 됐어요"
+}
+
+### 공지 목록
+GET http://localhost:4012/notices
+
+### jaehoon이 관리 기록 보기
+GET http://localhost:4012/audit
+Authorization: Bearer JAEHOON_TOKEN
+
+### 관리 기록 보기
+GET http://localhost:4012/audit
+Authorization: Bearer ADMIN_TOKEN

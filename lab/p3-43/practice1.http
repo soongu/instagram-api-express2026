@@ -1,0 +1,27 @@
+### 내 정보
+GET http://localhost:4001/me
+
+### 이름 고치기
+PATCH http://localhost:4001/me
+Content-Type: application/json
+
+{
+  "name": "김재훈2"
+}
+
+### 역할까지 실어 고치기
+PATCH http://localhost:4001/me
+Content-Type: application/json
+
+{
+  "name": "김재훈3",
+  "role": "ADMIN"
+}
+
+### 빈 이름으로 고치기
+PATCH http://localhost:4001/me
+Content-Type: application/json
+
+{
+  "name": ""
+}

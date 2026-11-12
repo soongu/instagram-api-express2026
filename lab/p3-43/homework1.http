@@ -1,0 +1,63 @@
+### 첫 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi12345"
+}
+
+### 역할을 실어 보낸 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "dami@example.com",
+  "password": "dami12345",
+  "role": "MANAGER"
+}
+
+### dami로 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "email": "dami@example.com",
+  "password": "dami12345"
+}
+
+### dami가 회원 목록
+GET http://localhost:4011/members
+
+### bomi로 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi12345"
+}
+
+### bomi가 회원 목록
+GET http://localhost:4011/members
+
+### bomi가 자기 자신 내보내기
+DELETE http://localhost:4011/members/1
+
+### bomi가 dami 내보내기
+DELETE http://localhost:4011/members/2
+
+### 회원 목록 다시 보기
+GET http://localhost:4011/members
+
+### 내보낸 뒤 새 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "sena@example.com",
+  "password": "sena12345"
+}
+
+### 새 가입 뒤 회원 목록
+GET http://localhost:4011/members
