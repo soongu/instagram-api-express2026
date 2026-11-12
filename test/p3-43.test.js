@@ -338,6 +338,11 @@ describe('축 ④ Step 4 — 토큰에 역할', () => {
       await j.login('jaehoon');
       expect(parts(j.cookie('accessToken'))[1].role).toBe('USER');
       expect(j.cookie('accessToken').length).toBe(220);
+      // 🙋 — 페이로드의 role 만 ADMIN 으로 고쳐 서명은 그대로 붙이면 401
+      const [h, p, sig] = j.cookie('accessToken').split('.');
+      const forged = [h, Buffer.from(Buffer.from(p, 'base64url').toString().replace('"role":"USER"', '"role":"ADMIN"')).toString('base64url'), sig].join('.');
+      expect(parts(forged)[1].role).toBe('ADMIN');
+      expect(await device(base).get('/api/v2/auth/me', { Authorization: `Bearer ${forged}` })).toMatchObject({ status: 401, body: { error: { code: 'LOGIN_REQUIRED' } } });
       const [{ id }] = await gate('SELECT id FROM posts WHERE author_id = 2 ORDER BY id DESC LIMIT 1');
       expect((await a.send('DELETE', `/api/v2/posts/${id}`)).body).toEqual({ error: { code: 'NOT_POST_AUTHOR', message: '내가 쓴 게시물만 고치거나 지울 수 있어요' } });
     });
@@ -616,7 +621,7 @@ describe('축 ⑩·⑪ 직접 해보기 2·3 — 공지 서버가 토큰의 역�
   it('🔴 둘 다 — 토큰 없이 401 · X-Role 만 401 · jaehoon 403 · admin.hong 200 · 목록에 2번만', async () => {
     await noticeServers(async ({ a, j }) => {
       for (const [file, port] of [['practice2.http', LAB_PORT], ['practice3.http', LAB_PORT2]]) {
-        const out = await runHttp(file, port, { JAEHOON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken') });
+        const out = await runHttp(file, port, { SEOYEON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken') });
         expect(out.map((r) => r.status)).toEqual([200, 401, 401, 403, 200, 200]);
         expect(out[3].body).toEqual({ message: '관리자만 할 수 있어요' });
         expect(out[5].body).toEqual([{ id: 2, title: '새 기능 소개', authorId: 1 }]);
@@ -670,6 +675,20 @@ describe('축 ⑫ 과제', () => {
     expect(r.out[10].body).toEqual([{ id: 1, email: 'bomi@example.com', role: 'MANAGER' }, { id: 3, email: 'sena@example.com', role: 'MEMBER' }]);
     expect(parts(r.damiToken)[1]).toMatchObject({ role: 'MEMBER', sub: '2' });
     expect(r.damiMe.status).toBe(401);
+  }, 60000);
+
+  it('🔴 [기초] 틀린 판 — 운영진 라우트를 app.use(requireMember) 위에 두면 운영진 bomi 도 회원 목록 403', async () => {
+    const r = await club((d) => {
+      const file = join(d, 'lab/p3-43/homework1.js');
+      const text = read(file);
+      const start = text.indexOf('// 회원 목록은 운영진만 본다');
+      const end = text.indexOf('// 나는 누구');
+      const routes = text.slice(start, end);
+      const use = '// 여기부터는 로그인한 회원만 지나간다';
+      if (start < 0 || end < 0 || !text.includes(use)) throw new Error('옮길 자리가 없다');
+      writeFileSync(file, text.replace(routes, '').replace(use, `${routes}${use}`));
+    });
+    expect(r.out[5]).toMatchObject({ status: 403, body: { message: '운영진만 할 수 있어요' } });
   }, 60000);
 
   it('🔴 [기초] 틀린 판 — 번호를 members.length + 1 로 매기면 새 가입이 2번을 받고, 내보낸 dami 의 토큰이 sena 로 읽힌다', async () => {
@@ -731,4 +750,99 @@ describe('축 ⑭ 실습·과제 서버도 비밀키가 없으면 뜨지 않는�
       expect(out.out).toContain(`Error: .env에 ${name}이 없어요`);
     }
   }, 30000);
+});
+
+const DOCS = ['p3-43-role-based-authorization-lecture.md', 'p3-43-role-based-authorization-answers.md']
+  .map((name) => join(new URL('../../', ROOT).pathname, `part3/7-express-auth/${name}`));
+const fences = (file, lang) => {
+  const out = [];
+  const lines = read(file).split('\n');
+  let cur = null;
+  for (const line of lines) {
+    if (line.startsWith('```')) {
+      if (cur === null) cur = { lang: line.slice(3), body: [] };
+      else { if (lang === undefined || cur.lang === lang) out.push(cur.body.join('\n')); cur = null; }
+    } else if (cur) cur.body.push(line);
+  }
+  return out;
+};
+const meaningful = (block) => block.split('\n').filter((l) => l.trim() !== '' && l.trim() !== '...' && l.trim() !== '// ...');
+
+describe('축 ⑬ 교안·답안의 블록은 코드베이스와 실제 실행과 같다', () => {
+  it('🔴 javascript 블록 — 줄마다 Step 1~8 커밋이나 스냅숏의 그 경로 파일에 있다', () => {
+    const blocks = DOCS.flatMap((d) => fences(d, 'javascript'));
+    expect(blocks.length).toBeGreaterThan(20);
+    for (const block of blocks) {
+      const [first] = block.split('\n');
+      const rel = first.replace('// ~/instagram-api/', '');
+      expect(first.startsWith('// ~/instagram-api/'), first).toBe(true);
+      const sources = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => stepDir(n)(rel)).filter(existsSync).map(read);
+      for (const snap of readdirSync(P('snapshots')).filter((f) => f.startsWith('p3-43.'))) {
+        if (rel.endsWith(snap.split('.').slice(-2).join('.'))) sources.push(read(P(`snapshots/${snap}`)));
+      }
+      expect(sources.length, rel).toBeGreaterThan(0);
+      const ok = sources.some((src) => meaningful(block).every((l) => src.split('\n').includes(l)));
+      expect(ok, `${rel}\n${block}`).toBe(true);
+    }
+  });
+
+  it('🔴 http 블록 — 줄마다 requests/admin.http 나 lab/p3-43 의 .http 에 있다 · admin.http 는 교안에 적은 차례 그대로', () => {
+    const files = ['requests/admin.http', ...readdirSync(LAB('.')).filter((f) => f.endsWith('.http')).map((f) => `lab/p3-43/${f}`)].map((rel) => read(R(rel)).split('\n'));
+    const blocks = DOCS.flatMap((d) => fences(d, 'http'));
+    expect(blocks.length).toBe(10);
+    for (const b of blocks) expect(files.some((lines) => meaningful(b).every((l) => lines.includes(l))), b).toBe(true);
+    // 교안이 admin.http 에 더하라고 한 덩어리를 차례로 이으면 그 파일이 된다
+    const adminBlocks = fences(DOCS[0], 'http').filter((b) => b.includes('localhost:3000'));
+    expect(adminBlocks.join('\n\n') + '\n').toBe(read(R('requests/admin.http')));
+  });
+
+  it('🔴 prisma 블록 · 마이그레이션 · make-admin 출력 · 토큰 페이로드 모양 · 쿼리 표', () => {
+    const lecture = read(DOCS[0]);
+    for (const l of meaningful(fences(DOCS[0], 'prisma')[0])) expect(read(stepDir(2)('prisma/schema.prisma')).split('\n'), l).toContain(l);
+    const mig = readdirSync(stepDir(2)('prisma/migrations')).find((n) => n.endsWith('_add_user_role'));
+    expect(lecture).toContain(`Applying migration \`${mig}\``);
+    expect(lecture).toContain(`  └─ ${mig}/`);
+    expect(lecture).toContain("```bash\n역할을 바꿨어요 { id: 45, username: 'admin.hong', profileImage: null, role: 'ADMIN' }\n```");
+    const payload = fences(DOCS[0], '').find((b) => b.startsWith('{"sid":'));
+    expect(Object.keys(JSON.parse(payload))).toEqual(['sid', 'role', 'iat', 'exp', 'sub']);
+    expect(JSON.parse(payload)).toMatchObject({ role: 'ADMIN', sub: '45' });
+    expect(JSON.parse(payload).exp - JSON.parse(payload).iat).toBe(3600);
+    expect(lecture).toContain('jaehoon의 토큰은 220자로 늘었어요');
+    const table = fences(DOCS[0], '').find((b) => b.startsWith(' 보낸 사람'));
+    expect(table.split('\n').slice(2).map((l) => l.trim().split(/\s{2,}/))).toEqual([
+      ['jaehoon', '게시물 목록', '3', '3'],
+      ['jaehoon', '나는 누구', '1', '1'],
+      ['jaehoon', '사람 목록(403 에러)', '0', '0'],
+      ['jaehoon', '남의 게시물 지우기(403 에러)', '1', '1'],
+      ['admin.hong', '사람 목록', '1', '2'],
+      ['admin.hong', '남의 게시물 지우기', '5', '6'],
+    ]);
+  });
+
+  it('🔴 sql 블록 — 교안 차례대로 판정 DB 에서 실행하면 교안의 결과·에러와 같다', async () => {
+    await freshGate();
+    const lecture = read(DOCS[0]);
+    const sqls = fences(DOCS[0], 'sql').filter((b) => !b.startsWith('-- CreateEnum'));
+    expect(sqls).toEqual([
+      'SELECT DISTINCT role FROM users;',
+      "UPDATE users SET role = 'OWNER' WHERE username = 'jaehoon';",
+      "SELECT username, role FROM users WHERE username = 'boram';",
+      "SELECT id, username, role FROM users WHERE username = 'admin.hong';",
+    ]);
+    expect(await gate(sqls[0])).toEqual([{ role: 'USER' }]);
+    await expect(gate(sqls[1])).rejects.toMatchObject({ message: 'invalid input value for enum user_role: "OWNER"' });
+    expect(lecture).toContain('```\n   invalid input value for enum user_role: "OWNER"\n```');
+    expect(lecture).toContain('```sql\n' + read(stepDir(2)(`prisma/migrations/${readdirSync(stepDir(2)('prisma/migrations')).find((n) => n.endsWith('_add_user_role'))}/migration.sql`)) + '```');
+    expect(lecture).toContain(' id   username     role\n ==   ==========   ====\n 45   admin.hong   USER');
+    expect(await gate(sqls[3])).toEqual([{ id: 45, username: 'admin.hong', role: 'USER' }]);
+    expect(lecture).toContain(' username   role\n ========   ====\n boram      USER');
+  }, 30000);
+
+  it('🔴 json 블록 — 403 본문 · admin.hong 로그인 응답 · 지운 게시물은 «관리자가 고친 글»', () => {
+    const jsons = fences(DOCS[0], 'json');
+    expect(JSON.parse(jsons[0])).toEqual({ error: { code: 'NOT_POST_AUTHOR', message: '내가 쓴 게시물만 고치거나 지울 수 있어요' } });
+    expect(JSON.parse(jsons[1])).toEqual({ data: { id: 45, username: 'admin.hong', profileImage: null, role: 'ADMIN' } });
+    expect(jsons[2]).toContain('"content": "관리자가 고친 글"');
+    expect(jsons[4]).toContain('"role": "ADMIN"');
+  });
 });
