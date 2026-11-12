@@ -587,14 +587,12 @@ describe('축 ⑤ Step 5 — social_accounts 테이블', () => {
     expect(read(stepDir(5)(`prisma/migrations/${dir}/migration.sql`))).toBe(SOCIAL_SQL);
   });
 
-  it('🔴 스키마 — User 에 socialAccounts · 모델 SocialAccount(@@unique · @@index · @@map) · 다른 모델은 한 글자도 안 바뀌었다', () => {
-    const before = read(stepDir(4)('prisma/schema.prisma'));
+  it('🔴 스키마 — code/p3-44 의 스키마에 User 한 줄(sessions 아래 socialAccounts)과 SocialAccount 모델만 더해졌다(다른 줄은 정렬까지 그대로)', () => {
+    const before = execFileSync('git', ['show', 'code/p3-44:prisma/schema.prisma'], { cwd: P('.'), encoding: 'utf8' });
     const after = read(stepDir(5)('prisma/schema.prisma'));
-    expect(after).toContain('  sessions       Session[]\n  socialAccounts SocialAccount[]\n');
-    expect(after.endsWith(SOCIAL_MODEL)).toBe(true);
-    // User 블록의 정렬만 바뀌고(새 이름이 가장 길다) 다른 모델은 그대로
-    const strip = (text) => text.replace(/^model User \{[\s\S]*?\n\}\n/m, '').replace(SOCIAL_MODEL, '');
-    expect(strip(after)).toBe(strip(before).trimEnd() + '\n');
+    const line = '  sessions     Session[]\n';
+    expect(before.split(line)).toHaveLength(2);
+    expect(after).toBe(before.replace(line, `${line}  socialAccounts SocialAccount[]\n`).trimEnd() + '\n' + SOCIAL_MODEL);
   });
 
   it('🔴 같은 «제공자 + 그 계정» 은 한 번만(23505) · 사람을 지우면 그 사람의 소셜 계정도 지워진다', async () => {
