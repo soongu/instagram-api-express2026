@@ -391,3 +391,60 @@ describe('축 ③ Step 3 — POST /auth/reissue', () => {
     });
   });
 });
+
+describe('축 ④ Step 4 — 회전과 재사용 감지', () => {
+  it('🔴 Step 3 판은 복사해 둔 Refresh 로 몇 번이든 새 토큰을 받는다(겪기)', async () => {
+    await freshGate();
+    await withServer(stepDir(3), async ({ base }) => {
+      const jar = device(base);
+      await jar.login('jaehoon');
+      const copied = jar.cookie('refreshToken');
+      expect((await jar.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
+      const thief = device(base);
+      for (let i = 0; i < 3; i += 1) {
+        expect((await thief.send('POST', '/api/v2/auth/reissue', undefined, { Cookie: `refreshToken=${copied}` })).status).toBe(200);
+      }
+    });
+  });
+
+  it('🔴 새 토큰을 받을 때마다 Refresh 도 새것(같은 행 · 새 비밀값 · 행의 해시도 바뀜) · 복사해 둔 옛 Refresh 가 오면 401 · 그 행이 지워져 진짜 사용자도 401', async () => {
+    await freshGate();
+    await withServer(stepDir(4), async ({ base }) => {
+      const blocks = HTTP(4);
+      const jar = device(base);
+      const login = await sendBlock(blockOf(blocks, '로그인'), jar, { port: PORT });
+      const copied = jar.cookie('refreshToken');
+      expect(cookieLine(login, 'refreshToken')).toBeDefined();
+      const [sid, secret] = copied.split('.');
+      const re = await sendBlock(blockOf(blocks, '새 토큰 받기'), jar, { port: PORT });
+      expect(re.status).toBe(200);
+      const line = cookieLine(re, 'refreshToken');
+      expect(line).toMatch(/Path=\/api\/v2\/auth;/);
+      expect(line).toMatch(/Max-Age=604800;/);
+      const [sid2, secret2] = jar.cookie('refreshToken').split('.');
+      expect(sid2).toBe(sid);
+      expect(secret2).not.toBe(secret);
+      expect(await gate('SELECT refresh_token_hash AS h FROM sessions WHERE id = $1', [sid])).toEqual([{ h: sha256(secret2) }]);
+      const stolen = await sendBlock(blockOf(blocks, '복사해 둔 Refresh 토큰으로 새 토큰 받기'), jar, { port: PORT, swap: { COPIED_REFRESH: copied } });
+      expect(stolen.status).toBe(401);
+      expect(stolen.body.error.code).toBe('LOGIN_REQUIRED');
+      expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 0 }]);
+      expect((await sendBlock(blockOf(blocks, '새 토큰 받기'), jar, { port: PORT })).status).toBe(401);
+    });
+  });
+
+  it('🔴 같은 Refresh 로 두 요청이 동시에 오면 하나만 200 · 하나는 401 · 그 행은 지워진다', async () => {
+    await freshGate();
+    await withServer(stepDir(4), async ({ base }) => {
+      for (let round = 0; round < 3; round += 1) {
+        const jar = device(base);
+        await jar.login('jaehoon');
+        const cookie = `refreshToken=${jar.cookie('refreshToken')}`;
+        const [sid] = jar.cookie('refreshToken').split('.');
+        const results = await Promise.all([0, 1].map(() => fetch(`${base}/api/v2/auth/reissue`, { method: 'POST', headers: { Cookie: cookie } })));
+        expect(results.map((r) => r.status).sort()).toEqual([200, 401]);
+        expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 0 }]);
+      }
+    });
+  });
+});
