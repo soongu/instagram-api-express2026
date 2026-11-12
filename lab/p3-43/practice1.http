@@ -25,3 +25,13 @@ Content-Type: application/json
 {
   "name": ""
 }
+
+### 번호와 사용자 이름까지 실어 고치기
+PATCH http://localhost:4001/me
+Content-Type: application/json
+
+{
+  "name": "김재훈4",
+  "id": 45,
+  "username": "admin.hong"
+}
