@@ -34,6 +34,15 @@ Content-Type: application/json
   "password": "club2026!"
 }
 
+### 비밀번호가 숫자인 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "dami@example.com",
+  "password": 20262026
+}
+
 ### 짧은 비밀번호
 POST http://localhost:4011/members
 Content-Type: application/json
