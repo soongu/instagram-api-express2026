@@ -11,7 +11,7 @@ Content-Type: application/json
 }
 
 ### 복사해 둔 토큰으로 공지 올리기
-# 수업 서버 로그인 응답의 set-cookie 에서 accessToken= 뒤의 값(; 앞까지)으로 COPIED_TOKEN 를 바꾼다
+# 수업 서버 로그인 응답의 set-cookie 에서 accessToken= 뒤의 값(; 앞까지)으로 COPIED_TOKEN 을 바꾼다
 # @no-cookie-jar
 POST http://localhost:4001/notices
 Authorization: Bearer COPIED_TOKEN
