@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
+import jwt from 'jsonwebtoken';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { applyMigrationsAfter } from './helpers/tip-schema.js';
@@ -33,6 +34,10 @@ const R = (rel) => join(ROUND.dir, rel);
 const BEFORE = roundDir('code/p3-41');
 const B = (rel) => join(BEFORE.dir, rel);
 const LAB = (rel) => R(`lab/p3-42/${rel}`);
+// 두 .http 는 2026-11-12 학생 낭독 집중 검수가 main 에만 고쳤다(북마크 code/p3-42 는 옛 판) — 작업트리에서 읽는다.
+// practice3.http 는 «토큰 없이 로그아웃» 을 더했고, homework1.http 는 CLASS_TOKEN 을 «다시 로그인해 받은» 값으로 바꾸게 했다.
+const MAIN_HTTP = ['practice3.http', 'homework1.http'];
+const LAB_HTTP = (rel) => (MAIN_HTTP.includes(rel) ? P(`lab/p3-42/${rel}`) : LAB(rel));
 
 // 판정의 비밀키 — 학생처럼 무작위 32바이트를 base64url 로 적은 값(43자).
 const SECRET = 'q2Xh0v9bGm4RkT7sYp1wLc8nZf3uJd6eHa5iVo0rQyE';
@@ -549,30 +554,51 @@ describe('축 ⑧ 직접 해보기 2 — 비밀키 바꾸기', () => {
 describe('축 ⑨ 직접 해보기 3 — 차단 목록', () => {
   const KEY = 'kW3m9Qe1Zt7Rb2Xy5Nc8Lp4Vh6Js0Ga1Df3Hk7Mn9Qr';
   const scenario = async (edit) => {
-    const [loginA, loginB, meA, logoutA, meB] = httpBlocks(LAB('practice3.http'));
+    const [loginA, loginB, meA, logoutA, meB, logoutNone] = httpBlocks(LAB_HTTP('practice3.http'));
     const lab = await labServer('practice3.js', LAB_PORT, { LAB_SECRET: KEY }, edit);
     const jar = device(lab.base);
     try {
       const a = (await sendBlock(loginA, jar, { port: LAB_PORT })).body.token;
       const b = (await sendBlock(loginB, jar, { port: LAB_PORT })).body.token;
       const swap = { TOKEN_A: a, TOKEN_B: b };
+      // 교안 차례 — 위에서부터 셋(A 나는 누구 · A 로그아웃 · B 나는 누구) → «토큰 없이 로그아웃» → A 를 한 번 더
+      const meAFirst = (await sendBlock(meA, jar, { port: LAB_PORT, swap })).status;
+      const logoutAStatus = (await sendBlock(logoutA, jar, { port: LAB_PORT, swap })).status;
+      const meBStatus = (await sendBlock(meB, jar, { port: LAB_PORT, swap })).status;
+      const none = await sendBlock(logoutNone, jar, { port: LAB_PORT, swap });
       return {
         jtiDiffers: parts(a)[1].jti !== parts(b)[1].jti,
-        meA: (await sendBlock(meA, jar, { port: LAB_PORT, swap })).status,
-        logoutA: (await sendBlock(logoutA, jar, { port: LAB_PORT, swap })).status,
+        meA: meAFirst,
+        logoutA: logoutAStatus,
+        meB: meBStatus,
+        logoutNone: { status: none.status, body: none.body },
         meAAgain: await sendBlock(meA, jar, { port: LAB_PORT, swap }),
-        meB: (await sendBlock(meB, jar, { port: LAB_PORT, swap })).status,
       };
     } finally {
       await stop(lab.srv);
     }
   };
 
-  it('🔴 A 200 → A 로그아웃 → 복사해 둔 A 는 401(로그아웃한 토큰이에요) · B 는 그대로 200', async () => {
+  it('🔴 A 200 → A 로그아웃 → B 는 그대로 200 · 토큰 없이 로그아웃은 401(로그인이 필요해요) · 복사해 둔 A 는 401(로그아웃한 토큰이에요)', async () => {
     const r = await scenario();
     expect(r).toMatchObject({ jtiDiffers: true, meA: 200, logoutA: 200, meB: 200 });
+    expect(r.logoutNone).toEqual({ status: 401, body: { message: '로그인이 필요해요' } });
     expect(r.meAAgain).toMatchObject({ status: 401, body: { message: '로그아웃한 토큰이에요' } });
   }, 30000);
+
+  // 2026-11-12 학생 낭독 집중 검수 — 로그아웃이 requireToken 을 거치지 않고 jwt.decode 로 jti 를 꺼내는 판(서명을 안 본다).
+  // 옛 확인 넷(A 200 · 로그아웃 200 · B 200 · A 다시 401)은 정답 판과 같아 못 가렸다 — «토큰 없이 로그아웃» 이 가린다.
+  it('🔴 틀린 판 — 로그아웃이 jwt.decode 로 jti 를 꺼내면 옛 확인 넷은 같고, 토큰 없이 로그아웃만 401 이 아니다', async () => {
+    const decodeOnly = (tail) => (d) => replaceIn(d, 'lab/p3-42/practice3.js',
+      "app.post('/logout', requireToken, (req, res) => {\n  const { jti, exp } = res.locals.payload;",
+      `app.post('/logout', (req, res) => {\n  const { jti, exp } = jwt.decode((req.headers.authorization ?? '').slice('Bearer '.length))${tail};`);
+    for (const tail of ['', ' ?? {}']) {
+      const r = await scenario(decodeOnly(tail));
+      expect(r).toMatchObject({ meA: 200, logoutA: 200, meB: 200 });
+      expect(r.meAAgain).toMatchObject({ status: 401, body: { message: '로그아웃한 토큰이에요' } });
+      expect(r.logoutNone.status, tail).not.toBe(401);
+    }
+  }, 60000);
 
   it('🔴 틀린 판 — 사람(sub)으로 막는 판은 B 까지 401', async () => {
     const bySub = (d) => {
@@ -585,18 +611,21 @@ describe('축 ⑨ 직접 해보기 3 — 차단 목록', () => {
 
 describe('축 ⑩ 과제', () => {
   const CLUB = 'Hd4Kf7Lp1Mq3Nr6Ts9Uv2Wx5Yz8Ab0Cd3Ef6Gh9Ij2K';
-  const runHw1 = async (edit) => {
+  const runHw1 = async (edit, { expiredClassToken = false } = {}) => {
     await freshGate();
     const out = [];
     await withServer(stepDir(6), async ({ base }) => {
       const http = device(base);
       await http.login('jaehoon');
-      const classToken = http.cookie('accessToken');
+      // 수업이 끝나고 과제를 할 때쯤이면 수업 중에 복사해 둔 토큰은 1시간이 지났다 — 그 토큰을 흉내 낸다.
+      const classToken = expiredClassToken
+        ? jwt.sign({ sid: parts(http.cookie('accessToken'))[1].sid }, SECRET, { subject: '2', expiresIn: -60, algorithm: 'HS256' })
+        : http.cookie('accessToken');
       const lab = await labServer('homework1.js', HW_PORT, { CLUB_SECRET: CLUB }, edit);
       try {
         const jar = device(lab.base);
         let copied;
-        for (const block of httpBlocks(LAB('homework1.http'))) {
+        for (const block of httpBlocks(LAB_HTTP('homework1.http'))) {
           const res = await sendBlock(block, jar, { port: HW_PORT, swap: { COPIED_TOKEN: copied ?? '', CLASS_TOKEN: classToken } });
           if (block.title === '로그인') {
             copied = jar.cookie('clubToken');
@@ -628,23 +657,68 @@ describe('축 ⑩ 과제', () => {
     expect(shared.at(-1)).toEqual(['수업 백엔드의 토큰으로 회원 목록', 200]);
   }, 60000);
 
-  const runHw2 = async (edit) => {
+  // 2026-11-12 학생 낭독 집중 검수 — 확인 11 에 «다시 로그인해 받은» 토큰을 쓰게 한 이유. 1시간이 지난 수업 토큰이면
+  // 비밀키를 함께 쓰는 틀린 판도 401 이라 드러나지 않는다.
+  it('🔴 [기초] 틀린 판 — 비밀키를 함께 써도 기한이 지난 수업 토큰이면 401 이라 가려지지 않는다', async () => {
+    const shared = await runHw1((d) => replaceIn(d, 'lab/p3-42/homework1.js', 'const SECRET = process.env.CLUB_SECRET;', 'const SECRET = process.env.JWT_SECRET;'), { expiredClassToken: true });
+    expect(shared.at(-1)).toEqual(['수업 백엔드의 토큰으로 회원 목록', 401]);
+  }, 60000);
+
+  const runHw2 = async (edit, { restart = false } = {}) => {
     const lab = await labServer('homework2.js', HW_PORT + 1, { CLUB_SECRET: CLUB }, edit);
     const out = [];
     try {
       const jar = device(lab.base);
       let other;
-      for (const block of httpBlocks(LAB('homework2.http'))) {
+      const blocks = httpBlocks(LAB('homework2.http'));
+      for (const block of blocks) {
         const res = await sendBlock(block, jar, { port: HW_PORT + 1, swap: { OTHER_TOKEN: other ?? '' } });
         if (block.title === '로그인 — 다른 기기') other = cookieLine(res, 'clubToken').split(';')[0].split('=')[1];
         if (block.title === '나는 누구 — 비밀번호를 바꾼 이 기기' && res.status === 200) expect(res.body).toEqual({ email: 'bomi@example.com' });
         out.push([block.title, res.status]);
+      }
+      if (restart) {
+        // 서버를 끄고 같은 명령으로 다시 띄운다 — 회원 목록이 비고, 이 기기의 쿠키는 그대로다.
+        await stop(lab.srv);
+        lab.srv = await boot(join(lab.dir, 'lab/p3-42/homework2.js'), { port: HW_PORT + 1, cwd: lab.dir, env: { ...env, CLUB_SECRET: CLUB }, ready: '포트에서' });
+        const me = blocks.find((b) => b.title === '나는 누구 — 비밀번호를 바꾼 이 기기');
+        out.push(['다시 띄운 뒤 나는 누구 — 비밀번호를 바꾼 이 기기', (await sendBlock(me, jar, { port: HW_PORT + 1 })).status]);
       }
     } finally {
       await stop(lab.srv);
     }
     return out;
   };
+
+  // 2026-11-12 학생 낭독 집중 검수 — 요청 9개에는 «없는 회원» 이 없어서 «회원이 없으면» 을 안 보는 판을 못 가렸다.
+  // 서버를 다시 띄우면 회원 목록이 빈다 — 정답 판은 401, 회원을 try 밖에서 찾고 회원이 없는지 안 보는 판은 500.
+  it('🔴 [응용] 서버를 다시 띄운 뒤 이 기기의 나는 누구는 401 · 회원이 없는지 안 보는 판은 500', async () => {
+    const right = await runHw2(undefined, { restart: true });
+    expect(right.at(-1)).toEqual(['다시 띄운 뒤 나는 누구 — 비밀번호를 바꾼 이 기기', 401]);
+    const original = /function requireMember\(req, res, next\) \{[\s\S]*?\n\}\n/.exec(read(LAB('homework2.js')))[0];
+    const outside = [
+      'function requireMember(req, res, next) {',
+      '  let payload;',
+      '  try {',
+      "    payload = jwt.verify(req.cookies.clubToken, SECRET, { algorithms: ['HS256'] });",
+      '  } catch {',
+      "    return res.status(401).json({ message: '로그인이 필요해요' });",
+      '  }',
+      '  const member = members.find((m) => m.id === Number(payload.sub));',
+      '',
+      '  if (payload.ver !== member.tokenVersion) {',
+      "    return res.status(401).json({ message: '로그인이 필요해요' });",
+      '  }',
+      '',
+      '  res.locals.member = member;',
+      '  next();',
+      '}',
+      '',
+    ].join('\n');
+    const wrong = await runHw2((d) => replaceIn(d, 'lab/p3-42/homework2.js', original, outside), { restart: true });
+    expect(wrong.slice(0, -1)).toEqual(right.slice(0, -1));
+    expect(wrong.at(-1)).toEqual(['다시 띄운 뒤 나는 누구 — 비밀번호를 바꾼 이 기기', 500]);
+  }, 90000);
 
   it('🔴 [응용] 지금 비밀번호 확인 · 이 기기는 남고 다른 기기는 401 · 옛 비밀번호 401 · 새 비밀번호 200', async () => {
     expect(await runHw2()).toEqual([
@@ -703,7 +777,7 @@ describe('축 ⑪ 교안·답안의 코드 블록과 출력은 실제와 같다'
   }, 30000);
 
   it('🔴 http 블록은 그 파일과 같다 · .env.example 블록도', () => {
-    const files = ['requests/logout.http', ...readdirSync(LAB('.')).filter((f) => f.endsWith('.http')).map((f) => `lab/p3-42/${f}`)].map((rel) => read(R(rel)).trimEnd());
+    const files = [read(R('requests/logout.http')).trimEnd(), ...readdirSync(LAB('.')).filter((f) => f.endsWith('.http')).map((f) => read(LAB_HTTP(f)).trimEnd())];
     const blocks = DOCS.flatMap((d) => fences(d, 'http'));
     expect(blocks).toHaveLength(6);
     for (const b of blocks) expect(files, b.join('\n')).toContain(b.join('\n').trimEnd());
@@ -855,3 +929,35 @@ describe('축 ⑫ 실습·과제 서버도 비밀키가 없으면 뜨지 않는�
   }, 60000);
 });
 
+
+// 2026-11-12 학생 낭독 집중 검수 — 학생이 교안을 글자 그대로 따라 쳤을 때 남던 것 · 확인 절차가 가리지 못하던 것.
+describe('축 ⑬ 학생 낭독 집중 검수 — 교안의 지시와 확인 절차', () => {
+  const TRACK = new URL('../../', ROOT).pathname;
+  const lecture = () => read(join(TRACK, 'part3/7-express-auth/p3-42-jwt-token-authorization-lecture.md'));
+  const section = (text, from, to) => text.slice(text.indexOf(from), to ? text.indexOf(to, text.indexOf(from)) : undefined);
+
+  it('🔴 Step 4 — sessionService 의 SESSION_LIFETIME 위 주석에서 «로그인 쿠키의 maxAge» 를 지우라고 한다 · main 의 학생 파일도 그 판', () => {
+    const step4 = section(lecture(), '## Step 4:', '## Step 5:');
+    expect(step4).toContain('`SESSION_LIFETIME`에 달린 주석은 «7일(밀리초).»까지만 남기고 그 뒤의 문장은 지워요');
+    const file = read(P('services/sessionService.js')).split('\n');
+    expect(file).toContain('// 로그인을 남겨 둘 기간 — 7일(밀리초).');
+    expect(file.join('\n')).not.toContain('maxAge');
+  });
+
+  it('🔴 직접 해보기 3 — 확인에 «토큰 없이 로그아웃» 401(로그인이 필요해요)', () => {
+    const lab3 = section(lecture(), '### 직접 해보기 3', '### 🤔 같이 생각해보기 — ');
+    expect(lab3).toContain('### 토큰 없이 로그아웃');
+    expect(lab3).toMatch(/«토큰 없이 로그아웃»[^\n]*401[^\n]*«로그인이 필요해요»/);
+  });
+
+  it('🔴 과제 [기초] 확인 11 — 수업 백엔드에 «로그인» 을 다시 보내 새로 받은 토큰으로', () => {
+    const hw1 = section(lecture(), '### [기초]', '### [응용]');
+    expect(hw1).toMatch(/11\. [^\n]*«로그인»을 다시 보내/);
+    expect(read(P('lab/p3-42/homework1.http'))).toContain('# 수업 백엔드에서 «로그인»을 다시 보내 새로 받은 accessToken 값으로 CLASS_TOKEN 을 바꾼다');
+  });
+
+  it('🔴 과제 [응용] — 서버를 다시 띄운 뒤 이 기기의 나는 누구는 401', () => {
+    const hw2 = section(lecture(), '### [응용]', '## 생각해볼 주제');
+    expect(hw2).toMatch(/다시 띄운 뒤[^\n]*«나는 누구 — 비밀번호를 바꾼 이 기기»[^\n]*401/);
+  });
+});
