@@ -1987,8 +1987,10 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
       expect(got.callback).toEqual([302, '/?error=LOGIN_FAILED']);
       expect(got.notice).toBe(LOGIN_FAILED_TEXT);
       expect(got.members).toEqual(START_MEMBERS);
-      expect(got.terminal).toContain('DOMException [TimeoutError]: The operation was aborted due to timeout');
-      labSeen.homework2AbortErrorName = got.terminal.slice(got.terminal.indexOf('DOMException')).split('\n').slice(0, 2).join('\n');
+      // 스택 없이 대괄호로 싸인 한 줄로 찍힌다(이 흐름에서 실측 — 세 번 모두 같았다)
+      expect(got.terminal.split('\n')).toContain('[DOMException [TimeoutError]: The operation was aborted due to timeout]');
+      // 터미널에 찍힌 에러 전체(첫 줄의 포트 안내만 뺀다) — 보고에 원문으로 남긴다
+      labSeen.homework2AbortErrorTerminal = scrub(got.terminal.replace(/^.*번 포트에서 과제 서버가 돌아가요\n/, ''), '(없음)');
     }, 60_000);
   });
 
