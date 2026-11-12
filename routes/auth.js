@@ -26,6 +26,14 @@ router.get(
 );
 // 위 두 주소에서 난 에러는 여기서 받는다 — 앱의 에러 미들웨어까지 가면 JSON 으로 답하게 된다.
 router.use('/google', authController.socialFailed);
+// 카카오 로그인 — 구글과 같은 주소 둘이다. 전략의 이름만 다르다.
+router.get('/kakao', authController.rememberNext, passport.authenticate('kakao', { session: false }));
+router.get(
+  '/kakao/callback',
+  passport.authenticate('kakao', { session: false, failureRedirect: '/login?error=SOCIAL_LOGIN_FAILED' }),
+  authController.socialCallback,
+);
+router.use('/kakao', authController.socialFailed);
 
 router.all('/signup', allowOnly('POST'));
 router.all('/check-duplicate', allowOnly('GET'));
@@ -36,5 +44,7 @@ router.all('/logout', allowOnly('POST'));
 router.all('/logout-all', allowOnly('POST'));
 router.all('/google', allowOnly('GET'));
 router.all('/google/callback', allowOnly('GET'));
+router.all('/kakao', allowOnly('GET'));
+router.all('/kakao/callback', allowOnly('GET'));
 
 export default router;
