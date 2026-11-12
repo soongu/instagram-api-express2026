@@ -1224,6 +1224,7 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
         const notice = async (query) => (await browser(base).get(`/?error=${query}`)).body.match(/<p>(.*?)<\/p>/)?.[1];
         out.constructorNotice = await notice('constructor');
         out.injectedNotice = await notice(encodeURIComponent('<b>x</b>'));
+        out.injectedTagInBody = (await browser(base).get(`/?error=${encodeURIComponent('<b>x</b>')}`)).body.includes('<b>x</b>');
         out.members = (await browser(base).get('/members')).body;
         const nobody = await browser(base).get('/me');
         out.nobody = [nobody.status, nobody.body];
@@ -1244,6 +1245,7 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
       deniedPage: true,
       constructorNotice: LOGIN_FAILED_TEXT,
       injectedNotice: LOGIN_FAILED_TEXT,
+      injectedTagInBody: false,
       members: [
         { id: 1, nickname: 'dahye', email: 'dahye@example.com' },
         { id: 2, nickname: 'jaehoon', email: 'jaehoon@example.com' },
@@ -1293,6 +1295,7 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
         "  const text = Object.hasOwn(NOTICES, error ?? '') ? NOTICES[error] : NOTICES.LOGIN_FAILED;\n",
         '  const text = NOTICES[error] ?? error;\n'));
       expect(seen.injectedNotice).toBe('<b>x</b>');
+      expect(seen.injectedTagInBody).toBe(true);
       labWrongSeen.hw1Raw = { constructorNotice: seen.constructorNotice, injectedNotice: seen.injectedNotice };
     }, 60_000);
 
@@ -1308,6 +1311,8 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
 
   describe('축 ⑭ 과제 [응용] — 처음 온 사람은 별명을 직접 고른다', () => {
     const form = (nickname) => new URLSearchParams({ nickname });
+    // homework2.http 둘째 요청의 본문 — 민지의 별명에 jaehoon 의 id·이메일을 함께 싣는다
+    const MIXED_BODY = 'nickname=민지&provider=lab&id=10001&email=jaehoon@example.com';
     const observe = (source) => {
       let seen;
       return withLab('homework2.js', source, async ({ base }) => {
@@ -1330,10 +1335,19 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
         const replay = await browser(base).send('POST', '/nickname', form('재훈3'), { Cookie: `labPending=${pendingCookie}` });
         out.copiedCookieAgain = [replay.status, replay.location];
         const b = browser(base);
-        await labLogin(b, 'minji');
+        const minjiFirst = await labLogin(b, 'minji');
+        out.minjiCallback = [minjiFirst.callback.status, minjiFirst.callback.location];
         const taken = await b.send('POST', '/nickname', form('재훈'));
         out.taken = [taken.status, taken.body.includes('이미 쓰고 있는 별명이에요')];
-        out.minji = (await followIn(b, await b.send('POST', '/nickname', form('민지')))).res.body;
+        // 시크릿 창의 minji — 그 창의 labPending 값을 복사해, 본문에 jaehoon 의 id·이메일을 함께 실어 보낸다(homework2.http 둘째 요청)
+        const minjiPending = b.cookie('labPending');
+        const mixed = await browser(base).send('POST', '/nickname', new URLSearchParams(MIXED_BODY), { Cookie: `labPending=${minjiPending}` });
+        out.mixed = [mixed.status, mixed.location];
+        out.member3 = (await browser(base).get('/members')).body.find((m) => m.id === 3) ?? null;
+        const b2 = browser(base);
+        const minjiAgain = (await labLogin(b2, 'minji')).callback;
+        out.minjiAgainCallback = [minjiAgain.status, minjiAgain.location];
+        out.minjiAgain = minjiAgain.location === '/me' ? (await followIn(b2, minjiAgain)).res.body : null;
         const c = browser(base);
         const again = await labLogin(c, 'jaehoon');
         out.againCallback = [again.callback.status, again.callback.location];
@@ -1356,8 +1370,12 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
       me: { id: 2, nickname: '재훈', email: 'jaehoon@example.com' },
       sameBrowserAgain: [302, '/'],
       copiedCookieAgain: [302, '/'],
+      minjiCallback: [302, '/nickname'],
       taken: [409, true],
-      minji: { id: 3, nickname: '민지', email: 'minji@example.com' },
+      mixed: [302, '/me'],
+      member3: { id: 3, nickname: '민지', email: 'minji@example.com' },
+      minjiAgainCallback: [302, '/me'],
+      minjiAgain: { id: 3, nickname: '민지', email: 'minji@example.com' },
       againCallback: [302, '/me'],
       again: { id: 2, nickname: '재훈', email: 'jaehoon@example.com' },
       dahyeCallback: [302, '/?error=EMAIL_TAKEN'],
@@ -1365,7 +1383,7 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
       members: ['1 dahye', '2 재훈', '3 민지'],
     };
 
-    it('🔴 정답 판 — 처음엔 /nickname 폼(회원은 dahye 하나) · 재 400 · 재훈 → /me id 2 · 같은 브라우저·복사해 둔 labPending 으로 다시 내면 / · minji 재훈 409 → 민지 id 3 · jaehoon 다시 → 폼 없이 /me · dahye → /?error=EMAIL_TAKEN · 쿠키 없이 /nickname → /', async () => {
+    it('🔴 정답 판 — 처음엔 /nickname 폼(회원은 dahye 하나) · 재 400 · 재훈 → /me id 2 · 같은 브라우저·복사해 둔 labPending 으로 다시 내면 / · minji 재훈 409 → 복사해 둔 labPending 으로 «민지 + jaehoon 의 id·이메일» 본문 → 302 /me · 3번은 민지·minji@example.com · minji 다시 → 폼 없이 /me · jaehoon 다시 → 폼 없이 /me · dahye → /?error=EMAIL_TAKEN · 쿠키 없이 /nickname → /', async () => {
       expect(await observe(LAB('homework2.js'))).toEqual(RIGHT);
     }, 60_000);
 
@@ -1392,6 +1410,15 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
       labWrongSeen.recordOnly = seen;
     }, 60_000);
 
+    it('🔴 폼 본문의 provider·id·email 을 믿는 판(createMember({ ...profile, ...req.body }, nickname)) — 3번의 이메일이 jaehoon@example.com 이 된다', async () => {
+      const seen = await observe(edit1(LAB('homework2.js'), '  startSession(res, createMember(profile, nickname));\n',
+        '  startSession(res, createMember({ ...profile, ...req.body }, nickname));\n'));
+      expect(seen.mixed).toEqual([302, '/me']);
+      expect(seen.member3).toEqual({ id: 3, nickname: '민지', email: 'jaehoon@example.com' });
+      expect(seen).not.toEqual(RIGHT);
+      labWrongSeen.trustBody = seen;
+    }, 60_000);
+
     it('🔴 별명을 묻기 전에 이메일 겹침을 안 보는 판 — dahye 가 별명 폼까지 간다', async () => {
       const src = LAB('homework2.js');
       const block = "    // 이메일이 같은 회원이 이미 있으면 별명을 묻기 전에 돌려보낸다.\n    if (members.some((item) => item.email === profile.email)) {\n      done(Object.assign(new Error('이미 가입한 이메일이에요'), { code: 'EMAIL_TAKEN' }));\n      return;\n    }\n\n";
@@ -1401,43 +1428,73 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
     }, 60_000);
   });
 
-  describe('축 ⑭-b homework2.http — 복사해 둔 쿠키로 별명 다시 내기(httpYac 으로 실제로 보낸다)', () => {
-    const HW2_HTTP = '### 복사해 둔 쿠키로 별명 다시 내기\n# @no-redirect\nPOST http://localhost:4002/nickname\nContent-Type: application/x-www-form-urlencoded\nCookie: labPending=COPIED_PENDING\n\nnickname=재훈3\n';
-    /** 그 판을 띄우고 jaehoon 이 재훈으로 가입한 뒤, 복사해 둔 labPending 값으로 homework2.http 를 httpYac 으로 보낸다. */
-    const sendCopied = (source) => {
+  describe('축 ⑭-b homework2.http — 복사해 둔 쿠키로 별명 다시 내기 · 본문에 다른 사람의 id 를 실어 내기(httpYac 으로 실제로 보낸다)', () => {
+    const HW2_HTTP = '### 복사해 둔 쿠키로 별명 다시 내기\n# @no-redirect\nPOST http://localhost:4002/nickname\nContent-Type: application/x-www-form-urlencoded\nCookie: labPending=COPIED_PENDING\n\nnickname=재훈3\n\n### 본문에 다른 사람의 id를 함께 실어 별명 내기\n# @no-redirect\nPOST http://localhost:4002/nickname\nContent-Type: application/x-www-form-urlencoded\nCookie: labPending=MINJI_PENDING\n\nnickname=민지&provider=lab&id=10001&email=jaehoon@example.com\n';
+    /**
+     * 그 판을 띄워 장면 차례대로 — jaehoon 이 재훈으로 가입(그때의 labPending 을 복사) → minji 가 별명 폼까지(그 창의 labPending 을 복사) →
+     * 자리표시 둘을 진짜 값으로 바꾼 사본을 httpYac 한 파일 --all 로 보낸다.
+     */
+    const sendBoth = (source) => {
       let seen;
-      return withLab('homework2.js', source, async ({ base }) => {
+      return withLab('homework2.js', source, async ({ base, tail }) => {
         const a = browser(base);
         await labLogin(a, 'jaehoon');
         const pending = a.cookie('labPending');
         await a.send('POST', '/nickname', new URLSearchParams({ nickname: '재훈' }));
+        const b = browser(base);
+        await labLogin(b, 'minji');
+        const minjiPending = b.cookie('labPending');
         const dir = mkdtempSync(join(tmpdir(), 'p345-http-'));
         dirs.push(dir);
-        writeFileSync(join(dir, 'homework2.http'), swapAll(LAB('homework2.http'), [['4002', String(LAB_PORT)], ['COPIED_PENDING', pending]], 'homework2.http'));
+        writeFileSync(join(dir, 'homework2.http'), swapAll(LAB('homework2.http'), [['4002', String(LAB_PORT)], ['COPIED_PENDING', pending], ['MINJI_PENDING', minjiPending]], 'homework2.http'));
+        const mark = tail().length;
         const out = await httpyac(dir, 'homework2.http');
+        await sleep(100);
+        const second = out.slice(out.indexOf('=== 본문에 다른 사람의 id를 함께 실어 별명 내기 ==='));
         seen = {
           out,
-          status: out.match(/^HTTP\/1\.1 (\d+)/m)?.[1],
-          location: out.match(/^location: (.*)$/m)?.[1],
-          sentCookie: out.match(/^cookie: (.*)$/mi)?.[1],
-          members: (await browser(base).get('/members')).body.map((m) => `${m.id} ${m.nickname}`),
+          statuses: [...out.matchAll(/^HTTP\/1\.1 (\d+)/gm)].map((m) => m[1]),
+          locations: [...out.matchAll(/^location: (.*)$/gm)].map((m) => m[1]),
+          sentCookies: [...out.matchAll(/^cookie: labPending=(.*)$/gm)].map((m) => m[1]),
+          secondSentBody: second.split('\n').find((l) => l.startsWith('nickname=')),
+          members: (await browser(base).get('/members')).body,
+          serverLog: tail().slice(mark),
         };
       }).then(() => seen);
     };
 
-    it('🔴 파일 글자 그대로 — POST …/nickname · Cookie: labPending=COPIED_PENDING · 본문 nickname=재훈3', () => {
+    it('🔴 파일 글자 그대로 — 요청 둘(복사해 둔 쿠키로 재훈3 · MINJI_PENDING 으로 민지 + jaehoon 의 id·이메일)', () => {
       expect(LAB('homework2.http')).toBe(HW2_HTTP);
     });
 
-    it('🔴 정답 판에 보내면 302 Location: / (회원이 안 는다) · 서버의 pendings.delete 만 뺀 판에 보내면 302 /me 로 3번 «재훈3» 이 생긴다(한글 본문 · 손으로 적은 Cookie 그대로)', async () => {
-      const right = await sendCopied(LAB('homework2.js'));
-      expect(right.out).toContain('1 requests processed (1 succeeded)');
-      expect([right.status, right.location, right.sentCookie]).toEqual(['302', '/', expect.stringMatching(/^labPending=[0-9a-f-]{36}$/)]);
-      expect(right.members).toEqual(['1 dahye', '2 재훈']);
-      const wrong = await sendCopied(edit1(LAB('homework2.js'), '  pendings.delete(req.cookies.labPending);\n', ''));
-      expect([wrong.status, wrong.location]).toEqual(['302', '/me']);
-      expect(wrong.members).toEqual(['1 dahye', '2 재훈', '3 재훈3']);
-      labWrongSeen.hw2Http = { right: right.out, wrongMembers: wrong.members, sentCookie: right.sentCookie };
+    it('🔴 정답 판 — 첫 요청 302 / (회원이 안 는다) · 둘째 요청 302 /me 로 3번 민지·minji@example.com / 서버의 pendings.delete 만 뺀 판은 첫 요청이 302 /me 로 3번 «재훈3»', async () => {
+      const right = await sendBoth(LAB('homework2.js'));
+      expect(right.out).toContain('2 requests processed (2 succeeded)');
+      expect(right.statuses).toEqual(['302', '302']);
+      expect(right.locations).toEqual(['/', '/me']);
+      expect(right.sentCookies).toHaveLength(2);
+      for (const value of right.sentCookies) expect(value).toMatch(/^[0-9a-f-]{36}$/);
+      expect(right.members).toEqual([
+        { id: 1, nickname: 'dahye', email: 'dahye@example.com' },
+        { id: 2, nickname: '재훈', email: 'jaehoon@example.com' },
+        { id: 3, nickname: '민지', email: 'minji@example.com' },
+      ]);
+      const recordOnly = await sendBoth(edit1(LAB('homework2.js'), '  pendings.delete(req.cookies.labPending);\n', ''));
+      expect(recordOnly.locations).toEqual(['/me', '/me']);
+      expect(recordOnly.members.map((m) => `${m.id} ${m.nickname}`)).toEqual(['1 dahye', '2 재훈', '3 재훈3', '4 민지']);
+      labWrongSeen.hw2Http = { right: right.out, secondSentBody: right.secondSentBody, recordOnlyMembers: recordOnly.members };
+    }, 60_000);
+
+    it('🔎 폼 본문을 믿는 판에 httpYac 으로 보내면 — 서버가 받은 본문의 @·& 와 3번의 이메일', async () => {
+      const wrong = edit1(edit1(LAB('homework2.js'), '  startSession(res, createMember(profile, nickname));\n',
+        '  startSession(res, createMember({ ...profile, ...req.body }, nickname));\n'),
+      "app.post('/nickname', (req, res) => {\n", "app.post('/nickname', (req, res) => {\n  console.log('받은 본문', JSON.stringify(req.body));\n");
+      const seen = await sendBoth(wrong);
+      expect(seen.locations).toEqual(['/', '/me']);
+      expect(seen.members[2]).toEqual({ id: 3, nickname: '민지', email: 'jaehoon@example.com' });
+      const received = seen.serverLog.split('\n').filter((l) => l.startsWith('받은 본문 ')).map((l) => JSON.parse(l.slice('받은 본문 '.length)));
+      expect(received.at(-1)).toEqual({ nickname: '민지', provider: 'lab', id: '10001', email: 'jaehoon@example.com' });
+      labWrongSeen.hw2HttpTrustBody = { secondSentBody: seen.secondSentBody, received, members: seen.members };
     }, 60_000);
   });
 });
