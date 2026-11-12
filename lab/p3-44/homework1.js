@@ -122,6 +122,7 @@ app.post('/auth/refresh', (req, res) => {
     logins.delete(loginId);
     return res.status(401).json({ message: '다시 로그인해 주세요' });
   }
+
   const hash = hashSecret(secret ?? '');
 
   if (login.secretHash !== hash) {
