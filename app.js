@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import passport from 'passport';
 import postsRouter from './routes/posts.js';
 import likesRouter from './routes/likes.js';
 import authRouter from './routes/auth.js';
@@ -15,8 +16,12 @@ import { privateNoCache } from './middlewares/cache.js';
 import { apiVersion } from './middlewares/version.js';
 import { oldApiNotice } from './middlewares/deprecation.js';
 import { requireLogin } from './middlewares/auth.js';
+import { googleStrategy } from './strategies/google.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
+
+// 어떤 방법으로 로그인을 확인할지 등록한다 — 라우트에서 이름 'google' 로 꺼내 쓴다.
+passport.use('google', googleStrategy);
 
 const app = express();
 
