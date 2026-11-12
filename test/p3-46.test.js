@@ -1209,10 +1209,12 @@ const runLabScript = (file, source) => {
   dirs.push(dir);
   mkdirSync(join(dir, 'lab/p3-46'), { recursive: true });
   writeFileSync(join(dir, `lab/p3-46/${file}`), source);
+  // 학생 프로젝트처럼 ESM 으로 돌린다 — 이 줄이 없으면 CommonJS 로 돌아 에러의 스택 모양이 학생 것과 다르다.
+  writeFileSync(join(dir, 'package.json'), '{ "type": "module" }\n');
   try {
     return { code: 0, out: execFileSync(process.execPath, [`lab/p3-46/${file}`], { cwd: dir, encoding: 'utf8', stdio: 'pipe' }) };
   } catch (error) {
-    return { code: error.status, out: `${error.stdout}${error.stderr}`.replaceAll(`file://${dir}`, 'file://~/instagram-api').replaceAll(`file:///private${dir}`, 'file://~/instagram-api') };
+    return { code: error.status, out: `${error.stdout}${error.stderr}`.replaceAll(`/private${dir}`, '~/instagram-api').replaceAll(dir, '~/instagram-api') };
   }
 };
 const nodeCheck = (source) => {
