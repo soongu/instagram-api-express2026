@@ -374,7 +374,7 @@ describe('축 ⑥ Step 6 — 로그아웃이 달라진다', () => {
       let copied;
       for (const { title, text } of blocks()) {
         titles.push(title);
-        const [first, ...rest] = text.split('\n').filter((l) => !l.startsWith('# @'));
+        const [first, ...rest] = text.split('\n').filter((l) => !l.startsWith('#'));
         const [method, url] = first.split(' ');
         const path = url.replace('http://localhost:3000', '');
         if (title === '로그인') {
@@ -383,9 +383,10 @@ describe('축 ⑥ Step 6 — 로그아웃이 달라진다', () => {
           copied = http.cookie('accessToken');
           expect(await gate('SELECT count(*)::int AS n FROM sessions')).toEqual([{ n: 1 }]);
         } else if (title === '복사해 둔 토큰으로 게시물 목록') {
-          expect(rest[0]).toBe('Authorization: Bearer 여기에-복사해-둔-토큰');
+          expect(rest[0]).toBe('Authorization: Bearer COPIED_TOKEN');
+          expect(text).toContain('# @no-cookie-jar\n');
           // 자리표시 그대로면 401, 복사해 둔 토큰을 붙여 넣으면 200
-          expect((await device(base).get(path, { Authorization: 'Bearer 여기에-복사해-둔-토큰' })).status).toBe(401);
+          expect((await device(base).get(path, { Authorization: 'Bearer COPIED_TOKEN' })).status).toBe(401);
           const res = await device(base).get(path, { Authorization: `Bearer ${copied}` });
           expect(res.status).toBe(200);
           expect(res.body.data.items).toHaveLength(1);
