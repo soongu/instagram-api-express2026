@@ -414,3 +414,235 @@ describe('축 ⑥ Step 6 — 로그아웃이 달라진다', () => {
     });
   }, 30000);
 });
+
+/** .http 파일을 요청 덩어리로 — 제목 · `# @no-cookie-jar` · 요청 줄 · 헤더 · 본문. */
+const httpBlocks = (file) => read(file).split(/^### /m).slice(1).map((chunk) => {
+  const lines = chunk.replace(/\n+$/, '').split('\n');
+  const title = lines.shift();
+  const noJar = lines.includes('# @no-cookie-jar');
+  const rest = lines.filter((l) => !l.startsWith('#'));
+  const [method, url] = rest.shift().split(' ');
+  const headers = {};
+  while (rest.length && rest[0] !== '') {
+    const line = rest.shift();
+    const at = line.indexOf(': ');
+    headers[line.slice(0, at)] = line.slice(at + 2);
+  }
+  const body = rest.join('\n').trim();
+  return { title, noJar, method, url, headers, body: body === '' ? undefined : body };
+});
+/** 한 덩어리를 보낸다 — `swap` 으로 자리표시를 바꾸고, 쿠키 단지는 `jar`(device) 를 쓴다. */
+const sendBlock = async (block, jar, { port, swap = {} } = {}) => {
+  const fill = (text) => Object.entries(swap).reduce((t, [k, v]) => t.replaceAll(k, v), text);
+  const url = new URL(fill(block.url));
+  url.port = String(port);
+  const headers = Object.fromEntries(Object.entries(block.headers).map(([k, v]) => [k, fill(v)]));
+  const target = block.noJar ? device(url.origin) : jar;
+  return target.send(block.method, `${url.pathname}${url.search}`, block.body === undefined ? undefined : JSON.parse(block.body), headers);
+};
+/** 실습 서버 하나를 학생 폴더 모양으로 띄운다 — 포트만 판정 포트로 바꾼다. */
+const labServer = async (file, port, extraEnv, edit) => {
+  const dir = studentDir(stepDir(6), (d) => {
+    cpSync(LAB(file), join(d, `lab/p3-42/${file}`));
+    replaceIn(d, `lab/p3-42/${file}`, /app\.listen\((40\d\d)/.exec(read(LAB(file)))[0], `app.listen(${port}`);
+    if (edit) edit(d);
+  });
+  const srv = await boot(join(dir, `lab/p3-42/${file}`), { port, cwd: dir, env: { ...env, ...extraEnv }, ready: '포트에서' });
+  return { srv, dir, base: `http://localhost:${port}` };
+};
+
+describe('축 ⑦ 직접 해보기 1 — DB 없이 토큰을 확인하는 공지 서버', () => {
+  const run = async (edit) => {
+    await freshGate();
+    const result = {};
+    await withServer(stepDir(6), async ({ base }) => {
+      const http = device(base);
+      await http.login('jaehoon');
+      const token = http.cookie('accessToken');
+      const lab = await labServer('practice1.js', LAB_PORT, {}, edit);
+      try {
+        const [list, anon, posted] = httpBlocks(LAB('practice1.http'));
+        const jar = device(lab.base);
+        result.list = await sendBlock(list, jar, { port: LAB_PORT });
+        result.anon = await sendBlock(anon, jar, { port: LAB_PORT });
+        result.posted = await sendBlock(posted, jar, { port: LAB_PORT, swap: { COPIED_TOKEN: token } });
+        // 수업 서버에서 로그아웃해도
+        await http.send('POST', '/api/v2/auth/logout-all');
+        result.afterLogout = await sendBlock(posted, jar, { port: LAB_PORT, swap: { COPIED_TOKEN: token } });
+        result.token = token;
+        result.lab = lab;
+      } catch (error) {
+        await stop(lab.srv);
+        throw error;
+      }
+    });
+    // 수업 서버를 끈 뒤에도
+    const [, , posted] = httpBlocks(LAB('practice1.http'));
+    result.serverOff = await sendBlock(posted, device(result.lab.base), { port: LAB_PORT, swap: { COPIED_TOKEN: result.token } });
+    await stop(result.lab.srv);
+    return result;
+  };
+
+  it('🔴 목록 200 · 토큰 없이 401 · 복사한 토큰 201(글쓴이 2) · 수업 서버에서 로그아웃해도 201 · 수업 서버를 꺼도 201', async () => {
+    const r = await run();
+    expect(r.list).toMatchObject({ status: 200, body: [{ id: 1, title: '서버 점검 안내', authorId: 1 }] });
+    expect(r.anon).toMatchObject({ status: 401, body: { message: '로그인이 필요해요' } });
+    expect(r.posted).toMatchObject({ status: 201, body: { id: 2, title: '이번 주 모임은 쉬어요', authorId: 2 } });
+    expect(r.afterLogout).toMatchObject({ status: 201, body: { id: 3, authorId: 2 } });
+    expect(r.serverOff).toMatchObject({ status: 201, body: { id: 4, authorId: 2 } });
+    expect(read(LAB('practice1.js'))).not.toMatch(/db\.js|prisma|fetch\(/);
+  }, 60000);
+
+  it('🔴 틀린 판 둘 — 수업 서버의 나는 누구에 물어보는 판은 수업 서버를 끄면 실패 · Number 를 빠뜨리면 글쓴이가 "2"', async () => {
+    const ask = (d) => replaceIn(d, 'lab/p3-42/practice1.js', "  try {\n    const payload = jwt.verify(token, SECRET, { algorithms: ['HS256'] });\n    res.locals.userId = Number(payload.sub);\n    next();\n  } catch {\n    res.status(401).json({ message: '로그인이 필요해요' });\n  }",
+      `  fetch('http://localhost:${PORT}/api/v2/auth/me', { headers: { Authorization: \`Bearer \${token}\` } })\n    .then(async (response) => {\n      if (!response.ok) return res.status(401).json({ message: '로그인이 필요해요' });\n      res.locals.userId = (await response.json()).data.id;\n      next();\n    })\n    .catch(next);`);
+    const asked = await run(ask);
+    expect(asked.posted.status).toBe(201);
+    expect(asked.serverOff.status).toBe(500);
+    const noNumber = await run((d) => replaceIn(d, 'lab/p3-42/practice1.js', 'res.locals.userId = Number(payload.sub);', 'res.locals.userId = payload.sub;'));
+    expect(noNumber.posted.body.authorId).toBe('2');
+  }, 90000);
+});
+
+describe('축 ⑧ 직접 해보기 2 — 비밀키 바꾸기', () => {
+  const KEY1 = 'kW3m9Qe1Zt7Rb2Xy5Nc8Lp4Vh6Js0Ga1Df3Hk7Mn9Qr';
+  const KEY2 = 'Tz8Yc2Wd5Fe1Gh7Jk3Lm9Np4Qr6St0Uv2Wx5Yz8Ab1C';
+  const scenario = async (edit) => {
+    const [login, first, second] = httpBlocks(LAB('practice2.http'));
+    let lab = await labServer('practice2.js', LAB_PORT, { LAB_SECRET: KEY1, LAB_OLD_SECRET: '' }, edit);
+    const jar = device(lab.base);
+    const out = {};
+    try {
+      const a = (await sendBlock(login, jar, { port: LAB_PORT })).body.token;
+      out.firstBefore = (await sendBlock(first, jar, { port: LAB_PORT, swap: { FIRST_TOKEN: a } })).status;
+      await stop(lab.srv);
+      lab = await labServer('practice2.js', LAB_PORT, { LAB_SECRET: KEY2, LAB_OLD_SECRET: KEY1 }, edit);
+      out.firstDuring = (await sendBlock(first, jar, { port: LAB_PORT, swap: { FIRST_TOKEN: a } })).status;
+      const b = (await sendBlock(login, jar, { port: LAB_PORT })).body.token;
+      out.secondDuring = (await sendBlock(second, jar, { port: LAB_PORT, swap: { SECOND_TOKEN: b } })).status;
+      out.secondAlg = parts(b)[0].alg;
+      await stop(lab.srv);
+      lab = await labServer('practice2.js', LAB_PORT, { LAB_SECRET: KEY2, LAB_OLD_SECRET: '' }, edit);
+      out.firstAfter = (await sendBlock(first, jar, { port: LAB_PORT, swap: { FIRST_TOKEN: a } })).status;
+      out.secondAfter = (await sendBlock(second, jar, { port: LAB_PORT, swap: { SECOND_TOKEN: b } })).status;
+    } finally {
+      await stop(lab.srv);
+    }
+    return out;
+  };
+
+  it('🔴 첫 토큰은 바꾸는 동안 200 · 옛 키를 빼면 401 · 둘째 토큰은 내내 200', async () => {
+    expect(await scenario()).toEqual({ firstBefore: 200, firstDuring: 200, secondDuring: 200, secondAlg: 'HS256', firstAfter: 401, secondAfter: 200 });
+  }, 60000);
+
+  it('🔴 틀린 판 둘 — 옛 키를 안 보는 판은 바꾸자마자 401 · 옛 키로 만드는 판은 옛 키를 빼면 둘째도 401', async () => {
+    expect((await scenario((d) => replaceIn(d, 'lab/p3-42/practice2.js', 'for (const secret of [SECRET, OLD_SECRET])', 'for (const secret of [SECRET])'))).firstDuring).toBe(401);
+    expect((await scenario((d) => replaceIn(d, 'lab/p3-42/practice2.js', 'const token = jwt.sign({}, SECRET,', 'const token = jwt.sign({}, OLD_SECRET ?? SECRET,'))).secondAfter).toBe(401);
+  }, 90000);
+});
+
+describe('축 ⑨ 직접 해보기 3 — 차단 목록', () => {
+  const KEY = 'kW3m9Qe1Zt7Rb2Xy5Nc8Lp4Vh6Js0Ga1Df3Hk7Mn9Qr';
+  const scenario = async (edit) => {
+    const [loginA, loginB, meA, logoutA, meB] = httpBlocks(LAB('practice3.http'));
+    const lab = await labServer('practice3.js', LAB_PORT, { LAB_SECRET: KEY }, edit);
+    const jar = device(lab.base);
+    try {
+      const a = (await sendBlock(loginA, jar, { port: LAB_PORT })).body.token;
+      const b = (await sendBlock(loginB, jar, { port: LAB_PORT })).body.token;
+      const swap = { TOKEN_A: a, TOKEN_B: b };
+      return {
+        jtiDiffers: parts(a)[1].jti !== parts(b)[1].jti,
+        meA: (await sendBlock(meA, jar, { port: LAB_PORT, swap })).status,
+        logoutA: (await sendBlock(logoutA, jar, { port: LAB_PORT, swap })).status,
+        meAAgain: await sendBlock(meA, jar, { port: LAB_PORT, swap }),
+        meB: (await sendBlock(meB, jar, { port: LAB_PORT, swap })).status,
+      };
+    } finally {
+      await stop(lab.srv);
+    }
+  };
+
+  it('🔴 A 200 → A 로그아웃 → 복사해 둔 A 는 401(로그아웃한 토큰이에요) · B 는 그대로 200', async () => {
+    const r = await scenario();
+    expect(r).toMatchObject({ jtiDiffers: true, meA: 200, logoutA: 200, meB: 200 });
+    expect(r.meAAgain).toMatchObject({ status: 401, body: { message: '로그아웃한 토큰이에요' } });
+  }, 30000);
+
+  it('🔴 틀린 판 — 사람(sub)으로 막는 판은 B 까지 401', async () => {
+    const bySub = (d) => {
+      replaceIn(d, 'lab/p3-42/practice3.js', 'if (revoked.has(payload.jti)) {', 'if (revoked.has(payload.sub)) {');
+      replaceIn(d, 'lab/p3-42/practice3.js', 'revoked.set(jti, exp);', 'revoked.set(res.locals.payload.sub, exp);');
+    };
+    expect((await scenario(bySub)).meB).toBe(401);
+  }, 30000);
+});
+
+describe('축 ⑩ 과제', () => {
+  const CLUB = 'Hd4Kf7Lp1Mq3Nr6Ts9Uv2Wx5Yz8Ab0Cd3Ef6Gh9Ij2K';
+  const runHw1 = async (edit) => {
+    await freshGate();
+    const out = [];
+    await withServer(stepDir(6), async ({ base }) => {
+      const http = device(base);
+      await http.login('jaehoon');
+      const classToken = http.cookie('accessToken');
+      const lab = await labServer('homework1.js', HW_PORT, { CLUB_SECRET: CLUB }, edit);
+      try {
+        const jar = device(lab.base);
+        let copied;
+        for (const block of httpBlocks(LAB('homework1.http'))) {
+          const res = await sendBlock(block, jar, { port: HW_PORT, swap: { COPIED_TOKEN: copied ?? '', CLASS_TOKEN: classToken } });
+          if (block.title === '로그인') copied = jar.cookie('clubToken');
+          out.push([block.title, res.status]);
+        }
+      } finally {
+        await stop(lab.srv);
+      }
+    });
+    return out;
+  };
+
+  it('🔴 [기초] 401 → 로그인 200 → 로그아웃 뒤 401 · 복사해 둔 쿠키는 200(세션 판은 401) · 수업 서버의 토큰은 401', async () => {
+    expect(await runHw1()).toEqual([
+      ['가입', 201], ['로그인하지 않고 회원 목록', 401], ['로그인', 200], ['회원 목록', 200], ['나는 누구', 200],
+      ['로그아웃', 200], ['로그아웃한 뒤 회원 목록', 401], ['복사해 둔 쿠키로 회원 목록', 200], ['수업 서버의 토큰으로 회원 목록', 401],
+    ]);
+  }, 60000);
+
+  it('🔴 [기초] 틀린 판 — 수업 서버의 JWT_SECRET 을 함께 쓰면 수업 서버의 토큰이 동아리 회원 목록을 연다', async () => {
+    const shared = await runHw1((d) => replaceIn(d, 'lab/p3-42/homework1.js', 'const SECRET = process.env.CLUB_SECRET;', 'const SECRET = process.env.JWT_SECRET;'));
+    expect(shared.at(-1)).toEqual(['수업 서버의 토큰으로 회원 목록', 200]);
+  }, 60000);
+
+  const runHw2 = async (edit) => {
+    const lab = await labServer('homework2.js', HW_PORT + 1, { CLUB_SECRET: CLUB }, edit);
+    const out = [];
+    try {
+      const jar = device(lab.base);
+      let other;
+      for (const block of httpBlocks(LAB('homework2.http'))) {
+        const res = await sendBlock(block, jar, { port: HW_PORT + 1, swap: { OTHER_TOKEN: other ?? '' } });
+        if (block.title === '로그인 — 다른 기기') other = cookieLine(res, 'clubToken').split(';')[0].split('=')[1];
+        out.push([block.title, res.status]);
+      }
+    } finally {
+      await stop(lab.srv);
+    }
+    return out;
+  };
+
+  it('🔴 [응용] 지금 비밀번호 확인 · 이 기기는 남고 다른 기기는 401 · 옛 비밀번호 401 · 새 비밀번호 200', async () => {
+    expect(await runHw2()).toEqual([
+      ['가입', 201], ['로그인 — 다른 기기', 200], ['로그인 — 이 기기', 200], ['지금 비밀번호를 틀리게 보내면', 401], ['비밀번호 바꾸기', 200],
+      ['나는 누구 — 비밀번호를 바꾼 이 기기', 200], ['나는 누구 — 다른 기기', 401], ['옛 비밀번호로 로그인', 401], ['새 비밀번호로 로그인', 200],
+    ]);
+  }, 60000);
+
+  it('🔴 [응용] 틀린 판 둘 — 이 기기에 새 토큰을 안 주면 이 기기도 401 · 버전을 안 올리면 다른 기기가 200', async () => {
+    const noNew = await runHw2((d) => replaceIn(d, 'lab/p3-42/homework2.js', '  member.tokenVersion += 1;\n  giveToken(res, member);\n', '  member.tokenVersion += 1;\n'));
+    expect(noNew.find(([t]) => t === '나는 누구 — 비밀번호를 바꾼 이 기기')[1]).toBe(401);
+    const noBump = await runHw2((d) => replaceIn(d, 'lab/p3-42/homework2.js', '  member.tokenVersion += 1;\n', ''));
+    expect(noBump.find(([t]) => t === '나는 누구 — 다른 기기')[1]).toBe(200);
+  }, 90000);
+});
