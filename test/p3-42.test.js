@@ -210,6 +210,7 @@ describe('축 ② Step 2 — 토큰을 만드는 곳과 비밀키', () => {
       const login = await me.login('jaehoon');
       expect(login.status).toBe(500);
       expect(login.body).toEqual({ error: { code: 'INTERNAL_ERROR', message: '서버에서 문제가 생겼어요' } });
+      await sleep(300);
       expect(srv.tail()).toContain('Error: secretOrPrivateKey must have a value');
       expect(srv.tail()).toContain('POST /api/v2/auth/login 500 ');
     } finally {
@@ -254,9 +255,107 @@ describe('축 ② Step 2 — 토큰을 만드는 곳과 비밀키', () => {
       out = { code: error.status, text: `${error.stdout}${error.stderr}` };
     }
     expect(out.code).toBe(1);
-    expect(out.text).toContain(`${dir}/services/tokenService.js:8`);
-    expect(out.text).toContain("  throw new Error('.env에 JWT_SECRET이 없어요');");
-    expect(out.text).toContain('Error: .env에 JWT_SECRET이 없어요');
+    // 첫 줄이 그 파일의 9번째 줄을 가리키고, 그 줄과 ^ 표시, 에러 문장이 이어진다
+    expect(out.text).toMatch(/^file:\/\/\/.+\/services\/tokenService\.js:9\n  throw new Error\('\.env에 JWT_SECRET이 없어요'\);\n        \^\n\nError: \.env에 JWT_SECRET이 없어요\n/);
+    expect(out.text).toMatch(/\nNode\.js v24\.\d+\.\d+\n$/);
     expect(read(S2('.env.example'))).toBe('# ~/instagram-api/.env.example\n# 이 파일은 «이름만» 알려줘요. 값은 각자 자기 것을 .env에 적으세요.\nDATABASE_URL=\nCORS_ORIGIN=\nJWT_SECRET=\n');
+  }, 30000);
+});
+
+/** db.js 에 log: ['query'] 를 켠다 — 교안 오프닝·Step 4 가 학생에게 시키는 그 한 줄. */
+const queryLog = (d) => replaceIn(d, 'db.js', 'new PrismaClient({ adapter });', "new PrismaClient({ adapter, log: ['query'] });");
+const sessionsLines = (text) => text.split('\n').filter((l) => l.startsWith('prisma:query') && l.includes('"public"."sessions"'));
+
+describe('축 ④ Step 4 — requireLogin 의 안쪽', () => {
+  it('🔴 Step 2 판은 목록 요청마다 sessions 를 한 번 찾는다 · Step 4 판은 0번(로그인할 때 INSERT 하나만)', async () => {
+    for (const [n, perRequest] of [[2, 1], [4, 0]]) {
+      await freshGate();
+      await withServer(stepDir(n), async ({ base, tail }) => {
+        const me = device(base);
+        await me.login('jaehoon');
+        await sleep(200);
+        const before = sessionsLines(tail()).length;
+        expect(before).toBe(1); // 로그인 — INSERT
+        for (let i = 0; i < 3; i += 1) expect((await me.get('/api/v2/posts?limit=2')).status).toBe(200);
+        await sleep(200);
+        expect(sessionsLines(tail()).length - before).toBe(3 * perRequest);
+      }, { edit: queryLog });
+    }
+  }, 40000);
+
+  it('🔴 Step 4 판 — 로그인 쿠키는 accessToken 하나 · 세션 행은 남긴다 · Bearer 로도 · 고친 쿠키·숫자 Bearer 는 401', async () => {
+    const S4 = stepDir(4);
+    await freshGate();
+    await withServer(S4, async ({ base }) => {
+      const me = device(base);
+      const login = await me.login('jaehoon');
+      expect(login.setCookies.map((l) => l.split('=')[0])).toEqual(['accessToken']);
+      const token = me.cookie('accessToken');
+      expect(await gate('SELECT id, user_id FROM sessions')).toEqual([{ id: parts(token)[1].sid, user_id: 2 }]);
+      expect((await me.get('/api/v2/auth/me')).body).toEqual({ data: { id: 2, username: 'jaehoon', profileImage: 'https://picsum.photos/seed/jaehoon/40/40' } });
+      const anon = device(base);
+      expect((await anon.get('/api/v2/posts?limit=1', anon.bearer(token))).status).toBe(200);
+      expect((await anon.get('/api/v2/auth/me', anon.bearer(token))).status).toBe(200);
+      expect(await anon.get('/api/v2/auth/me')).toMatchObject({ status: 401, body: { error: { code: 'LOGIN_REQUIRED' } } });
+      expect((await anon.get('/api/v2/auth/me', { Cookie: 'accessToken=1' })).status).toBe(401);
+      expect((await anon.get('/api/v2/auth/me', anon.bearer('3'))).status).toBe(401);
+      // 옛 세션 쿠키는 이제 아무것도 아니다
+      expect((await anon.get('/api/v2/posts?limit=1', { Cookie: `sessionId=${parts(token)[1].sid}` })).status).toBe(401);
+    });
+    expect(read(S4('services/sessionService.js'))).not.toContain('getUserId');
+  }, 30000);
+
+  it('🔴 Step 4 판 — 토큰은 살아 있는데 그 사람이 지워졌으면 나는 누구는 401', async () => {
+    await freshGate();
+    await withServer(stepDir(4), async ({ base }) => {
+      const me = device(base);
+      expect((await me.send('POST', '/api/v2/auth/signup', { emailOrPhone: 'gone@example.com', name: '지울사람', username: 'gone', password: 'gone12345' })).status).toBe(201);
+      await me.login('gone', 'gone12345');
+      expect((await me.get('/api/v2/auth/me')).status).toBe(200);
+      await gate(`DELETE FROM users WHERE username = 'gone'`);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions')).toEqual([{ n: 0 }]);
+      expect(await me.get('/api/v2/auth/me')).toMatchObject({ status: 401, body: { error: { code: 'LOGIN_REQUIRED' } } });
+    });
+  }, 30000);
+
+  it('🔴 Step 4 판 — 로그아웃은 토큰의 sid 행을 지우고 쿠키를 지운다 · 토큰 없이 로그아웃해도 200(아무것도 안 지운다)', async () => {
+    await freshGate();
+    await withServer(stepDir(4), async ({ base }) => {
+      const [a, b] = [device(base), device(base)];
+      await a.login('jaehoon');
+      await b.login('jaehoon');
+      expect((await device(base).send('POST', '/api/v2/auth/logout')).status).toBe(200);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions')).toEqual([{ n: 2 }]);
+      const sid = parts(a.cookie('accessToken'))[1].sid;
+      const out = await a.send('POST', '/api/v2/auth/logout');
+      expect(out.body).toEqual({ data: { message: '로그아웃했어요' } });
+      expect(out.setCookies).toEqual(['accessToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT']);
+      expect(await gate('SELECT id FROM sessions WHERE id = $1', [sid])).toEqual([]);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions')).toEqual([{ n: 1 }]);
+      const all = await b.send('POST', '/api/v2/auth/logout-all');
+      expect(all.setCookies).toEqual(['accessToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT']);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions')).toEqual([{ n: 0 }]);
+    });
+  }, 30000);
+});
+
+describe('축 ⑤ Step 5 — 서버가 막는 토큰', () => {
+  const run = async (n) => {
+    await freshGate();
+    let out;
+    await withServer(stepDir(n), async () => {
+      const dir = studentDir(stepDir(n), (d) => replaceIn(d, 'lab/p3-42/check-tokens.js', 'http://localhost:3000', `http://localhost:${PORT}`));
+      out = node(dir, 'lab/p3-42/check-tokens.js');
+    });
+    return out;
+  };
+
+  it('🔴 Step 4 판 — 진짜와 HS512 가 200(헤더의 alg 를 서버가 그대로 따른다) · 나머지 넷은 401', async () => {
+    expect(await run(4)).toEqual({ code: 0, out: '200  진짜 토큰\n401  페이로드만 바꾼 토큰\n401  다른 비밀키로 만든 토큰\n401  알고리즘을 none으로 바꾼 토큰\n200  HS512로 만든 토큰\n401  기한이 지난 토큰\n' });
+  }, 30000);
+
+  it('🔴 Step 5 판 — algorithms 를 HS256 하나로 정하면 HS512 도 401', async () => {
+    expect(await run(5)).toEqual({ code: 0, out: '200  진짜 토큰\n401  페이로드만 바꾼 토큰\n401  다른 비밀키로 만든 토큰\n401  알고리즘을 none으로 바꾼 토큰\n401  HS512로 만든 토큰\n401  기한이 지난 토큰\n' });
+    expect(read(stepDir(5)('services/tokenService.js'))).toContain("    return jwt.verify(token, SECRET, { algorithms: ['HS256'] });");
   }, 30000);
 });
