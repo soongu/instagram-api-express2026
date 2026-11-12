@@ -38,8 +38,8 @@ GET http://localhost:4011/members
 GET http://localhost:4011/members
 Cookie: clubToken=COPIED_TOKEN
 
-### 수업 서버의 토큰으로 회원 목록
-# 수업 서버 로그인 응답의 accessToken 값으로 CLASS_TOKEN 을 바꾼다
+### 수업 백엔드의 토큰으로 회원 목록
+# 수업 백엔드 로그인 응답의 accessToken 값으로 CLASS_TOKEN 을 바꾼다
 # @no-cookie-jar
 GET http://localhost:4011/members
 Cookie: clubToken=CLASS_TOKEN
