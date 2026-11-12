@@ -37,12 +37,14 @@ kakaoStrategy.userProfile = async (accessToken, done) => {
 
     const info = await response.json();
 
+    // 카카오는 같은 뜻의 값을 다른 이름, 다른 위치에 준다 — id 는 카카오가 이 앱에서 그 계정에 매긴 회원번호(숫자)다.
+    // 동의항목에 닉네임만 넣었으니 이메일은 오지 않는다.
     done(null, {
       provider: 'kakao',
-      id: info.sub,
-      email: info.email,
-      emailVerified: info.email_verified === true,
-      name: info.name,
+      id: String(info.id),
+      email: undefined,
+      emailVerified: false,
+      name: info.kakao_account?.profile?.nickname,
     });
   } catch (error) {
     done(error);
