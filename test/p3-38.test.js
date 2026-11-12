@@ -702,7 +702,7 @@ describe('축 ⑨ 학생 낭독 집중 검수', () => {
     expect(md).toContain('지난 시간 Step 2에서 코드로만 짚은 장면이에요.');
     // p3-34 Step 4 — /api/v2/zzz 의 404 에도 v1 헤더
     expect(prior('part3/6-api-design/p3-34-versioning-docs-lecture.md')).toContain('`/api/v2/zzz`처럼 없는 주소로 온 요청도 v1 라우터를 지나가서, 그 404에도 두 헤더가 붙어요.');
-    expect(md).toContain('`/api/v2/zzz`의 404에까지');
+    expect(md).toContain('`/api/v2/zzz`의 404 응답에까지');
     // Step 3 — 복사가 아니라 옮기는 이유
     expect(md).toContain('같은 검색에 형식이 다른 주소가 둘 생기기 때문이에요');
   });
