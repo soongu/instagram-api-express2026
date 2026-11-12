@@ -138,7 +138,8 @@ const device = (base) => {
   const send = async (method, path, body, extra = {}) => {
     const headers = { ...extra };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const carried = [...jar.values()].filter((c) => pathMatches(c.path, path));
+    // httpYac 처럼 path 가 긴 쿠키를 앞에 싣는다(RFC 6265 §5.4 — 길이가 같으면 먼저 받은 쿠키가 앞)
+    const carried = [...jar.values()].filter((c) => pathMatches(c.path, path)).sort((a, b) => b.path.length - a.path.length);
     // httpYac 처럼 — Authorization 헤더를 적어도 기억한 쿠키는 함께 싣는다(`# @no-cookie-jar` 요청은 sendBlock 이 빈 단지로 보낸다)
     if (carried.length > 0 && !headers.Cookie) headers.Cookie = carried.map((c) => `${c.name}=${c.value}`).join('; ');
     const res = await fetch(`${base}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -677,9 +678,9 @@ describe('축 ⑧ 직접 해보기 1 — 쿠키의 path', () => {
   };
   it('🔴 시작 코드는 labRefresh 가 모든 주소에 실린다 · path 를 /auth 로 주면 /authors 에도 안 실린다 · 지울 때 path 를 빼면 남는다', async () => {
     expect(await run(SNAP('practice1-start.practice1.js'))).toEqual([200, 'labAccess,labRefresh', 'labAccess,labRefresh', 'labAccess,labRefresh', 200, '']);
-    expect(await run(LAB_SRC('practice1.js'))).toEqual([200, 'labAccess', 'labAccess', 'labAccess,labRefresh', 200, '']);
+    expect(await run(LAB_SRC('practice1.js'))).toEqual([200, 'labAccess', 'labAccess', 'labRefresh,labAccess', 200, '']);
     const half = LAB_SRC('practice1.js').replace("res.clearCookie('labRefresh', { path: '/auth' });", "res.clearCookie('labRefresh');");
-    expect(await run(half)).toEqual([200, 'labAccess', 'labAccess', 'labAccess,labRefresh', 200, 'labRefresh']);
+    expect(await run(half)).toEqual([200, 'labAccess', 'labAccess', 'labRefresh,labAccess', 200, 'labRefresh']);
   });
 });
 
