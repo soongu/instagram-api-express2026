@@ -9,7 +9,7 @@ if (!SECRET) {
   throw new Error('.env에 JWT_SECRET이 없어요');
 }
 
-// 토큰을 쓸 수 있는 시간 — 15분(밀리초). 로그인 쿠키의 maxAge 도 이 값을 쓴다.
+// 토큰을 쓸 수 있는 시간 — 15분(밀리초). 토큰을 담는 쿠키는 이보다 오래, 로그인 기한 동안 둔다.
 export const TOKEN_LIFETIME = 1000 * 60 * 15;
 
 // 로그인한 사람에게 줄 토큰 — 누구인지(sub), 어느 로그인인지(sid), 무엇을 할 수 있는 사람인지(role)를 담아 서명한다.
@@ -22,12 +22,9 @@ export function createAccessToken(user, sessionId) {
   });
 }
 
-// 토큰의 서명과 기한을 확인하고 담긴 값을 돌려준다 — 서명이 틀렸거나 기한이 지났으면 null.
+// 토큰의 서명과 기한을 확인하고 담긴 값을 돌려준다 — 서명이 틀렸거나 기한이 지났으면 에러를 던진다.
+// 기한만 지났으면 에러의 이름이 TokenExpiredError 라, 받는 쪽이 둘을 가를 수 있다.
 // 받을 알고리즘은 HS256 하나로 정한다 — 토큰 헤더의 alg 가 무엇이라고 하든 그것만 받는다.
-export function readAccessToken(token) {
-  try {
-    return jwt.verify(token, SECRET, { algorithms: ['HS256'] });
-  } catch {
-    return null;
-  }
+export function verifyAccessToken(token) {
+  return jwt.verify(token, SECRET, { algorithms: ['HS256'] });
 }

@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 
@@ -584,6 +585,54 @@ describe('축 ⑥ Step 6 — 로그아웃은 Refresh 쿠키로 기록을 지운�
       const [sid] = jar.cookie('refreshToken').split('.');
       expect((await jar.send('POST', '/api/auth/logout')).status).toBe(200);
       expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 1 }]);
+    });
+  });
+});
+
+describe('축 ⑦ Step 7 — 만료만 TOKEN_EXPIRED · Access 쿠키는 로그인 기한만큼', () => {
+  it('🔴 기한만 지난 토큰은 401 TOKEN_EXPIRED · 다른 비밀키(기한도 지남)·없음·엉터리는 LOGIN_REQUIRED', async () => {
+    await freshGate();
+    const expired = expiredToken(7);
+    const forged = jwt.sign({ role: 'USER' }, 'another-secret', { subject: '2', expiresIn: -60, algorithm: 'HS256' });
+    await withServer(stepDir(7), async ({ base }) => {
+      const blocks = HTTP(7);
+      const jar = device(base);
+      const res = await sendBlock(blockOf(blocks, '기한이 지난 토큰으로 게시물 목록'), jar, { port: PORT, swap: { EXPIRED_TOKEN: expired } });
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({ error: { code: 'TOKEN_EXPIRED', message: '토큰의 기한이 지났어요' } });
+      const none = await sendBlock(blockOf(blocks, '쿠키 없이 게시물 목록'), jar, { port: PORT });
+      expect(none.body.error.code).toBe('LOGIN_REQUIRED');
+      for (const token of [forged, 'abc']) {
+        const r = await jar.send('GET', '/api/v2/posts?limit=1', undefined, jar.bearer(token));
+        expect(r.status).toBe(401);
+        expect(r.body.error.code).toBe('LOGIN_REQUIRED');
+      }
+      // 옛 주소는 옛 모양 — 코드 없이 문장만
+      const old = await jar.send('GET', '/api/posts?limit=1', undefined, jar.bearer(expired));
+      expect(old.status).toBe(401);
+      expect(old.body).toEqual({ message: '토큰의 기한이 지났어요' });
+    });
+  });
+
+  it('🔴 로그인·새 토큰 받기의 accessToken 쿠키는 Max-Age=604800(로그인 기한) · 토큰 자체는 그대로 15분', async () => {
+    await freshGate();
+    await withServer(stepDir(7), async ({ base }) => {
+      const jar = device(base);
+      const login = await jar.login('jaehoon');
+      expect(cookieLine(login, 'accessToken')).toMatch(/Max-Age=604800;/);
+      const re = await jar.send('POST', '/api/v2/auth/reissue');
+      expect(cookieLine(re, 'accessToken')).toMatch(/Max-Age=604800;/);
+      const [, claims] = parts(jar.cookie('accessToken'));
+      expect(claims.exp - claims.iat).toBe(900);
+    });
+  });
+
+  it('🔴 문서 — 로그인이 필요한 두 주소의 401 에 TOKEN_EXPIRED', async () => {
+    await withServer(stepDir(7), async ({ base }) => {
+      const doc = await (await fetch(`${base}/api/openapi.json`)).json();
+      const codes = JSON.stringify(doc.paths['/api/v2/posts']);
+      expect(codes).toContain('TOKEN_EXPIRED');
+      expect(codes).toContain('LOGIN_REQUIRED');
     });
   });
 });
