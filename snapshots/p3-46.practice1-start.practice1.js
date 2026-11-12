@@ -6,7 +6,7 @@ const NOT_ALLOWED = /[^A-Za-z0-9_.]/g;
 // 이미 쓰고 있는 사용자 이름
 const taken = new Set(['jaehoon', 'kakao']);
 
-// 소셜 로그인으로 처음 온 사람들 — 제공자의 응답을 우리 모양으로 바꾼 값이다. id 는 글자다.
+// 소셜 로그인으로 처음 온 사람들 — 제공자의 응답을 우리가 정한 이름으로 맞춘 값이다. id 는 글자다.
 const visitors = [
   { provider: 'kakao', id: '3812345678', name: 'minsu_dev' },
   { provider: 'kakao', id: '3812345679', name: '민수' },

@@ -31,7 +31,7 @@ const READERS = {
   naver: (info) => ({ id: info.response.id, email: info.response.email, emailVerified: false, name: info.response.name }),
 };
 
-// 제공자의 응답을 우리 모양({ provider, id, email, emailVerified, name })으로 바꾼다.
+// 제공자의 응답을 우리가 정한 이름({ provider, id, email, emailVerified, name })으로 맞춘다.
 function toProfile(provider, info) {
   if (!Object.hasOwn(READERS, provider)) throw new Error(`모르는 제공자예요: ${provider}`);
 
