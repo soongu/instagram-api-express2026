@@ -33,3 +33,15 @@ DELETE http://localhost:3000/api/v2/posts/{{reported.data.id}}
 ### 헤더에 관리자라고 적어 지우기
 DELETE http://localhost:3000/api/v2/posts/{{reported.data.id}}
 X-Role: admin
+
+### 역할을 실어 보낸 가입
+POST http://localhost:3000/api/v2/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "boram@example.com",
+  "name": "이보람",
+  "username": "boram",
+  "password": "boram1234",
+  "role": "ADMIN"
+}
