@@ -616,13 +616,13 @@ describe('축 ⑩ 과제', () => {
   it('🔴 [기초] 401 → 로그인 200 → 로그아웃 뒤 401 · 복사해 둔 쿠키는 200(세션 판은 401) · 수업 서버의 토큰은 401', async () => {
     expect(await runHw1()).toEqual([
       ['가입', 201], ['로그인하지 않고 회원 목록', 401], ['로그인', 200], ['회원 목록', 200], ['나는 누구', 200],
-      ['로그아웃', 200], ['로그아웃한 뒤 회원 목록', 401], ['복사해 둔 쿠키로 회원 목록', 200], ['수업 서버의 토큰으로 회원 목록', 401],
+      ['로그아웃', 200], ['로그아웃한 뒤 회원 목록', 401], ['복사해 둔 쿠키로 회원 목록', 200], ['수업 백엔드의 토큰으로 회원 목록', 401],
     ]);
   }, 60000);
 
   it('🔴 [기초] 틀린 판 — 수업 서버의 JWT_SECRET 을 함께 쓰면 수업 서버의 토큰이 동아리 회원 목록을 연다', async () => {
     const shared = await runHw1((d) => replaceIn(d, 'lab/p3-42/homework1.js', 'const SECRET = process.env.CLUB_SECRET;', 'const SECRET = process.env.JWT_SECRET;'));
-    expect(shared.at(-1)).toEqual(['수업 서버의 토큰으로 회원 목록', 200]);
+    expect(shared.at(-1)).toEqual(['수업 백엔드의 토큰으로 회원 목록', 200]);
   }, 60000);
 
   const runHw2 = async (edit) => {
