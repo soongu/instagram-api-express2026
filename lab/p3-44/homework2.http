@@ -1,0 +1,23 @@
+### 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 내 로그인 기기
+GET http://localhost:4012/sessions
+
+### 다른 기기 내보내기
+# 위 목록에서 current 가 false 인 기록의 id 로 OTHER_SESSION 을 바꾼다
+DELETE http://localhost:4012/sessions/OTHER_SESSION
+
+### 남의 로그인 기록 내보내기
+# SQL 로 찾은 다른 사람의 기록 id 로 SOMEONE_ELSE 를 바꾼다
+DELETE http://localhost:4012/sessions/SOMEONE_ELSE
+
+### 로그인 없이 내 로그인 기기
+# @no-cookie-jar
+GET http://localhost:4012/sessions

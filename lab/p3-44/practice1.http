@@ -1,0 +1,17 @@
+### 로그인
+POST http://localhost:4001/login
+
+### 게시물 목록에 실려 온 쿠키
+GET http://localhost:4001/posts
+
+### 작성자 목록에 실려 온 쿠키
+GET http://localhost:4001/authors
+
+### 새 토큰 받는 주소에 실려 온 쿠키
+POST http://localhost:4001/auth/refresh
+
+### 로그아웃
+POST http://localhost:4001/auth/logout
+
+### 로그아웃 뒤 새 토큰 받는 주소에 실려 온 쿠키
+POST http://localhost:4001/auth/refresh
