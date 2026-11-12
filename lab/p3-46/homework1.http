@@ -1,0 +1,5 @@
+### 회원 목록
+GET http://localhost:4002/members
+
+### 로그인하지 않고 나는 누구
+GET http://localhost:4002/me
