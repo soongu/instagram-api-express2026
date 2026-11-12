@@ -7,8 +7,9 @@ import OAuth2Strategy from 'passport-oauth2';
 
 const AUTH_SERVER = 'http://127.0.0.1:4001';
 
-// 회원 · 소셜 계정 · 로그인 기록 — 실습 서버라 메모리에 둔다(서버가 다시 뜨면 비워진다).
-const members = [];
+// 회원 · 소셜 계정 · 로그인 기록 — 실습 서버라 메모리에 둔다(서버가 다시 뜨면 처음으로 돌아간다).
+// 1번 dahye 는 이메일로 먼저 가입해 둔 회원이다 — 소셜 계정이 없다.
+const members = [{ id: 1, nickname: 'dahye', email: 'dahye@example.com' }];
 const socialAccounts = [];
 const sessions = new Map();
 // 인가 서버는 다녀왔지만 아직 별명을 정하지 않은 사람 — 임시 ID → 인가 서버가 확인해 준 사람.
@@ -86,7 +87,20 @@ const labStrategy = new OAuth2Strategy(
   },
   // 이미 회원이면 그 회원을, 처음 온 사람이면 인가 서버가 확인해 준 사람을 pending 에 담아 넘긴다.
   (accessToken, refreshToken, profile, done) => {
-    done(null, findMember(profile) ?? { pending: profile });
+    const member = findMember(profile);
+
+    if (member) {
+      done(null, member);
+      return;
+    }
+
+    // 이메일이 같은 회원이 이미 있으면 별명을 묻기 전에 돌려보낸다.
+    if (members.some((item) => item.email === profile.email)) {
+      done(Object.assign(new Error('이미 가입한 이메일이에요'), { code: 'EMAIL_TAKEN' }));
+      return;
+    }
+
+    done(null, { pending: profile });
   },
 );
 
@@ -113,8 +127,17 @@ const app = express();
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: false }));
 
+// 로그인하지 못하고 돌아왔을 때 보여 줄 문장 — 주소의 ?error= 에 실려 온 코드로 고른다.
+const NOTICES = {
+  LOGIN_FAILED: '로그인하지 못했어요. 다시 시도해 주세요.',
+  EMAIL_TAKEN: '이미 가입한 이메일이에요.',
+};
+
 app.get('/', (req, res) => {
-  const notice = req.query.error === undefined ? '' : '<p>로그인하지 못했어요. 다시 시도해 주세요.</p>';
+  const { error } = req.query;
+  // 표에 없는 코드가 와도 주소의 글자를 그대로 보여 주지 않는다.
+  const text = Object.hasOwn(NOTICES, error ?? '') ? NOTICES[error] : NOTICES.LOGIN_FAILED;
+  const notice = error === undefined ? '' : `<p>${text}</p>`;
 
   res.send(`<!doctype html><meta charset="utf-8">${notice}<a href="/login">인가 서버로 로그인</a>`);
 });
@@ -139,6 +162,13 @@ app.get(
     res.redirect('/nickname');
   },
 );
+
+// 콜백에서 난 에러는 여기서 받는다 — 브라우저가 문서로 연 주소라 JSON 대신 첫 화면으로 보낸다.
+app.use('/callback', (err, req, res, next) => {
+  if (err.code !== 'EMAIL_TAKEN') console.error(err);
+
+  res.redirect(`/?error=${err.code === 'EMAIL_TAKEN' ? 'EMAIL_TAKEN' : 'LOGIN_FAILED'}`);
+});
 
 app.get('/nickname', (req, res) => {
   if (!pendings.has(req.cookies.labPending)) {
