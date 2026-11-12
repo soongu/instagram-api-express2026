@@ -359,3 +359,57 @@ describe('축 ⑤ Step 5 — 서버가 막는 토큰', () => {
     expect(read(stepDir(5)('services/tokenService.js'))).toContain("    return jwt.verify(token, SECRET, { algorithms: ['HS256'] });");
   }, 30000);
 });
+
+describe('축 ⑥ Step 6 — 로그아웃이 달라진다', () => {
+  const blocks = () => read(R('requests/logout.http')).split(/^### /m).slice(1).map((chunk) => {
+    const lines = chunk.split('\n');
+    return { title: lines[0], text: lines.slice(1).join('\n') };
+  });
+
+  it('🔴 logout.http 차례 — 로그인 200 · 로그아웃 200(행이 지워진다) · 쿠키 없이 401 · 복사해 둔 토큰은 200', async () => {
+    await freshGate();
+    await withServer(stepDir(6), async ({ base }) => {
+      const http = device(base);
+      const titles = [];
+      let copied;
+      for (const { title, text } of blocks()) {
+        titles.push(title);
+        const [first, ...rest] = text.split('\n').filter((l) => !l.startsWith('# @'));
+        const [method, url] = first.split(' ');
+        const path = url.replace('http://localhost:3000', '');
+        if (title === '로그인') {
+          const res = await http.send(method, path, JSON.parse(rest.slice(rest.indexOf('') + 1).join('\n')));
+          expect(res.status).toBe(200);
+          copied = http.cookie('accessToken');
+          expect(await gate('SELECT count(*)::int AS n FROM sessions')).toEqual([{ n: 1 }]);
+        } else if (title === '복사해 둔 토큰으로 게시물 목록') {
+          expect(rest[0]).toBe('Authorization: Bearer 여기에-복사해-둔-토큰');
+          // 자리표시 그대로면 401, 복사해 둔 토큰을 붙여 넣으면 200
+          expect((await device(base).get(path, { Authorization: 'Bearer 여기에-복사해-둔-토큰' })).status).toBe(401);
+          const res = await device(base).get(path, { Authorization: `Bearer ${copied}` });
+          expect(res.status).toBe(200);
+          expect(res.body.data.items).toHaveLength(1);
+        } else {
+          const res = await http.send(method, path);
+          expect(res.status).toBe(title === '로그아웃' ? 200 : 401);
+          if (title === '로그아웃') expect(await gate('SELECT count(*)::int AS n FROM sessions')).toEqual([{ n: 0 }]);
+        }
+      }
+      expect(titles).toEqual(['로그인', '로그아웃', '로그아웃한 뒤 게시물 목록', '복사해 둔 토큰으로 게시물 목록']);
+    });
+  }, 30000);
+
+  it('🔴 모든 기기에서 로그아웃 — 행은 모두 지워지는데 다른 기기의 토큰은 그대로 200 · 나는 누구도 200', async () => {
+    await freshGate();
+    await withServer(stepDir(6), async ({ base }) => {
+      const [chrome, http] = [device(base), device(base)];
+      await chrome.login('jaehoon');
+      await http.login('jaehoon');
+      expect((await http.send('POST', '/api/v2/auth/logout-all')).body).toEqual({ data: { message: '모든 기기에서 로그아웃했어요' } });
+      expect(await gate('SELECT count(*)::int AS n FROM sessions')).toEqual([{ n: 0 }]);
+      expect((await chrome.get('/api/v2/posts?limit=1')).status).toBe(200);
+      expect((await chrome.get('/api/v2/auth/me')).status).toBe(200);
+      expect((await http.get('/api/v2/posts?limit=1')).status).toBe(401);
+    });
+  }, 30000);
+});
