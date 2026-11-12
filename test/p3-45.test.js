@@ -864,6 +864,24 @@ describe('축 ⑦ Step 7 — 로그인 기록과 토큰 둘 · 302 · ?next= · 
   }, 30_000);
 });
 
+describe('축 ⑦-c .env 의 값이 하나씩 빠지면', () => {
+  it('🔎 GOOGLE_CLIENT_SECRET 만 빠지면 서버는 뜨고 시작도 302 — 토큰 주소에 빈 client_secret 이 가서 콜백이 /login?error=SOCIAL_LOGIN_FAILED', async () => {
+    await freshGate();
+    const dir = studentDir(stepDir(7), (d) => useFakeGoogle(d, google));
+    const srv = await start(dir, { without: ['GOOGLE_CLIENT_SECRET'] });
+    try {
+      const { begin, callback } = await googleLogin(browser(SITE));
+      expect(begin.status).toBe(302);
+      expect(callback.location).toBe(LOGIN_FAILED_PAGE);
+      expect(google.state.log.token[0].body.client_secret).toBe('');
+      await sleep(100);
+      expect(srv.tail()).toContain('TokenError: Unauthorized');
+    } finally {
+      await stop(srv);
+    }
+  }, 30_000);
+});
+
 describe('축 ⑦-b 에러 미들웨어의 차례', () => {
   it('🔎 router.use(\'/google\', socialFailed) 를 router.all 줄들 «아래» 로 내리면 405 까지 잡아 302 /login?error=METHOD_NOT_ALLOWED 로 바꾼다 — 그래서 라우트 둘 바로 아래에 둔다', async () => {
     const line = "router.use('/google', authController.socialFailed);\n";
