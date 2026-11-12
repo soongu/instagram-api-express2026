@@ -767,6 +767,15 @@ describe('축 ⑪ 과제 [기초] — 동아리 서버에 Refresh', () => {
     const noCode = src.replace("      return res.status(401).json({ code: 'TOKEN_EXPIRED', message: '토큰의 기한이 지났어요' });", "      return res.status(401).json({ message: '로그인이 필요해요' });");
     expect((await run(noCode)).expiredBody.code).toBeUndefined();
   });
+  it('🔴 답안 «확인하지 못하는 요구사항» — 끝나는 때 확인과 내보낸 회원 확인을 빼도 상태 코드 열 개가 같다', async () => {
+    const src = LAB_SRC('homework1.js');
+    const noExpiry = src.replace('  if (!login || login.expiresAt <= Date.now()) {', '  if (!login) {');
+    expect(noExpiry).not.toBe(src);
+    expect((await run(noExpiry)).statuses).toEqual([201, 200, 200, 200, 401, 401, 200, 401, 200, 401]);
+    const noMember = src.replace("  if (!member) {\n    logins.delete(loginId);\n    return res.status(401).json({ message: '다시 로그인해 주세요' });\n  }\n\n  const nextSecret", '  const nextSecret');
+    expect(noMember).not.toBe(src);
+    expect((await run(noMember)).statuses).toEqual([201, 200, 200, 200, 401, 401, 200, 401, 200, 401]);
+  });
 });
 
 describe('축 ⑫ 과제 [응용] — 로그인한 기기 목록과 내보내기', () => {
@@ -833,6 +842,26 @@ describe('축 ⑬ Step 4 — 직전 비밀값일 때만 지운다', () => {
       const reuse = await fetch(`${base}/api/v2/auth/reissue`, { method: 'POST', headers: { Cookie: `refreshToken=${first}` } });
       expect(reuse.status).toBe(401);
       expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 0 }]);
+    });
+  });
+
+  it('🔴 🤔 — 훔친 사람이 두 번 바꾼 뒤 처음 값이 오면 지우지 않는다(직전 해시 하나만 남겨서) · 훔친 사람은 계속 200 · 다시 로그인해 모든 기기에서 로그아웃하면 끝난다', async () => {
+    await freshGate();
+    await withServer(stepDir(4), async ({ base }) => {
+      const thief = device(base);
+      await thief.login('jaehoon');
+      const first = thief.cookie('refreshToken');
+      const [sid] = first.split('.');
+      expect((await thief.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
+      expect((await thief.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
+      const late = await fetch(`${base}/api/v2/auth/reissue`, { method: 'POST', headers: { Cookie: `refreshToken=${first}` } });
+      expect(late.status).toBe(401);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 1 }]);
+      expect((await thief.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
+      const owner = device(base);
+      await owner.login('jaehoon');
+      expect((await owner.send('POST', '/api/v2/auth/logout-all')).status).toBe(200);
+      expect((await thief.send('POST', '/api/v2/auth/reissue')).status).toBe(401);
     });
   });
 
