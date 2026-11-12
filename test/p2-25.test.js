@@ -728,6 +728,7 @@ describe('인용이 코드베이스와 byte 동일한가', () => {
     const now = real('.env.example').trimEnd().split('\n');
     expect(now.slice(0, 2)).toEqual(then.slice(0, 2));
     // 🔀 (p3-42) 토큰에 서명할 비밀키 이름 `JWT_SECRET` 이 더해졌다 — 없으면 서버가 뜨지 않는다.
-    expect(now.slice(2)).toEqual(['DATABASE_URL=', 'CORS_ORIGIN=', 'JWT_SECRET=']);
+    // 🔀 (p3-45) 구글 로그인의 클라이언트 ID·비밀값과 화면 주소 `SITE_URL` 이 더해졌다 — 클라이언트 ID 가 없으면 서버가 뜨지 않는다.
+    expect(now.slice(2)).toEqual(['DATABASE_URL=', 'CORS_ORIGIN=', 'JWT_SECRET=', 'GOOGLE_CLIENT_ID=', 'GOOGLE_CLIENT_SECRET=', 'SITE_URL=']);
   });
 });
