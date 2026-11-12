@@ -1,0 +1,8 @@
+### 회원 목록
+GET http://localhost:4002/members
+
+### 제때 답하지 않았을 때의 첫 화면
+GET http://localhost:4002/?error=PROVIDER_TIMEOUT
+
+### 표에 없는 코드로 연 첫 화면
+GET http://localhost:4002/?error=%3Cb%3Ex%3C%2Fb%3E
