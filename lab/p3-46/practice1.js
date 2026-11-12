@@ -15,6 +15,8 @@ const visitors = [
   { provider: 'kakao', id: '3812345681', name: undefined },
   { provider: 'naver', id: 'aB3dE5fG7hI9', name: 'js' },
   { provider: 'kakao', id: '3812345683', name: 'minsu_dev' },
+  // 닉네임이 긴 사람
+  { provider: 'naver', id: 'cD4eF6gH8iJ0', name: 'the_quick_brown_fox_jumps_over' },
 ];
 
 // 처음 온 사람의 사용자 이름을 정한다 — 닉네임을 쓸 수 있으면 닉네임으로, 아니면 제공자 이름으로.
