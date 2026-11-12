@@ -26,6 +26,19 @@ export async function createSession(userId) {
   return { sessionId: session.id, refreshToken: `${session.id}.${secret}` };
 }
 
+// Refresh 토큰으로 로그인 기록을 찾는다 — 행이 있고 비밀값의 해시가 같을 때만 그 행을, 아니면 null.
+export async function findSessionByRefreshToken(refreshToken) {
+  const [sessionId, secret] = (refreshToken ?? '').split('.');
+
+  if (!sessionId || !secret) return null;
+
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+
+  if (!session || session.refreshTokenHash !== hashSecret(secret)) return null;
+
+  return session;
+}
+
 export async function deleteSession(sessionId) {
   // 세션 ID 가 없으면 여기서 끝낸다 — undefined 를 넘기면 조건이 사라져 모든 세션을 지운다.
   if (!sessionId) return;

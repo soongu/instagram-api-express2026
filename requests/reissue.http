@@ -15,3 +15,9 @@ GET http://localhost:3000/api/v2/posts?limit=1
 # @no-cookie-jar
 GET http://localhost:3000/api/v2/posts?limit=1
 Authorization: Bearer EXPIRED_TOKEN
+
+### 새 토큰 받기
+POST http://localhost:3000/api/v2/auth/reissue
+
+### jaehoon이 사람 목록
+GET http://localhost:3000/api/v2/admin/users

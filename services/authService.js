@@ -26,6 +26,19 @@ export async function login(username, password) {
   return { user, accessToken, refreshToken };
 }
 
+// 새 토큰 받기 — Refresh 토큰으로 로그인 기록을 찾고, 그 사람을 다시 찾아 «지금» 역할로 Access 토큰을 만든다.
+// 사람을 지우면 그 사람의 기록도 함께 지워지니(Cascade), 기록이 있으면 사람도 있다.
+export async function reissue(refreshToken) {
+  const session = await sessionService.findSessionByRefreshToken(refreshToken);
+
+  if (!session) throw new UnauthorizedError('LOGIN_REQUIRED');
+
+  const user = await userService.findUserById(session.userId);
+  const accessToken = tokenService.createAccessToken(user, session.id);
+
+  return { accessToken };
+}
+
 // 나는 누구 — 토큰에서 꺼낸 번호로 그 사람을 찾는다. 토큰은 살아 있어도 그 사람이 지워졌으면 401.
 export async function whoAmI(userId) {
   const user = await userService.findUserById(userId);
