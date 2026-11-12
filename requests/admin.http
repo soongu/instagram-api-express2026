@@ -1,0 +1,35 @@
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 신고가 들어올 게시물 올리기
+# @name reported
+POST http://localhost:3000/api/v2/posts
+Content-Type: application/json
+
+{
+  "imageUrls": ["/images/post-8.jpg"],
+  "postAlt": "광고 문구가 적힌 사진",
+  "content": "지금 가입하면 100만 원을 드려요"
+}
+
+### admin.hong으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin.hong",
+  "password": "admin1234!"
+}
+
+### 관리자가 그 게시물 지우기
+DELETE http://localhost:3000/api/v2/posts/{{reported.data.id}}
+
+### 헤더에 관리자라고 적어 지우기
+DELETE http://localhost:3000/api/v2/posts/{{reported.data.id}}
+X-Role: admin
