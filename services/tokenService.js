@@ -21,3 +21,12 @@ export function createAccessToken(userId, sessionId) {
     algorithm: 'HS256',
   });
 }
+
+// 토큰의 서명과 기한을 확인하고 담긴 값을 돌려준다 — 서명이 틀렸거나 기한이 지났으면 null.
+export function readAccessToken(token) {
+  try {
+    return jwt.verify(token, SECRET);
+  } catch {
+    return null;
+  }
+}
