@@ -448,3 +448,56 @@ describe('축 ④ Step 4 — 회전과 재사용 감지', () => {
     });
   });
 });
+
+const DAY = 24 * 60 * 60 * 1000;
+const sessionTimes = async (sid) => (await gate('SELECT created_at, expires_at FROM sessions WHERE id = $1', [sid]))[0];
+
+describe('축 ⑤ Step 5 — 슬라이딩 7일 · 절대 30일', () => {
+  it('🔴 Step 4 판은 expires_at 이 지난 행으로도 새 토큰을 받는다(겪기 — 아무도 기한을 안 본다)', async () => {
+    await freshGate();
+    await withServer(stepDir(4), async ({ base }) => {
+      const jar = device(base);
+      await jar.login('jaehoon');
+      await gate("UPDATE sessions SET expires_at = now() - interval '1 minute' WHERE user_id = 2");
+      expect((await jar.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
+    });
+  });
+
+  it('🔴 expires_at 이 지났으면 401 · 행을 지운다 · created_at 이 30일 넘게 지났으면 expires_at 이 남아 있어도 401', async () => {
+    await freshGate();
+    await withServer(stepDir(5), async ({ base }) => {
+      const a = device(base);
+      await a.login('jaehoon');
+      const [sidA] = a.cookie('refreshToken').split('.');
+      await gate("UPDATE sessions SET expires_at = now() - interval '1 minute' WHERE id = $1", [sidA]);
+      const res = await a.send('POST', '/api/v2/auth/reissue');
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('LOGIN_REQUIRED');
+      expect(await sessionTimes(sidA)).toBeUndefined();
+      const b = device(base);
+      await b.login('jaehoon');
+      const [sidB] = b.cookie('refreshToken').split('.');
+      await gate("UPDATE sessions SET created_at = now() - interval '31 days' WHERE id = $1", [sidB]);
+      expect((await sessionTimes(sidB)).expires_at.getTime()).toBeGreaterThan(Date.now());
+      expect((await b.send('POST', '/api/v2/auth/reissue')).status).toBe(401);
+      expect(await sessionTimes(sidB)).toBeUndefined();
+    });
+  });
+
+  it('🔴 새 토큰을 받으면 expires_at 이 «지금 + 7일» 로 밀린다 · 처음 로그인한 지 25일이면 «created_at + 30일» 에서 멈춘다', async () => {
+    await freshGate();
+    await withServer(stepDir(5), async ({ base }) => {
+      const jar = device(base);
+      await jar.login('jaehoon');
+      const [sid] = jar.cookie('refreshToken').split('.');
+      await gate("UPDATE sessions SET expires_at = now() + interval '1 day', created_at = now() - interval '6 days' WHERE id = $1", [sid]);
+      expect((await jar.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
+      const slid = await sessionTimes(sid);
+      expect(Math.abs(slid.expires_at.getTime() - (Date.now() + 7 * DAY))).toBeLessThan(60 * 1000);
+      await gate("UPDATE sessions SET created_at = now() - interval '25 days' WHERE id = $1", [sid]);
+      expect((await jar.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
+      const capped = await sessionTimes(sid);
+      expect(capped.expires_at.getTime()).toBe(capped.created_at.getTime() + 30 * DAY);
+    });
+  });
+});

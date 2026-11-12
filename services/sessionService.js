@@ -2,8 +2,11 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { prisma } from '../db.js';
 
-// 로그인을 남겨 둘 기간 — 7일(밀리초).
+// 로그인을 남겨 둘 기간 — 7일(밀리초). 새 토큰을 받을 때마다 다시 7일로 미룬다. Refresh 쿠키의 maxAge 도 이 값을 쓴다.
 export const SESSION_LIFETIME = 1000 * 60 * 60 * 24 * 7;
+
+// 처음 로그인한 때부터 이 기간이 지나면, 그동안 새 토큰을 몇 번 받았어도 다시 로그인해야 한다 — 30일(밀리초).
+export const SESSION_MAX_LIFETIME = 1000 * 60 * 60 * 24 * 30;
 
 // Refresh 토큰에 붙일 비밀값 — 아무도 짐작할 수 없는 무작위 32바이트.
 function newSecret() {
@@ -42,13 +45,27 @@ export async function rotateRefreshToken(refreshToken) {
 
   if (!session) return null;
 
+  // 마지막으로 새 토큰을 받은 뒤 7일이 지났거나(expires_at), 처음 로그인한 뒤 30일이 지났으면 끝난 로그인이다.
+  const now = Date.now();
+  const limit = session.createdAt.getTime() + SESSION_MAX_LIFETIME;
+
+  if (session.expiresAt.getTime() <= now || limit <= now) {
+    await deleteSession(sessionId);
+    return null;
+  }
+
   const hash = hashSecret(secret);
   const nextSecret = newSecret();
   // 해시가 «지금도» 받은 비밀값의 것일 때만 바꾼다 — 같은 토큰으로 두 요청이 거의 같이 와도 하나만 바뀐다.
   // 바꾸면서 지금 해시를 직전 해시로 옮겨 둔다.
   const { count } = await prisma.session.updateMany({
     where: { id: sessionId, refreshTokenHash: hash },
-    data: { refreshTokenHash: hashSecret(nextSecret), previousRefreshTokenHash: hash },
+    data: {
+      refreshTokenHash: hashSecret(nextSecret),
+      previousRefreshTokenHash: hash,
+      // 쓸 때마다 7일 뒤로 미룬다 — 단, 처음 로그인한 뒤 30일을 넘기지 않는다.
+      expiresAt: new Date(Math.min(now + SESSION_LIFETIME, limit)),
+    },
   });
 
   if (count === 0) {
