@@ -530,30 +530,67 @@ describe('축 ⑩ 직접 해보기 3 — 관리자 스크립트', () => {
   });
 });
 
+// 🔀 2026-11-12 학생 낭독 — 과제 [기초] 의 요청은 일곱이다(«비밀번호가 숫자인 가입» 을 더했다). 요청 여섯이던 판은
+//    비밀번호가 문자열인지 안 보는 판을 못 가렸다. 그 요청 파일은 `main` 에만 있다(북마크 `code/p3-39` 는 여섯 그대로) —
+//    그래서 이 파일만 작업트리(`main`)에서 읽는다.
+const HW_HTTP = P('lab/p3-39/homework1.http');
+const httpRequests = (http) => http.split(/^### /m).slice(1).map((block) => {
+  const [title, ...rest] = block.split('\n');
+  const [start] = rest;
+  const [method, url] = start.split(' ');
+  const body = rest.join('\n').split('\n\n')[1]?.trim();
+  return { title, method, url, body };
+});
+const sendAll = async (http) => {
+  const statuses = [];
+  let list;
+  for (const r of httpRequests(http.replaceAll('4011', String(HW_PORT)))) {
+    const res = await getRes(r.url, r.body ? { method: r.method, headers: { 'Content-Type': 'application/json' }, body: r.body } : { method: r.method });
+    statuses.push(res.status);
+    list = res.body;
+  }
+  return { statuses, list };
+};
+/** 과제 [기초] 서버의 한 판(소스 글자)을 띄운다. */
+const withHomework = async (source, fn) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p339-hw-'));
+  try {
+    writeFileSync(join(dir, 'homework1.js'), source.replaceAll('4011', String(HW_PORT)));
+    symlinkSync(P('node_modules'), join(dir, 'node_modules'));
+    const srv = await boot(join(dir, 'homework1.js'), { port: HW_PORT, cwd: dir, ready: `${HW_PORT}번 포트에서` });
+    try {
+      await fn({ srv });
+    } finally {
+      await Promise.race([srv.stop(), sleep(500)]);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 describe('축 ⑪ 과제', () => {
-  it('🔴 [기초] homework1.http — 201 · 201 · 409 · 400 · 400 · 200 · 목록은 이메일만 · 서버 기록의 두 해시는 다르다', async () => {
-    await withLabServer('homework1.js', HW_PORT, async ({ dir, srv }) => {
-      const http = read(join(dir, 'homework1.http'));
-      const requests = http.split(/^### /m).slice(1).map((block) => {
-        const [title, ...rest] = block.split('\n');
-        const [start] = rest;
-        const [method, url] = start.split(' ');
-        const body = rest.join('\n').split('\n\n')[1]?.trim();
-        return { title, method, url, body };
-      });
-      expect(requests.map((r) => r.title)).toEqual(['가입', '같은 비밀번호로 한 사람 더 가입', '이미 가입한 이메일', '이메일이 숫자인 가입', '짧은 비밀번호', '회원 목록']);
-      const statuses = [];
-      let list;
-      for (const r of requests) {
-        const res = await getRes(r.url, r.body ? { method: r.method, headers: { 'Content-Type': 'application/json' }, body: r.body } : { method: r.method });
-        statuses.push(res.status);
-        list = res.body;
-      }
-      expect(statuses).toEqual([201, 201, 409, 400, 400, 200]);
+  it('🔴 [기초] homework1.http — 201 · 201 · 409 · 400 · 400 · 400 · 200 · 목록은 이메일만 · 서버 기록의 두 해시는 다르다', async () => {
+    await withHomework(read(LAB('homework1.js')), async ({ srv }) => {
+      const http = read(HW_HTTP);
+      expect(httpRequests(http).map((r) => r.title)).toEqual(['가입', '같은 비밀번호로 한 사람 더 가입', '이미 가입한 이메일', '이메일이 숫자인 가입', '비밀번호가 숫자인 가입', '짧은 비밀번호', '회원 목록']);
+      const { statuses, list } = await sendAll(http);
+      expect(statuses).toEqual([201, 201, 409, 400, 400, 400, 200]);
       expect(list).toEqual([{ email: 'bomi@example.com' }, { email: 'gaeun@example.com' }]);
       const hashes = [...srv.tail().matchAll(/passwordHash: '(\$2b\$12\$[./A-Za-z0-9]{53})'/g)].map((m) => m[1]);
       expect(hashes).toHaveLength(2);
       expect(hashes[0]).not.toBe(hashes[1]);
+    });
+  }, 30000);
+
+  it('🔴 [기초] 틀린 판 — 비밀번호가 문자열인지 안 보면 다섯째 «비밀번호가 숫자인 가입» 이 500(요청 여섯이던 판은 못 가렸다)', async () => {
+    const good = read(LAB('homework1.js'));
+    const wrong = good.replace("typeof email !== 'string' || typeof password !== 'string' || password.length < 8", "typeof email !== 'string' || password.length < 8");
+    expect(wrong).not.toBe(good);
+    await withHomework(wrong, async () => {
+      expect((await sendAll(read(HW_HTTP))).statuses).toEqual([201, 201, 409, 400, 500, 400, 200]);
+    });
+    await withHomework(wrong, async () => {
+      expect((await sendAll(read(LAB('homework1.http')))).statuses).toEqual([201, 201, 409, 400, 400, 200]);
     });
   }, 30000);
 
@@ -650,7 +687,7 @@ describe('축 ⑬ 교안·답안의 코드 블록은 줄마다 그 파일에 실
     const [lecture] = DOCS.map(read);
     const http = read(R('requests/auth.http'));
     expect(lecture).toContain(`\`\`\`http\n${http.slice(http.indexOf('### 해시로 저장되는지 볼 가입'))}\`\`\``);
-    expect(lecture).toContain(`\`\`\`http\n${read(LAB('homework1.http'))}\`\`\``);
+    expect(lecture).toContain(`\`\`\`http\n${read(HW_HTTP)}\`\`\``);
     expect(lecture).toContain(`\`\`\`prisma\n${read(R('prisma/schema.prisma')).match(/model User \{.*?\n\}/s)[0]}\n\`\`\``);
     const [dir] = readdirSync(R('prisma/migrations')).filter((name) => name.endsWith('_add_user_password_hash'));
     expect(lecture).toContain(`\`\`\`sql\n${read(R(`prisma/migrations/${dir}/migration.sql`))}\`\`\``);
@@ -662,4 +699,65 @@ describe('축 ⑬ 교안·답안의 코드 블록은 줄마다 그 파일에 실
     const { out } = run(LAB('.'), 'hash.js');
     expect(lecture).toContain(`\`\`\`\n${out}\`\`\``);
   });
+});
+
+// ───────── 축 ⑭ 2026-11-12 학생 낭독 — 교안이 «겪게» 한 두 장면 ─────────
+// Step 6 🙋 — `userFields` 로 고르지 않으면 «나는 누구» 에 해시까지 실린다(전후가 같아 말로만 듣던 것을 겪는다).
+// 🤔 «해시를 authService 에서 만들면» — 관리자 스크립트는 Prisma 검증 에러로 멈추고, 그 에러에 비밀번호가 받은 글자 그대로 찍힌다.
+describe('축 ⑭ 교안이 겪게 한 장면 — select 없는 «나는 누구» · 에러에 찍힌 비밀번호', () => {
+  const LECTURE = join(new URL('../../', ROOT).pathname, 'part3/7-express-auth/p3-39-signup-hashing-lecture.md');
+  const NO_SELECT = P('snapshots/p3-39.step6-no-select.userService.js');
+  beforeAll(freshGate);
+
+  it('🔴 스냅숏은 이 회차 userService 에서 findUserById 의 select 만 뺀 판', () => {
+    const from = read(R('services/userService.js'));
+    const line = '  return prisma.user.findUnique({ where: { id }, select: userFields });';
+    expect(from).toContain(line);
+    expect(read(NO_SELECT)).toBe(from.replace(line, '  return prisma.user.findUnique({ where: { id } });'));
+  });
+
+  it('🔴 Step 6 🙋 — select 를 빼면 seoyeon 의 «나는 누구» 에 이메일 · 성명 · 해시까지 실린다(교안의 줄과 번호 · 해시만 다르다)', async () => {
+    const dir = studentDir(R);
+    writeFileSync(join(dir, 'services/userService.js'), read(NO_SELECT));
+    const srv = await boot(join(dir, 'app.js'), { port: PORT, cwd: dir, env: { ...env, PORT: String(PORT) }, ready: `${PORT}번 포트에서` });
+    try {
+      const base = `http://localhost:${PORT}`;
+      expect((await getRes(`${base}/api/auth/signup`, json('POST', { emailOrPhone: 'seoyeon@example.com', name: '박서연', username: 'seoyeon', password: 'instagram1234' }))).status).toBe(201);
+      const login = await getRes(`${base}/api/auth/login`, json('POST', { username: 'seoyeon' }));
+      expect(login.body).toEqual({ id: 6, username: 'seoyeon', profileImage: null });
+      const cookie = login.headers.get('set-cookie').split(';')[0];
+      const me = await getRes(`${base}/api/auth/me`, { headers: { Cookie: cookie } });
+      expect(me.status).toBe(200);
+      expect(me.body.passwordHash).toMatch(/^\$2b\$12\$[./A-Za-z0-9]{53}$/);
+      const lecture = read(LECTURE);
+      const quoted = lecture.split('\n').find((l) => l.startsWith('{"id":43,"username":"seoyeon","email"'));
+      expect(quoted, '교안 토글에 select 없는 «나는 누구» 응답 줄이 있어야 한다').toBeDefined();
+      const shown = JSON.parse(quoted);
+      expect(Object.keys(shown)).toEqual(Object.keys(me.body));
+      expect(shown).toEqual({ ...me.body, id: 43, passwordHash: shown.passwordHash });
+      // 토글의 해시는 같은 Step 의 SQL 결과에 적은 seoyeon 의 해시와 같다(같은 행을 다시 본 것이니까).
+      expect(lecture).toMatch(new RegExp(`^ seoyeon {4}${shown.passwordHash.replaceAll('$', '\\$').replaceAll('.', '\\.')}$`, 'm'));
+    } finally {
+      await Promise.race([srv.stop(), sleep(500)]);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60000);
+
+  it('🔴 🤔 — userService 가 비밀번호를 모르는 판(code/p3-38)이면 관리자 스크립트가 Prisma 검증 에러로 멈추고, 에러에 비밀번호가 그대로 찍힌다', async () => {
+    await freshGate();
+    const dir = studentDir(R);
+    try {
+      writeFileSync(join(dir, 'services/userService.js'), read(B('services/userService.js')));
+      const done = run(join(dir, 'lab/p3-39'), 'practice3.js', env);
+      expect(done.code).not.toBe(0);
+      expect(done.out).toContain('PrismaClientValidationError');
+      expect(done.out).toContain('Unknown argument `password`');
+      expect(done.out).toContain('    password: "admin1234!",\n');
+      expect(await gate("SELECT count(*)::int AS n FROM users WHERE username = 'admin.hong'")).toEqual([{ n: 0 }]);
+      const think = read(LECTURE).split('### 🤔 같이 생각해보기 — 해시를 authService에서 만들면 안 될까요')[1].split('</details>')[0];
+      expect(think).toContain('`admin1234!`');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30000);
 });
