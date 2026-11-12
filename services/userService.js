@@ -1,5 +1,5 @@
 // ~/instagram-api/services/userService.js
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db.js';
 import { ConflictError, NotFoundError } from '../errors.js';
@@ -16,6 +16,9 @@ const TAKEN_BY_INDEX = {
 
 // 휴대폰 번호는 하이픈을 빼고 숫자만 다룬다 — 010-1234-5678 과 01012345678 은 같은 번호다.
 const digitsOnly = (phone) => phone.replaceAll('-', '');
+
+// 사용자 이름에 쓸 수 있는 글자가 아닌 것 — 영문·숫자·밑줄·점만 남긴다.
+const NOT_ALLOWED = /[^A-Za-z0-9_.]/g;
 
 // 비밀번호를 해시할 때의 cost — 하나 올리면 해시 한 번에 걸리는 시간이 두 배가 된다.
 const PASSWORD_COST = 12;
@@ -117,4 +120,39 @@ export async function setRole(id, role) {
     if (error.code === 'P2025') throw new NotFoundError('USER_NOT_FOUND');
     throw error;
   }
+}
+
+// 소셜 계정(어느 제공자의 누구)에 이어진 우리 사람을 찾는다 — 없으면 null.
+export async function findUserBySocialAccount(provider, providerUserId) {
+  const account = await prisma.socialAccount.findUnique({
+    where: { provider_providerUserId: { provider, providerUserId } },
+    select: { user: { select: userFields } },
+  });
+
+  return account?.user ?? null;
+}
+
+// 소셜 로그인으로 처음 온 사람을 만든다 — 사람과 소셜 계정을 함께 넣는다(둘 다 들어가거나 둘 다 안 들어간다).
+// 비밀번호는 없고(password_hash 는 NULL), 이메일은 제공자가 확인했다고 한 것만 넣는다.
+export async function createSocialUser({ provider, id, email, emailVerified, name }) {
+  // 사용자 이름은 이메일 앞부분에서 쓸 수 있는 글자만 남겨 정한다 — 남는 글자가 없으면 제공자 이름을 쓴다.
+  const base = (email ?? '').split('@')[0].replace(NOT_ALLOWED, '').slice(0, 26) || provider;
+  const data = {
+    name: name?.slice(0, 50),
+    email: emailVerified ? email : undefined,
+    socialAccounts: { create: { provider, providerUserId: id } },
+  };
+
+  // 이름이 이미 쓰이고 있으면 뒤에 무작위 숫자 넷을 붙여 다시 넣어 본다 — 다섯 번까지.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const username = attempt === 0 ? base : `${base}${randomInt(1000, 10000)}`;
+
+    try {
+      return await createUser({ ...data, username });
+    } catch (error) {
+      if (error.code !== 'USERNAME_TAKEN') throw error;
+    }
+  }
+
+  throw new ConflictError('USERNAME_TAKEN');
 }
