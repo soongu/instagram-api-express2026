@@ -1,0 +1,22 @@
+### 공지 목록
+GET http://localhost:4001/notices
+
+### 토큰 없이 공지 올리기
+# @no-cookie-jar
+POST http://localhost:4001/notices
+Content-Type: application/json
+
+{
+  "title": "이번 주 모임은 쉬어요"
+}
+
+### 복사해 둔 토큰으로 공지 올리기
+# 수업 서버 로그인 응답의 set-cookie 에서 accessToken= 뒤의 값(; 앞까지)을 COPIED_TOKEN 자리에 붙여 넣는다
+# @no-cookie-jar
+POST http://localhost:4001/notices
+Authorization: Bearer COPIED_TOKEN
+Content-Type: application/json
+
+{
+  "title": "이번 주 모임은 쉬어요"
+}

@@ -1,0 +1,74 @@
+### 가입
+POST http://localhost:4012/members
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi1234"
+}
+
+### 로그인 — 다른 기기
+# 이 응답의 set-cookie 에서 clubToken= 뒤의 값(; 앞까지)을 복사해 두고, 아래 OTHER_TOKEN 자리에 붙여 넣는다
+# @no-cookie-jar
+POST http://localhost:4012/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi1234"
+}
+
+### 로그인 — 이 기기
+POST http://localhost:4012/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi1234"
+}
+
+### 지금 비밀번호를 틀리게 보내면
+POST http://localhost:4012/password
+Content-Type: application/json
+
+{
+  "currentPassword": "bomi9999",
+  "newPassword": "bomi5678"
+}
+
+### 비밀번호 바꾸기
+POST http://localhost:4012/password
+Content-Type: application/json
+
+{
+  "currentPassword": "bomi1234",
+  "newPassword": "bomi5678"
+}
+
+### 나는 누구 — 비밀번호를 바꾼 이 기기
+GET http://localhost:4012/me
+
+### 나는 누구 — 다른 기기
+# @no-cookie-jar
+GET http://localhost:4012/me
+Cookie: clubToken=OTHER_TOKEN
+
+### 옛 비밀번호로 로그인
+# @no-cookie-jar
+POST http://localhost:4012/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi1234"
+}
+
+### 새 비밀번호로 로그인
+# @no-cookie-jar
+POST http://localhost:4012/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi5678"
+}
