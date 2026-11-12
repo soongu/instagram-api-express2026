@@ -50,6 +50,18 @@ export async function login(req, res) {
   sendData(res, user);
 }
 
+export async function reissue(req, res) {
+  const { accessToken } = await authService.reissue(req.cookies.refreshToken);
+
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: TOKEN_LIFETIME,
+  });
+
+  sendData(res, { message: '새 토큰을 받았어요' });
+}
+
 export async function me(req, res) {
   const user = await authService.whoAmI(res.locals.userId);
 
