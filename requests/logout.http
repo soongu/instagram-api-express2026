@@ -1,0 +1,19 @@
+### 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 로그아웃
+POST http://localhost:3000/api/v2/auth/logout
+
+### 로그아웃한 뒤 게시물 목록
+GET http://localhost:3000/api/v2/posts?limit=1
+
+### 복사해 둔 토큰으로 게시물 목록
+# @no-cookie-jar
+GET http://localhost:3000/api/v2/posts?limit=1
+Authorization: Bearer 여기에-복사해-둔-토큰
