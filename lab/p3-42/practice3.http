@@ -27,3 +27,6 @@ Authorization: Bearer TOKEN_A
 # 기기 B 로그인 응답의 token 값으로 TOKEN_B 를 바꾼다
 GET http://localhost:4003/me
 Authorization: Bearer TOKEN_B
+
+### 토큰 없이 로그아웃
+POST http://localhost:4003/logout

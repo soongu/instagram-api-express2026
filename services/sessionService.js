@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../db.js';
 
-// 로그인을 남겨 둘 기간 — 7일(밀리초). 로그인 쿠키의 maxAge 도 이 값을 쓴다.
+// 로그인을 남겨 둘 기간 — 7일(밀리초).
 export const SESSION_LIFETIME = 1000 * 60 * 60 * 24 * 7;
 
 // 세션 하나가 sessions 테이블의 한 행이다. 서버가 다시 떠도 테이블은 남는다.
