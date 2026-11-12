@@ -450,7 +450,13 @@ describe('축 ④ Step 4 — 회전과 재사용 감지', () => {
 });
 
 const DAY = 24 * 60 * 60 * 1000;
-const sessionTimes = async (sid) => (await gate('SELECT created_at, expires_at FROM sessions WHERE id = $1', [sid]))[0];
+// TIMESTAMP(3) 은 시간대가 없어 pg 가 한국 시각으로 읽는다 — 데이터베이스 안에서 UTC 기준 밀리초로 바꿔 꺼낸다.
+const sessionTimes = async (sid) => {
+  const [row] = await gate(`SELECT (extract(epoch FROM created_at) * 1000)::float8 AS created,
+    (extract(epoch FROM expires_at) * 1000)::float8 AS expires,
+    (extract(epoch FROM now()::timestamp) * 1000)::float8 AS now FROM sessions WHERE id = $1`, [sid]);
+  return row;
+};
 
 describe('축 ⑤ Step 5 — 슬라이딩 7일 · 절대 30일', () => {
   it('🔴 Step 4 판은 expires_at 이 지난 행으로도 새 토큰을 받는다(겪기 — 아무도 기한을 안 본다)', async () => {
@@ -478,7 +484,8 @@ describe('축 ⑤ Step 5 — 슬라이딩 7일 · 절대 30일', () => {
       await b.login('jaehoon');
       const [sidB] = b.cookie('refreshToken').split('.');
       await gate("UPDATE sessions SET created_at = now() - interval '31 days' WHERE id = $1", [sidB]);
-      expect((await sessionTimes(sidB)).expires_at.getTime()).toBeGreaterThan(Date.now());
+      const timesB = await sessionTimes(sidB);
+      expect(timesB.expires).toBeGreaterThan(timesB.now);
       expect((await b.send('POST', '/api/v2/auth/reissue')).status).toBe(401);
       expect(await sessionTimes(sidB)).toBeUndefined();
     });
@@ -493,11 +500,11 @@ describe('축 ⑤ Step 5 — 슬라이딩 7일 · 절대 30일', () => {
       await gate("UPDATE sessions SET expires_at = now() + interval '1 day', created_at = now() - interval '6 days' WHERE id = $1", [sid]);
       expect((await jar.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
       const slid = await sessionTimes(sid);
-      expect(Math.abs(slid.expires_at.getTime() - (Date.now() + 7 * DAY))).toBeLessThan(60 * 1000);
+      expect(Math.abs(slid.expires - (slid.now + 7 * DAY))).toBeLessThan(60 * 1000);
       await gate("UPDATE sessions SET created_at = now() - interval '25 days' WHERE id = $1", [sid]);
       expect((await jar.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
       const capped = await sessionTimes(sid);
-      expect(capped.expires_at.getTime()).toBe(capped.created_at.getTime() + 30 * DAY);
+      expect(capped.expires).toBe(capped.created + 30 * DAY);
     });
   });
 });
