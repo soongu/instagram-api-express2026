@@ -1239,15 +1239,19 @@ describe('축 ⑩ 직접 해보기 1 — 닉네임으로 사용자 이름 정하
     'kakao5681  ← undefined',
     'naver  ← js',
     'minsu_dev5683  ← minsu_dev',
+    'the_quick_brown_fox_jumps_  ← the_quick_brown_fox_jumps_over',
   ];
   const run = (source) => runLabScript('practice1.js', source);
   /** 정답과 다른 줄만(줄 번호와 함께). */
   const wrongLines = (out) => out.trimEnd().split('\n').map((line, i) => (line === RIGHT[i] ? null : `${i + 1}: ${line}`)).filter(Boolean);
 
-  it('🔴 정답 판 — 여섯 줄 · 닉네임을 쓸 수 있으면 닉네임 · 아니면 제공자 이름 · 이미 쓰는 이름이면 회원번호 끝 네 글자', () => {
+  it('🔴 정답 판 — 일곱 줄 · 닉네임을 쓸 수 있으면 닉네임(26자까지) · 아니면 제공자 이름 · 이미 쓰는 이름이면 회원번호 끝 네 글자', () => {
     const { code, out } = run(LAB('practice1.js'));
     expect(code).toBe(0);
     expect(out.trimEnd().split('\n')).toEqual(RIGHT);
+    // 일곱째 사람의 닉네임은 30자이고, 사용자 이름은 그 앞 26자다
+    const [username, nickname] = RIGHT[6].split('  ← ');
+    expect([nickname.length, username.length, nickname.slice(0, 26)]).toEqual([30, 26, username]);
     labSeen.practice1 = out;
   });
 
@@ -1274,6 +1278,8 @@ describe('축 ⑩ 직접 해보기 1 — 닉네임으로 사용자 이름 정하
     expect(out.split('\n').slice(0, 3)).toEqual(RIGHT.slice(0, 3));
     expect(out).toContain("TypeError: Cannot read properties of undefined (reading 'replace')");
     expect(out).not.toContain(RIGHT[3]);
+    // 넷째 사람에서 멈추니 다섯째~일곱째 줄은 없다
+    for (const line of RIGHT.slice(3)) expect(out).not.toContain(line);
     labSeen.practice1NoName = out;
   });
 
@@ -1302,9 +1308,11 @@ describe('축 ⑩ 직접 해보기 1 — 닉네임으로 사용자 이름 정하
     labSeen.practice1NoMinLength = out;
   });
 
-  it('🔎 26자까지만 남기는 규칙은 이 여섯 사람으로는 드러나지 않는다 — slice 를 빼도 출력이 같다(샘플의 닉네임이 모두 26자 안쪽)', () => {
-    const { out } = run(edit1(LAB('practice1.js'), ".replace(NOT_ALLOWED, '').slice(0, 26)", ".replace(NOT_ALLOWED, '')"));
-    expect(out.trimEnd().split('\n')).toEqual(RIGHT);
+  it('🔴 틀린 판 ⑤ — 26자까지만 남기는 것을 빼먹으면(.slice(0, 26) 없음) 일곱째 줄만 다르다 — 닉네임 30자가 그대로 사용자 이름이 된다', () => {
+    const { code, out } = run(edit1(LAB('practice1.js'), ".replace(NOT_ALLOWED, '').slice(0, 26)", ".replace(NOT_ALLOWED, '')"));
+    expect(code).toBe(0);
+    expect(wrongLines(out)).toEqual(['7: the_quick_brown_fox_jumps_over  ← the_quick_brown_fox_jumps_over']);
+    labSeen.practice1NoSlice = out;
   });
 });
 
@@ -1740,6 +1748,53 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       expect(seenRes.status).toBe(500);
       expect(seenRes.headers.get('content-type')).toBe('text/html; charset=utf-8');
       expect(seenRes.body).toContain('<pre>TypeError: Cannot read properties of undefined');
+    }, 60_000);
+
+    // 확인 절차 하나 더 — 틀린 판 (e)(에러 미들웨어를 /callback 에만)는 정상 경로로는 드러나지 않는다.
+    // 톡 전략의 clientSecret 을 잠깐 틀리게 바꿔 «톡의 콜백에서 에러가 나는» 장면을 일부러 만든다.
+    const wrongSecret = (source) => edit1(source, "    clientSecret: 'talk-secret',", "    clientSecret: 'talk-secret-x',");
+    const secretScene = async (source) => {
+      let got;
+      await withHomework('homework1.js', wrongSecret(source), async ({ base, tail }) => {
+        const before = talk.tail().length;
+        const tab = browser(base);
+        const { callback } = await talkLogin(tab, 'sora');
+        await sleep(150);
+        got = {
+          status: callback.status,
+          location: callback.location,
+          contentType: callback.headers.get('content-type'),
+          body: callback.body,
+          notice: callback.status === 302 ? noticeOf(await endOf(tab, callback)) : null,
+          terminal: tail().replace(/^.*번 포트에서 과제 서버가 돌아가요\n/, ''),
+          talkLog: talk.tail().slice(before),
+          members: (await browser(base).get('/members')).body.length,
+        };
+      });
+      return got;
+    };
+
+    it('🔴 확인 — 톡 전략의 clientSecret 을 talk-secret-x 로 바꾸고 sora 로 허용하면 302 /?error=LOGIN_FAILED · 문장 · 터미널 첫 줄은 «TokenError: 앱을 확인하지 못했어요» · 회원은 그대로 둘', async () => {
+      const got = await secretScene(LAB('homework1.js'));
+      expect([got.status, got.location]).toEqual([302, '/?error=LOGIN_FAILED']);
+      expect(got.notice).toBe('로그인하지 못했어요. 다시 시도해 주세요.');
+      expect(got.terminal.split('\n')[0]).toBe('TokenError: 앱을 확인하지 못했어요');
+      expect(got.terminal).toContain("  code: 'invalid_client',");
+      // 톡 서버는 토큰 요청을 401 로 거절했고, 사용자 정보는 묻지도 않았다
+      expect(got.talkLog).toBe('[톡] POST /oauth/authorize 303\n[톡] POST /oauth/token 401\n');
+      expect(got.members).toBe(2);
+      labSeen.homework1WrongSecret = { status: got.status, location: got.location, terminal: scrub(got.terminal, '(없음)'), talkLog: got.talkLog };
+    }, 60_000);
+
+    it('🔴 (e) 를 이 확인이 가려낸다 — 에러 미들웨어를 /callback 에만 둔 판은 같은 장면에서 500 · text/html · Express 기본 에러 화면(<pre>TokenError: 앱을 확인하지 못했어요 …)', async () => {
+      const wrong = edit1(LAB('homework1.js'), "app.use(['/callback', '/talk/callback'], (err, req, res, next) => {", "app.use('/callback', (err, req, res, next) => {");
+      const got = await secretScene(wrong);
+      expect(got.status).toBe(500);
+      expect(got.location).toBeNull();
+      expect(got.contentType).toBe('text/html; charset=utf-8');
+      expect(got.body.startsWith('<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>Error</title>\n</head>\n<body>\n<pre>TokenError: 앱을 확인하지 못했어요<br>')).toBe(true);
+      expect(got.terminal.split('\n')[0]).toBe('TokenError: 앱을 확인하지 못했어요');
+      labSeen.homework1WrongSecretNoMiddleware = { status: got.status, contentType: got.contentType, bodyHead: got.body.slice(0, 400), terminalHead: got.terminal.split('\n').slice(0, 3) };
     }, 60_000);
 
     it('🔴 homework1.http — 요청 둘 · httpYac 으로 보내면 회원 목록 200(처음에는 둘) · 로그인하지 않은 «나는 누구» 401', async () => {
