@@ -21,3 +21,9 @@ POST http://localhost:3000/api/v2/auth/reissue
 
 ### jaehoon이 사람 목록
 GET http://localhost:3000/api/v2/admin/users
+
+### 복사해 둔 Refresh 토큰으로 새 토큰 받기
+# 로그인 응답의 set-cookie 에서 refreshToken= 뒤의 값(; 앞까지)으로 COPIED_REFRESH 를 바꾼다
+# @no-cookie-jar
+POST http://localhost:3000/api/v2/auth/reissue
+Cookie: refreshToken=COPIED_REFRESH
