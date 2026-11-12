@@ -1,0 +1,22 @@
+### 공지 목록
+GET http://localhost:4003/notices
+
+### 토큰 없이 공지 지우기
+DELETE http://localhost:4003/notices/1
+
+### 헤더에 관리자라고 적어 공지 지우기
+DELETE http://localhost:4003/notices/1
+X-Role: ADMIN
+
+### jaehoon의 토큰으로 공지 지우기
+# JAEHOON_TOKEN 은 수업 백엔드에서 jaehoon으로 로그인한 응답의 accessToken 값으로 바꾼다
+DELETE http://localhost:4003/notices/1
+Authorization: Bearer JAEHOON_TOKEN
+
+### admin.hong의 토큰으로 공지 지우기
+# ADMIN_TOKEN 은 수업 백엔드에서 admin.hong으로 로그인한 응답의 accessToken 값으로 바꾼다
+DELETE http://localhost:4003/notices/1
+Authorization: Bearer ADMIN_TOKEN
+
+### 공지 목록 다시 보기
+GET http://localhost:4003/notices
