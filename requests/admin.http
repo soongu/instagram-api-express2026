@@ -68,3 +68,27 @@ Content-Type: application/json
 ### 로그인 없이 사람 목록
 # @no-cookie-jar
 GET http://localhost:3000/api/v2/admin/users
+
+### jaehoon을 다시 USER로
+PATCH http://localhost:3000/api/v2/admin/users/2/role
+Content-Type: application/json
+
+{
+  "role": "USER"
+}
+
+### 복사해 둔 jaehoon의 토큰으로 사람 목록
+# jaehoon이 관리자일 때 받은 로그인 응답의 set-cookie 에서 accessToken= 뒤의 값(; 앞까지)으로 COPIED_TOKEN 을 바꾼다
+# @no-cookie-jar
+GET http://localhost:3000/api/v2/admin/users
+Authorization: Bearer COPIED_TOKEN
+
+### 복사해 둔 jaehoon의 토큰으로 자기를 관리자로
+# @no-cookie-jar
+PATCH http://localhost:3000/api/v2/admin/users/2/role
+Authorization: Bearer COPIED_TOKEN
+Content-Type: application/json
+
+{
+  "role": "ADMIN"
+}
