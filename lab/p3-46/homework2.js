@@ -165,7 +165,7 @@ app.get('/', (req, res) => {
   res.send(`<!doctype html><meta charset="utf-8">${notice}<a href="/login">인가 서버로 로그인</a> <a href="/talk">톡으로 로그인</a>`);
 });
 
-// 제공자를 다녀온 회원(req.user)에게 로그인을 준다 — 브라우저가 문서로 연 주소라 JSON 대신 /me 로 보낸다.
+// 제공자를 다녀온 회원(req.user)을 로그인시킨다 — 브라우저가 문서로 연 주소라 JSON 대신 /me 로 보낸다.
 function startSession(req, res) {
   const sessionId = randomUUID();
 
@@ -183,7 +183,7 @@ app.get('/talk/callback', passport.authenticate('talk', { session: false, failur
 
 // 두 콜백에서 난 에러는 여기서 받는다 — 브라우저가 문서로 연 주소라 JSON 대신 첫 화면으로 보낸다.
 app.use(['/callback', '/talk/callback'], (err, req, res, next) => {
-  // 무엇 때문인지 코드로 가른다 — 시간 안에 답을 못 받으면 fetch 가 이름이 TimeoutError 인 에러를 던진다.
+  // 무엇 때문에 실패했는지에 따라 에러 코드를 정한다 — 시간 안에 답을 못 받으면 fetch 가 이름이 TimeoutError 인 에러를 던진다.
   let code = 'LOGIN_FAILED';
 
   if (err.code === 'EMAIL_TAKEN') code = 'EMAIL_TAKEN';
