@@ -1,0 +1,56 @@
+### 첫 가입
+POST http://localhost:4011/members
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi12345"
+}
+
+### bomi로 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi12345"
+}
+
+### 내 정보
+GET http://localhost:4011/me
+
+### 새 토큰 받기
+POST http://localhost:4011/auth/refresh
+
+### 복사해 둔 Refresh 토큰으로 새 토큰 받기
+# «bomi로 로그인» 응답의 set-cookie 에서 clubRefresh= 뒤의 값(; 앞까지)으로 COPIED_REFRESH 를 바꾼다
+# @no-cookie-jar
+POST http://localhost:4011/auth/refresh
+Cookie: clubRefresh=COPIED_REFRESH
+
+### 다시 새 토큰 받기
+POST http://localhost:4011/auth/refresh
+
+### 다시 bomi로 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "email": "bomi@example.com",
+  "password": "bomi12345"
+}
+
+### 기한이 지난 토큰으로 내 정보
+# 터미널에서 node --env-file=.env lab/p3-44/homework1-expired-token.js 로 만든 토큰으로 EXPIRED_TOKEN 을 바꾼다
+# @no-cookie-jar
+GET http://localhost:4011/me
+Cookie: clubToken=EXPIRED_TOKEN
+
+### 로그아웃
+POST http://localhost:4011/auth/logout
+
+### 로그아웃한 Refresh 토큰으로 새 토큰 받기
+# «다시 bomi로 로그인» 응답의 set-cookie 에서 clubRefresh= 뒤의 값으로 LOGGED_OUT_REFRESH 를 바꾼다
+# @no-cookie-jar
+POST http://localhost:4011/auth/refresh
+Cookie: clubRefresh=LOGGED_OUT_REFRESH
