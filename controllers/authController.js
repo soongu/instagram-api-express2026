@@ -76,3 +76,8 @@ export async function logoutAll(req, res) {
   clearTokenCookies(res);
   sendData(res, { message: '모든 기기에서 로그아웃했어요' });
 }
+
+// 구글이 확인해 준 사람을 그대로 보여 준다 — 로그인은 아직 주지 않는다.
+export function socialCallback(req, res) {
+  sendData(res, req.user);
+}
