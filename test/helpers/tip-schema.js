@@ -42,3 +42,10 @@ export const ROLE_MIGRATION = '20261112021830_add_user_role';
 export async function applyMigration(client, name) {
   await client.query(readFileSync(new URL(`${name}/migration.sql`, MIG), 'utf8'));
 }
+
+/**
+ * `p3-45` 의 `social_accounts` 테이블 — `users` 를 가리킨다. 이것이 생기면 `social_accounts` 를 모르는 옛 시드
+ * (`p3-41`~`p3-44` 북마크 판 — `TRUNCATE TABLE sessions, … users`)도 `users` 를 비우지 못해 0A000 으로 멈춘다.
+ * 그 회차들의 학생 파일은 소셜 계정을 읽지도 쓰지도 않으니, 옛 시드를 쓰는 판정은 `before: SOCIAL_ACCOUNTS_MIGRATION` 으로 그 앞까지만 얹는다.
+ */
+export const SOCIAL_ACCOUNTS_MIGRATION = '20261112075022_add_social_accounts';

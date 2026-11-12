@@ -27,7 +27,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
-import { applyMigrationsAfter } from './helpers/tip-schema.js';
+import { applyMigrationsAfter, SOCIAL_ACCOUNTS_MIGRATION } from './helpers/tip-schema.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -178,7 +178,9 @@ beforeAll(async () => {
     await tpl.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
   // p3-43 뒤 — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다(그 회차 뒤 마이그레이션을 tip 까지 얹는다)
-  await applyMigrationsAfter(tpl, readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort().at(-1));
+  // 🚨 2026-11-12 `p3-45` — `social_accounts` 가 `users` 를 가리킨다. 이 회차 시드(북마크 판)는 그 테이블을 비우는 목록에 없어
+  //    `TRUNCATE … users` 가 0A000 으로 멈추니, tip 은 그 마이그레이션 «앞» 까지만 얹는다(이 회차 학생 파일은 소셜 계정을 안 쓴다).
+  await applyMigrationsAfter(tpl, readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort().at(-1), SOCIAL_ACCOUNTS_MIGRATION);
   await tpl.end();
   execFileSync(process.execPath, [R('seed.js')], {
     cwd: ROUND.dir, encoding: 'utf8',
