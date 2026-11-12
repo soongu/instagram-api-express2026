@@ -23,6 +23,7 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
+import { applyMigrationsAfter } from './helpers/tip-schema.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -222,6 +223,9 @@ beforeAll(async () => {
   for (const dir of readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
     await tpl.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // 🚨 2026-11-12 `p3-44` — 작업트리 클라이언트는 sessions 행을 만들 때 refresh_token_hash 까지 돌려받으려 한다.
+  //    그 컬럼이 없으면 로그인이 P2022 로 멈추니, 이 회차 뒤의 마이그레이션을 tip 까지 얹는다(이 회차 학생 파일은 그 컬럼을 쓰지 않는다).
+  await applyMigrationsAfter(tpl, readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort().at(-1));
   await tpl.end();
   execFileSync(process.execPath, [R('seed.js')], {
     cwd: ROUND.dir, encoding: 'utf8',
