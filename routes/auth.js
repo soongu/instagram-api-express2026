@@ -19,6 +19,8 @@ router.post('/logout', authController.logout);
 router.post('/logout-all', requireLogin, authController.logoutAll);
 // 구글 로그인 시작 — 구글의 로그인 화면으로 보낸다. 우리 서버는 세션을 쓰지 않아서 session: false 를 준다.
 router.get('/google', passport.authenticate('google', { session: false }));
+// 구글이 로그인을 마친 사람을 돌려보내는 주소 — 받은 코드로 구글에 그 사람을 묻고, 확인되면 다음 함수로 넘긴다.
+router.get('/google/callback', passport.authenticate('google', { session: false }), authController.socialCallback);
 
 router.all('/signup', allowOnly('POST'));
 router.all('/check-duplicate', allowOnly('GET'));
@@ -28,5 +30,6 @@ router.all('/me', allowOnly('GET'));
 router.all('/logout', allowOnly('POST'));
 router.all('/logout-all', allowOnly('POST'));
 router.all('/google', allowOnly('GET'));
+router.all('/google/callback', allowOnly('GET'));
 
 export default router;

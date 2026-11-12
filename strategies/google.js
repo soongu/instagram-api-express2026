@@ -20,3 +20,27 @@ export const googleStrategy = new OAuth2Strategy(
     done(null, profile);
   },
 );
+
+// 구글에 «이 Access 토큰의 주인이 누구인지» 묻는다 — 토큰은 주소가 아니라 Authorization 헤더에 싣는다.
+googleStrategy.userProfile = async (accessToken, done) => {
+  try {
+    const response = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) throw new Error(`구글이 사용자 정보를 주지 않았어요 (${response.status})`);
+
+    const info = await response.json();
+
+    // 제공자마다 다른 이름을 우리 이름으로 맞춘다 — id 는 구글이 그 계정에 매긴, 바뀌지 않는 값(sub)이다.
+    done(null, {
+      provider: 'google',
+      id: info.sub,
+      email: info.email,
+      emailVerified: info.email_verified === true,
+      name: info.name,
+    });
+  } catch (error) {
+    done(error);
+  }
+};
