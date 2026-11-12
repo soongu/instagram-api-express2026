@@ -170,8 +170,9 @@ async function removeUploadedFiles(imageUrls) {
   }
 }
 
-export async function removePost(id, userId) {
-  await checkAuthor(id, userId);
+export async function removePost(id, userId, role) {
+  // 관리자는 남의 게시물도 지울 수 있다 — 신고된 게시물을 내리는 일이라, 고치기는 열지 않고 지우기에만 연다.
+  if (role !== 'ADMIN') await checkAuthor(id, userId);
 
   let post;
   try {
