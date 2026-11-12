@@ -8,10 +8,10 @@ DELETE http://localhost:4002/notices/1
 DELETE http://localhost:4002/notices/1
 X-Role: ADMIN
 
-### jaehoon의 토큰으로 공지 지우기
-# JAEHOON_TOKEN 은 수업 백엔드에서 jaehoon으로 로그인한 응답의 accessToken 값으로 바꾼다
+### seoyeon의 토큰으로 공지 지우기
+# SEOYEON_TOKEN 은 수업 백엔드에서 seoyeon으로 로그인한 응답의 accessToken 값으로 바꾼다
 DELETE http://localhost:4002/notices/1
-Authorization: Bearer JAEHOON_TOKEN
+Authorization: Bearer SEOYEON_TOKEN
 
 ### admin.hong의 토큰으로 공지 지우기
 # ADMIN_TOKEN 은 수업 백엔드에서 admin.hong으로 로그인한 응답의 accessToken 값으로 바꾼다
