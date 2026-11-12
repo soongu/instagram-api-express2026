@@ -34,3 +34,7 @@ Authorization: Bearer EXPIRED_TOKEN
 
 ### 로그아웃
 POST http://localhost:3000/api/v2/auth/logout
+
+### 쿠키 없이 게시물 목록
+# @no-cookie-jar
+GET http://localhost:3000/api/v2/posts?limit=1

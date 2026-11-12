@@ -15,11 +15,14 @@ export function readToken(req) {
 }
 
 // 로그인한 사람만 다음으로 보낸다 — 토큰의 서명과 기한만 확인하고, 데이터베이스는 찾아보지 않는다.
+// 기한만 지난 토큰은 TOKEN_EXPIRED 로 따로 알린다 — 화면은 이 코드를 보고 새 토큰을 받는다.
 export function requireLogin(req, res, next) {
-  const payload = tokenService.readAccessToken(readToken(req));
+  let payload;
 
-  if (!payload) {
-    next(new UnauthorizedError('LOGIN_REQUIRED'));
+  try {
+    payload = tokenService.verifyAccessToken(readToken(req));
+  } catch (error) {
+    next(new UnauthorizedError(error.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'LOGIN_REQUIRED'));
     return;
   }
 
