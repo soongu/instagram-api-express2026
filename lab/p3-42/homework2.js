@@ -90,7 +90,8 @@ app.post('/password', async (req, res) => {
     return res.status(400).json({ message: '새 비밀번호는 8자 이상이어야 해요' });
   }
   if (typeof currentPassword !== 'string' || !(await bcrypt.compare(currentPassword, member.passwordHash))) {
-    return res.status(401).json({ message: '지금 비밀번호가 맞지 않아요' });
+    // 로그인은 되어 있으니 401 이 아니라 400 — 401 이면 화면은 로그인이 풀렸다고 읽는다.
+    return res.status(400).json({ message: '지금 비밀번호가 맞지 않아요' });
   }
 
   member.passwordHash = await bcrypt.hash(newPassword, COST);

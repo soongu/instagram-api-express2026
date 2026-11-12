@@ -14,7 +14,7 @@ POST http://localhost:3000/api/v2/auth/logout
 GET http://localhost:3000/api/v2/posts?limit=1
 
 ### 복사해 둔 토큰으로 게시물 목록
-# 로그인 응답의 set-cookie 에서 accessToken= 뒤의 값(; 앞까지)을 COPIED_TOKEN 자리에 붙여 넣는다
+# 로그인 응답의 set-cookie 에서 accessToken= 뒤의 값(; 앞까지)으로 COPIED_TOKEN 를 바꾼다
 # @no-cookie-jar
 GET http://localhost:3000/api/v2/posts?limit=1
 Authorization: Bearer COPIED_TOKEN

@@ -7,11 +7,11 @@ Content-Type: application/json
 }
 
 ### 첫 토큰으로 나는 누구
-# 첫 로그인 응답의 token 값을 FIRST_TOKEN 자리에 붙여 넣는다
+# 첫 로그인 응답의 token 값으로 FIRST_TOKEN 를 바꾼다
 GET http://localhost:4002/me
 Authorization: Bearer FIRST_TOKEN
 
 ### 둘째 토큰으로 나는 누구
-# 키를 바꾼 뒤 다시 로그인한 응답의 token 값을 SECOND_TOKEN 자리에 붙여 넣는다
+# 키를 바꾼 뒤 다시 로그인한 응답의 token 값으로 SECOND_TOKEN 를 바꾼다
 GET http://localhost:4002/me
 Authorization: Bearer SECOND_TOKEN
