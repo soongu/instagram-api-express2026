@@ -8,7 +8,7 @@ Content-Type: application/json
 }
 
 ### 로그인 — 다른 기기
-# 이 응답의 set-cookie 에서 clubToken= 뒤의 값(; 앞까지)을 복사해 두고, 아래 OTHER_TOKEN 자리에 붙여 넣는다
+# 이 응답의 set-cookie 에서 clubToken= 뒤의 값(; 앞까지)을 복사해 두고, 아래 OTHER_TOKEN 을 그 값으로 바꾼다
 # @no-cookie-jar
 POST http://localhost:4012/login
 Content-Type: application/json
