@@ -5,3 +5,11 @@ Content-Type: application/x-www-form-urlencoded
 Cookie: labPending=COPIED_PENDING
 
 nickname=재훈3
+
+### 본문에 다른 사람의 id를 함께 실어 별명 내기
+# @no-redirect
+POST http://localhost:4002/nickname
+Content-Type: application/x-www-form-urlencoded
+Cookie: labPending=MINJI_PENDING
+
+nickname=민지&provider=lab&id=10001&email=jaehoon@example.com
