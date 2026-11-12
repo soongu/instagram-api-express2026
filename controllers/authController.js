@@ -2,8 +2,9 @@
 import * as authService from '../services/authService.js';
 import * as userService from '../services/userService.js';
 import { sendData } from '../responses.js';
-import { MESSAGES } from '../errors.js';
+import { HttpError, MESSAGES } from '../errors.js';
 import { SESSION_LIFETIME } from '../services/sessionService.js';
+import { tempCookie } from '../strategies/stateStore.js';
 
 // 토큰 둘을 쿠키에 담는다 — 둘 다 스크립트가 못 읽게 httpOnly, 둘 다 로그인 기록이 남는 7일 동안.
 // Access 토큰 자체는 15분이면 끝나지만, 쿠키가 먼저 사라지면 서버는 «기한이 지난 토큰»인지 «로그인하지 않은 요청»인지 모른다.
@@ -77,7 +78,42 @@ export async function logoutAll(req, res) {
   sendData(res, { message: '모든 기기에서 로그아웃했어요' });
 }
 
-// 구글이 확인해 준 사람을 그대로 보여 준다 — 로그인은 아직 주지 않는다.
-export function socialCallback(req, res) {
-  sendData(res, req.user);
+// 로그인한 뒤 돌아갈 주소 — 우리 화면 안의 경로일 때만 쓰고, 아니면 피드로 간다.
+function safeNextPath(next) {
+  const site = process.env.SITE_URL;
+
+  if (typeof next !== 'string' || !URL.canParse(next, site)) return '/';
+
+  const url = new URL(next, site);
+
+  return url.origin === new URL(site).origin ? url.pathname + url.search : '/';
+}
+
+// 구글로 떠나기 전에, 다녀온 뒤 돌아갈 곳(주소의 ?next=)을 쿠키에 맡겨 둔다.
+export function rememberNext(req, res, next) {
+  res.cookie('oauth_next', safeNextPath(req.query.next), tempCookie);
+  next();
+}
+
+// 구글을 다녀온 사람(req.user)에게 로그인을 준다 — 비밀번호 로그인과 같은 로그인 기록, 같은 쿠키 둘.
+// 브라우저가 문서로 연 주소라 JSON 대신 보던 곳으로 보낸다.
+export async function socialCallback(req, res) {
+  const tokens = await authService.startSession(req.user);
+
+  setTokenCookies(res, tokens);
+  res.clearCookie('oauth_next', { path: tempCookie.path });
+  res.redirect(safeNextPath(req.cookies.oauth_next));
+}
+
+// 소셜 로그인이 실패했을 때 — 이 주소도 브라우저가 문서로 연 것이라, JSON 대신 로그인 화면으로 보낸다.
+// 무엇 때문인지는 주소의 ?error= 에 에러 코드로 싣는다.
+export function socialFailed(err, req, res, next) {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  if (!(err instanceof HttpError)) console.error(err);
+
+  res.redirect(`/login?error=${err instanceof HttpError ? err.code : 'SOCIAL_LOGIN_FAILED'}`);
 }

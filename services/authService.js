@@ -13,17 +13,22 @@ export function signup({ emailOrPhone, name, username, password }) {
   return userService.createUser({ username, name, ...contact, password });
 }
 
-// 로그인 — 사용자 이름과 비밀번호를 확인하고, 로그인 기록(세션)을 남긴 뒤 토큰 둘을 돌려준다.
+// 로그인 기록(세션)을 남기고 토큰 둘을 만든다 — 비밀번호로 확인했든 구글이 확인해 줬든, 확인이 끝난 뒤의 일은 같다.
 // Access 토큰에는 그 기록(sid)을 담고, Refresh 토큰은 그 기록에서 새 Access 토큰을 받을 때 쓴다.
+export async function startSession(user) {
+  const { sessionId, refreshToken } = await sessionService.createSession(user.id);
+  const accessToken = tokenService.createAccessToken(user, sessionId);
+
+  return { user, accessToken, refreshToken };
+}
+
+// 로그인 — 사용자 이름과 비밀번호를 확인한 뒤, 로그인 기록과 토큰 둘을 돌려준다.
 export async function login(username, password) {
   const user = await userService.checkPassword(username, password);
 
   if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 
-  const { sessionId, refreshToken } = await sessionService.createSession(user.id);
-  const accessToken = tokenService.createAccessToken(user, sessionId);
-
-  return { user, accessToken, refreshToken };
+  return startSession(user);
 }
 
 // 소셜 로그인 — 제공자가 확인해 준 사람(profile)에 이어진 우리 사람을 찾고, 처음 온 사람이면 만든다.
