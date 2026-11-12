@@ -201,9 +201,9 @@ afterAll(async () => {
 describe('축 ① Step 1 — sessions 표', () => {
   it('🔴 칸 넷 · 기본 키 · FK 는 ON DELETE CASCADE · user_id 인덱스', async () => {
     await freshGate();
-    // 이 회차가 지은 칸만 본다 — 판정 DB 는 tip 스키마까지 얹어서 뒤 회차의 칸(`p3-44` refresh_token_hash)이 함께 있다.
+    // 이 회차가 지은 칸만 본다 — 판정 DB 는 tip 스키마까지 얹어서 뒤 회차의 칸(`p3-44` 의 두 해시)이 함께 있다.
     const cols = (await gate(`SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'sessions' ORDER BY ordinal_position`))
-      .filter((c) => c.column_name !== 'refresh_token_hash');
+      .filter((c) => !c.column_name.endsWith('refresh_token_hash'));
     expect(cols).toEqual([
       { column_name: 'id', data_type: 'text', is_nullable: 'NO' },
       { column_name: 'user_id', data_type: 'integer', is_nullable: 'NO' },
