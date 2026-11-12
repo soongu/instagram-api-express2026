@@ -1,0 +1,7 @@
+### 복사해 둔 쿠키로 별명 다시 내기
+# @no-redirect
+POST http://localhost:4002/nickname
+Content-Type: application/x-www-form-urlencoded
+Cookie: labPending=COPIED_PENDING
+
+nickname=재훈3

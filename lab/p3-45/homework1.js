@@ -7,8 +7,9 @@ import OAuth2Strategy from 'passport-oauth2';
 
 const AUTH_SERVER = 'http://127.0.0.1:4001';
 
-// 회원 · 소셜 계정 · 로그인 기록 — 실습 서버라 메모리에 둔다(서버가 다시 뜨면 비워진다).
-const members = [];
+// 회원 · 소셜 계정 · 로그인 기록 — 실습 서버라 메모리에 둔다(서버가 다시 뜨면 처음으로 돌아간다).
+// 1번 dahye 는 이메일로 먼저 가입해 둔 회원이다 — 소셜 계정이 없다.
+const members = [{ id: 1, nickname: 'dahye', email: 'dahye@example.com' }];
 const socialAccounts = [];
 const sessions = new Map();
 
@@ -44,6 +45,11 @@ function findOrCreateMember({ provider, id, email }) {
 
   if (account) return members.find((member) => member.id === account.memberId);
 
+  // 이메일이 같은 회원이 이미 있어도 그 회원에게 잇지 않는다 — 새로 만들지도 않고 돌려보낸다.
+  if (members.some((member) => member.email === email)) {
+    throw Object.assign(new Error('이미 가입한 이메일이에요'), { code: 'EMAIL_TAKEN' });
+  }
+
   const member = { id: members.length + 1, nickname: email.split('@')[0], email };
 
   members.push(member);
@@ -65,7 +71,11 @@ const labStrategy = new OAuth2Strategy(
   },
   // 인가 서버가 확인해 준 사람을 우리 회원으로 바꾼다 — 여기서 넘긴 값이 req.user 가 된다.
   (accessToken, refreshToken, profile, done) => {
-    done(null, findOrCreateMember(profile));
+    try {
+      done(null, findOrCreateMember(profile));
+    } catch (error) {
+      done(error);
+    }
   },
 );
 
@@ -91,8 +101,17 @@ const app = express();
 
 app.use(cookieParser());
 
+// 로그인하지 못하고 돌아왔을 때 보여 줄 문장 — 주소의 ?error= 에 실려 온 코드로 고른다.
+const NOTICES = {
+  LOGIN_FAILED: '로그인하지 못했어요. 다시 시도해 주세요.',
+  EMAIL_TAKEN: '이미 가입한 이메일이에요.',
+};
+
 app.get('/', (req, res) => {
-  const notice = req.query.error === undefined ? '' : '<p>로그인하지 못했어요. 다시 시도해 주세요.</p>';
+  const { error } = req.query;
+  // 표에 없는 코드가 와도 주소의 글자를 그대로 보여 주지 않는다.
+  const text = Object.hasOwn(NOTICES, error ?? '') ? NOTICES[error] : NOTICES.LOGIN_FAILED;
+  const notice = error === undefined ? '' : `<p>${text}</p>`;
 
   res.send(`<!doctype html><meta charset="utf-8">${notice}<a href="/login">인가 서버로 로그인</a>`);
 });
@@ -111,6 +130,13 @@ app.get(
     res.redirect('/me');
   },
 );
+
+// 콜백에서 난 에러는 여기서 받는다 — 브라우저가 문서로 연 주소라 JSON 대신 첫 화면으로 보낸다.
+app.use('/callback', (err, req, res, next) => {
+  if (err.code !== 'EMAIL_TAKEN') console.error(err);
+
+  res.redirect(`/?error=${err.code === 'EMAIL_TAKEN' ? 'EMAIL_TAKEN' : 'LOGIN_FAILED'}`);
+});
 
 app.get('/me', (req, res) => {
   const member = members.find((item) => item.id === sessions.get(req.cookies.labSession));
