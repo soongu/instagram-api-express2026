@@ -7,6 +7,7 @@ import postsRouter from './routes/posts.js';
 import likesRouter from './routes/likes.js';
 import authRouter from './routes/auth.js';
 import uploadsRouter from './routes/uploads.js';
+import adminRouter from './routes/admin.js';
 import { HttpError, NotFoundError } from './errors.js';
 import { sendError } from './responses.js';
 import { logger } from './middlewares/logger.js';
@@ -59,6 +60,7 @@ api.use(requireLogin);
 api.use('/posts', postsRouter);
 api.use('/posts/:id/likes', likesRouter);
 api.use('/uploads', uploadsRouter);
+api.use('/admin', adminRouter);
 
 // 새 주소 — 버전은 위에서 적어 두었다.
 app.use('/api/v2', api);
