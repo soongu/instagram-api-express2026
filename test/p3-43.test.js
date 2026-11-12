@@ -42,6 +42,10 @@ const HW_PORT2 = 3945;
 const ROUND = roundDir('code/p3-43');
 const R = (rel) => join(ROUND.dir, rel);
 const LAB = (rel) => R(`lab/p3-43/${rel}`);
+// 다섯 .http 는 2026-11-12 학생 낭독 집중 검수가 main 에만 고쳤다(북마크 code/p3-43 은 옛 판) — 작업트리에서 읽는다.
+//   확인에 «하나만 어긴 값»(31자 이름 · 이름 없는 소개 · 151자 소개 · 공백만 · 101자 이유)과 «없는 대상»(없는 공지 · 내보낸 회원) · «회원이 운영진을 내보내기» 를 더했다.
+const MAIN_HTTP = ['practice1.http', 'practice2.http', 'practice3.http', 'homework1.http', 'homework2.http'];
+const LAB_HTTP = (rel) => (MAIN_HTTP.includes(rel) ? P(`lab/p3-43/${rel}`) : LAB(rel));
 
 const SECRET = 'q2Xh0v9bGm4RkT7sYp1wLc8nZf3uJd6eHa5iVo0rQyE';
 const CLUB_SECRET = 'Zk3p9QvL0sYb7Rt2Nw5xHc8mJd1fGa6eUo4iTy0rPqE';
@@ -574,7 +578,7 @@ const labServer = async (file, port, extraEnv = {}, edit) => {
 const runHttp = async (file, port, swap = {}) => {
   const jar = device(`http://localhost:${port}`);
   const out = [];
-  for (const block of httpBlocks(read(LAB(file)))) out.push(await sendBlock(block, jar, { port, swap }));
+  for (const block of httpBlocks(read(LAB_HTTP(file)))) out.push(await sendBlock(block, jar, { port, swap }));
   return out;
 };
 
@@ -588,14 +592,14 @@ describe('축 ⑨ 직접 해보기 1 — 내 정보 서버', () => {
     }
   };
 
-  it('🔴 시작 판 — 역할까지 실어 고치면 role ADMIN · 빈 이름도 200 / 끝 판 — role USER 그대로 · 빈 이름 400', async () => {
+  it('🔴 시작 판 — 역할까지 실어 고치면 role ADMIN · 빈 이름·길이를 넘긴 값도 200 / 끝 판 — role USER 그대로 · 빈 이름 · 31자 이름 · 이름 없는 소개 · 151자 소개 400', async () => {
     const before = await run(P('snapshots/p3-43.practice1-start.practice1.js'));
-    expect(before.map((r) => r.status)).toEqual([200, 200, 200, 200, 200]);
+    expect(before.map((r) => r.status)).toEqual([200, 200, 200, 200, 200, 200, 200, 200]);
     expect(before[2].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈3', bio: '', role: 'ADMIN' });
-    expect(before[4].body).toEqual({ id: 45, username: 'admin.hong', name: '김재훈4', bio: '', role: 'ADMIN' });
+    expect(before[7].body).toMatchObject({ id: 45, username: 'admin.hong', name: '김재훈4', role: 'ADMIN' });
     const after = await run();
-    expect(after.map((r) => r.status)).toEqual([200, 200, 200, 400, 200]);
-    expect(after[4].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈4', bio: '', role: 'USER' });
+    expect(after.map((r) => r.status)).toEqual([200, 200, 200, 400, 400, 400, 400, 200]);
+    expect(after[7].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈4', bio: '', role: 'USER' });
     expect(after[0].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈', bio: '', role: 'USER' });
     expect(after[2].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈3', bio: '', role: 'USER' });
     expect(after[3].body).toEqual({ message: '보낸 내용이 규칙에 안 맞아요' });
@@ -606,14 +610,29 @@ describe('축 ⑨ 직접 해보기 1 — 내 정보 서버', () => {
     writeFileSync(block, read(LAB('practice1.js')).replace('  Object.assign(me(), result.data);', '  delete req.body.role;\n  Object.assign(me(), req.body);'));
     dirs.push(block);
     const out = await run(block);
-    expect(out.map((r) => r.status)).toEqual([200, 200, 200, 400, 200]);
+    expect(out.map((r) => r.status)).toEqual([200, 200, 200, 400, 400, 400, 400, 200]);
     expect(out[2].body.role).toBe('USER');
-    expect(out[4].body).toMatchObject({ id: 45, username: 'admin.hong' });
+    expect(out[7].body).toMatchObject({ id: 45, username: 'admin.hong' });
   }, 30000);
+
+  // 하나만 어긴 값 — 길이 상한이나 «늘 함께» 를 빠뜨린 판은 그 요청 하나만 200 이 된다
+  const variant = async (from, to) => {
+    const file = join(tmpdir(), `p343-variant-${process.pid}-${dirs.length}.js`);
+    const text = read(LAB('practice1.js'));
+    if (!text.includes(from)) throw new Error(`«${from}» 이 없다`);
+    writeFileSync(file, text.replace(from, to));
+    dirs.push(file);
+    return (await run(file)).map((r) => r.status);
+  };
+  it('🔴 틀린 판 — name 30자 상한 · name 을 늘 보내야 한다는 것 · bio 150자 상한을 빠뜨리면 그 요청이 200', async () => {
+    expect(await variant('name: z.string().min(1).max(30),', 'name: z.string().min(1),')).toEqual([200, 200, 200, 400, 200, 400, 400, 200]);
+    expect(await variant('name: z.string().min(1).max(30),', 'name: z.string().min(1).max(30).optional(),')).toEqual([200, 200, 200, 400, 400, 200, 400, 200]);
+    expect(await variant('bio: z.string().max(150).optional(),', 'bio: z.string().optional(),')).toEqual([200, 200, 200, 400, 400, 400, 200, 200]);
+  }, 60000);
 });
 
 /** 공지 서버 둘(직접 해보기 2·3)을 수업 서버(Step 8 판)와 함께 띄운다. */
-const noticeServers = async (fn) => {
+const noticeServers = async (fn, edit2) => {
   await freshGate();
   makeAdmin(8);
   const dir = studentDir(stepDir(8));
@@ -621,7 +640,7 @@ const noticeServers = async (fn) => {
   let p2;
   let p3;
   try {
-    p2 = await labServer('practice2.js', LAB_PORT);
+    p2 = await labServer('practice2.js', LAB_PORT, {}, edit2);
     p3 = await labServer('practice3.js', LAB_PORT2);
     const a = device(`http://localhost:${PORT}`);
     await a.login('admin.hong', 'admin1234!');
@@ -641,11 +660,20 @@ describe('축 ⑩·⑪ 직접 해보기 2·3 — 공지 서버가 토큰의 역�
       for (const [file, port] of [['practice2.http', LAB_PORT], ['practice3.http', LAB_PORT2]]) {
         // practice3.http 의 마지막 요청(내려간 jaehoon 의 토큰)은 여기서는 jaehoon 의 USER 토큰으로 — 토큰부터 403
         const out = await runHttp(file, port, { SEOYEON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken'), COPIED_TOKEN: j.cookie('accessToken') });
-        expect(out.map((r) => r.status)).toEqual(file === 'practice2.http' ? [200, 401, 401, 403, 200, 200] : [200, 401, 401, 403, 200, 200, 403]);
+        expect(out.map((r) => r.status)).toEqual(file === 'practice2.http' ? [200, 401, 401, 403, 200, 404, 200] : [200, 401, 401, 403, 200, 404, 200, 403]);
         expect(out[3].body).toEqual({ message: '관리자만 할 수 있어요' });
-        expect(out[5].body).toEqual([{ id: 2, title: '새 기능 소개', authorId: 1 }]);
+        expect(out[5].body).toEqual({ message: '그런 공지는 없어요' });
+        expect(out[6].body).toEqual([{ id: 2, title: '새 기능 소개', authorId: 1 }]);
       }
     });
+  }, 60000);
+
+  it('🔴 틀린 판 — 없는 번호에 404 를 빠뜨리면 findIndex 의 -1 로 splice(-1, 1) 이 마지막 공지를 지운다 · 여섯째가 200 · 목록이 빈다', async () => {
+    await noticeServers(async ({ a, j }) => {
+      const out = await runHttp('practice2.http', LAB_PORT, { SEOYEON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken') });
+      expect(out.map((r) => r.status)).toEqual([200, 401, 401, 403, 200, 200, 200]);
+      expect(out[6].body).toEqual([]);
+    }, (d) => replaceIn(d, 'lab/p3-43/practice2.js', "  if (index === -1) {\n    return res.status(404).json({ message: '그런 공지는 없어요' });\n  }\n\n", ''));
   }, 60000);
 
   it('🔴 내려간 jaehoon 의 토큰 — 직접 해보기 2 는 200(수업 서버에 안 묻는다) · 3 은 403 · 수업 서버를 끄면 3 의 관리자 일은 503 · 목록은 둘 다 200', async () => {
@@ -674,7 +702,7 @@ describe('축 ⑫ 과제', () => {
       const jar = device(`http://localhost:${HW_PORT}`);
       const out = [];
       let damiToken;
-      for (const block of httpBlocks(read(LAB('homework1.http')))) {
+      for (const block of httpBlocks(read(LAB_HTTP('homework1.http')))) {
         out.push(await sendBlock(block, jar, { port: HW_PORT }));
         if (block.title === 'dami로 로그인') damiToken = jar.cookie('clubToken');
       }
@@ -685,13 +713,15 @@ describe('축 ⑫ 과제', () => {
     }
   };
 
-  it('🔴 [기초] 첫 가입은 운영진 · 역할을 실어 보내도 회원 · 회원은 목록 403 · 운영진 200 · 자기 자신 400 · 내보내기 200 · 새 가입은 3번 · 내보낸 dami 의 토큰은 나는 누구 401', async () => {
+  it('🔴 [기초] 첫 가입은 운영진 · 역할을 실어 보내도 회원 · 회원은 목록·내보내기 403 · 운영진 200 · 자기 자신 400 · 내보내기 200 · 내보낸 회원 다시 404 · 새 가입은 3번 · 내보낸 dami 의 토큰은 나는 누구 401', async () => {
     const r = await club();
-    expect(r.out.map((x) => x.status)).toEqual([201, 201, 200, 403, 200, 200, 400, 200, 200, 201, 200]);
+    expect(r.out.map((x) => x.status)).toEqual([201, 201, 200, 403, 403, 200, 200, 400, 200, 404, 200, 201, 200]);
     expect(r.out[3].body).toEqual({ message: '운영진만 할 수 있어요' });
-    expect(r.out[5].body).toEqual([{ id: 1, email: 'bomi@example.com', role: 'MANAGER' }, { id: 2, email: 'dami@example.com', role: 'MEMBER' }]);
-    expect(r.out[6].body).toEqual({ message: '자기 자신은 내보낼 수 없어요' });
-    expect(r.out[10].body).toEqual([{ id: 1, email: 'bomi@example.com', role: 'MANAGER' }, { id: 3, email: 'sena@example.com', role: 'MEMBER' }]);
+    expect(r.out[4].body).toEqual({ message: '운영진만 할 수 있어요' });
+    expect(r.out[6].body).toEqual([{ id: 1, email: 'bomi@example.com', role: 'MANAGER' }, { id: 2, email: 'dami@example.com', role: 'MEMBER' }]);
+    expect(r.out[7].body).toEqual({ message: '자기 자신은 내보낼 수 없어요' });
+    expect(r.out[9].body).toEqual({ message: '그런 회원은 없어요' });
+    expect(r.out[12].body).toEqual([{ id: 1, email: 'bomi@example.com', role: 'MANAGER' }, { id: 3, email: 'sena@example.com', role: 'MEMBER' }]);
     expect(parts(r.damiToken)[1]).toMatchObject({ role: 'MEMBER', sub: '2' });
     expect(r.damiMe.status).toBe(401);
   }, 60000);
@@ -707,14 +737,24 @@ describe('축 ⑫ 과제', () => {
       if (start < 0 || end < 0 || !text.includes(use)) throw new Error('옮길 자리가 없다');
       writeFileSync(file, text.replace(routes, '').replace(use, `${routes}${use}`));
     });
-    expect(r.out[5]).toMatchObject({ status: 403, body: { message: '운영진만 할 수 있어요' } });
+    expect(r.out[6]).toMatchObject({ status: 403, body: { message: '운영진만 할 수 있어요' } });
+  }, 60000);
+
+  it('🔴 [기초] 틀린 판 — 내보내기에 requireManager 를 빠뜨리면 «dami가 bomi 내보내기» 가 200(회원이 운영진을 내보낸다)', async () => {
+    const r = await club((d) => replaceIn(d, 'lab/p3-43/homework1.js', "app.delete('/members/:id', requireManager, (req, res) => {", "app.delete('/members/:id', (req, res) => {"));
+    expect(r.out[4]).toMatchObject({ status: 200, body: { email: 'bomi@example.com' } });
+  }, 60000);
+
+  it('🔴 [기초] 틀린 판 — 없는 번호에 404 를 빠뜨리면 «내보낸 dami 다시 내보내기» 가 200(splice(-1, 1) 이 bomi 를 내보낸다)', async () => {
+    const r = await club((d) => replaceIn(d, 'lab/p3-43/homework1.js', "  if (index === -1) {\n    return res.status(404).json({ message: '그런 회원은 없어요' });\n  }\n\n", ''));
+    expect(r.out[9]).toMatchObject({ status: 200, body: { email: 'bomi@example.com' } });
   }, 60000);
 
   it('🔴 [기초] 틀린 판 — 번호를 members.length + 1 로 매기면 새 가입이 2번을 받고, 내보낸 dami 의 토큰이 sena 로 읽힌다', async () => {
     const r = await club((d) => {
       replaceIn(d, 'lab/p3-43/homework1.js', 'members.push({ id: nextId, email, passwordHash, role });\n  nextId += 1;', 'members.push({ id: members.length + 1, email, passwordHash, role });');
     });
-    expect(r.out[10].body).toEqual([{ id: 1, email: 'bomi@example.com', role: 'MANAGER' }, { id: 2, email: 'sena@example.com', role: 'MEMBER' }]);
+    expect(r.out[12].body).toEqual([{ id: 1, email: 'bomi@example.com', role: 'MANAGER' }, { id: 2, email: 'sena@example.com', role: 'MEMBER' }]);
     expect(r.damiMe).toMatchObject({ status: 200, body: { email: 'sena@example.com' } });
   }, 60000);
 
@@ -768,12 +808,13 @@ describe('축 ⑫ 과제', () => {
     }
   }, 60000);
 
-  it('🔴 [응용] jaehoon 403 · 이유 없이 400 · 이유를 적으면 200 · 목록에 2번만 · jaehoon 의 기록 보기 403 · 관리자는 최근 것부터 셋(막힌 시도 둘 포함) · 토큰은 안 남는다', async () => {
+  it('🔴 [응용] jaehoon 403 · 이유 없이 · 공백만 · 101자 400 · 없는 공지 404 · 이유를 적으면 200 · 목록에 2번만 · jaehoon 의 기록 보기 403 · 관리자는 최근 것부터 넷(막힌 시도 셋 포함) · 토큰은 안 남는다', async () => {
     const { out, swap } = await audit();
-    expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 403, 403, 200]);
-    expect(out[1].body).toEqual({ message: '숨기는 이유를 100자 안으로 적어 주세요' });
-    expect(out[3].body).toEqual([{ id: 2, title: '새 기능 소개', authorId: 1, hidden: false }]);
-    const log = out[6].body;
+    expect(out.map((r) => r.status)).toEqual([403, 400, 400, 400, 404, 200, 200, 403, 403, 200]);
+    for (const i of [1, 2, 3]) expect(out[i].body).toEqual({ message: '숨기는 이유를 100자 안으로 적어 주세요' });
+    expect(out[4].body).toEqual({ message: '그런 공지는 없어요' });
+    expect(out[6].body).toEqual([{ id: 2, title: '새 기능 소개', authorId: 1, hidden: false }]);
+    const log = out[9].body;
     expect(log.map(({ at, ...rest }) => rest)).toEqual([
       { actorId: 2, action: 'GET /audit', result: 'DENIED' },
       { actorId: 2, action: 'PATCH /notices/2/hide', result: 'DENIED' },
@@ -792,9 +833,19 @@ describe('축 ⑫ 과제', () => {
       if (read(file).split(line).length !== 3) throw new Error('기록 줄이 둘이 아니다');
       writeFileSync(file, read(file).replaceAll(line, ''));
     });
-    expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 403, 403, 200]);
-    expect(out[6].body.map((e) => e.action)).toEqual(['HIDE_NOTICE']);
+    expect(out.map((r) => r.status)).toEqual([403, 400, 400, 400, 404, 200, 200, 403, 403, 200]);
+    expect(out[9].body.map((e) => e.action)).toEqual(['HIDE_NOTICE']);
   }, 60000);
+
+  it('🔴 [응용] 틀린 판 — trim() 을 빠뜨리면 공백만 적은 이유가 200 · 100자 상한을 빠뜨리면 101자가 200 · 없는 공지 404 를 빠뜨리면 500', async () => {
+    const CHECK = "  if (typeof reason !== 'string' || reason.trim() === '' || reason.length > 100) {";
+    const noTrim = await audit((d) => replaceIn(d, 'lab/p3-43/homework2.js', CHECK, "  if (typeof reason !== 'string' || reason === '' || reason.length > 100) {"));
+    expect(noTrim.out.map((r) => r.status)).toEqual([403, 400, 200, 400, 404, 200, 200, 403, 403, 200]);
+    const noMax = await audit((d) => replaceIn(d, 'lab/p3-43/homework2.js', CHECK, "  if (typeof reason !== 'string' || reason.trim() === '') {"));
+    expect(noMax.out.map((r) => r.status)).toEqual([403, 400, 400, 200, 404, 200, 200, 403, 403, 200]);
+    const no404 = await audit((d) => replaceIn(d, 'lab/p3-43/homework2.js', "  if (!notice) {\n    return res.status(404).json({ message: '그런 공지는 없어요' });\n  }\n\n", ''));
+    expect(no404.out.map((r) => r.status)).toEqual([403, 400, 400, 400, 500, 200, 200, 403, 403, 200]);
+  }, 120000);
 
   it('🔴 [응용] 틀린 판 — 직접 해보기 2(토큰의 역할만 믿는다)에서 시작하면 내려간 jaehoon 의 숨기기가 200', async () => {
     const { out } = await audit((d) => {
@@ -814,7 +865,7 @@ describe('축 ⑫ 과제', () => {
 
 ` + text.slice(end));
     });
-    expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 200, 403, 200]);
+    expect(out.map((r) => r.status)).toEqual([403, 400, 400, 400, 404, 200, 200, 200, 403, 200]);
   }, 60000);
 });
 
@@ -864,13 +915,26 @@ describe('축 ⑬ 교안·답안의 블록은 코드베이스와 실제 실행�
   });
 
   it('🔴 http 블록 — 줄마다 requests/admin.http 나 lab/p3-43 의 .http 에 있다 · admin.http 는 교안에 적은 차례 그대로', () => {
-    const files = ['requests/admin.http', ...readdirSync(LAB('.')).filter((f) => f.endsWith('.http')).map((f) => `lab/p3-43/${f}`)].map((rel) => read(R(rel)).split('\n'));
+    const files = [R('requests/admin.http'), ...readdirSync(LAB('.')).filter((f) => f.endsWith('.http')).map((f) => LAB_HTTP(f))].map((path) => read(path).split('\n'));
     const blocks = DOCS.flatMap((d) => fences(d, 'http'));
     expect(blocks.length).toBe(11);
     for (const b of blocks) expect(files.some((lines) => meaningful(b).every((l) => lines.includes(l))), b).toBe(true);
     // 교안이 admin.http 에 더하라고 한 덩어리를 차례로 이으면 그 파일이 된다
     const adminBlocks = fences(DOCS[0], 'http').filter((b) => b.includes('localhost:3000'));
     expect(adminBlocks.join('\n\n') + '\n').toBe(read(R('requests/admin.http')));
+ 
+    // 실습·과제의 .http 도 교안 블록이 곧 그 파일이다(직접 해보기 3 은 2 를 복사해 포트를 바꾸고 한 요청을 더한 것)
+    const labBlock = (port) => DOCS.flatMap((d) => fences(d, 'http')).filter((b) => b.includes(`localhost:${port}/`));
+    for (const [file, port] of [['practice1.http', 4001], ['practice2.http', 4002], ['homework1.http', 4011], ['homework2.http', 4012]]) {
+      expect(labBlock(port), file).toHaveLength(1);
+      expect(`${labBlock(port)[0]}\n`, file).toBe(read(LAB_HTTP(file)));
+    }
+    expect(`${labBlock(4002)[0].replaceAll('4002', '4003')}\n\n${labBlock(4003)[0]}\n`).toBe(read(LAB_HTTP('practice3.http')));
+    // 교안이 적은 상태 코드 차례가 위 실행과 같다
+    const lecture = read(DOCS[0]);
+    for (const seq of ['200 · 200 · 200 · 400 · 400 · 400 · 400 · 200', '200 · 401 · 401 · 403 · 200 · 404 · 200', '201 · 201 · 200 · 403 · 403 · 200 · 200 · 400 · 200 · 404 · 200 · 201 · 200', '403 · 400 · 400 · 400 · 404 · 200 · 200 · 403 · 403 · 200']) {
+      expect(lecture, seq).toContain(seq);
+    }
   });
 
   it('🔴 prisma 블록 · 마이그레이션 · make-admin 출력 · 토큰 페이로드 모양 · 쿼리 표', () => {

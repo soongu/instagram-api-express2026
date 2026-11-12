@@ -29,6 +29,9 @@ Content-Type: application/json
 ### dami가 회원 목록
 GET http://localhost:4011/members
 
+### dami가 bomi 내보내기
+DELETE http://localhost:4011/members/1
+
 ### bomi로 로그인
 POST http://localhost:4011/login
 Content-Type: application/json
@@ -45,6 +48,9 @@ GET http://localhost:4011/members
 DELETE http://localhost:4011/members/1
 
 ### bomi가 dami 내보내기
+DELETE http://localhost:4011/members/2
+
+### 내보낸 dami 다시 내보내기
 DELETE http://localhost:4011/members/2
 
 ### 회원 목록 다시 보기

@@ -16,6 +16,34 @@ Content-Type: application/json
 
 {}
 
+### 공백만 적은 이유로 공지 숨기기
+PATCH http://localhost:4012/notices/1/hide
+Authorization: Bearer ADMIN_TOKEN
+Content-Type: application/json
+
+{
+  "reason": "   "
+}
+
+### 101자 이유로 공지 숨기기
+# 이유가 101자예요 — «안녕하세요» 스무 번에 느낌표 하나
+PATCH http://localhost:4012/notices/1/hide
+Authorization: Bearer ADMIN_TOKEN
+Content-Type: application/json
+
+{
+  "reason": "안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요!"
+}
+
+### 없는 공지 숨기기
+PATCH http://localhost:4012/notices/99/hide
+Authorization: Bearer ADMIN_TOKEN
+Content-Type: application/json
+
+{
+  "reason": "없는 공지를 숨겨 봐요"
+}
+
 ### 이유를 적어 공지 숨기기
 PATCH http://localhost:4012/notices/1/hide
 Authorization: Bearer ADMIN_TOKEN
