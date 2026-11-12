@@ -2,6 +2,7 @@
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '../db.js';
+import * as userService from './userService.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { cursorSchema } from '../schemas/postSchema.js';
 
@@ -172,7 +173,9 @@ async function removeUploadedFiles(imageUrls) {
 
 export async function removePost(id, userId, role) {
   // 관리자는 남의 게시물도 지울 수 있다 — 신고된 게시물을 내리는 일이라, 고치기는 열지 않고 지우기에만 연다.
-  if (role !== 'ADMIN') await checkAuthor(id, userId);
+  // 토큰이 관리자라고 하면 데이터베이스에서 지금 역할을 한 번 더 본다.
+  const admin = role === 'ADMIN' && (await userService.isAdmin(userId));
+  if (!admin) await checkAuthor(id, userId);
 
   let post;
   try {

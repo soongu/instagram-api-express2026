@@ -92,3 +92,8 @@ Content-Type: application/json
 {
   "role": "ADMIN"
 }
+
+### 복사해 둔 jaehoon의 토큰으로 남의 게시물 지우기
+# @no-cookie-jar
+DELETE http://localhost:3000/api/v2/posts/2
+Authorization: Bearer COPIED_TOKEN

@@ -1,5 +1,6 @@
 // ~/instagram-api/middlewares/auth.js
 import * as tokenService from '../services/tokenService.js';
+import * as userService from '../services/userService.js';
 import { ForbiddenError, UnauthorizedError } from '../errors.js';
 
 // 요청에 실려 온 토큰 — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
@@ -29,9 +30,10 @@ export function requireLogin(req, res, next) {
   next();
 }
 
-// 관리자만 다음으로 보낸다 — requireLogin 이 토큰에서 꺼내 둔 역할을 본다.
-export function requireAdmin(req, res, next) {
-  if (res.locals.role !== 'ADMIN') {
+// 관리자만 다음으로 보낸다 — 토큰의 역할로 먼저 거르고,
+// 토큰이 관리자라고 할 때만 데이터베이스에서 지금 역할을 한 번 더 본다(역할을 내렸어도 토큰은 만료까지 ADMIN 이라서).
+export async function requireAdmin(req, res, next) {
+  if (res.locals.role !== 'ADMIN' || !(await userService.isAdmin(res.locals.userId))) {
     next(new ForbiddenError('ADMIN_ONLY'));
     return;
   }
