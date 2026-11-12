@@ -1283,19 +1283,22 @@ describe('축 ⑩ 직접 해보기 1 — 닉네임으로 사용자 이름 정하
     'kakao5681  ← undefined',
     'naver  ← js',
     'minsu_dev5683  ← minsu_dev',
-    'the_quick_brown_fox_jumps_  ← the_quick_brown_fox_jumps_over',
+    'thequick_brown_fox_jumps_o  ← the quick_brown_fox_jumps_over',
+    'kim  ← kim',
   ];
   const run = (source) => runLabScript('practice1.js', source);
   /** 정답과 다른 줄만(줄 번호와 함께). */
   const wrongLines = (out) => out.trimEnd().split('\n').map((line, i) => (line === RIGHT[i] ? null : `${i + 1}: ${line}`)).filter(Boolean);
 
-  it('🔴 정답 판 — 일곱 줄 · 닉네임을 쓸 수 있으면 닉네임(26자까지) · 아니면 제공자 이름 · 이미 쓰는 이름이면 회원번호 끝 네 글자', () => {
+  it('🔴 정답 판 — 여덟 줄 · 닉네임을 쓸 수 있으면 닉네임(26자까지) · 아니면 제공자 이름 · 이미 쓰는 이름이면 회원번호 끝 네 글자', () => {
     const { code, out } = run(LAB('practice1.js'));
     expect(code).toBe(0);
     expect(out.trimEnd().split('\n')).toEqual(RIGHT);
-    // 일곱째 사람의 닉네임은 30자이고, 사용자 이름은 그 앞 26자다
+    // 일곱째 사람의 닉네임은 빈칸 하나가 든 30자이고, 사용자 이름은 빈칸을 지운 29자의 앞 26자다
     const [username, nickname] = RIGHT[6].split('  ← ');
-    expect([nickname.length, username.length, nickname.slice(0, 26)]).toEqual([30, 26, username]);
+    expect([nickname.length, username.length, nickname.replace(' ', '').slice(0, 26)]).toEqual([30, 26, username]);
+    // 여덟째 사람의 닉네임은 딱 3자다
+    expect(RIGHT[7].split('  ← ')[1]).toHaveLength(3);
     labSeen.practice1 = out;
   });
 
@@ -1322,7 +1325,7 @@ describe('축 ⑩ 직접 해보기 1 — 닉네임으로 사용자 이름 정하
     expect(out.split('\n').slice(0, 3)).toEqual(RIGHT.slice(0, 3));
     expect(out).toContain("TypeError: Cannot read properties of undefined (reading 'replace')");
     expect(out).not.toContain(RIGHT[3]);
-    // 넷째 사람에서 멈추니 다섯째~일곱째 줄은 없다
+    // 넷째 사람에서 멈추니 다섯째~여덟째 줄은 없다
     for (const line of RIGHT.slice(3)) expect(out).not.toContain(line);
     labSeen.practice1NoName = out;
   });
@@ -1352,11 +1355,26 @@ describe('축 ⑩ 직접 해보기 1 — 닉네임으로 사용자 이름 정하
     labSeen.practice1NoMinLength = out;
   });
 
-  it('🔴 틀린 판 ⑤ — 26자까지만 남기는 것을 빼먹으면(.slice(0, 26) 없음) 일곱째 줄만 다르다 — 닉네임 30자가 그대로 사용자 이름이 된다', () => {
+  it('🔴 틀린 판 ⑤ — 26자까지만 남기는 것을 빼먹으면(.slice(0, 26) 없음) 일곱째 줄만 다르다 — 빈칸만 지운 29자가 그대로 사용자 이름이 된다', () => {
     const { code, out } = run(edit1(LAB('practice1.js'), ".replace(NOT_ALLOWED, '').slice(0, 26)", ".replace(NOT_ALLOWED, '')"));
     expect(code).toBe(0);
-    expect(wrongLines(out)).toEqual(['7: the_quick_brown_fox_jumps_over  ← the_quick_brown_fox_jumps_over']);
+    expect(wrongLines(out)).toEqual(['7: thequick_brown_fox_jumps_over  ← the quick_brown_fox_jumps_over']);
     labSeen.practice1NoSlice = out;
+  });
+
+  it('🔴 틀린 판 (가) — 3자 «이상» 을 3자 «초과» 로 적으면(letters.length > 3) 여덟째 줄만 다르다 — 3자짜리 닉네임 kim 이 제공자 이름으로 밀린다', () => {
+    const { code, out } = run(edit1(LAB('practice1.js'), 'letters.length >= 3 ? letters : profile.provider', 'letters.length > 3 ? letters : profile.provider'));
+    expect(code).toBe(0);
+    expect(wrongLines(out)).toEqual(['8: naver9kL1  ← kim']);
+    labSeen.practice1GreaterThan = out;
+  });
+
+  it('🔴 틀린 판 (나) — 26자로 자르기를 글자 지우기보다 먼저 하면(slice 가 replace 앞) 일곱째 줄만 다르다 — 빈칸을 지우고 나면 25자만 남는다', () => {
+    const { code, out } = run(edit1(LAB('practice1.js'), ".replace(NOT_ALLOWED, '').slice(0, 26)", ".slice(0, 26).replace(NOT_ALLOWED, '')"));
+    expect(code).toBe(0);
+    expect(wrongLines(out)).toEqual(['7: thequick_brown_fox_jumps_  ← the quick_brown_fox_jumps_over']);
+    expect(out.split('\n')[6].split('  ← ')[0]).toHaveLength(25);
+    labSeen.practice1SliceFirst = out;
   });
 });
 
@@ -1515,8 +1533,11 @@ const talkLogin = async (tab, account, { decision = 'allow', nickname = true, ta
   const begin = await tab.get('/talk');
   if (begin.status !== 302) return { begin };
   const auth = new URL(begin.location);
-  // 브라우저처럼 동의 화면을 먼저 연다(톡 서버의 로그에 GET 줄이 찍힌다).
-  if (openPage) await (await fetch(begin.location)).text();
+  // 브라우저처럼 동의 화면을 먼저 열고, 브라우저가 저절로 보내는 아이콘 요청도 한 번 보낸다(톡 서버의 로그에는 GET 줄 하나만 찍힌다).
+  if (openPage) {
+    await (await fetch(begin.location)).text();
+    await fetch(`${auth.origin}/favicon.ico`);
+  }
   const fields = [...auth.searchParams, ['account', account], ['decision', decision]];
   if (nickname) fields.push(['nickname', 'yes']);
   const consent = await fetch(`${auth.origin}/oauth/authorize`, { method: 'POST', body: new URLSearchParams(fields), redirect: 'manual' });
@@ -1594,6 +1615,20 @@ describe('축 ⑬ 나눠 주는 talk-server.js — 실습용 제공자 «톡»',
     expect([badClient.status, noticeOf(await badClient.text())]).toEqual([400, '등록되지 않은 앱이에요']);
     const badUri = await fetch(`${TALK_BASE}/oauth/authorize?${new URLSearchParams({ ...AUTHORIZE, redirect_uri: 'http://evil.example/cb' })}`);
     expect([badUri.status, noticeOf(await badUri.text())]).toEqual([400, '등록하지 않은 redirect_uri예요']);
+  }, 30_000);
+
+  it('🔴 /favicon.ico 는 204 로 답하고 요청 로그에 찍지 않는다 — 브라우저로 동의 화면을 열어도 로그가 한 줄(GET /oauth/authorize 200)뿐이다', async () => {
+    await sleep(100);
+    const before = talk.tail().length;
+    expect((await fetch(`${TALK_BASE}/oauth/authorize?${new URLSearchParams(AUTHORIZE)}`)).status).toBe(200);
+    const icon = await fetch(`${TALK_BASE}/favicon.ico`);
+    expect([icon.status, await icon.text()]).toEqual([204, '']);
+    await sleep(100);
+    expect(talk.tail().slice(before)).toBe('[톡] GET /oauth/authorize 200\n');
+    // 그 밖의 없는 주소는 그대로 404 로 찍힌다
+    expect((await fetch(`${TALK_BASE}/nope`)).status).toBe(404);
+    await sleep(100);
+    expect(talk.tail().slice(before)).toBe('[톡] GET /oauth/authorize 200\n[톡] GET /nope 404\n');
   }, 30_000);
 
   it('🔴 허용하면 303 ?code=…&state=… · 거부하면 303 ?error=access_denied&error_description=User%20denied%20access(state 없이)', async () => {
@@ -2277,7 +2312,7 @@ describe('축 ⑯ 교안·답안이 말한 글자 = 실제', () => {
     expect(http).toEqual([LAB('homework1.http'), LAB('homework2.http')]);
   });
 
-  it('🔴 과제 [응용] 의 톡 서버 네 줄 — 동의 화면을 GET 으로 열고 haru 로 허용한 흐름에서(TALK_DELAY=5000 · 과제 [응용] 정답) 그대로 찍힌다', async () => {
+  it('🔴 과제 [응용] 의 톡 서버 네 줄 — 동의 화면을 GET 으로 열고(/favicon.ico 요청도 한 번) haru 로 허용한 흐름에서(TALK_DELAY=5000 · 과제 [응용] 정답) 그대로 찍힌다', async () => {
     const fence = fencesOf(LECTURE_MD).filter((one) => one.lang === '' && one.body[0] === '[톡] GET /oauth/authorize 200');
     expect(fence).toHaveLength(1);
     const talk = await startTalk(5000);
