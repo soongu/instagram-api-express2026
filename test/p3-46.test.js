@@ -1431,11 +1431,11 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
     'ok  구글에서 허용',
     'denied  카카오에서 취소',
     'denied  네이버에서 취소',
-    'forged  state 를 고친 주소',
+    'forged  state를 고친 주소',
     'failed  네이버 쪽 문제',
-    'failed  code 도 error 도 없는 주소',
-    'ok  state 에 error 라는 글자가 든 성공',
-    'forged  쿠키도 state 도 없는 주소',
+    'failed  code도 error도 없는 주소',
+    'ok  state에 error라는 글자가 든 성공',
+    'forged  쿠키도 state도 없는 주소',
   ];
   const BODY_FROM = '  const query = new URL(url).searchParams;';
   const BODY_TO = "\n  return 'ok';\n}\n";
@@ -1455,6 +1455,12 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
 
   it('🔴 정답 판 — 여덟 줄', () => {
     expect(results(LAB('practice3.js'))).toEqual(RIGHT);
+    // 주석의 낱말 — 교안 본문과 같은 «저장해 둔» · «제공자에게 다녀온»
+    for (const src of [LAB('practice3.js'), SNAP('practice3-start.practice3.js')]) {
+      expect(src).toContain('// 제공자에게 다녀온 브라우저가 연 콜백 주소들 — saved 는 떠나기 전에 쿠키에 저장해 둔 state 다.\n');
+      expect(src).not.toContain('맡겨 둔');
+    }
+    expect(LAB('practice3.js')).toContain('  // 저장해 둔 state 가 없거나 주소의 state 와 다르면 우리가 보낸 요청의 답이 아니다.\n');
     labSeen.practice3 = `${RIGHT.join('\n')}\n`;
   });
 
@@ -1489,15 +1495,15 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
 
   return 'ok';
 `));
-    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['failed  state 에 error 라는 글자가 든 성공']);
+    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['failed  state에 error라는 글자가 든 성공']);
     labSeen.practice3Includes = got.join('\n');
   });
 
-  it('🔴 틀린 판 — code 가 있는지 안 보면 code 도 error 도 없는 주소가 ok · state 를 != 로 견주면 쿠키도 state 도 없는 주소가 ok', () => {
+  it('🔴 틀린 판 — code 가 있는지 안 보면 code도 error도 없는 주소가 ok · state 를 != 로 견주면 쿠키도 state도 없는 주소가 ok', () => {
     const noCode = results(edit1(LAB('practice3.js'), "  if (error !== null || !query.has('code')) return 'failed';", "  if (error !== null) return 'failed';"));
-    expect(noCode.filter((line, i) => line !== RIGHT[i])).toEqual(['ok  code 도 error 도 없는 주소']);
+    expect(noCode.filter((line, i) => line !== RIGHT[i])).toEqual(['ok  code도 error도 없는 주소']);
     const loose = results(edit1(LAB('practice3.js'), "  if (!savedState || query.get('state') !== savedState) return 'forged';", "  if (query.get('state') != savedState) return 'forged';"));
-    expect(loose.filter((line, i) => line !== RIGHT[i])).toEqual(['ok  쿠키도 state 도 없는 주소']);
+    expect(loose.filter((line, i) => line !== RIGHT[i])).toEqual(['ok  쿠키도 state도 없는 주소']);
   });
 });
 
