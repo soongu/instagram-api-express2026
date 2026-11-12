@@ -1,0 +1,17 @@
+### 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 게시물 목록
+GET http://localhost:3000/api/v2/posts?limit=1
+
+### 기한이 지난 토큰으로 게시물 목록
+# 터미널에서 node --env-file=.env lab/p3-44/expired-token.js 로 만든 토큰으로 EXPIRED_TOKEN 을 바꾼다
+# @no-cookie-jar
+GET http://localhost:3000/api/v2/posts?limit=1
+Authorization: Bearer EXPIRED_TOKEN
