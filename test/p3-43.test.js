@@ -586,13 +586,25 @@ describe('축 ⑨ 직접 해보기 1 — 내 정보 서버', () => {
 
   it('🔴 시작 판 — 역할까지 실어 고치면 role ADMIN · 빈 이름도 200 / 끝 판 — role USER 그대로 · 빈 이름 400', async () => {
     const before = await run(P('snapshots/p3-43.practice1-start.practice1.js'));
-    expect(before.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+    expect(before.map((r) => r.status)).toEqual([200, 200, 200, 200, 200]);
     expect(before[2].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈3', bio: '', role: 'ADMIN' });
+    expect(before[4].body).toEqual({ id: 45, username: 'admin.hong', name: '김재훈4', bio: '', role: 'ADMIN' });
     const after = await run();
-    expect(after.map((r) => r.status)).toEqual([200, 200, 200, 400]);
+    expect(after.map((r) => r.status)).toEqual([200, 200, 200, 400, 200]);
+    expect(after[4].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈4', bio: '', role: 'USER' });
     expect(after[0].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈', bio: '', role: 'USER' });
     expect(after[2].body).toEqual({ id: 1, username: 'jaehoon', name: '김재훈3', bio: '', role: 'USER' });
     expect(after[3].body).toEqual({ message: '보낸 내용이 규칙에 안 맞아요' });
+  }, 30000);
+
+  it('🔴 틀린 판 — 검사는 하되 role 만 지우고 본문을 덮어쓰면 넷째까지는 같지만 다섯째에 번호와 사용자 이름이 바뀐다', async () => {
+    const block = join(tmpdir(), `p343-blocklist-${process.pid}.js`);
+    writeFileSync(block, read(LAB('practice1.js')).replace('  Object.assign(me(), result.data);', '  delete req.body.role;\n  Object.assign(me(), req.body);'));
+    dirs.push(block);
+    const out = await run(block);
+    expect(out.map((r) => r.status)).toEqual([200, 200, 200, 400, 200]);
+    expect(out[2].body.role).toBe('USER');
+    expect(out[4].body).toMatchObject({ id: 45, username: 'admin.hong' });
   }, 30000);
 });
 
@@ -712,9 +724,14 @@ describe('축 ⑫ 과제', () => {
       lab = await labServer('homework2.js', HW_PORT2, {}, edit);
       const a = device(`http://localhost:${PORT}`);
       await a.login('admin.hong', 'admin1234!');
+      // Step 7 처럼 — jaehoon 을 올렸다가 그 사이 받은 토큰을 복사하고 다시 내린다
+      await a.send('PATCH', '/api/v2/admin/users/2/role', { role: 'ADMIN' });
+      const old = device(`http://localhost:${PORT}`);
+      await old.login('jaehoon');
+      await a.send('PATCH', '/api/v2/admin/users/2/role', { role: 'USER' });
       const j = device(`http://localhost:${PORT}`);
       await j.login('jaehoon');
-      const swap = { JAEHOON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken') };
+      const swap = { JAEHOON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken'), COPIED_TOKEN: old.cookie('accessToken') };
       return { out: await runHttp('homework2.http', HW_PORT2, swap), swap };
     } finally {
       if (lab) await stop(lab.srv);
@@ -749,12 +766,13 @@ describe('축 ⑫ 과제', () => {
 
   it('🔴 [응용] jaehoon 403 · 이유 없이 400 · 이유를 적으면 200 · 목록에 2번만 · jaehoon 의 기록 보기 403 · 관리자는 최근 것부터 셋(막힌 시도 둘 포함) · 토큰은 안 남는다', async () => {
     const { out, swap } = await audit();
-    expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 403, 200]);
+    expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 403, 403, 200]);
     expect(out[1].body).toEqual({ message: '숨기는 이유를 100자 안으로 적어 주세요' });
     expect(out[3].body).toEqual([{ id: 2, title: '새 기능 소개', authorId: 1, hidden: false }]);
-    const log = out[5].body;
+    const log = out[6].body;
     expect(log.map(({ at, ...rest }) => rest)).toEqual([
       { actorId: 2, action: 'GET /audit', result: 'DENIED' },
+      { actorId: 2, action: 'PATCH /notices/2/hide', result: 'DENIED' },
       { actorId: 45, action: 'HIDE_NOTICE', result: 'OK', targetId: 1, reason: '점검이 끝나 지난 안내가 됐어요' },
       { actorId: 2, action: 'PATCH /notices/1/hide', result: 'DENIED' },
     ]);
@@ -770,8 +788,29 @@ describe('축 ⑫ 과제', () => {
       if (read(file).split(line).length !== 3) throw new Error('기록 줄이 둘이 아니다');
       writeFileSync(file, read(file).replaceAll(line, ''));
     });
-    expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 403, 200]);
-    expect(out[5].body.map((e) => e.action)).toEqual(['HIDE_NOTICE']);
+    expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 403, 403, 200]);
+    expect(out[6].body.map((e) => e.action)).toEqual(['HIDE_NOTICE']);
+  }, 60000);
+
+  it('🔴 [응용] 틀린 판 — 직접 해보기 2(토큰의 역할만 믿는다)에서 시작하면 내려간 jaehoon 의 숨기기가 200', async () => {
+    const { out } = await audit((d) => {
+      const file = join(d, 'lab/p3-43/homework2.js');
+      const text = read(file);
+      const start = text.indexOf('// 관리자만 다음으로 보낸다');
+      const end = text.indexOf('const adminOnly');
+      writeFileSync(file, text.slice(0, start) + `function requireAdmin(req, res, next) {
+  if (res.locals.role !== 'ADMIN') {
+    record(res, \`\${req.method} \${req.path}\`, 'DENIED');
+    res.status(403).json({ message: '관리자만 할 수 있어요' });
+    return;
+  }
+
+  next();
+}
+
+` + text.slice(end));
+    });
+    expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 200, 403, 200]);
   }, 60000);
 });
 
