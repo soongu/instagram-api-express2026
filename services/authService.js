@@ -13,16 +13,17 @@ export function signup({ emailOrPhone, name, username, password }) {
   return userService.createUser({ username, name, ...contact, password });
 }
 
-// 로그인 — 사용자 이름과 비밀번호를 확인하고, 로그인 기록(세션)을 남긴 뒤 그 기록을 담은 토큰을 돌려준다.
+// 로그인 — 사용자 이름과 비밀번호를 확인하고, 로그인 기록(세션)을 남긴 뒤 토큰 둘을 돌려준다.
+// Access 토큰에는 그 기록(sid)을 담고, Refresh 토큰은 그 기록에서 새 Access 토큰을 받을 때 쓴다.
 export async function login(username, password) {
   const user = await userService.checkPassword(username, password);
 
   if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 
-  const sessionId = await sessionService.createSession(user.id);
+  const { sessionId, refreshToken } = await sessionService.createSession(user.id);
   const accessToken = tokenService.createAccessToken(user, sessionId);
 
-  return { user, accessToken };
+  return { user, accessToken, refreshToken };
 }
 
 // 나는 누구 — 토큰에서 꺼낸 번호로 그 사람을 찾는다. 토큰은 살아 있어도 그 사람이 지워졌으면 401.
