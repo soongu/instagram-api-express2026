@@ -45,3 +45,11 @@ Content-Type: application/json
   "password": "boram1234",
   "role": "ADMIN"
 }
+
+### 관리자가 그 게시물의 글 고치기
+PATCH http://localhost:3000/api/v2/posts/{{reported.data.id}}
+Content-Type: application/json
+
+{
+  "content": "관리자가 고친 글"
+}
