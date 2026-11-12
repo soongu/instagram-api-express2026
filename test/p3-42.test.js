@@ -646,3 +646,175 @@ describe('축 ⑩ 과제', () => {
     expect(noBump.find(([t]) => t === '나는 누구 — 다른 기기')[1]).toBe(200);
   }, 90000);
 });
+
+describe('축 ⑪ 교안·답안의 코드 블록과 출력은 실제와 같다', () => {
+  const TRACK_DIR = new URL('../../', ROOT).pathname;
+  const DOCS = ['part3/7-express-auth/p3-42-jwt-token-authorization-lecture.md', 'part3/7-express-auth/p3-42-jwt-token-authorization-answers.md'].map((f) => join(TRACK_DIR, f));
+  const fences = (file, lang) => {
+    const out = [];
+    let open = null;
+    let openLang = null;
+    for (const line of read(file).split('\n')) {
+      if (line.startsWith('```')) {
+        if (open) { if (openLang === lang) out.push(open); open = null; } else { open = []; openLang = line.slice(3); }
+      } else if (open) open.push(line);
+    }
+    return out;
+  };
+  const showAt = (ref, rel) => {
+    try {
+      return execFileSync('git', ['show', `${ref}:${rel}`], { cwd: P('.'), encoding: 'utf8', stdio: 'pipe' });
+    } catch {
+      return null;
+    }
+  };
+  const versions = (rel) => [
+    existsSync(R(rel)) ? read(R(rel)) : null,
+    ...[2, 4, 5, 6].map((n) => showAt(commitOf(n), rel)),
+    rel === 'services/tokenService.js' ? read(P('snapshots/p3-42.step2-no-guard.tokenService.js')) : null,
+  ].filter(Boolean);
+  const meaningful = (b) => b.filter((l) => l.trim() !== '' && l.trim() !== '...');
+  const fenceOf = (startsWith) => fences(DOCS[0], '').find((b) => b[0]?.startsWith(startsWith));
+  const normalize = (text, dir) => text.replaceAll(`/private${dir}`, dir).replaceAll(`file://${dir}`, 'file:///Users/hong/instagram-api').replaceAll(dir, '/Users/hong/instagram-api')
+    .replaceAll(P('node_modules'), '/Users/hong/instagram-api/node_modules').replaceAll(`/private${tmpdir()}`, tmpdir());
+
+  it('🔴 javascript 블록마다 한 버전에 줄이 모두 있다(수업 화면 블록은 instagram-next/.verify 가 본다)', () => {
+    const all = DOCS.flatMap((d) => fences(d, 'javascript')).filter((b) => (b[0] ?? '').startsWith('// ~/instagram-api/'));
+    expect(all.length).toBeGreaterThanOrEqual(15);
+    for (const b of all) {
+      const rel = b[0].replace('// ~/instagram-api/', '');
+      expect(versions(rel).some((text) => meaningful(b).every((l) => text.split('\n').includes(l))), `${rel}\n${meaningful(b).join('\n')}`).toBe(true);
+    }
+  }, 30000);
+
+  it('🔴 http 블록은 그 파일과 같다 · .env.example 블록도', () => {
+    const files = ['requests/logout.http', ...readdirSync(LAB('.')).filter((f) => f.endsWith('.http')).map((f) => `lab/p3-42/${f}`)].map((rel) => read(R(rel)).trimEnd());
+    const blocks = DOCS.flatMap((d) => fences(d, 'http'));
+    expect(blocks).toHaveLength(6);
+    for (const b of blocks) expect(files, b.join('\n')).toContain(b.join('\n').trimEnd());
+    expect(fenceOf('# ~/instagram-api/.env.example').join('\n')).toBe(read(R('.env.example')).trimEnd());
+  });
+
+  it('🔴 Step 2 — 가드 없는 판의 500 에러 줄 · 가드가 있는 판에서 비밀키 줄을 주석으로 바꾸면 찍히는 줄', async () => {
+    // 500 에러 — 학생처럼 npm run dev(--watch --env-file)로 띄우고 auth.http 의 «로그인»(옛 주소)을 보낸다
+    const dir = studentDir(stepDir(2), (d) => writeFileSync(join(d, 'services/tokenService.js'), read(P('snapshots/p3-42.step2-no-guard.tokenService.js'))));
+    writeFileSync(join(dir, '.env'), `DATABASE_URL="${GATE_URL}"\nCORS_ORIGIN=http://localhost:3001\nPORT=${PORT}\n`);
+    await freshGate();
+    const cleanEnv = { ...process.env };
+    for (const k of ['NODE_ENV', 'VITEST', 'DATABASE_URL', 'CORS_ORIGIN', 'PORT', 'JWT_SECRET']) delete cleanEnv[k];
+    const { spawn } = await import('node:child_process');
+    const child = spawn(process.execPath, ['--watch', '--env-file=.env', 'app.js'], { cwd: dir, env: cleanEnv });
+    let out = '';
+    child.stdout.on('data', (b) => { out += b; });
+    child.stderr.on('data', (b) => { out += b; });
+    const until = async (cond, ms = 15000) => { const t0 = Date.now(); while (!cond()) { if (Date.now() - t0 > ms) throw new Error(out); await sleep(100); } };
+    try {
+      await until(() => out.includes('기다리고 있어요'));
+      const res = await fetch(`http://localhost:${PORT}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'jaehoon', password: 'jaehoon1234' }) });
+      expect(res.status).toBe(500);
+      await until(() => out.includes('POST /api/auth/login 500'));
+      const error = normalize(out.slice(out.indexOf('Error: secretOrPrivateKey')), dir).trimEnd().split('\n');
+      const fence = fenceOf('Error: secretOrPrivateKey');
+      expect(error.slice(0, 6)).toEqual(fence.slice(0, 6));
+      expect(error[6]).toMatch(/^POST \/api\/auth\/login 500 [\d.]+ms$/);
+      expect(fence[6]).toMatch(/^POST \/api\/auth\/login 500 [\d.]+ms$/);
+      // 가드를 넣고(Step 2 판), 비밀키를 적고, 그 줄을 주석으로 바꾼다
+      writeFileSync(join(dir, '.env'), `${read(join(dir, '.env'))}JWT_SECRET=${SECRET}\n`);
+      await until(() => out.split('기다리고 있어요').length > 2);
+      cpSync(stepDir(2)('services/tokenService.js'), join(dir, 'services/tokenService.js'));
+      await until(() => out.split('기다리고 있어요').length > 3);
+      const mark = out.length;
+      writeFileSync(join(dir, '.env'), read(join(dir, '.env')).replace('JWT_SECRET=', '# JWT_SECRET='));
+      await until(() => out.slice(mark).includes('Waiting for file changes'));
+      const guard = normalize(out.slice(mark), dir).trimEnd().split('\n');
+      const restarts = fences(DOCS[0], '').filter((f) => f[0] === "Change detected in '/Users/hong/instagram-api/.env'");
+      // 첫째는 비밀키를 적고 저장했을 때의 두 줄, 둘째는 주석으로 바꿨을 때의 줄 전부
+      expect(restarts[0]).toEqual(guard.slice(0, 2));
+      expect(guard).toEqual(restarts[1]);
+    } finally {
+      child.kill();
+      await sleep(300);
+    }
+  }, 60000);
+
+  it('🔴 Step 3 — 교안의 node -p 명령으로 토큰 가운데를 읽으면 sid·iat·exp·sub 한 줄 · 토큰은 201자', async () => {
+    await freshGate();
+    await withServer(stepDir(2), async ({ base }) => {
+      const me = device(base);
+      await me.login('jaehoon');
+      const token = me.cookie('accessToken');
+      expect(token).toHaveLength(201);
+      const cmd = fences(DOCS[0], 'bash').find((b) => b[0].startsWith('node -p "Buffer.from(process.argv[1]'))[0];
+      expect(cmd).toBe('node -p "Buffer.from(process.argv[1].split(\'.\')[1], \'base64url\').toString()" 복사한-토큰');
+      const code = cmd.slice('node -p "'.length, cmd.lastIndexOf('"'));
+      const out = execFileSync(process.execPath, ['-p', code, token], { encoding: 'utf8' }).trim();
+      const shape = /^\{"sid":"[0-9a-f-]{36}","iat":(\d{10}),"exp":(\d{10}),"sub":"2"\}$/;
+      expect(out).toMatch(shape);
+      const [, iat, exp] = out.match(shape);
+      expect(Number(exp) - Number(iat)).toBe(3600);
+      expect(fenceOf('{"sid":')[0]).toMatch(shape);
+    });
+  }, 30000);
+
+  it('🔴 Step 4 — grep 은 정의 한 줄 · 게시물 목록 요청의 쿼리 셋에 sessions 가 없다', async () => {
+    const dir = studentDir(stepDir(4), (d) => cpSync(B('services/sessionService.js'), join(d, 'services/sessionService.js')));
+    const out = execFileSync('/usr/bin/grep', ['-rn', 'getUserId', 'services', 'middlewares', 'controllers'], { cwd: dir, encoding: 'utf8' });
+    expect(fenceOf('services/sessionService.js:22:')).toEqual([out.trimEnd()]);
+    await freshGate();
+    await withServer(stepDir(4), async ({ base, tail }) => {
+      const me = device(base);
+      await me.login('jaehoon');
+      await sleep(200);
+      const mark = tail().length;
+      expect((await me.get('/api/posts')).status).toBe(200);
+      await sleep(300);
+      const lines = tail().slice(mark).trim().split('\n');
+      const fence = fenceOf('prisma:query SELECT "public"."posts"');
+      expect(lines).toHaveLength(4);
+      for (const [i, l] of fence.entries()) {
+        const head = l.split(' … ')[0].replace(/ …$/, '').replace(/ [\d.]+ms$/, '');
+        expect(lines[i].startsWith(head), `${lines[i].slice(0, 120)}\n${head}`).toBe(true);
+        if (l.includes(' FROM ')) expect(lines[i]).toContain(l.slice(l.indexOf(' FROM '), l.indexOf(' FROM ') + 28));
+      }
+      expect(lines.join('\n')).not.toContain('"public"."sessions"');
+    }, { edit: queryLog });
+  }, 30000);
+
+  it('🔴 Step 5 — 스크립트 결과 두 펜스가 축 ⑤ 의 실제 출력과 같다', () => {
+    const outs = fences(DOCS[0], '').filter((b) => b[0] === '200  진짜 토큰').map((b) => b.join('\n'));
+    expect(outs).toEqual([
+      '200  진짜 토큰\n401  페이로드만 바꾼 토큰\n401  다른 비밀키로 만든 토큰\n401  알고리즘을 none으로 바꾼 토큰\n200  HS512로 만든 토큰\n401  기한이 지난 토큰',
+      '200  진짜 토큰\n401  페이로드만 바꾼 토큰\n401  다른 비밀키로 만든 토큰\n401  알고리즘을 none으로 바꾼 토큰\n401  HS512로 만든 토큰\n401  기한이 지난 토큰',
+    ]);
+  });
+
+  it('🔴 오프닝·Step 7 — 화면이 보내는 여섯 요청(나는 누구 401 · 로그인 · 나는 누구 · 목록 셋)의 쿼리 줄 — 세션 판 16 · sessions 5 / 오늘 12 · 1', async () => {
+    const scene = async (from, cookieName) => {
+      let counted;
+      await freshGate();
+      await withServer(from, async ({ base, tail }) => {
+        await sleep(200);
+        const mark = tail().length;
+        const anon = device(base);
+        expect((await anon.get('/api/v2/auth/me')).status).toBe(401);
+        const me = device(base);
+        await me.login('jaehoon');
+        expect(me.cookie(cookieName)).toBeTruthy();
+        expect((await me.get('/api/v2/auth/me')).status).toBe(200);
+        let cursor = null;
+        for (let i = 0; i < 3; i += 1) {
+          const page = await me.get(`/api/v2/posts?limit=2${cursor ? `&cursor=${cursor}` : ''}`);
+          expect(page.status).toBe(200);
+          cursor = page.body.data.nextCursor;
+        }
+        expect(cursor).toBeNull();
+        await sleep(300);
+        const lines = tail().slice(mark).split('\n').filter((l) => l.startsWith('prisma:query'));
+        counted = { queries: lines.length, sessions: lines.filter((l) => l.includes('"public"."sessions"')).length };
+      }, { edit: queryLog });
+      return counted;
+    };
+    expect(await scene(BEFORE.dir ? (rel) => join(BEFORE.dir, rel) : B, 'sessionId')).toEqual({ queries: 16, sessions: 5 });
+    expect(await scene(stepDir(6), 'accessToken')).toEqual({ queries: 12, sessions: 1 });
+  }, 60000);
+});
