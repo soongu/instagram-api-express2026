@@ -1,5 +1,5 @@
 ### jaehoon이 공지 숨기기
-# JAEHOON_TOKEN 은 수업 백엔드에서 jaehoon으로 로그인한 응답의 accessToken 값으로 바꾼다
+# JAEHOON_TOKEN 은 수업 백엔드에서 jaehoon으로 로그인한 응답 set-cookie 의 accessToken= 뒤의 값(; 앞까지)으로 바꾼다
 PATCH http://localhost:4012/notices/1/hide
 Authorization: Bearer JAEHOON_TOKEN
 Content-Type: application/json
@@ -9,7 +9,7 @@ Content-Type: application/json
 }
 
 ### 이유 없이 공지 숨기기
-# ADMIN_TOKEN 은 수업 백엔드에서 admin.hong으로 로그인한 응답의 accessToken 값으로 바꾼다
+# ADMIN_TOKEN 은 수업 백엔드에서 admin.hong으로 로그인한 응답 set-cookie 의 accessToken= 뒤의 값(; 앞까지)으로 바꾼다
 PATCH http://localhost:4012/notices/1/hide
 Authorization: Bearer ADMIN_TOKEN
 Content-Type: application/json
