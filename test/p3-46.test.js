@@ -1028,6 +1028,50 @@ describe('축 ⑤ Step 6 — 네이버 전략(새 OIDC 경로)과 프로필', ()
     }, { edit: (d) => replaceIn(d, 'strategies/naver.js', '    const { response: info } = await response.json();', '    const info = await response.json();') });
   }, 30_000);
 
+  // 카카오 파일을 복사해 네이버 파일을 만들 때 손이 가기 쉬운 틀린 판 — 응답을 맨 바깥에서 읽고 `id: String(info.id),` 를 그대로 둔다.
+  // `info.id` 가 없어도 `String(undefined)` 는 글자 "undefined" 라서 Prisma 가 막지 않는다 — 에러 없이 가입되고, 네이버 사람이 모두 한 사람이 된다.
+  const naverKeptString = (d) => {
+    replaceIn(d, 'strategies/naver.js', '    const { response: info } = await response.json();', '    const info = await response.json();');
+    replaceIn(d, 'strategies/naver.js', '      id: info.id,', '      id: String(info.id),');
+  };
+
+  it('🔴 틀린 판 — 응답을 맨 바깥에서 읽고 id: String(info.id) 를 그대로 둔 판은 에러 없이 가입된다(provider_user_id 가 글자 «undefined» · username naver · name NULL) · 다른 네이버 사람이 와도 그 첫 사람으로 로그인된다', async () => {
+    await freshGate();
+    await withServer(stepDir(6), async ({ base, tail }) => {
+      const before = await counts();
+      const first = await asNaver(base);
+      expect([first.callback.status, first.callback.location]).toEqual([302, '/']);
+      expect(await userRow(first.me.id)).toEqual({ id: first.me.id, username: 'naver', email: null, name: null, password_hash: null, role: 'USER' });
+      expect(await socialRows()).toEqual([{ user_id: first.me.id, provider: 'naver', provider_user_id: 'undefined' }]);
+      expect(await counts()).toEqual([before[0] + 1, before[1] + 1, before[2] + 1]);
+      // 다른 네이버 사람 — id · 이메일 · 이름이 모두 다르다
+      const second = await asNaver(base, { id: 'zY9xW7vU5tS3rQ1pO9nM7lK5jI3hG1fE9dC7bA5zY3x', email: 'seojun.park@naver.com', name: '박서준' });
+      expect([second.callback.status, second.callback.location]).toEqual([302, '/']);
+      expect(second.me).toEqual(first.me);
+      expect(await socialRows()).toEqual([{ user_id: first.me.id, provider: 'naver', provider_user_id: 'undefined' }]);
+      expect(await counts()).toEqual([before[0] + 1, before[1] + 1, before[2] + 2]);
+      await sleep(100);
+      expect(tail()).not.toContain('Error');
+      seen.naverKeptString = { firstMe: first.me, secondMe: second.me, user: await userRow(first.me.id), social: await socialRows() };
+    }, { edit: naverKeptString });
+  }, 30_000);
+
+  it('🔎 response 안에서 맞게 읽고 id: String(info.id) 만 남긴 판은 정답과 결과가 같다 — 네이버의 id 는 원래 글자다', async () => {
+    const run = async (edit) => {
+      await freshGate();
+      let got;
+      await withServer(stepDir(6), async ({ base }) => {
+        const { callback, me } = await asNaver(base);
+        const { id, ...user } = await userRow(me.id);
+        got = { location: callback.location, username: me.username, user, social: (await socialRows()).map(({ provider, provider_user_id }) => `${provider} ${provider_user_id}`) };
+      }, { edit });
+      return got;
+    };
+    const right = await run();
+    expect(right.social).toEqual([`naver ${DEFAULT_NAVER_PROFILE.id}`]);
+    expect(await run((d) => replaceIn(d, 'strategies/naver.js', '      id: info.id,', '      id: String(info.id),'))).toEqual(right);
+  }, 60_000);
+
   it('🔴 네이버 주소 둘은 GET 만 — POST 는 405 + Allow: GET(JSON 그대로)', async () => {
     await withServer(stepDir(6), async ({ base }) => {
       for (const path of ['/api/v2/auth/naver', '/api/v2/auth/naver/callback', '/api/v2/auth/kakao', '/api/v2/auth/google']) {
@@ -1696,6 +1740,12 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       labSeen.homework1 = withoutTerminal(got);
     }, 60_000);
 
+    it('🔴 톡의 프로필은 받지 않은 이메일도 빼지 않고 적는다 — { provider, id(글자), email: undefined, name } · 과제 [응용] 도 같다', () => {
+      const block = "    done(null, {\n      provider: 'talk',\n      id: String(info.id),\n      email: undefined,\n      name: info.account?.profile?.nickname,\n    });\n";
+      expect(LAB('homework1.js').split(block)).toHaveLength(2);
+      expect(LAB('homework2.js').split(block)).toHaveLength(2);
+    });
+
     it('🔴 지난 과제(lab/p3-45/homework1.js)를 복사해 고쳤다 — diff 로 지운 줄 24 · 전략 · 저장소 · 첫 화면의 표는 그대로', () => {
       const { removed } = diffLines(showAt('code/p3-45', 'lab/p3-45/homework1.js'), LAB('homework1.js'));
       labSeen.homework1RemovedFromLast = removed;
@@ -1707,7 +1757,7 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
     });
 
     it('🔴 (a) 회원번호를 숫자 그대로 넘기는 판 — 먼저 가입해 둔 소라를 못 찾아 새 회원(5번이 아니라 3번 소라)이 생긴다', async () => {
-      const got = await observe(edit1(LAB('homework1.js'), "id: String(info.id), name:", 'id: info.id, name:'));
+      const got = await observe(edit1(LAB('homework1.js'), '      id: String(info.id),\n', '      id: info.id,\n'));
       expect(got.sora).toEqual({ id: 3, nickname: '소라' });
       expect(wrongKeys(got)).toContain('sora');
       expect(wrongKeys(got)).toContain('members');
@@ -1820,7 +1870,7 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
     { id: 2, nickname: '소라', providers: ['talk'] },
   ];
   // 톡의 응답을 읽는 쪽(둘째 userProfile)의 catch — 틀린 판을 만들 때 여기를 바꾼다.
-  const TALK_CATCH = "    done(null, { provider: 'talk', id: String(info.id), name: info.account?.profile?.nickname });\n  } catch (error) {\n    done(error);\n  }\n";
+  const TALK_CATCH = "      name: info.account?.profile?.nickname,\n    });\n  } catch (error) {\n    done(error);\n  }\n";
 
   it('🔴 homework2.js 는 [기초] 정답에서 세 줄을 지우고 열다섯 줄을 더했다 — 상수 · fetch 둘의 signal · 문장 하나 · 에러 미들웨어', () => {
     const { removed, added } = diffLines(LAB('homework1.js'), LAB('homework2.js'));
@@ -1853,22 +1903,34 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
     let talk;
     beforeAll(async () => { talk = await startTalk(5000); }, 30_000);
     afterAll(async () => { if (talk) await stop(talk); });
-    /** 톡 sora 로 로그인해 보고 관찰한 것 — 콜백 응답 · 걸린 시간 · 그 뒤의 회원 목록 · 두 터미널. */
-    const observe = (source) => {
+    /**
+     * 톡 haru 로 로그인해 보고 관찰한 것 — 콜백 응답 · 걸린 시간 · 그 뒤의 회원 목록 · 두 터미널.
+     * haru 는 처음 온 사람이다(미리 넣어 둔 회원이 아니다) — «회원을 만들지 않는다» 가 회원 목록에서 바로 보인다.
+     * `thenSora` 를 주면 이어서 sora 로도 로그인해 본다(그 사람의 /me).
+     */
+    const observe = (source, { thenSora = false } = {}) => {
       let out;
       return withHomework('homework2.js', source, async ({ base, tail }) => {
         const before = talk.tail().length;
         const tab = browser(base);
-        const { callback, took } = await talkLogin(tab, 'sora');
+        const { callback, took } = await talkLogin(tab, 'haru');
         const end = await endOf(tab, callback);
+        const members = (await browser(base).get('/members')).body;
+        let sora;
+        if (thenSora) {
+          const other = browser(base);
+          const second = await talkLogin(other, 'sora');
+          sora = { callback: [second.callback.status, second.callback.location], end: await endOf(other, second.callback), members: (await browser(base).get('/members')).body };
+        }
         // 톡 서버가 5초 뒤에 답을 쓰려다 그만두는 것까지 기다린다
-        await sleep(Math.max(0, 5300 - took));
+        if (!thenSora) await sleep(Math.max(0, 5300 - took));
         out = {
           callback: [callback.status, callback.location],
           took,
           notice: noticeOf(end),
           end,
-          members: (await browser(base).get('/members')).body,
+          members,
+          sora,
           terminal: tail(),
           talkLog: talk.tail().slice(before),
         };
@@ -1880,7 +1942,7 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
       expect(talk.tail().startsWith(`톡 서버가 ${TALK_PORT}번 포트에서 기다리고 있어요.\n사용자 정보는 5000ms 늦게 답해요.\n`)).toBe(true);
     });
 
-    it('🔴 정답 판 — 3초쯤 뒤 /?error=PROVIDER_TIMEOUT · 문장 · 회원이 안 는다 · 터미널에 에러를 찍지 않는다 · 톡 쪽 로그는 토큰 200 뒤에 «받는 쪽이 먼저 끊었어요»', async () => {
+    it('🔴 정답 판 — haru 로 허용하면 3초쯤 뒤 /?error=PROVIDER_TIMEOUT · 문장 · 회원은 dahye·소라 둘 그대로(haru 를 만들지 않는다) · 터미널에 에러를 찍지 않는다 · 톡 쪽 로그는 토큰 200 뒤에 «받는 쪽이 먼저 끊었어요»', async () => {
       const got = await observe(LAB('homework2.js'));
       expect(got.callback).toEqual([302, '/?error=PROVIDER_TIMEOUT']);
       expect(got.took).toBeGreaterThanOrEqual(2900);
@@ -1890,33 +1952,41 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
       expect(got.terminal).not.toContain('Error');
       // 토큰 교환은 곧바로 끝났고, 사용자 정보만 늦다
       expect(got.talkLog).toBe('[톡] POST /oauth/authorize 303\n[톡] POST /oauth/token 200\n[톡] GET /v2/me (받는 쪽이 먼저 끊었어요)\n');
-      labSeen.homework2Timeout = { callback: got.callback, took: got.took, talkLog: got.talkLog };
+      labSeen.homework2Timeout = { callback: got.callback, took: got.took, members: got.members, talkLog: got.talkLog };
     }, 60_000);
 
-    it('🔴 틀린 판 — 기다리는 시간을 정하지 않은 판은 5초 뒤 로그인된다(/me)', async () => {
+    it('🔴 틀린 판 (a) — 기다리는 시간을 정하지 않은 판은 5초 뒤 로그인된다(/me 에 3번 하루) · 회원이 셋', async () => {
       const src = LAB('homework2.js');
       const wrong = src.replaceAll('      signal: AbortSignal.timeout(PROVIDER_TIMEOUT),\n', '');
       expect(wrong.length).toBe(src.length - 2 * '      signal: AbortSignal.timeout(PROVIDER_TIMEOUT),\n'.length);
       const got = await observe(wrong);
       expect(got.callback).toEqual([302, '/me']);
       expect(got.took).toBeGreaterThanOrEqual(4900);
-      expect(got.end).toEqual({ id: 2, nickname: '소라' });
+      expect(got.end).toEqual({ id: 3, nickname: '하루' });
+      expect(got.members).toEqual([...START_MEMBERS, { id: 3, nickname: '하루', providers: ['talk'] }]);
       expect(got.talkLog).toContain('[톡] GET /v2/me 200\n');
+      labSeen.homework2NoLimit = { callback: got.callback, took: got.took, end: got.end, members: got.members };
     }, 60_000);
 
-    it('🔴 틀린 판 — 시간 초과를 잡고도 회원을 만드는 판은 3초쯤 뒤 /me 로 가고 별명 없는 회원이 하나 는다', async () => {
+    it('🔴 틀린 판 (b) — 시간 초과를 잡고도 빈 프로필을 넘기는 판은 3초쯤 뒤 /me 로 가고 별명 없는 3번이 생긴다 · 이어서 sora 가 와도 같은 3번으로 로그인된다(번호 없는 소셜 계정을 함께 쓴다)', async () => {
       const wrong = edit1(LAB('homework2.js'), TALK_CATCH, TALK_CATCH.replace('    done(error);\n', "    if (error.name === 'TimeoutError') {\n      done(null, { provider: 'talk' });\n      return;\n    }\n\n    done(error);\n"));
-      const got = await observe(wrong);
+      const got = await observe(wrong, { thenSora: true });
       expect(got.callback).toEqual([302, '/me']);
       expect(got.took).toBeLessThan(4500);
+      expect(got.end).toEqual({ id: 3 });
       expect(got.members).toEqual([...START_MEMBERS, { id: 3, providers: ['talk'] }]);
-      labSeen.homework2CreatesAnyway = { callback: got.callback, end: got.end, members: got.members };
+      // 둘째로 온 sora — 미리 넣어 둔 2번 소라가 아니라 방금 생긴 3번으로 로그인된다 · 회원은 더 늘지 않는다
+      expect(got.sora.callback).toEqual([302, '/me']);
+      expect(got.sora.end).toEqual({ id: 3 });
+      expect(got.sora.members).toEqual(got.members);
+      labSeen.homework2CreatesAnyway = { callback: got.callback, end: got.end, members: got.members, sora: got.sora };
     }, 60_000);
 
-    it('🔴 틀린 판 — 에러의 이름을 AbortError 로 견주면 /?error=LOGIN_FAILED 로 가고 터미널에 DOMException [TimeoutError] 가 찍힌다', async () => {
+    it('🔴 틀린 판 (c) — 에러의 이름을 AbortError 로 견주면 /?error=LOGIN_FAILED 로 가고 터미널에 DOMException [TimeoutError] 가 찍힌다 · 회원은 그대로', async () => {
       const got = await observe(edit1(LAB('homework2.js'), "  if (err.name === 'TimeoutError') code = 'PROVIDER_TIMEOUT';", "  if (err.name === 'AbortError') code = 'PROVIDER_TIMEOUT';"));
       expect(got.callback).toEqual([302, '/?error=LOGIN_FAILED']);
       expect(got.notice).toBe(LOGIN_FAILED_TEXT);
+      expect(got.members).toEqual(START_MEMBERS);
       expect(got.terminal).toContain('DOMException [TimeoutError]: The operation was aborted due to timeout');
       labSeen.homework2AbortErrorName = got.terminal.slice(got.terminal.indexOf('DOMException')).split('\n').slice(0, 2).join('\n');
     }, 60_000);
@@ -1927,15 +1997,16 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
     beforeAll(async () => { talk = await startTalk(); }, 30_000);
     afterAll(async () => { if (talk) await stop(talk); });
 
-    it('🔴 정답 판 — 늦지 않으면 로그인된다 · 닉네임을 끈 haru 는 별명 없는 3번', async () => {
+    it('🔴 정답 판 — 늦지 않으면 haru 가 로그인된다(/me 에 3번 하루) · 미리 넣어 둔 sora 는 2번 소라', async () => {
       await withHomework('homework2.js', LAB('homework2.js'), async ({ base }) => {
         const a = browser(base);
-        const sora = await talkLogin(a, 'sora');
-        expect([sora.callback.status, sora.callback.location]).toEqual([302, '/me']);
-        expect(sora.took).toBeLessThan(1500);
-        expect(await endOf(a, sora.callback)).toEqual({ id: 2, nickname: '소라' });
+        const haru = await talkLogin(a, 'haru');
+        expect([haru.callback.status, haru.callback.location]).toEqual([302, '/me']);
+        expect(haru.took).toBeLessThan(1500);
+        expect(await endOf(a, haru.callback)).toEqual({ id: 3, nickname: '하루' });
         const b = browser(base);
-        expect(await endOf(b, (await talkLogin(b, 'haru', { nickname: false })).callback)).toEqual({ id: 3 });
+        expect(await endOf(b, (await talkLogin(b, 'sora')).callback)).toEqual({ id: 2, nickname: '소라' });
+        expect((await browser(base).get('/members')).body).toEqual([...START_MEMBERS, { id: 3, nickname: '하루', providers: ['talk'] }]);
         const denied = await talkLogin(browser(base), 'sora', { decision: 'deny' });
         expect([denied.callback.status, denied.callback.location]).toEqual([302, '/?error=LOGIN_FAILED']);
       });
@@ -1967,7 +2038,7 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
 
     it('🔴 homework2.http — 요청 셋 · httpYac 으로 보내면 셋 다 200 · 둘째는 PROVIDER_TIMEOUT 문장 · 셋째는 기본 문장(태그 없음)', async () => {
       const http = LAB('homework2.http');
-      expect(http).toBe('### 회원 목록\nGET http://localhost:4002/members\n\n### 제때 답하지 않았을 때의 첫 화면\nGET http://localhost:4002/?error=PROVIDER_TIMEOUT\n\n### 표에 없는 코드로 연 첫 화면\nGET http://localhost:4002/?error=%3Cb%3Ex%3C%2Fb%3E\n');
+      expect(http).toBe('### 회원 목록\nGET http://localhost:4002/members\n\n### 제때 답하지 않았을 때의 첫 화면\nGET http://localhost:4002/?error=PROVIDER_TIMEOUT\n\n### 문장 목록에 없는 에러 코드로 연 첫 화면\nGET http://localhost:4002/?error=%3Cb%3Ex%3C%2Fb%3E\n');
       await withHomework('homework2.js', LAB('homework2.js'), async () => {
         const out = await httpyac('homework2.http', http);
         expect(out).toContain('3 requests processed (3 succeeded)');
@@ -2204,7 +2275,7 @@ describe('축 ⑯ 교안·답안이 말한 글자 = 실제', () => {
     expect(http).toEqual([LAB('homework1.http'), LAB('homework2.http')]);
   });
 
-  it('🔴 과제 [응용] 의 톡 서버 네 줄 — 동의 화면을 GET 으로 열고 허용한 흐름에서(TALK_DELAY=5000 · 과제 [응용] 정답) 그대로 찍힌다', async () => {
+  it('🔴 과제 [응용] 의 톡 서버 네 줄 — 동의 화면을 GET 으로 열고 haru 로 허용한 흐름에서(TALK_DELAY=5000 · 과제 [응용] 정답) 그대로 찍힌다', async () => {
     const fence = fencesOf(LECTURE_MD).filter((one) => one.lang === '' && one.body[0] === '[톡] GET /oauth/authorize 200');
     expect(fence).toHaveLength(1);
     const talk = await startTalk(5000);
@@ -2212,7 +2283,7 @@ describe('축 ⑯ 교안·답안이 말한 글자 = 실제', () => {
       await sleep(100);
       const before = talk.tail().length;
       await withHomework('homework2.js', LAB('homework2.js'), async ({ base }) => {
-        const { callback } = await talkLogin(browser(base), 'sora', { openPage: true });
+        const { callback } = await talkLogin(browser(base), 'haru', { openPage: true });
         expect(callback.location).toBe('/?error=PROVIDER_TIMEOUT');
         await sleep(300);
       });
