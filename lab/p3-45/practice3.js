@@ -8,7 +8,16 @@ function isSafe(next) {
   return new URL(next, SITE).origin === SITE;
 }
 
-const values = ['/jaehoon', '/jaehoon/saved?tab=1', 'https://evil.example/login', '//evil.example/login', '/\\evil.example/login', 'javascript:alert(1)'];
+const values = [
+  '/jaehoon',
+  '/jaehoon/saved?tab=1',
+  'https://evil.example/login',
+  '//evil.example/login',
+  '/\\evil.example/login',
+  'javascript:alert(1)',
+  'https://localhost:3001/jaehoon',
+  undefined, // 주소에 ?next= 가 없을 때 req.query.next 의 값
+];
 
 for (const next of values) {
   // 브라우저가 이 값을 Location 으로 받으면 실제로 가게 되는 주소

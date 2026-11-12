@@ -1040,7 +1040,9 @@ const LAB_PORT = 3964;
 const LAB_BASE = `http://localhost:${LAB_PORT}`;
 const LAB_REF = hasRef('refs/heads/code/p3-45') ? 'code/p3-45' : 'main';
 const showAt = (ref, rel) => execFileSync('git', ['show', `${ref}:${rel}`], { cwd: P('.'), encoding: 'utf8' });
-const LAB = (name) => showAt(LAB_REF, `lab/p3-45/${name}`);
+// 🔀 학생 낭독 집중 검수(2026-11-12)가 `main` 에서만 고친 실습 파일 — 북마크 `code/p3-45` 는 옛 판이라 작업트리에서 읽는다.
+const MAIN_LAB = ['practice3.js'];
+const LAB = (name) => (MAIN_LAB.includes(name) ? read(P(`lab/p3-45/${name}`)) : showAt(LAB_REF, `lab/p3-45/${name}`));
 /** 글자를 모두 바꾼다 — 바꿀 글자가 없으면 던진다. */
 const swapAll = (text, pairs, what) => pairs.reduce((out, [a, b]) => {
   if (!out.includes(a)) throw new Error(`${what} 에 바꿀 글자가 없다: ${a}`);
@@ -1205,6 +1207,7 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
         const a = browser(base);
         const first = await labLogin(a, 'jaehoon');
         out.firstCallback = [first.callback.status, first.callback.location];
+        out.sessionCookie = (cookieLine(first.callback, 'labSession') ?? '').replace(/=[^;]*/, '=…');
         out.first = (await followIn(a, first.callback)).res.body;
         const b = browser(base);
         out.minji = (await followIn(b, (await labLogin(b, 'minji')).callback)).res.body;
@@ -1236,6 +1239,7 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
     const LOGIN_FAILED_TEXT = '로그인하지 못했어요. 다시 시도해 주세요.';
     const RIGHT = {
       firstCallback: [302, '/me'],
+      sessionCookie: 'labSession=…; Path=/; HttpOnly; SameSite=Lax',
       first: { id: 2, nickname: 'jaehoon', email: 'jaehoon@example.com' },
       minji: { id: 3, nickname: 'minji', email: 'minji@example.com' },
       again: { id: 2, nickname: 'jaehoon', email: 'jaehoon@example.com' },
@@ -1307,12 +1311,27 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
       expect(seen.constructorNotice).not.toBe(LOGIN_FAILED_TEXT);
       labWrongSeen.hw1NoHasOwn = { constructorNotice: seen.constructorNotice };
     }, 60_000);
+
+    // 학생 낭독 집중 검수(2026-11-12) — 확인 차례에 «로그인하지 않고 /me» 와 쿠키 표가 없어 아래 두 판이 통과했다
+    it('🔴 (f) /me 가 회원을 못 찾아도 200 으로 답하는 판 — 로그인하지 않고 /me 를 열면 401 이 아니다(나머지 확인은 정답 판과 같다)', async () => {
+      const seen = await observe(edit1(LAB('homework1.js'), "    res.status(401).json({ message: '로그인이 필요해요' });\n", '    res.json({});\n'));
+      expect(seen.nobody).toEqual([200, {}]);
+      expect({ ...withoutTerminal(seen), nobody: RIGHT.nobody }).toEqual(RIGHT);
+    }, 60_000);
+
+    it('🔴 (g) labSession 쿠키에 옵션을 주지 않은 판 — 쿠키 표의 HttpOnly·SameSite 칸이 빈다(나머지 확인은 정답 판과 같다)', async () => {
+      const seen = await observe(edit1(LAB('homework1.js'), "    res.cookie('labSession', sessionId, { httpOnly: true, sameSite: 'lax' });\n", "    res.cookie('labSession', sessionId);\n"));
+      expect(seen.sessionCookie).toBe('labSession=…; Path=/');
+      expect({ ...withoutTerminal(seen), sessionCookie: RIGHT.sessionCookie }).toEqual(RIGHT);
+    }, 60_000);
   });
 
   describe('축 ⑭ 과제 [응용] — 처음 온 사람은 별명을 직접 고른다', () => {
     const form = (nickname) => new URLSearchParams({ nickname });
     // homework2.http 둘째 요청의 본문 — 민지의 별명에 jaehoon 의 id·이메일을 함께 싣는다
     const MIXED_BODY = 'nickname=민지&provider=lab&id=10001&email=jaehoon@example.com';
+    // 교안의 확인이 내는 11자 별명
+    const LONG_NICKNAME = '가나다라마바사아자차카';
     const observe = (source) => {
       let seen;
       return withLab('homework2.js', source, async ({ base }) => {
@@ -1324,8 +1343,13 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
         out.formShown = page.status === 200 && page.body.includes('<form method="post" action="/nickname">');
         out.membersAtForm = (await browser(base).get('/members')).body.map((m) => `${m.id} ${m.nickname}`);
         const pendingCookie = a.cookie('labPending');
+        out.pendingCookie = (cookieLine(first.callback, 'labPending') ?? '').replace(/=[^;]*/, '=…').replace(/Expires=[^;]*/, 'Expires=…');
         const short = await a.send('POST', '/nickname', form('재'));
         out.short = [short.status, short.body.includes('별명은 2자에서 10자까지 쓸 수 있어요')];
+        const blank = await a.send('POST', '/nickname', form('   '));
+        out.blank = [blank.status, typeof blank.body === 'string' && blank.body.includes('별명은 2자에서 10자까지 쓸 수 있어요')];
+        const long = await a.send('POST', '/nickname', form(LONG_NICKNAME));
+        out.long = [long.status, typeof long.body === 'string' && long.body.includes('별명은 2자에서 10자까지 쓸 수 있어요')];
         const done = await a.send('POST', '/nickname', form('재훈'));
         out.done = [done.status, done.location];
         out.me = (await followIn(a, done)).res.body;
@@ -1339,6 +1363,8 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
         out.minjiCallback = [minjiFirst.callback.status, minjiFirst.callback.location];
         const taken = await b.send('POST', '/nickname', form('재훈'));
         out.taken = [taken.status, taken.body.includes('이미 쓰고 있는 별명이에요')];
+        const padded = await b.send('POST', '/nickname', form(' 재훈 '));
+        out.padded = [padded.status, typeof padded.body === 'string' && padded.body.includes('이미 쓰고 있는 별명이에요')];
         // 시크릿 창의 minji — 그 창의 labPending 값을 복사해, 본문에 jaehoon 의 id·이메일을 함께 실어 보낸다(homework2.http 둘째 요청)
         const minjiPending = b.cookie('labPending');
         const mixed = await browser(base).send('POST', '/nickname', new URLSearchParams(MIXED_BODY), { Cookie: `labPending=${minjiPending}` });
@@ -1365,13 +1391,17 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
       firstCallback: [302, '/nickname'],
       formShown: true,
       membersAtForm: ['1 dahye'],
+      pendingCookie: 'labPending=…; Max-Age=600; Path=/; Expires=…; HttpOnly; SameSite=Lax',
       short: [400, true],
+      blank: [400, true],
+      long: [400, true],
       done: [302, '/me'],
       me: { id: 2, nickname: '재훈', email: 'jaehoon@example.com' },
       sameBrowserAgain: [302, '/'],
       copiedCookieAgain: [302, '/'],
       minjiCallback: [302, '/nickname'],
       taken: [409, true],
+      padded: [409, true],
       mixed: [302, '/me'],
       member3: { id: 3, nickname: '민지', email: 'minji@example.com' },
       minjiAgainCallback: [302, '/me'],
@@ -1425,6 +1455,28 @@ describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', (
       const seen = await observe(edit1(src, block, ''));
       expect(seen.dahyeCallback).toEqual([302, '/nickname']);
       labWrongSeen.noEmailCheck = { dahyeCallback: seen.dahyeCallback };
+    }, 60_000);
+
+    // 학생 낭독 집중 검수(2026-11-12) — 확인의 별명이 재·재훈·재훈3·민지 뿐이라 아래 두 판이 통과했다
+    it('🔴 앞뒤 공백을 빼지 않고 아래쪽 길이만 보는 판 — «재» 는 400 이지만 공백 세 칸이 별명으로 가입된다 · 11자도 가입된다', async () => {
+      const src = LAB('homework2.js');
+      const wrong = edit1(edit1(src, "  const nickname = (req.body?.nickname ?? '').trim();\n", "  const nickname = req.body?.nickname ?? '';\n"),
+        '  if (nickname.length < 2 || nickname.length > 10) {\n', '  if (nickname.length < 2) {\n');
+      expect(LONG_NICKNAME).toHaveLength(11);
+      const seen = await observe(wrong);
+      expect(seen.short).toEqual([400, true]);
+      expect(seen.blank).toEqual([302, false]);
+      expect(seen.members).toContain('2    ');
+    }, 60_000);
+
+    it('🔴 폼 본문의 provider·id 만 믿는 판 — 3번은 민지·minji@example.com 으로 정답 판과 같아 보이지만, minji 가 다시 로그인하면 /?error=EMAIL_TAKEN', async () => {
+      const seen = await observe(edit1(LAB('homework2.js'), '  startSession(res, createMember(profile, nickname));\n',
+        '  startSession(res, createMember({ ...profile, provider: req.body.provider ?? profile.provider, id: req.body.id ?? profile.id }, nickname));\n'));
+      expect(seen.mixed).toEqual(RIGHT.mixed);
+      expect(seen.member3).toEqual(RIGHT.member3);
+      expect(seen.minjiAgainCallback).toEqual([302, '/?error=EMAIL_TAKEN']);
+      expect(seen.againCallback).toEqual(RIGHT.againCallback);
+      expect(seen.dahyeCallback).toEqual(RIGHT.dahyeCallback);
     }, 60_000);
   });
 
@@ -1561,6 +1613,8 @@ const PRACTICE3_RIGHT = [
   '거절  //evil.example/login  →  http://evil.example/login',
   '거절  /\\evil.example/login  →  http://evil.example/login',
   '거절  javascript:alert(1)  →  javascript:alert(1)',
+  '거절  https://localhost:3001/jaehoon  →  https://localhost:3001/jaehoon',
+  '거절  undefined  →  http://localhost:3001/undefined',
 ];
 
 describe('축 ⑫ 직접 해보기 3 — 돌아갈 주소 검사', () => {
@@ -1579,10 +1633,65 @@ describe('축 ⑫ 직접 해보기 3 — 돌아갈 주소 검사', () => {
     labWrongSeen.practice3Start = lines;
   });
 
-  it('🔴 정답 판 출력 6줄 — 통과 둘 · 거절 넷', () => {
+  it('🔴 정답 판 출력 8줄 — 통과 둘 · 거절 여섯', () => {
     const lines = run(LAB('practice3.js'));
     expect(lines).toEqual(PRACTICE3_RIGHT);
     expect(lines.filter((line) => line.startsWith('통과'))).toHaveLength(2);
-    expect(lines.filter((line) => line.startsWith('거절'))).toHaveLength(4);
+    expect(lines.filter((line) => line.startsWith('거절'))).toHaveLength(6);
+  });
+
+  // 학생 낭독 집중 검수(2026-11-12) — 값 6개로는 아래 두 판이 «앞의 두 줄만 통과» 를 그대로 통과했다
+  it('🔴 typeof 검사를 뺀 판 — 마지막 줄(undefined)이 «통과» 로 찍힌다', () => {
+    const lines = run(edit1(LAB('practice3.js'), "  if (typeof next !== 'string' || !URL.canParse(next, SITE)) return false;\n", '  if (!URL.canParse(next, SITE)) return false;\n'));
+    expect(lines.slice(0, 7)).toEqual(PRACTICE3_RIGHT.slice(0, 7));
+    expect(lines[7]).toBe('통과  undefined  →  http://localhost:3001/undefined');
+  });
+
+  it('🔴 출처 대신 호스트만 비교한 판 — 일곱째 줄(https://localhost:3001/jaehoon)이 «통과» 로 찍힌다', () => {
+    const lines = run(edit1(LAB('practice3.js'), '  return new URL(next, SITE).origin === SITE;\n', '  return new URL(next, SITE).host === new URL(SITE).host;\n'));
+    expect(lines.slice(0, 6)).toEqual(PRACTICE3_RIGHT.slice(0, 6));
+    expect(lines[6]).toBe('통과  https://localhost:3001/jaehoon  →  https://localhost:3001/jaehoon');
+    expect(lines[7]).toBe(PRACTICE3_RIGHT[7]);
+  });
+});
+
+// 축 ⑯ 학생 낭독 집중 검수(2026-11-12) — 교안·답안이 적은 실습 블록과 확인이 고친 파일·위 실행과 같다
+const DOCS = ['p3-45-passport-google-login-lecture.md', 'p3-45-passport-google-login-answers.md']
+  .map((name) => join(new URL('../../', ROOT).pathname, `part3/7-express-auth/${name}`));
+const fences = (file, lang) => {
+  const out = [];
+  let cur = null;
+  for (const line of read(file).split('\n')) {
+    if (line.startsWith('```')) {
+      if (cur === null) cur = { lang: line.slice(3), body: [] };
+      else { if (cur.lang === lang) out.push(cur.body.join('\n')); cur = null; }
+    } else if (cur) cur.body.push(line);
+  }
+  return out;
+};
+
+describe('축 ⑯ 학생 검수 — 교안의 직접 해보기 3 블록과 과제 확인 차례', () => {
+  it('🔴 직접 해보기 3 의 시작 코드는 곧 시작 판 스냅숏 · 해설의 출력 8줄은 시작 판을 돌린 출력 · 해설의 isSafe 는 정답 파일에 그대로 있다', () => {
+    const js = fences(DOCS[0], 'javascript').filter((b) => b.startsWith('// ~/instagram-api/lab/p3-45/practice3.js'));
+    expect(js).toHaveLength(2);
+    expect(`${js[0]}\n`).toBe(read(SNAP('practice3-start.practice3.js')));
+    const right = LAB('practice3.js');
+    for (const line of js[1].split('\n').filter((l) => l !== '...')) expect(right, line).toContain(line);
+    const startOut = runLabScript('practice3.js', read(SNAP('practice3-start.practice3.js'))).trimEnd();
+    expect(startOut.split('\n')).toHaveLength(8);
+    expect(fences(DOCS[0], '')).toContain(startOut);
+  });
+  it('🔴 교안·답안이 적은 확인이 위 실행과 같다 — 여섯 줄 거절 · 쿠키 표 · 401 본문 · 11자 별명 · minji 다시 로그인', () => {
+    const [lecture, answers] = DOCS.map(read);
+    expect(lecture).toContain('값 8개마다');
+    expect(lecture).toContain('앞의 두 줄만 «통과»이고 나머지 여섯 줄은 «거절»이에요');
+    for (const doc of [lecture, answers]) {
+      expect(doc).toContain('`labSession`은 HttpOnly 칸에 체크가 있고 SameSite 칸이 `Lax`예요');
+      expect(doc).toContain('{"message":"로그인이 필요해요"}');
+      expect(doc).toContain('11자인 `가나다라마바사아자차카`');
+      expect(doc).toContain('10분쯤 뒤의 시각');
+      expect(doc).toMatch(/minji가 다시 로그인하면 (별명 )?폼 없이 바로 `\/me`가 보이고,? `id`는 3이에요/);
+    }
+    expect(answers).toContain('minji가 다시 로그인하면 `/me`가 아니라 `/?error=EMAIL_TAKEN`으로 가요');
   });
 });
