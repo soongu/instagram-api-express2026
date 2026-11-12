@@ -28,6 +28,7 @@ model User {
   comments     Comment[]
   likes        PostLike[]
   sessions     Session[]
+  socialAccounts SocialAccount[]
 
   @@map("users")
 }
@@ -109,4 +110,20 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+// 소셜 계정 — «어느 제공자의 누구» 한 쌍이 한 행이고, 우리 사람 한 명을 가리킨다.
+// 같은 쌍은 한 번만 들어간다 — 같은 구글 계정으로 다시 오면 이 행으로 그 사람을 찾는다.
+// 사람을 지우면 그 사람의 소셜 계정도 함께 지운다(onDelete: Cascade).
+model SocialAccount {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       String   @db.VarChar(20)
+  providerUserId String   @map("provider_user_id") @db.VarChar(255)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("social_accounts")
 }
