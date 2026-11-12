@@ -29,6 +29,7 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
+import { applyMigration, ROLE_MIGRATION } from './helpers/tip-schema.js';
 import { sendAll } from './helpers/send-http.js';
 
 const ROOT = new URL('../', import.meta.url);
@@ -180,6 +181,8 @@ beforeAll(async () => {
   for (const dir of readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
     await tpl.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // p3-43 뒤 — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다. sessions(p3-41)는 얹지 않는다 — 이 회차 북마크의 시드가 그 테이블을 모른다
+  await applyMigration(tpl, ROLE_MIGRATION);
   await tpl.end();
   // 학생 DB 는 앞 회차 시드로 들어간 다섯이 비밀번호가 없다 — 그 판(code/p3-39)의 seed.js 로 넣는다.
   execFileSync(process.execPath, [B('seed.js')], {
@@ -293,6 +296,7 @@ describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
       for (const dir of readdirSync(S4('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
         await db.query(read(S4(`prisma/migrations/${dir}/migration.sql`)));
       }
+      await applyMigration(db, ROLE_MIGRATION);
       const dir = studentDir(S4);
       dirs.push(dir);
       const { code, out } = run(dir, 'seed.js', { DATABASE_URL: url });
@@ -322,6 +326,8 @@ describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
     dirs.push(dir);
     cpSync(S4('prisma'), join(dir, 'prisma'), { recursive: true });
     cpSync(S4('prisma.config.js'), join(dir, 'prisma.config.js'));
+    // p3-43 뒤 — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다. 교안의 두 명령은 그대로 두고 그 마이그레이션 폴더만 얹는다
+    cpSync(P(`prisma/migrations/${ROLE_MIGRATION}`), join(dir, `prisma/migrations/${ROLE_MIGRATION}`), { recursive: true });
     // 학생의 .env 는 수업 DB 를 가리킨다 — 판정은 다른 이름을 둬서, 명령 앞의 값이 지면 그 DB 가 생겨 드러나게 한다.
     writeFileSync(join(dir, '.env'), `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/${ENVFILE_DB}"\n`);
     const cmdEnv = { HOME: process.env.HOME, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, npm_config_update_notifier: 'false' };

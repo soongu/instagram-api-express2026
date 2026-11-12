@@ -27,7 +27,7 @@ import pg from 'pg';
 import express from 'express';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
-import { applyMigrationsAfter, SESSIONS_MIGRATION } from './helpers/tip-schema.js';
+import { applyMigrationsAfter, applyMigration, SESSIONS_MIGRATION, ROLE_MIGRATION } from './helpers/tip-schema.js';
 import { P235_MIGRATIONS } from '../sql/p2-36/setup.mjs';
 
 const ROOT = new URL('../', import.meta.url);
@@ -141,6 +141,8 @@ beforeAll(async () => {
   //    (P2022) 이 회차의 마이그레이션 뒤로 tip 의 것을 얹는다. 이 회차의 학생 파일은 그 칸을 읽지도 쓰지도 않는다(test/helpers/tip-schema.js).
   // 🚨 2026-11-11 p3-41 — 이 회차 북마크의 seed.js 는 sessions 를 비우는 목록에 없다 — sessions 테이블 앞까지만 얹는다.
   await applyMigrationsAfter(db, SIGNUP_MIGRATION, SESSIONS_MIGRATION);
+  // p3-43 의 role — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다
+  await applyMigration(db, ROLE_MIGRATION);
   reseed();
 }, 120000);
 
