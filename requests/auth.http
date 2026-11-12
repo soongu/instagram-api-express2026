@@ -48,7 +48,7 @@ GET http://localhost:3000/api/auth/me
 Authorization: Bearer 3
 
 ### 로그아웃
-POST http://localhost:3000/api/auth/logout
+POST http://localhost:3000/api/v2/auth/logout
 
 ### 회원가입
 POST http://localhost:3000/api/auth/signup
@@ -132,4 +132,4 @@ Content-Type: application/json
 }
 
 ### 모든 기기에서 로그아웃
-POST http://localhost:3000/api/auth/logout-all
+POST http://localhost:3000/api/v2/auth/logout-all
