@@ -27,6 +27,7 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
+import { applyMigration, ROLE_MIGRATION } from './helpers/tip-schema.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -133,6 +134,8 @@ beforeAll(async () => {
   for (const dir of readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
     await tpl.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // p3-43 뒤 — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다. sessions(p3-41)는 얹지 않는다 — 이 회차 북마크의 시드가 그 테이블을 모른다
+  await applyMigration(tpl, ROLE_MIGRATION);
   await tpl.end();
   // 🚨 2026-11-10 p3-40 — 작업트리 seed.js 는 시드 다섯에게 비밀번호를 준다(userService.createUser). 이 회차의 시드 다섯은
   //    비밀번호가 없어야 하니(축 ⑧ «다른 사람은 NULL») 이 회차 북마크의 seed.js 로 넣는다.
@@ -729,12 +732,15 @@ describe('축 ⑭ 교안이 겪게 한 장면 — select 없는 «나는 누구�
       const me = await getRes(`${base}/api/auth/me`, { headers: { Cookie: cookie } });
       expect(me.status).toBe(200);
       expect(me.body.passwordHash).toMatch(/^\$2b\$12\$[./A-Za-z0-9]{53}$/);
+      // p3-43 뒤 — 작업트리 클라이언트는 select 가 없으면 role 컬럼까지 고른다(이 회차의 학생 DB 에는 없는 컬럼이라 교안 줄에도 없다)
+      const { role, ...meBody } = me.body;
+      expect(role).toBe('USER');
       const lecture = read(LECTURE);
       const quoted = lecture.split('\n').find((l) => l.startsWith('{"id":43,"username":"seoyeon","email"'));
       expect(quoted, '교안 토글에 select 없는 «나는 누구» 응답 줄이 있어야 한다').toBeDefined();
       const shown = JSON.parse(quoted);
-      expect(Object.keys(shown)).toEqual(Object.keys(me.body));
-      expect(shown).toEqual({ ...me.body, id: 43, passwordHash: shown.passwordHash });
+      expect(Object.keys(shown)).toEqual(Object.keys(meBody));
+      expect(shown).toEqual({ ...meBody, id: 43, passwordHash: shown.passwordHash });
       // 토글의 해시는 같은 Step 의 SQL 결과에 적은 seoyeon 의 해시와 같다(같은 행을 다시 본 것이니까).
       expect(lecture).toMatch(new RegExp(`^ seoyeon {4}${shown.passwordHash.replaceAll('$', '\\$').replaceAll('.', '\\.')}$`, 'm'));
     } finally {

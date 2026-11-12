@@ -27,6 +27,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
+import { applyMigrationsAfter } from './helpers/tip-schema.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -176,6 +177,8 @@ beforeAll(async () => {
   for (const dir of readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
     await tpl.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // p3-43 뒤 — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다(그 회차 뒤 마이그레이션을 tip 까지 얹는다)
+  await applyMigrationsAfter(tpl, readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort().at(-1));
   await tpl.end();
   execFileSync(process.execPath, [R('seed.js')], {
     cwd: ROUND.dir, encoding: 'utf8',

@@ -30,3 +30,15 @@ export const P234_LAST = '20261001144541_add_post_likes';
 
 /** `p3-41` 의 `sessions` 테이블 — 이것이 생기면 `sessions` 를 모르는 옛 시드는 `users` 를 비우지 못한다. */
 export const SESSIONS_MIGRATION = '20261111043902_add_sessions';
+
+/**
+ * `p3-43` 의 `users.role`(enum · 기본값 USER) — 작업트리 클라이언트는 사람을 만들 때 기본값 USER 를 직접 실어 보내서,
+ * 이 컬럼이 없는 판정 DB 에서는 시드가 `P2022 ColumnNotFound`(`role of relation users`)로 멈춘다.
+ * 그 회차 학생 파일은 역할을 읽지도 쓰지도 않으니 얹어도 판정이 보는 동작은 같다.
+ */
+export const ROLE_MIGRATION = '20261112021830_add_user_role';
+
+/** 마이그레이션 하나만 적용한다 — `before` 로 앞에서 끊은 판정이 그 뒤의 것 하나를 더 얹을 때. */
+export async function applyMigration(client, name) {
+  await client.query(readFileSync(new URL(`${name}/migration.sql`, MIG), 'utf8'));
+}
