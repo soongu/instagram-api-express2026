@@ -647,13 +647,22 @@ describe('축 ⑪ 직접 해보기 2 — 다른 서버도 같은 로그인을 �
       const anon = await fetch(`${s.lab}/notices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"title":"아무나 올려 볼게요"}' });
       expect([anon.status, await anon.json()]).toEqual([401, { message: '로그인이 필요해요' }]);
       const { me, lab } = await twoServers(s);
-      const res = await lab.send('POST', '/notices', { title: '다음 주 스터디는 쉬어요' });
+      // practice2.http 의 «공지 올리기» 는 본문에 authorId 1 을 싣는다(2026-11-12 학생 낭독 집중 검수) — 글쓴이는 그래도 2.
+      const res = await lab.send('POST', '/notices', { title: '다음 주 스터디는 쉬어요', authorId: 1 });
       expect([res.status, await res.json()]).toEqual([201, { id: 2, authorId: 2, title: '다음 주 스터디는 쉬어요' }]);
       const cookie = me.cookie();
       await me.send('POST', '/api/auth/logout-all');
       const after = await fetch(`${s.lab}/notices`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '{"title":"또"}' });
       expect(after.status).toBe(401);
     });
+  }, 40000);
+
+  it('🔴 틀린 판 — 본문의 authorId 를 먼저 쓰는 판은 «공지 올리기» 가 1 로 올라간다(확인의 «authorId 는 2» 가 가린다)', async () => {
+    await withLab('practice2.js', LAB_PORT, async (s) => {
+      const { lab } = await twoServers(s);
+      const res = await lab.send('POST', '/notices', { title: '다음 주 스터디는 쉬어요', authorId: 1 });
+      expect([res.status, (await res.json()).authorId]).toEqual([201, 1]);
+    }, { edit: (d) => replaceIn(d, 'lab/p3-41/practice2.js', 'authorId: res.locals.userId,', 'authorId: req.body.authorId ?? res.locals.userId,') });
   }, 40000);
 
   it('🔴 틀린 판 둘 — cookieParser 를 빠뜨리면 로그인해도 500 · requireLogin 을 앱 전체에 걸면 목록도 401', async () => {
@@ -695,6 +704,8 @@ describe('축 ⑬ 과제', () => {
     const statuses = [];
     statuses.push((await me.send('POST', '/members', { email: 'bomi@example.com', password: 'bomi1234' })).status);
     statuses.push((await device(lab).get('/members')).status);
+    // «로그인하지 않고 나는 누구» — 2026-11-12 학생 낭독 집중 검수가 더했다(main 에만 · 북마크 code/p3-41 은 일곱).
+    statuses.push((await device(lab).get('/me')).status);
     statuses.push((await me.send('POST', '/login', { email: 'bomi@example.com', password: 'bomi1234' })).status);
     const copied = me.cookie();
     statuses.push((await me.get('/members')).status);
@@ -706,11 +717,19 @@ describe('축 ⑬ 과제', () => {
   };
   it('🔴 [기초] 401 → 로그인 200 → 로그아웃 뒤 401 · 복사해 둔 쿠키도 401 · 서버 세션을 안 지운 판은 마지막이 200', async () => {
     await withLab('homework1.js', HW_PORT, async ({ lab }) => {
-      expect(await club(lab)).toEqual([201, 401, 200, 200, 200, 200, 401, 401]);
+      expect(await club(lab)).toEqual([201, 401, 401, 200, 200, 200, 200, 401, 401]);
     });
     await withLab('homework1.js', HW_PORT, async ({ lab }) => {
-      expect(await club(lab)).toEqual([201, 401, 200, 200, 200, 200, 401, 200]);
+      expect(await club(lab)).toEqual([201, 401, 401, 200, 200, 200, 200, 401, 200]);
     }, { edit: (d) => replaceIn(d, 'lab/p3-41/homework1.js', '  sessions.delete(req.cookies.clubSession);\n', '') });
+    // requireMember 를 회원 목록 라우트에만 붙인 판 — 나머지 요청은 같고 «로그인하지 않고 나는 누구» 만 200 이다.
+    await withLab('homework1.js', HW_PORT, async ({ lab }) => {
+      expect(await club(lab)).toEqual([201, 401, 200, 200, 200, 200, 200, 401, 401]);
+      expect((await device(lab).get('/me')).body).toEqual({});
+    }, { edit: (d) => {
+      replaceIn(d, 'lab/p3-41/homework1.js', '// 여기부터는 로그인한 회원만 지나간다 — 가입·로그인·로그아웃은 위에 둔다.\napp.use(requireMember);\n\n', '');
+      replaceIn(d, 'lab/p3-41/homework1.js', "app.get('/members', (req, res)", "app.get('/members', requireMember, (req, res)");
+    } });
     // app.use(requireMember) 를 가입·로그인보다 위에 두면 가입부터 401 이다.
     await withLab('homework1.js', HW_PORT, async ({ lab }) => {
       const me = device(lab);
@@ -872,13 +891,23 @@ describe('축 ⑮ 교안·답안의 코드 블록은 줄마다 그 파일에 실
     for (const b of fences(DOCS[0], 'prisma')) {
       for (const l of meaningful(b)) expect(read(R('prisma/schema.prisma')).split('\n'), l).toContain(l);
     }
+    // 두 .http 는 2026-11-12 학생 낭독 집중 검수가 main 에만 고쳤다(북마크 code/p3-41 은 옛 판) — 작업트리에서 읽는다.
+    const MAIN_HTTP = ['lab/p3-41/homework1.http', 'lab/p3-41/practice2.http'];
     const http = ['requests/auth.http', 'requests/posts.http', 'requests/no-login.http', 'requests/rest.http', 'requests/cache.http', ...readdirSync(LAB('.')).filter((f) => f.endsWith('.http')).map((f) => `lab/p3-41/${f}`)]
-      .map((rel) => read(R(rel)).split('\n'));
+      .map((rel) => read(MAIN_HTTP.includes(rel) ? P(rel) : R(rel)).split('\n'));
     const blocks = DOCS.flatMap((d) => fences(d, 'http'));
     expect(blocks.length).toBe(8);
     for (const b of blocks) {
       expect(http.some((lines) => meaningful(b).every((l) => lines.includes(l))), meaningful(b).join('\n')).toBe(true);
     }
+  });
+
+  it('🔴 학생 낭독 집중 검수(2026-11-12) — 과제 [기초] 상태 코드 여덟 · 직접 해보기 2 본문의 authorId 1', () => {
+    const [lecture, answers] = DOCS.map(read);
+    for (const doc of [lecture, answers]) expect(doc).toContain('201 · 401 · 401 · 200 · 200 · 200 · 200 · 401');
+    expect(lecture).not.toContain('201 · 401 · 200 · 200 · 200 · 200 · 401');
+    expect(lecture).toContain('### 로그인하지 않고 나는 누구\n# @no-cookie-jar\nGET http://localhost:4011/me');
+    expect(lecture).toContain('"title": "다음 주 스터디는 쉬어요",\n  "authorId": 1');
   });
 
   it('🔴 언어 없는 펜스 — await 를 빠뜨린 판의 터미널 줄 · grep 출력 · 마이그레이션 폴더 이름', () => {

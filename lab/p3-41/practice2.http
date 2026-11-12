@@ -7,7 +7,8 @@ POST http://localhost:4002/notices
 Content-Type: application/json
 
 {
-  "title": "다음 주 스터디는 쉬어요"
+  "title": "다음 주 스터디는 쉬어요",
+  "authorId": 1
 }
 
 ### 로그인하지 않고 공지 올리기

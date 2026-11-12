@@ -11,6 +11,10 @@ Content-Type: application/json
 # @no-cookie-jar
 GET http://localhost:4011/members
 
+### 로그인하지 않고 나는 누구
+# @no-cookie-jar
+GET http://localhost:4011/me
+
 ### 로그인
 POST http://localhost:4011/login
 Content-Type: application/json
