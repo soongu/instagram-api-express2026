@@ -24,5 +24,7 @@ export function requireLogin(req, res, next) {
 
   // 토큰의 sub 는 글자라 숫자로 바꿔 담는다 — 서비스들은 사람 번호를 숫자로 받는다.
   res.locals.userId = Number(payload.sub);
+  // 역할도 토큰에서 꺼낸다 — 역할을 담기 전에 만든 토큰이면 undefined 라 관리자가 아니다.
+  res.locals.role = payload.role;
   next();
 }
