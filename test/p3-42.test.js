@@ -765,6 +765,10 @@ describe('축 ⑪ 교안·답안의 코드 블록과 출력은 실제와 같다'
       const [, iat, exp] = out.match(shape);
       expect(Number(exp) - Number(iat)).toBe(3600);
       expect(fenceOf('{"sid":')[0]).toMatch(shape);
+      // 글자 수를 세는 둘째 명령도 교안 그대로 실행한다
+      const lengthCmd = fences(DOCS[0], 'bash').find((b) => b[0].startsWith('node -p "process.argv[1].length"'))[0];
+      expect(lengthCmd).toBe('node -p "process.argv[1].length" 복사한-토큰');
+      expect(execFileSync(process.execPath, ['-p', 'process.argv[1].length', token], { encoding: 'utf8' }).trim()).toBe('201');
     });
   }, 30000);
 
