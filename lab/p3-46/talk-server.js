@@ -25,6 +25,9 @@ const app = express();
 
 app.use(express.urlencoded({ extended: false }));
 
+// 브라우저가 저절로 보내는 아이콘 요청은 기록하지 않는다 — 아래의 요청 기록보다 먼저 답하고 끝낸다.
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // 요청마다 한 줄 — 응답을 다 보냈으면 상태 코드를, 받는 쪽이 먼저 끊었으면 그렇다고 적는다.
 app.use((req, res, next) => {
   res.on('close', () => {
