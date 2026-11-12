@@ -51,6 +51,9 @@ const R = (rel) => join(ROUND.dir, rel);
 const BEFORE = roundDir('code/p3-39');
 const B = (rel) => join(BEFORE.dir, rel);
 const LAB = (rel) => R(`lab/p3-40/${rel}`);
+// 과제 [기초] .http 는 요청 여섯 판 — 2026-11-12 학생 낭독이 «이메일이 숫자인 로그인» 을 더했다(main 에만 · 북마크 code/p3-40 은 다섯 그대로).
+// 요청 다섯은 이메일 타입 검사를 뺀 판을 못 가렸다(email 123 이 401) — 그래서 이 파일만 작업트리에서 읽는다.
+const HW_HTTP = P('lab/p3-40/homework1.http');
 
 const env = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:3001' };
 const STUDENT_FILES = ['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'docs', 'package.json', 'requests', 'seed.js', 'data', 'lab/p3-36', 'lab/p3-40'];
@@ -388,6 +391,66 @@ describe('축 ⑥ Step 6 — 가짜 해시', () => {
     });
   }, 60000);
 
+  // 2026-11-12 학생 낭독 — «왜 서버가 뜰 때 한 번만» 의 이유(교안 Step 6) · 함수 안에서 만든 판은 «셋이 비슷» 해서 timing.js 로는 안 가려진다
+  const LECTURE6 = join(new URL('../../', ROOT).pathname, 'part3/7-express-auth/p3-40-login-password-check-lecture.md');
+  const TOP_DUMMY = 'const DUMMY_HASH = await bcrypt.hash(randomUUID(), PASSWORD_COST);\n';
+  const MATCHED = '  const matched = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);\n';
+  const editUserService = (fn) => (dir) => {
+    const file = join(dir, 'services/userService.js');
+    const src = read(file);
+    expect(src.split(TOP_DUMMY)).toHaveLength(2);
+    expect(src.split(MATCHED)).toHaveLength(2);
+    writeFileSync(file, fn(src.replace(TOP_DUMMY, '')));
+  };
+  const loginMs = async (base, body) => {
+    let total = 0;
+    for (let i = 0; i < 3; i += 1) total += (await post(base, '/api/v2/auth/login', body)).ms;
+    return total / 3;
+  };
+
+  it('🔴 가짜 해시를 checkPassword 안에서 늘 만들면 맞는 로그인까지 모두 느리고, 없을 때만 만들면 그쪽만 느리다', async () => {
+    expect(read(LECTURE6)).toContain('늘 만들면 맞는 로그인까지 모두 0.4초쯤 걸리고, 비교할 해시가 없을 때만 만들면 그쪽만 0.4초가 되어 시간이 다시 달라져요.');
+    const S6 = stepDir(6);
+    await freshGate();
+    const always = editUserService((src) => src.replace(MATCHED, `  const DUMMY_HASH = await bcrypt.hash(randomUUID(), PASSWORD_COST);\n${MATCHED}`));
+    await withServer(S6, async ({ base }) => {
+      await signupSeoyeon(base);
+      timing(S6, PORT);
+      const ms = timing(S6, PORT);
+      const right = await loginMs(base, { username: 'seoyeon', password: 'instagram1234' });
+      for (const value of [...ms, right]) expect(value).toBeGreaterThan(330);
+    }, { edit: always });
+    await freshGate();
+    const onlyMissing = editUserService((src) => src.replace(MATCHED, '  const matched = await bcrypt.compare(password, user?.passwordHash ?? (await bcrypt.hash(randomUUID(), PASSWORD_COST)));\n'));
+    await withServer(S6, async ({ base }) => {
+      await signupSeoyeon(base);
+      timing(S6, PORT);
+      const [nobody, nullUser, wrong] = timing(S6, PORT);
+      expect(nobody).toBeGreaterThan(330);
+      expect(nullUser).toBeGreaterThan(330);
+      expect(Math.min(nobody, nullUser) - wrong).toBeGreaterThan(120);
+    }, { edit: onlyMissing });
+  }, 90000);
+
+  it('🔴 세 실패는 옛 주소·새 주소 모두 상태 줄·헤더(Date 빼고)·본문까지 같다', async () => {
+    expect(read(LECTURE6)).toContain('상태 코드와 헤더도 같아요');
+    const S6 = stepDir(6);
+    await freshGate();
+    await withServer(S6, async ({ base }) => {
+      await signupSeoyeon(base);
+      for (const path of ['/api/auth/login', '/api/v2/auth/login']) {
+        const seen = [];
+        for (const body of [{ username: 'nobody', password: 'wrong-password' }, { username: 'minji', password: 'wrong-password' }, { username: 'seoyeon', password: 'wrong-password' }]) {
+          const res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          const headers = [...res.headers].filter(([name]) => name !== 'date');
+          seen.push(JSON.stringify({ status: res.status, headers, body: await res.text() }));
+        }
+        expect(JSON.parse(seen[0]).status).toBe(401);
+        expect(new Set(seen).size, path).toBe(1);
+      }
+    });
+  }, 30000);
+
   it('🔴 가짜 해시와 비교한 경우는 무엇이 맞든 실패 — 조건에 user.passwordHash === null', () => {
     const src = read(stepDir(6)('services/userService.js'));
     expect(src).toContain('const DUMMY_HASH = await bcrypt.hash(randomUUID(), PASSWORD_COST);');
@@ -592,8 +655,8 @@ describe('축 ⑬ 과제', () => {
     return dir;
   };
 
-  it('🔴 [기초] .http 201 · 200 · 401 · 401 · 400 · 두 실패 문장이 같고 시간이 비슷하다 · 가짜 해시를 뺀 판은 없는 이메일이 빠르다', async () => {
-    const http = read(LAB('homework1.http')).replaceAll('localhost:4011', `localhost:${LAB_PORT}`);
+  it('🔴 [기초] .http 201 · 200 · 401 · 401 · 400 · 400 · 두 실패 문장이 같고 시간이 비슷하다 · 가짜 해시를 뺀 판은 없는 이메일이 빠르다 · 타입 검사를 한쪽만 한 판은 요청이 가린다', async () => {
+    const http = read(HW_HTTP).replaceAll('localhost:4011', `localhost:${LAB_PORT}`);
     const timingFor = (dir) => {
       writeFileSync(join(dir, 't.js'), read(LAB('homework1-timing.js')).replaceAll('4011', String(LAB_PORT)));
       const { out } = run(dir, 't.js');
@@ -603,7 +666,9 @@ describe('축 ⑬ 과제', () => {
     let srv = await boot(join(good, 'homework1.js'), { port: LAB_PORT, ready: '동아리 가입 서버' });
     try {
       const results = await sendAll(http, `http://localhost:${LAB_PORT}`);
-      expect(results.map((r) => r.status)).toEqual([201, 200, 401, 401, 400]);
+      expect(results.map((r) => r.status)).toEqual([201, 200, 401, 401, 400, 400]);
+      expect(results[4].body).toEqual({ message: '이메일과 비밀번호를 보내 주세요' });
+      expect(results[5].body).toEqual(results[4].body);
       expect(results[2].body).toEqual(results[3].body);
       expect(results[2].body).toEqual({ message: '이메일이나 비밀번호가 맞지 않아요' });
       const [nobody, wrong] = timingFor(good);
@@ -621,6 +686,23 @@ describe('축 ⑬ 과제', () => {
       expect(wrong).toBeGreaterThan(150);
     } finally {
       await srv.stop();
+    }
+    // 타입 검사를 한쪽만 한 판 — 요청 여섯이 둘 다 가린다(요청 다섯이던 판은 이메일 쪽을 못 가렸다)
+    const LOGIN_CHECK = "if (typeof email !== 'string' || typeof password !== 'string') {";
+    for (const [name, check, expected] of [
+      ['no-email-check', "if (typeof password !== 'string') {", [201, 200, 401, 401, 400, 401]],
+      ['no-password-check', "if (typeof email !== 'string') {", [201, 200, 401, 401, 500, 400]],
+    ]) {
+      const dir = copyTo('homework1', (s) => {
+        expect(s.split(LOGIN_CHECK)).toHaveLength(2);
+        return s.replace(LOGIN_CHECK, check);
+      }, 4011);
+      srv = await boot(join(dir, 'homework1.js'), { port: LAB_PORT, ready: '동아리 가입 서버' });
+      try {
+        expect((await sendAll(http, `http://localhost:${LAB_PORT}`)).map((r) => r.status), name).toEqual(expected);
+      } finally {
+        await srv.stop();
+      }
     }
   }, 60000);
 
@@ -727,7 +809,8 @@ describe('축 ⑮ 교안·답안의 코드 블록은 줄마다 그 파일에 실
     expect(blocks).toHaveLength(5);
     const http = read(R('requests/auth.http')).split('\n');
     for (const b of blocks.filter((x) => ['### 로그인', '### 긴 비밀번호로 가입'].includes(x[0]))) for (const l of b.filter((x) => x.trim() !== '...')) expect(http, l).toContain(l);
-    for (const f of ['practice1.http', 'homework1.http', 'homework2.http']) expect(lecture).toContain(`\`\`\`http\n${read(LAB(f))}\`\`\``);
+    for (const f of ['practice1.http', 'homework2.http']) expect(lecture).toContain(`\`\`\`http\n${read(LAB(f))}\`\`\``);
+    expect(lecture).toContain(`\`\`\`http\n${read(HW_HTTP)}\`\`\``);
   });
 
   it('🔴 실행 출력 — practice3 일곱 줄은 글자 그대로 · timing·확인 스크립트 출력은 그 파일의 라벨 그대로', () => {

@@ -41,3 +41,12 @@ Content-Type: application/json
 {
   "email": "bomi@example.com"
 }
+
+### 이메일이 숫자인 로그인
+POST http://localhost:4011/login
+Content-Type: application/json
+
+{
+  "email": 123,
+  "password": "club2026!"
+}
