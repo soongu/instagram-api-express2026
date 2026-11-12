@@ -132,7 +132,13 @@ talkStrategy.userProfile = async (accessToken, done) => {
     const info = await response.json();
 
     // 톡은 회원번호를 숫자로 준다 — 글자로 바꿔 둔다. 닉네임은 동의한 사람에게만 account.profile 안에 온다.
-    done(null, { provider: 'talk', id: String(info.id), name: info.account?.profile?.nickname });
+    // 톡은 이메일을 주지 않는다 — 받지 않은 값도 빼지 않고 적어 둔다.
+    done(null, {
+      provider: 'talk',
+      id: String(info.id),
+      email: undefined,
+      name: info.account?.profile?.nickname,
+    });
   } catch (error) {
     done(error);
   }
