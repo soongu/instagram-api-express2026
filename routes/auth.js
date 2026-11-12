@@ -34,6 +34,14 @@ router.get(
   authController.socialCallback,
 );
 router.use('/kakao', authController.socialFailed);
+// 네이버 로그인 — 구글, 카카오와 같은 주소 둘이다. 전략의 이름만 다르다.
+router.get('/naver', authController.rememberNext, passport.authenticate('naver', { session: false }));
+router.get(
+  '/naver/callback',
+  passport.authenticate('naver', { session: false, failureRedirect: '/login?error=SOCIAL_LOGIN_FAILED' }),
+  authController.socialCallback,
+);
+router.use('/naver', authController.socialFailed);
 
 router.all('/signup', allowOnly('POST'));
 router.all('/check-duplicate', allowOnly('GET'));
@@ -46,5 +54,7 @@ router.all('/google', allowOnly('GET'));
 router.all('/google/callback', allowOnly('GET'));
 router.all('/kakao', allowOnly('GET'));
 router.all('/kakao/callback', allowOnly('GET'));
+router.all('/naver', allowOnly('GET'));
+router.all('/naver/callback', allowOnly('GET'));
 
 export default router;

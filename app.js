@@ -18,12 +18,14 @@ import { oldApiNotice } from './middlewares/deprecation.js';
 import { requireLogin } from './middlewares/auth.js';
 import { googleStrategy } from './strategies/google.js';
 import { kakaoStrategy } from './strategies/kakao.js';
+import { naverStrategy } from './strategies/naver.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 
 // 어떤 방법으로 로그인을 확인할지 등록한다 — 라우트에서 이름 'google' 로 꺼내 쓴다.
 passport.use('google', googleStrategy);
 passport.use('kakao', kakaoStrategy);
+passport.use('naver', naverStrategy);
 
 const app = express();
 
