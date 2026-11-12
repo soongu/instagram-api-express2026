@@ -1457,12 +1457,14 @@ const TALK_BASE = `http://localhost:${TALK_PORT}`;
 const TALK_CALLBACK = `${LAB_BASE}/talk/callback`;
 /**
  * 톡으로 로그인 한 바퀴 — /talk → 동의 화면에서 계정을 고르고 허용(또는 거부) → /talk/callback.
- * `nickname: false` 는 «닉네임 제공» 체크를 끈다 · `tamper` 는 돌아오는 주소의 state 를 바꾼다.
+ * `nickname: false` 는 «닉네임 제공» 체크를 끈다 · `tamper` 는 돌아오는 주소의 state 를 바꾼다 · `openPage` 는 동의 화면을 GET 으로 먼저 연다.
  */
-const talkLogin = async (tab, account, { decision = 'allow', nickname = true, tamper } = {}) => {
+const talkLogin = async (tab, account, { decision = 'allow', nickname = true, tamper, openPage = false } = {}) => {
   const begin = await tab.get('/talk');
   if (begin.status !== 302) return { begin };
   const auth = new URL(begin.location);
+  // 브라우저처럼 동의 화면을 먼저 연다(톡 서버의 로그에 GET 줄이 찍힌다).
+  if (openPage) await (await fetch(begin.location)).text();
   const fields = [...auth.searchParams, ['account', account], ['decision', decision]];
   if (nickname) fields.push(['nickname', 'yes']);
   const consent = await fetch(`${auth.origin}/oauth/authorize`, { method: 'POST', body: new URLSearchParams(fields), redirect: 'manual' });
@@ -1923,4 +1925,270 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
       });
     }, 60_000);
   });
+});
+
+// ── 축 ⑯ 교안·답안이 말한 글자 = 실제 ──────────────────────────────────────
+// 원고는 읽기만 한다. 경로는 앞 회차 판정(`p3-44`)처럼 트랙 폴더에서 찾고, `P346_LECTURE`·`P346_ANSWERS` 로 바꿀 수 있다.
+// 🚨 원고가 없으면 건너뛰지 않고 실패한다(읽는 순간 ENOENT).
+// 🔎 잠그지 않는 것 — 교안 Step 3 의 카카오 `console.log(info)` 출력 · SQL 결과 표 · 틀린 시크릿의 `TokenError` 첫 줄
+//    (사용자가 진짜 제공자로 재서 바꿀 값이다).
+const DOC_DIR = new URL('../../part3/7-express-auth/', ROOT).pathname;
+const LECTURE_MD = process.env.P346_LECTURE ?? join(DOC_DIR, 'p3-46-kakao-naver-strategies-lecture.md');
+const ANSWERS_MD = process.env.P346_ANSWERS ?? join(DOC_DIR, 'p3-46-kakao-naver-strategies-answers.md');
+/**
+ * 원고의 펜스를 차례대로 — 언어 · 본문(줄들) · 시작 줄 번호 · 그 펜스가 속한 Step(`## Step N`) ·
+ * 직접 해보기 번호(`### 직접 해보기 N`) · `**확인**` 뒤 몇째 펜스인지 · 해설(`💡 해설`) 안인지.
+ */
+const fencesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let step = null;
+  let practice = null;
+  let sinceCheck = null;
+  let solution = false;
+  read(file).split('\n').forEach((line, i) => {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.body.push(line);
+      return;
+    }
+    if (line.startsWith('```')) {
+      cur = { lang: line.slice(3).trim(), body: [], line: i + 1, step, practice, afterCheck: sinceCheck, solution };
+      if (sinceCheck !== null) sinceCheck += 1;
+      return;
+    }
+    const stepHead = /^## Step (\d+)/.exec(line);
+    if (/^## /.test(line)) { step = stepHead ? Number(stepHead[1]) : null; practice = null; sinceCheck = null; solution = false; }
+    if (/^### /.test(line)) {
+      const head = /^### 직접 해보기 (\d+)/.exec(line);
+      practice = head ? Number(head[1]) : null;
+      sinceCheck = null;
+      solution = false;
+    }
+    if (line.startsWith('**확인**')) sinceCheck = 0;
+    if (line.includes('<summary>💡 해설</summary>')) solution = true;
+    if (line.startsWith('</details>')) solution = false;
+  });
+  if (cur) throw new Error(`${file} — 닫히지 않은 펜스(${cur.line}번 줄)`);
+  return out;
+};
+const API_PATH = '// ~/instagram-api/';
+/** `...` 과 빈 줄을 뺀 줄이 `haystack`(줄들)에 차례대로 있는가 — 없으면 처음 못 찾은 줄을 돌려준다. */
+const firstMissing = (wanted, haystack) => {
+  let at = 0;
+  for (const line of wanted.filter((one) => one.trim() !== '' && one.trim() !== '...')) {
+    const found = haystack.indexOf(line, at);
+    if (found === -1) return line;
+    at = found + 1;
+  }
+  return null;
+};
+const where = (name, fence) => `${name} ${fence.line}번 줄의 펜스`;
+
+describe('축 ⑯ 교안·답안이 말한 글자 = 실제', () => {
+  const docs = () => [['교안', fencesOf(LECTURE_MD)], ['답안', fencesOf(ANSWERS_MD)]];
+  const practiceFence = (n, pick) => {
+    const found = fencesOf(LECTURE_MD).filter((fence) => fence.practice === n).filter(pick);
+    if (found.length !== 1) throw new Error(`교안 직접 해보기 ${n} 에서 펜스를 하나로 못 찾았다(${found.length}개)`);
+    return found[0];
+  };
+  /** `**확인**` 바로 아래의 언어 없는 펜스 — 기대 출력. */
+  const expectedOutput = (n) => practiceFence(n, (fence) => fence.afterCheck === 0 && fence.lang === '' && !fence.solution);
+  /** `**확인**` 뒤의 첫 javascript 펜스 — 시작 코드. */
+  const startCode = (n) => practiceFence(n, (fence) => fence.afterCheck === 1 && fence.lang === 'javascript' && !fence.solution);
+
+  it('🔴 javascript 펜스는 모두 경로 주석(// ~/instagram-api/…)으로 시작한다 — 교안 14개 · 답안 8개가 수업 파일 넷과 실습·과제 파일 다섯을 가리킨다', () => {
+    const paths = {};
+    for (const [name, fences] of docs()) {
+      const js = fences.filter((fence) => fence.lang === 'javascript');
+      const bad = js.filter((fence) => !(fence.body[0] ?? '').startsWith(API_PATH)).map((fence) => where(name, fence));
+      expect(bad).toEqual([]);
+      paths[name] = [...new Set(js.map((fence) => fence.body[0].slice(API_PATH.length)))].sort();
+    }
+    expect(paths['교안']).toEqual(['app.js', 'lab/p3-46/practice1.js', 'lab/p3-46/practice2.js', 'lab/p3-46/practice3.js', 'routes/auth.js', 'strategies/kakao.js', 'strategies/naver.js']);
+    expect(paths['답안']).toEqual(['lab/p3-46/homework1.js', 'lab/p3-46/homework2.js']);
+  });
+
+  it('🔴 교안의 수업 파일 블록 — ... 과 빈 줄을 뺀 모든 줄이 그 Step 의 커밋에 든 그 파일에 차례대로 있다(Step 3 의 console.log(info) 블록은 스냅숏에)', () => {
+    const problems = [];
+    let checked = 0;
+    for (const fence of fencesOf(LECTURE_MD).filter((one) => one.lang === 'javascript' && one.body[0].startsWith(API_PATH))) {
+      const rel = fence.body[0].slice(API_PATH.length);
+      if (rel.startsWith('lab/')) continue;
+      let source;
+      if (rel === 'strategies/kakao.js' && fence.body.includes('    console.log(info);')) {
+        if (fence.step !== 3) problems.push(`${where('교안', fence)} — console.log(info) 블록이 Step 3 이 아니다(Step ${fence.step})`);
+        source = SNAP('step3-log.kakao.js');
+      } else if (fence.step >= 2 && fence.step <= 6) {
+        source = read(stepDir(fence.step)(rel));
+      } else {
+        problems.push(`${where('교안', fence)} — ${rel} 블록이 Step 2~6 밖에 있다(Step ${fence.step})`);
+        continue;
+      }
+      const missing = firstMissing(fence.body, source.split('\n'));
+      if (missing !== null) problems.push(`${where('교안', fence)}(Step ${fence.step} · ${rel}) — 이 줄이 그 판에 (차례대로) 없다: ${missing}`);
+      checked += 1;
+    }
+    expect(problems).toEqual([]);
+    expect(checked).toBeGreaterThanOrEqual(8);
+  });
+
+  it('🔴 교안·답안의 실습·과제 블록 — 시작 코드는 시작 파일 스냅숏과 통째로 같고, 나머지는 모든 줄이 정답 파일에 차례대로 있다', () => {
+    const problems = [];
+    let checked = 0;
+    for (const [name, fences] of docs()) {
+      for (const fence of fences.filter((one) => one.lang === 'javascript' && one.body[0].startsWith(`${API_PATH}lab/`))) {
+        const rel = fence.body[0].slice(API_PATH.length);
+        const file = /^lab\/p3-46\/([\w.]+)$/.exec(rel)?.[1];
+        if (!file) { problems.push(`${where(name, fence)} — lab/p3-46 밖의 파일이다: ${rel}`); continue; }
+        const isStart = name === '교안' && fence.practice !== null && !fence.solution;
+        if (isStart) {
+          if (fence.line !== startCode(fence.practice).line) problems.push(`${where(name, fence)} — 해설 밖의 javascript 펜스인데 «확인» 뒤 첫 javascript 펜스가 아니다`);
+          const snapshot = SNAP(`practice${fence.practice}-start.${file}`);
+          if (`${fence.body.join('\n')}\n` !== snapshot) {
+            const [got, want] = [fence.body, snapshot.trimEnd().split('\n')];
+            const at = got.findIndex((line, i) => line !== want[i]);
+            problems.push(`${where(name, fence)} — 시작 파일 스냅숏과 다르다(교안 ${got.length}줄 · 스냅숏 ${want.length}줄) · 처음 다른 곳은 블록의 ${at === -1 ? got.length + 1 : at + 1}번째 줄: 교안 «${got[at] ?? '(없음)'}» ↔ 스냅숏 «${want[at === -1 ? got.length : at] ?? '(없음)'}»`);
+          }
+        } else {
+          const missing = firstMissing(fence.body, LAB(file).split('\n'));
+          if (missing !== null) problems.push(`${where(name, fence)}(${rel}) — 이 줄이 정답 파일에 (차례대로) 없다: ${missing}`);
+        }
+        checked += 1;
+      }
+    }
+    expect(problems).toEqual([]);
+    expect(checked).toBeGreaterThanOrEqual(14);
+    // 직접 해보기 셋 모두 시작 코드와 해설 코드가 하나씩 있다
+    for (const n of [1, 2, 3]) {
+      expect(startCode(n).body[0]).toBe(`${API_PATH}lab/p3-46/practice${n}.js`);
+      expect(practiceFence(n, (fence) => fence.solution && fence.lang === 'javascript').body[0]).toBe(`${API_PATH}lab/p3-46/practice${n}.js`);
+    }
+  });
+
+  it('🔴 직접 해보기 1~3 의 «확인» 바로 아래 펜스는 정답 스크립트의 실제 출력과 통째로 같다', () => {
+    const problems = [];
+    for (const n of [1, 2, 3]) {
+      const { code, out } = runLabScript(`practice${n}.js`, LAB(`practice${n}.js`));
+      const fence = expectedOutput(n);
+      if (code !== 0 || `${fence.body.join('\n')}\n` !== out) problems.push(`${where('교안', fence)}(직접 해보기 ${n}) — 실제 출력과 다르다:\n--- 교안\n${fence.body.join('\n')}\n--- 실제\n${out}`);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  // 틀린 판의 출력 자체는 축 ⑩(직접 해보기 1 — ①·②)·축 ⑪(직접 해보기 2 — 네이버를 맨 위에서 · 확인하지 않음)이 잠갔다.
+  // 여기서는 «교안의 해설이 인용한 글자» 가 그 틀린 판에서 실제로 나온 글자인지를 잇는다.
+  it('🔴 해설이 인용한 틀린 판의 글자 — 실습 1 의 TypeError(reading replace) · «MinSu!» · 실습 2 의 {"provider":"naver","emailVerified":false} · «READERS[provider] is not a function» 가 그 틀린 판에서 실제로 나온다', () => {
+    const lecture = read(LECTURE_MD);
+    const p1 = LAB('practice1.js');
+    const p2 = LAB('practice2.js');
+    const noName = runLabScript('practice1.js', edit1(p1, "(profile.name ?? '').replace(NOT_ALLOWED, '')", "profile.name.replace(NOT_ALLOWED, '')")).out;
+    const noGlobal = runLabScript('practice1.js', edit1(p1, 'const NOT_ALLOWED = /[^A-Za-z0-9_.]/g;', 'const NOT_ALLOWED = /[^A-Za-z0-9_.]/;')).out;
+    const naverTop = runLabScript('practice2.js', edit1(p2,
+      'naver: (info) => ({ id: info.response.id, email: info.response.email, emailVerified: false, name: info.response.name }),',
+      'naver: (info) => ({ id: info.id, email: info.email, emailVerified: false, name: info.name }),')).out;
+    const noCheck = runLabScript('practice2.js', edit1(p2, "  if (!Object.hasOwn(READERS, provider)) throw new Error(`모르는 제공자예요: ${provider}`);\n\n", '')).out;
+    const quotes = [
+      ["TypeError: Cannot read properties of undefined (reading 'replace')", noName.split('\n').find((line) => line.startsWith('TypeError'))],
+      ['MinSu!', noGlobal.split('\n')[2].split('  ← ')[0]],
+      ['{"provider":"naver","emailVerified":false}', naverTop.split('\n')[2]],
+      ['READERS[provider] is not a function', noCheck.split('\n')[3]],
+    ];
+    for (const [quoted, actual] of quotes) {
+      expect(actual).toBe(quoted);
+      expect(lecture).toContain(quoted);
+    }
+    // 실습 2 해설의 펜스는 그 한 줄뿐이다
+    const fence = practiceFence(2, (one) => one.solution && one.lang === '');
+    expect(fence.body).toEqual(['{"provider":"naver","emailVerified":false}']);
+  });
+
+  describe('수업 백엔드를 띄워서', () => {
+    beforeAll(async () => {
+      // 실습 축이 가짜 구글을 껐다 — 수업 백엔드의 사본을 띄우려면 다시 필요하다.
+      if (!fakes.google) fakes.google = await startFakeGoogle({ port: GOOGLE_PORT });
+    }, 30_000);
+    /** 터미널 글자를 교안의 발췌와 견줄 수 있게 — 경로 · 걸린 시간 · code·state 값만 바꾼다(줄 끝의 빈칸은 버린다). */
+    const terminalLines = (text) => text
+      .replaceAll('/Users/hong/instagram-api', '~/instagram-api')
+      .replace(/\d+(\.\d+)?ms/g, 'N.Nms')
+      .replace(/(code|state)=[A-Za-z0-9_-]+/g, '$1=…')
+      .split('\n').map((line) => line.trimEnd());
+
+    it('🔴 Step 3 의 터미널 발췌(PrismaClientValidationError: 로 시작하는 펜스) — ... 을 뺀 모든 줄이 Step 3 판의 실제 터미널에 차례대로 있다', async () => {
+      const fence = fencesOf(LECTURE_MD).filter((one) => one.step === 3 && one.lang === '' && one.body[0].startsWith('PrismaClientValidationError:'));
+      expect(fence).toHaveLength(1);
+      await freshGate();
+      let actual;
+      await withServer(stepDir(3), async ({ base, tail, dir }) => {
+        const { callback } = await socialLogin(browser(base), 'kakao');
+        expect(callback.location).toBe(LOGIN_FAILED_PAGE);
+        await sleep(150);
+        actual = terminalLines(scrub(tail(), dir));
+      });
+      expect(firstMissing(terminalLines(fence[0].body.join('\n')), actual)).toBeNull();
+      // 발췌의 마지막 줄은 콜백 요청의 로그 한 줄이다
+      expect(terminalLines(fence[0].body.at(-1))[0]).toBe('GET /api/v2/auth/kakao/callback?code=…&state=… 302 N.Nms');
+    }, 30_000);
+
+    it('🔴 Step 4 의 한 줄(Argument `providerUserId`: Invalid value provided. Expected String, provided Int.) — String() 을 뺀 판의 실제 터미널에 그 줄이 있다', async () => {
+      const fence = fencesOf(LECTURE_MD).filter((one) => one.step === 4 && one.lang === '' && one.body[0].startsWith('Argument `providerUserId`'));
+      expect(fence).toHaveLength(1);
+      expect(fence[0].body).toHaveLength(1);
+      await freshGate();
+      await withServer(stepDir(4), async ({ base, tail }) => {
+        const { callback } = await socialLogin(browser(base), 'kakao');
+        expect(callback.location).toBe(LOGIN_FAILED_PAGE);
+        await sleep(150);
+        expect(tail().split('\n')).toContain(fence[0].body[0]);
+      }, { fake: false, edit: (d) => { cpSync(P('snapshots/p3-46.step4-number-id.kakao.js'), join(d, 'strategies/kakao.js')); useFakes(d); } });
+    }, 30_000);
+  });
+
+  it('🔴 과제의 http 블록 둘은 lab/p3-46/homework1.http · homework2.http 와 통째로 같다', () => {
+    const http = fencesOf(LECTURE_MD).filter((fence) => fence.lang === 'http').map((fence) => `${fence.body.join('\n')}\n`);
+    expect(http).toEqual([LAB('homework1.http'), LAB('homework2.http')]);
+  });
+
+  it('🔴 과제 [응용] 의 톡 서버 네 줄 — 동의 화면을 GET 으로 열고 허용한 흐름에서(TALK_DELAY=5000 · 과제 [응용] 정답) 그대로 찍힌다', async () => {
+    const fence = fencesOf(LECTURE_MD).filter((one) => one.lang === '' && one.body[0] === '[톡] GET /oauth/authorize 200');
+    expect(fence).toHaveLength(1);
+    const talk = await startTalk(5000);
+    try {
+      await sleep(100);
+      const before = talk.tail().length;
+      await withHomework('homework2.js', LAB('homework2.js'), async ({ base }) => {
+        const { callback } = await talkLogin(browser(base), 'sora', { openPage: true });
+        expect(callback.location).toBe('/?error=PROVIDER_TIMEOUT');
+        await sleep(300);
+      });
+      expect(talk.tail().slice(before)).toBe(`${fence[0].body.join('\n')}\n`);
+    } finally {
+      await stop(talk);
+    }
+  }, 60_000);
+
+  it('🔴 답안의 console.log(info) 출력(id: 10001 …) — 과제 [기초] 정답에 그 한 줄을 넣고 톡 sora 로 로그인했을 때 과제 서버 터미널에 찍히는 객체와 같다', async () => {
+    const fence = fencesOf(ANSWERS_MD).filter((one) => one.lang === '' && one.body[0] === '{' && one.body[1] === '  id: 10001,');
+    expect(fence).toHaveLength(1);
+    const src = LAB('homework1.js');
+    const line = '    const info = await response.json();\n';
+    // 둘째(톡 전략의 userProfile) 줄 아래에 넣는다
+    const at = src.indexOf(line, src.indexOf(line) + 1);
+    expect(at).toBeGreaterThan(src.indexOf('talkStrategy.userProfile'));
+    const logging = `${src.slice(0, at + line.length)}    console.log(info);\n${src.slice(at + line.length)}`;
+    const talk = await startTalk();
+    try {
+      await withHomework('homework1.js', logging, async ({ base, tail }) => {
+        const tab = browser(base);
+        expect(await endOf(tab, (await talkLogin(tab, 'sora')).callback)).toEqual({ id: 2, nickname: '소라' });
+        await sleep(100);
+        const log = tail();
+        const from = log.indexOf('{\n  id: 10001,');
+        expect(from).toBeGreaterThan(0);
+        expect(log.slice(from, log.indexOf('\n}\n', from) + 2)).toBe(fence[0].body.join('\n'));
+      });
+    } finally {
+      await stop(talk);
+    }
+  }, 60_000);
 });
