@@ -3,7 +3,7 @@ POST http://localhost:4003/login
 Content-Type: application/json
 
 {
-  "username": "jaehoon"
+  "userId": 2
 }
 
 ### 로그인 — 기기 B
@@ -11,10 +11,10 @@ POST http://localhost:4003/login
 Content-Type: application/json
 
 {
-  "username": "jaehoon"
+  "userId": 2
 }
 
-### 기기 A 로 나는 누구
+### 기기 A로 나는 누구
 # 기기 A 로그인 응답의 token 값으로 TOKEN_A 를 바꾼다
 GET http://localhost:4003/me
 Authorization: Bearer TOKEN_A
@@ -23,7 +23,7 @@ Authorization: Bearer TOKEN_A
 POST http://localhost:4003/logout
 Authorization: Bearer TOKEN_A
 
-### 기기 B 로 나는 누구
+### 기기 B로 나는 누구
 # 기기 B 로그인 응답의 token 값으로 TOKEN_B 를 바꾼다
 GET http://localhost:4003/me
 Authorization: Bearer TOKEN_B

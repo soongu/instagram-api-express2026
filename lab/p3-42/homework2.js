@@ -8,10 +8,15 @@ import { randomUUID } from 'node:crypto';
 const app = express();
 const COST = 12;
 const SECRET = process.env.CLUB_SECRET;
+
+if (!SECRET) {
+  throw new Error('.env에 CLUB_SECRET이 없어요');
+}
+
 const TOKEN_LIFETIME = 1000 * 60 * 30;
 const DUMMY_HASH = await bcrypt.hash(randomUUID(), COST);
 
-// 회원마다 토큰 버전을 둔다 — 비밀번호를 바꾸면 1 올라가고, 그 전에 내준 토큰은 버전이 안 맞는다.
+// 회원마다 번호(id)와 토큰 버전을 둔다 — 비밀번호를 바꾸면 버전이 1 올라가고, 그 전에 내준 토큰은 버전이 안 맞는다.
 const members = [];
 
 app.use(express.json());
@@ -19,7 +24,7 @@ app.use(cookieParser());
 
 // 이 회원의 지금 버전을 담아 토큰을 만들고 쿠키에 싣는다.
 function giveToken(res, member) {
-  const token = jwt.sign({ ver: member.tokenVersion }, SECRET, { subject: member.email, expiresIn: TOKEN_LIFETIME / 1000, algorithm: 'HS256' });
+  const token = jwt.sign({ ver: member.tokenVersion }, SECRET, { subject: String(member.id), expiresIn: TOKEN_LIFETIME / 1000, algorithm: 'HS256' });
   res.cookie('clubToken', token, { httpOnly: true, sameSite: 'lax', maxAge: TOKEN_LIFETIME });
 }
 
@@ -27,7 +32,7 @@ function giveToken(res, member) {
 function requireMember(req, res, next) {
   try {
     const payload = jwt.verify(req.cookies.clubToken, SECRET, { algorithms: ['HS256'] });
-    const member = members.find((m) => m.email === payload.sub);
+    const member = members.find((m) => m.id === Number(payload.sub));
 
     if (!member || payload.ver !== member.tokenVersion) {
       return res.status(401).json({ message: '로그인이 필요해요' });
@@ -51,7 +56,7 @@ app.post('/members', async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, COST);
-  members.push({ email, passwordHash, tokenVersion: 0 });
+  members.push({ id: members.length + 1, email, passwordHash, tokenVersion: 0 });
 
   res.status(201).json({ email });
 });

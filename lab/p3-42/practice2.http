@@ -3,7 +3,7 @@ POST http://localhost:4002/login
 Content-Type: application/json
 
 {
-  "username": "jaehoon"
+  "userId": 2
 }
 
 ### 첫 토큰으로 나는 누구

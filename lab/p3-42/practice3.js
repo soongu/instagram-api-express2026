@@ -8,7 +8,11 @@ const app = express();
 // 직접 해보기 2 에서 .env 에 넣은 키를 쓴다.
 const SECRET = process.env.LAB_SECRET;
 
-// 로그아웃한 토큰의 번호(jti) → 그 토큰이 끝나는 시각(초). 끝난 토큰은 어차피 막히니 그때까지만 둔다.
+if (!SECRET) {
+  throw new Error('.env에 LAB_SECRET이 없어요');
+}
+
+// 로그아웃한 토큰의 jti → 그 토큰이 끝나는 시각(초). 끝난 토큰은 어차피 막히니 그때까지만 둔다.
 const revoked = new Map();
 
 app.use(express.json());
@@ -31,9 +35,10 @@ function requireToken(req, res, next) {
   }
 }
 
-// 토큰마다 번호(jti)를 붙여 만든다 — 그 번호로 토큰 하나를 가리킬 수 있다.
+// 토큰마다 고유한 값(jti)을 붙여 만든다 — 그 값으로 토큰 하나를 가리킬 수 있다.
+// 차단 목록만 보는 실습이라 비밀번호 없이 보낸 사람 번호로 내준다.
 app.post('/login', (req, res) => {
-  const token = jwt.sign({}, SECRET, { subject: req.body.username, jwtid: randomUUID(), expiresIn: '10m', algorithm: 'HS256' });
+  const token = jwt.sign({}, SECRET, { subject: String(req.body.userId), jwtid: randomUUID(), expiresIn: '10m', algorithm: 'HS256' });
 
   res.json({ token });
 });
@@ -53,7 +58,7 @@ app.post('/logout', requireToken, (req, res) => {
 });
 
 app.get('/me', requireToken, (req, res) => {
-  res.json({ username: res.locals.payload.sub });
+  res.json({ userId: Number(res.locals.payload.sub) });
 });
 
 app.listen(4003, () => {
