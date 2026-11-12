@@ -53,3 +53,18 @@ Content-Type: application/json
 {
   "content": "관리자가 고친 글"
 }
+
+### 사람 목록
+GET http://localhost:3000/api/v2/admin/users
+
+### jaehoon을 관리자로
+PATCH http://localhost:3000/api/v2/admin/users/2/role
+Content-Type: application/json
+
+{
+  "role": "ADMIN"
+}
+
+### 로그인 없이 사람 목록
+# @no-cookie-jar
+GET http://localhost:3000/api/v2/admin/users
