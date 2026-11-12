@@ -743,7 +743,10 @@ describe('축 ⑪ 과제 [기초] — 동아리 서버에 Refresh', () => {
       for (const block of blocks) {
         const r = await sendBlock(block, jar, { port: HW_PORT, swap: { ...swap, EXPIRED_TOKEN: tok }, named });
         res.push(r);
-        if (block.title === 'bomi로 로그인') swap.COPIED_REFRESH = cookieLine(r, 'clubRefresh').split(';')[0].slice('clubRefresh='.length);
+        if (block.title === 'bomi로 로그인') {
+          swap.COPIED_REFRESH = cookieLine(r, 'clubRefresh').split(';')[0].slice('clubRefresh='.length);
+          swap.FORGED_REFRESH = `${swap.COPIED_REFRESH.split('.')[0]}.guess`;
+        }
         if (block.title === '다시 bomi로 로그인') swap.LOGGED_OUT_REFRESH = cookieLine(r, 'clubRefresh').split(';')[0].slice('clubRefresh='.length);
         if (block.title === '기한이 지난 토큰으로 내 정보') expiredBody = r.body;
       }
@@ -751,31 +754,35 @@ describe('축 ⑪ 과제 [기초] — 동아리 서버에 Refresh', () => {
     }, { labPort: 4011, extraEnv: { CLUB_SECRET } });
     return { statuses, expiredBody };
   };
-  it('🔴 상태 코드 201 · 200 · 200 · 200 · 401 · 401 · 200 · 401 · 200 · 401 · 기한만 지난 토큰은 code TOKEN_EXPIRED', async () => {
+  it('🔴 상태 코드 201 · 200 · 200 · 401 · 200 · 401 · 401 · 200 · 401 · 200 · 401 · 기한만 지난 토큰은 code TOKEN_EXPIRED', async () => {
     const ok = await run(LAB_SRC('homework1.js'));
-    expect(ok.statuses).toEqual([201, 200, 200, 200, 401, 401, 200, 401, 200, 401]);
+    expect(ok.statuses).toEqual([201, 200, 200, 401, 200, 401, 401, 200, 401, 200, 401]);
     expect(ok.expiredBody).toEqual({ code: 'TOKEN_EXPIRED', message: '토큰의 기한이 지났어요' });
   });
-  it('🔴 틀린 판 넷을 가린다 — 회전 없음(5번째 200) · 재사용에도 안 지움(6번째 200) · 로그아웃이 기록을 안 지움(10번째 200) · 만료를 안 가름(code 없음)', async () => {
+  it('🔴 틀린 판 다섯을 가린다 — 회전 없음(6번째 200) · 재사용에도 안 지움(7번째 200) · 지어낸 값에도 지움(5번째 401) · 로그아웃이 기록을 안 지움(11번째 200) · 만료를 안 가름(code 없음)', async () => {
     const src = LAB_SRC('homework1.js');
-    const noRotate = src.replace("  const nextSecret = randomBytes(32).toString('base64url');\n  login.secretHash = hashSecret(nextSecret);", "  const nextSecret = secret;");
-    expect((await run(noRotate)).statuses[4]).toBe(200);
-    const noDelete = src.replace("  if (!secret || login.secretHash !== hashSecret(secret)) {\n    logins.delete(loginId);", "  if (!secret || login.secretHash !== hashSecret(secret)) {");
-    expect((await run(noDelete)).statuses[5]).toBe(200);
-    const logoutKeeps = src.replace("  if (login && secret && login.secretHash === hashSecret(secret)) {\n    logins.delete(loginId);\n  }\n", '');
-    expect((await run(logoutKeeps)).statuses[9]).toBe(200);
+    const swapOnce = (from, to) => { expect(src.split(from)).toHaveLength(2); return src.replace(from, to); };
+    const noRotate = swapOnce("  const nextSecret = randomBytes(32).toString('base64url');\n  login.previousHash = hash;\n  login.secretHash = hashSecret(nextSecret);", "  const nextSecret = secret;");
+    expect((await run(noRotate)).statuses[5]).toBe(200);
+    const reuse = "    if (login.previousHash === hash) {\n      logins.delete(loginId);\n    }\n";
+    const noDelete = swapOnce(reuse, '');
+    expect((await run(noDelete)).statuses[6]).toBe(200);
+    const deleteAny = swapOnce(reuse, '    logins.delete(loginId);\n');
+    expect((await run(deleteAny)).statuses[4]).toBe(401);
+    const logoutKeeps = swapOnce("  if (login && secret && login.secretHash === hashSecret(secret)) {\n    logins.delete(loginId);\n  }\n", '');
+    expect((await run(logoutKeeps)).statuses[10]).toBe(200);
     const noCode = src.replace("      return res.status(401).json({ code: 'TOKEN_EXPIRED', message: '토큰의 기한이 지났어요' });", "      return res.status(401).json({ message: '로그인이 필요해요' });");
     expect((await run(noCode)).expiredBody.code).toBeUndefined();
-  });
-  it('🔴 답안 «확인하지 못하는 요구사항» — 끝나는 때 확인과 내보낸 회원 확인을 빼도 상태 코드 열 개가 같다', async () => {
+  }, 60_000);
+  it('🔴 답안 «확인하지 못하는 요구사항» — 끝나는 때 확인과 내보낸 회원 확인을 빼도 상태 코드 열한 개가 같다', async () => {
     const src = LAB_SRC('homework1.js');
     const noExpiry = src.replace('  if (!login || login.expiresAt <= Date.now()) {', '  if (!login) {');
     expect(noExpiry).not.toBe(src);
-    expect((await run(noExpiry)).statuses).toEqual([201, 200, 200, 200, 401, 401, 200, 401, 200, 401]);
+    expect((await run(noExpiry)).statuses).toEqual([201, 200, 200, 401, 200, 401, 401, 200, 401, 200, 401]);
     const noMember = src.replace("  if (!member) {\n    logins.delete(loginId);\n    return res.status(401).json({ message: '다시 로그인해 주세요' });\n  }\n\n  const nextSecret", '  const nextSecret');
     expect(noMember).not.toBe(src);
-    expect((await run(noMember)).statuses).toEqual([201, 200, 200, 200, 401, 401, 200, 401, 200, 401]);
-  });
+    expect((await run(noMember)).statuses).toEqual([201, 200, 200, 401, 200, 401, 401, 200, 401, 200, 401]);
+  }, 60_000);
 });
 
 describe('축 ⑫ 과제 [응용] — 로그인한 기기 목록과 내보내기', () => {

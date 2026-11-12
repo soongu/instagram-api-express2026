@@ -29,7 +29,8 @@ const DUMMY_HASH = await bcrypt.hash(randomUUID(), COST);
 const members = [];
 // 다음 회원 번호 — 내보낸 회원의 번호를 다른 사람에게 다시 주지 않으려고 따로 센다.
 let nextId = 1;
-// 로그인 기록 — 로그인 ID → { memberId, secretHash, expiresAt }. Refresh 토큰의 비밀값은 해시로만 둔다.
+// 로그인 기록 — 로그인 ID → { memberId, secretHash, previousHash, expiresAt }. Refresh 토큰의 비밀값은 해시로만 둔다.
+// previousHash 는 바로 앞 비밀값의 해시 — 그 값이 다시 오면 이미 쓴 토큰이 다시 온 것이다.
 const logins = new Map();
 
 const hashSecret = (secret) => createHash('sha256').update(secret).digest('hex');
@@ -106,7 +107,7 @@ app.post('/login', async (req, res) => {
   // 로그인 기록을 하나 남기고, 그 기록을 가리키는 토큰 둘을 준다.
   const loginId = randomUUID();
   const secret = randomBytes(32).toString('base64url');
-  logins.set(loginId, { memberId: member.id, secretHash: hashSecret(secret), expiresAt: Date.now() + LOGIN_LIFETIME });
+  logins.set(loginId, { memberId: member.id, secretHash: hashSecret(secret), previousHash: null, expiresAt: Date.now() + LOGIN_LIFETIME });
   setTokens(res, member, loginId, secret);
 
   res.json({ email });
@@ -121,9 +122,13 @@ app.post('/auth/refresh', (req, res) => {
     logins.delete(loginId);
     return res.status(401).json({ message: '다시 로그인해 주세요' });
   }
-  // 이미 쓴(또는 훔친) 비밀값이 다시 왔다 — 그 로그인 기록을 지운다.
-  if (!secret || login.secretHash !== hashSecret(secret)) {
-    logins.delete(loginId);
+  const hash = hashSecret(secret ?? '');
+
+  if (login.secretHash !== hash) {
+    // 바로 앞 비밀값이 다시 왔다 — 이미 쓴(또는 훔친) 토큰이니 그 로그인 기록을 지운다. 지어낸 값이면 지우지 않는다.
+    if (login.previousHash === hash) {
+      logins.delete(loginId);
+    }
     return res.status(401).json({ message: '다시 로그인해 주세요' });
   }
 
@@ -136,6 +141,7 @@ app.post('/auth/refresh', (req, res) => {
   }
 
   const nextSecret = randomBytes(32).toString('base64url');
+  login.previousHash = hash;
   login.secretHash = hashSecret(nextSecret);
   login.expiresAt = Date.now() + LOGIN_LIFETIME;
   setTokens(res, member, loginId, nextSecret);
