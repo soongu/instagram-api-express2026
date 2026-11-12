@@ -939,7 +939,10 @@ describe('축 ⑬ 학생 낭독 집중 검수 — 교안의 지시와 확인 절
   it('🔴 Step 4 — sessionService 의 SESSION_LIFETIME 위 주석에서 «로그인 쿠키의 maxAge» 를 지우라고 한다 · main 의 학생 파일도 그 판', () => {
     const step4 = section(lecture(), '## Step 4:', '## Step 5:');
     expect(step4).toContain('`SESSION_LIFETIME`에 달린 주석은 «7일(밀리초).»까지만 남기고 그 뒤의 문장은 지워요');
-    const file = read(P('services/sessionService.js')).split('\n');
+    // 그 주석을 고친 커밋의 판을 읽는다 — 작업트리는 뒤 회차(`p3-44` Step 5)가 이 주석을 다시 바꿔서 이 회차의 판이 아니다.
+    const fixed = execFileSync('git', ['log', 'main', '--format=%H %s'], { cwd: P('.'), encoding: 'utf8' }).split('\n')
+      .find((line) => line.slice(41).startsWith('test(p3-42): 학생 낭독 집중 검수')).slice(0, 40);
+    const file = execFileSync('git', ['show', `${fixed}:services/sessionService.js`], { cwd: P('.'), encoding: 'utf8' }).split('\n');
     expect(file).toContain('// 로그인을 남겨 둘 기간 — 7일(밀리초).');
     expect(file.join('\n')).not.toContain('maxAge');
   });
