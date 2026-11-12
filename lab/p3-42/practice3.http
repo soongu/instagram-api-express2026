@@ -1,0 +1,29 @@
+### 로그인 — 기기 A
+POST http://localhost:4003/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### 로그인 — 기기 B
+POST http://localhost:4003/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### 기기 A 로 나는 누구
+# 기기 A 로그인 응답의 token 값을 TOKEN_A 자리에 붙여 넣는다
+GET http://localhost:4003/me
+Authorization: Bearer TOKEN_A
+
+### 기기 A 로그아웃
+POST http://localhost:4003/logout
+Authorization: Bearer TOKEN_A
+
+### 기기 B 로 나는 누구
+# 기기 B 로그인 응답의 token 값을 TOKEN_B 자리에 붙여 넣는다
+GET http://localhost:4003/me
+Authorization: Bearer TOKEN_B
