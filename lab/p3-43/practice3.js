@@ -42,12 +42,19 @@ async function requireAdmin(req, res, next) {
     return;
   }
 
-  const response = await fetch('http://localhost:3000/api/v2/auth/me', {
-    headers: { Authorization: req.headers.authorization },
-  });
-  const { data } = await response.json();
+  let role;
+  try {
+    const response = await fetch('http://localhost:3000/api/v2/auth/me', {
+      headers: { Authorization: req.headers.authorization },
+    });
+    role = response.ok ? (await response.json()).data.role : undefined;
+  } catch {
+    // 수업 서버가 꺼져 있으면 지금 역할을 알 수 없다 — 모르면 막는다.
+    res.status(503).json({ message: '지금은 관리자인지 확인할 수 없어요' });
+    return;
+  }
 
-  if (!response.ok || data.role !== 'ADMIN') {
+  if (role !== 'ADMIN') {
     res.status(403).json({ message: '관리자만 할 수 있어요' });
     return;
   }
