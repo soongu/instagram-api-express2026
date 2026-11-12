@@ -6,7 +6,7 @@ const NOT_ALLOWED = /[^A-Za-z0-9_.]/g;
 // 이미 쓰고 있는 사용자 이름
 const taken = new Set(['jaehoon', 'kakao']);
 
-// 소셜 로그인으로 처음 온 사람들 — 제공자의 응답을 우리 모양으로 바꾼 값이다. id 는 글자다.
+// 소셜 로그인으로 처음 온 사람들 — 제공자의 응답을 우리가 정한 이름으로 맞춘 값이다. id 는 글자다.
 const visitors = [
   { provider: 'kakao', id: '3812345678', name: 'minsu_dev' },
   { provider: 'kakao', id: '3812345679', name: '민수' },
@@ -27,7 +27,7 @@ function pickUsername(profile, taken) {
   const letters = (profile.name ?? '').replace(NOT_ALLOWED, '').slice(0, 26);
   const base = letters.length >= 3 ? letters : profile.provider;
 
-  // 이미 쓰는 이름이면 뒤에 회원번호의 끝 네 글자를 붙인다.
+  // 이미 쓰는 이름이면 뒤에 id 의 끝 네 글자를 붙인다.
   return taken.has(base) ? `${base}${profile.id.slice(-4)}` : base;
 }
 

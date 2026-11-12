@@ -166,7 +166,7 @@ app.get('/', (req, res) => {
   res.send(`<!doctype html><meta charset="utf-8">${notice}<a href="/login">인가 서버로 로그인</a> <a href="/talk">톡으로 로그인</a>`);
 });
 
-// 제공자를 다녀온 회원(req.user)을 로그인시킨다 — 브라우저가 문서로 연 주소라 JSON 대신 /me 로 보낸다.
+// 제공자에게 다녀온 회원(req.user)을 로그인시킨다 — 브라우저가 문서로 연 주소라 JSON 대신 /me 로 보낸다.
 function startSession(req, res) {
   const sessionId = randomUUID();
 

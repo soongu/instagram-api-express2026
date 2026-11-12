@@ -27,7 +27,7 @@ const READERS = {
   // 여기를 채워요 — google · kakao · naver
 };
 
-// 제공자의 응답을 우리 모양({ provider, id, email, emailVerified, name })으로 바꾼다.
+// 제공자의 응답을 우리가 정한 이름({ provider, id, email, emailVerified, name })으로 맞춘다.
 // 모르는 제공자면 «모르는 제공자예요: 이름» 이라는 에러를 던진다.
 function toProfile(provider, info) {
   // 여기를 채워요.
