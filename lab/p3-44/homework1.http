@@ -19,6 +19,12 @@ Content-Type: application/json
 ### 내 정보
 GET http://localhost:4011/me
 
+### 지어낸 비밀값으로 새 토큰 받기
+# COPIED_REFRESH 와 같은 값에서 점 뒤의 비밀값만 아무 글자로 바꿔 FORGED_REFRESH 를 바꾼다
+# @no-cookie-jar
+POST http://localhost:4011/auth/refresh
+Cookie: clubRefresh=FORGED_REFRESH
+
 ### 새 토큰 받기
 POST http://localhost:4011/auth/refresh
 
