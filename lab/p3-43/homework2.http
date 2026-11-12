@@ -28,7 +28,7 @@ Content-Type: application/json
 ### 공지 목록
 GET http://localhost:4012/notices
 
-### 내려간 jaehoon의 토큰으로 공지 숨기기
+### 역할이 내려간 jaehoon의 토큰으로 공지 숨기기
 # Step 7 에서 복사해 둔 jaehoon의 토큰(관리자일 때 받은 것)으로 COPIED_TOKEN 을 바꾼다
 PATCH http://localhost:4012/notices/2/hide
 Authorization: Bearer COPIED_TOKEN
