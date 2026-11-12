@@ -96,7 +96,12 @@ export async function setPassword(username, password) {
   }
 }
 
-// 사람의 역할을 바꾼다 — 관리자 스크립트가 부른다.
+// 사람 목록 — 관리자 주소가 부른다. 번호 차례로.
+export function getUsers() {
+  return prisma.user.findMany({ select: userFields, orderBy: { id: 'asc' } });
+}
+
+// 사람의 역할을 바꾼다 — 관리자 스크립트와 관리자 주소가 부른다.
 export async function setRole(id, role) {
   try {
     return await prisma.user.update({ where: { id }, data: { role }, select: userFields });
