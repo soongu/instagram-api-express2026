@@ -602,17 +602,19 @@ const noticeServers = async (fn) => {
   makeAdmin(8);
   const dir = studentDir(stepDir(8));
   const api = await start(dir);
-  const p2 = await labServer('practice2.js', LAB_PORT);
-  const p3 = await labServer('practice3.js', LAB_PORT2);
+  let p2;
+  let p3;
   try {
+    p2 = await labServer('practice2.js', LAB_PORT);
+    p3 = await labServer('practice3.js', LAB_PORT2);
     const a = device(`http://localhost:${PORT}`);
     await a.login('admin.hong', 'admin1234!');
     const j = device(`http://localhost:${PORT}`);
     await j.login('jaehoon');
     await fn({ api, p2, p3, a, j });
   } finally {
-    await stop(p2.srv);
-    await stop(p3.srv);
+    if (p2) await stop(p2.srv);
+    if (p3) await stop(p3.srv);
     await stop(api);
   }
 };
@@ -621,8 +623,9 @@ describe('축 ⑩·⑪ 직접 해보기 2·3 — 공지 서버가 토큰의 역�
   it('🔴 둘 다 — 토큰 없이 401 · X-Role 만 401 · jaehoon 403 · admin.hong 200 · 목록에 2번만', async () => {
     await noticeServers(async ({ a, j }) => {
       for (const [file, port] of [['practice2.http', LAB_PORT], ['practice3.http', LAB_PORT2]]) {
-        const out = await runHttp(file, port, { SEOYEON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken') });
-        expect(out.map((r) => r.status)).toEqual([200, 401, 401, 403, 200, 200]);
+        // practice3.http 의 마지막 요청(내려간 jaehoon 의 토큰)은 여기서는 jaehoon 의 USER 토큰으로 — 토큰부터 403
+        const out = await runHttp(file, port, { SEOYEON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken'), COPIED_TOKEN: j.cookie('accessToken') });
+        expect(out.map((r) => r.status)).toEqual(file === 'practice2.http' ? [200, 401, 401, 403, 200, 200] : [200, 401, 401, 403, 200, 200, 403]);
         expect(out[3].body).toEqual({ message: '관리자만 할 수 있어요' });
         expect(out[5].body).toEqual([{ id: 2, title: '새 기능 소개', authorId: 1 }]);
       }
@@ -704,8 +707,9 @@ describe('축 ⑫ 과제', () => {
     makeAdmin(8);
     const dir = studentDir(stepDir(8));
     const api = await start(dir);
-    const lab = await labServer('homework2.js', HW_PORT2, {}, edit);
+    let lab;
     try {
+      lab = await labServer('homework2.js', HW_PORT2, {}, edit);
       const a = device(`http://localhost:${PORT}`);
       await a.login('admin.hong', 'admin1234!');
       const j = device(`http://localhost:${PORT}`);
@@ -713,10 +717,35 @@ describe('축 ⑫ 과제', () => {
       const swap = { JAEHOON_TOKEN: j.cookie('accessToken'), ADMIN_TOKEN: a.cookie('accessToken') };
       return { out: await runHttp('homework2.http', HW_PORT2, swap), swap };
     } finally {
-      await stop(lab.srv);
+      if (lab) await stop(lab.srv);
       await stop(api);
     }
   };
+
+  it('🔴 [응용] 내려간 관리자의 토큰 — 숨기기 403 · 기록 보기 403 · 둘 다 DENIED 로 남는다(직접 해보기 3 의 다시 확인을 이어받았다)', async () => {
+    await freshGate();
+    makeAdmin(8);
+    const dir = studentDir(stepDir(8));
+    const api = await start(dir);
+    let lab;
+    try {
+      lab = await labServer('homework2.js', HW_PORT2);
+      const a = device(`http://localhost:${PORT}`);
+      await a.login('admin.hong', 'admin1234!');
+      await a.send('PATCH', '/api/v2/admin/users/2/role', { role: 'ADMIN' });
+      const j = device(`http://localhost:${PORT}`);
+      await j.login('jaehoon');
+      const stale = j.cookie('accessToken');
+      await a.send('PATCH', '/api/v2/admin/users/2/role', { role: 'USER' });
+      const hw = device(`http://localhost:${HW_PORT2}`);
+      expect((await hw.send('PATCH', '/notices/1/hide', { reason: '내려가기 전에 받은 토큰' }, { Authorization: `Bearer ${stale}` })).status).toBe(403);
+      const log = await hw.get('/audit', { Authorization: `Bearer ${a.cookie('accessToken')}` });
+      expect(log.body.map(({ at, ...rest }) => rest)).toEqual([{ actorId: 2, action: 'PATCH /notices/1/hide', result: 'DENIED' }]);
+    } finally {
+      if (lab) await stop(lab.srv);
+      await stop(api);
+    }
+  }, 60000);
 
   it('🔴 [응용] jaehoon 403 · 이유 없이 400 · 이유를 적으면 200 · 목록에 2번만 · jaehoon 의 기록 보기 403 · 관리자는 최근 것부터 셋(막힌 시도 둘 포함) · 토큰은 안 남는다', async () => {
     const { out, swap } = await audit();
@@ -735,7 +764,12 @@ describe('축 ⑫ 과제', () => {
   }, 60000);
 
   it('🔴 [응용] 틀린 판 — requireAdmin 이 막을 때 기록하지 않으면 관리자의 기록 보기에 HIDE_NOTICE 하나뿐', async () => {
-    const { out } = await audit((d) => replaceIn(d, 'lab/p3-43/homework2.js', "    record(res, `${req.method} ${req.path}`, 'DENIED');\n", ''));
+    const { out } = await audit((d) => {
+      const file = join(d, 'lab/p3-43/homework2.js');
+      const line = "    record(res, `${req.method} ${req.path}`, 'DENIED');\n";
+      if (read(file).split(line).length !== 3) throw new Error('기록 줄이 둘이 아니다');
+      writeFileSync(file, read(file).replaceAll(line, ''));
+    });
     expect(out.map((r) => r.status)).toEqual([403, 400, 200, 200, 403, 200]);
     expect(out[5].body.map((e) => e.action)).toEqual(['HIDE_NOTICE']);
   }, 60000);
@@ -789,7 +823,7 @@ describe('축 ⑬ 교안·답안의 블록은 코드베이스와 실제 실행�
   it('🔴 http 블록 — 줄마다 requests/admin.http 나 lab/p3-43 의 .http 에 있다 · admin.http 는 교안에 적은 차례 그대로', () => {
     const files = ['requests/admin.http', ...readdirSync(LAB('.')).filter((f) => f.endsWith('.http')).map((f) => `lab/p3-43/${f}`)].map((rel) => read(R(rel)).split('\n'));
     const blocks = DOCS.flatMap((d) => fences(d, 'http'));
-    expect(blocks.length).toBe(10);
+    expect(blocks.length).toBe(11);
     for (const b of blocks) expect(files.some((lines) => meaningful(b).every((l) => lines.includes(l))), b).toBe(true);
     // 교안이 admin.http 에 더하라고 한 덩어리를 차례로 이으면 그 파일이 된다
     const adminBlocks = fences(DOCS[0], 'http').filter((b) => b.includes('localhost:3000'));
@@ -807,7 +841,7 @@ describe('축 ⑬ 교안·답안의 블록은 코드베이스와 실제 실행�
     expect(Object.keys(JSON.parse(payload))).toEqual(['sid', 'role', 'iat', 'exp', 'sub']);
     expect(JSON.parse(payload)).toMatchObject({ role: 'ADMIN', sub: '45' });
     expect(JSON.parse(payload).exp - JSON.parse(payload).iat).toBe(3600);
-    expect(lecture).toContain('jaehoon의 토큰은 220자로 늘었어요');
+    expect(lecture).toContain('지난 시간에 201자였던 jaehoon의 토큰은 이제 220자예요');
     const table = fences(DOCS[0], '').find((b) => b.startsWith(' 보낸 사람'));
     expect(table.split('\n').slice(2).map((l) => l.trim().split(/\s{2,}/))).toEqual([
       ['jaehoon', '게시물 목록', '3', '3'],
