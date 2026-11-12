@@ -1,21 +1,29 @@
 // ~/instagram-api/services/sessionService.js
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { prisma } from '../db.js';
 
 // 로그인을 남겨 둘 기간 — 7일(밀리초).
 export const SESSION_LIFETIME = 1000 * 60 * 60 * 24 * 7;
 
+// Refresh 토큰의 비밀값을 해시로 바꾼다 — 데이터베이스에는 이 해시만 둔다.
+function hashSecret(secret) {
+  return createHash('sha256').update(secret).digest('hex');
+}
+
 // 세션 하나가 sessions 테이블의 한 행이다. 서버가 다시 떠도 테이블은 남는다.
+// Refresh 토큰은 «행 ID.비밀값» — 행 ID 는 Access 토큰에도 담겨 누구나 읽으니, 아무도 모르는 비밀값을 붙인다.
 export async function createSession(userId) {
+  const secret = randomBytes(32).toString('base64url');
   const session = await prisma.session.create({
     data: {
       id: randomUUID(),
       userId,
       expiresAt: new Date(Date.now() + SESSION_LIFETIME),
+      refreshTokenHash: hashSecret(secret),
     },
   });
 
-  return session.id;
+  return { sessionId: session.id, refreshToken: `${session.id}.${secret}` };
 }
 
 export async function deleteSession(sessionId) {

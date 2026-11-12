@@ -96,12 +96,14 @@ model Comment {
 
 // 로그인 세션 — 쿠키에 담아 준 세션 ID 하나가 한 행이다.
 // 사람을 지우면 그 사람의 세션도 함께 지운다(onDelete: Cascade).
+// Refresh 토큰은 원문이 아니라 비밀값의 해시만 둔다 — 데이터베이스가 새어도 그 값으로는 새 토큰을 못 받는다.
 model Session {
-  id        String   @id
-  userId    Int      @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  id               String   @id
+  userId           Int      @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt        DateTime @map("expires_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  refreshTokenHash String?  @map("refresh_token_hash")
 
   @@index([userId])
   @@map("sessions")

@@ -4,6 +4,7 @@ import * as userService from '../services/userService.js';
 import { sendData } from '../responses.js';
 import { MESSAGES } from '../errors.js';
 import { TOKEN_LIFETIME } from '../services/tokenService.js';
+import { SESSION_LIFETIME } from '../services/sessionService.js';
 import { readToken } from '../middlewares/auth.js';
 
 // 이미 쓰고 있을 때의 에러 코드 — 무엇을 찾았는지에 따라 다르다. 문장은 가입이 409 로 실패할 때와 같다.
@@ -30,13 +31,20 @@ export async function checkDuplicate(req, res) {
 
 export async function login(req, res) {
   const { username, password } = req.body;
-  const { user, accessToken } = await authService.login(username, password);
+  const { user, accessToken, refreshToken } = await authService.login(username, password);
 
-  // 토큰을 쿠키에 담는다 — 스크립트가 못 읽게 httpOnly, 토큰이 끝나는 1시간 뒤에 쿠키도 사라지게.
+  // 토큰을 쿠키에 담는다 — 스크립트가 못 읽게 httpOnly, 토큰이 끝나는 15분 뒤에 쿠키도 사라지게.
   res.cookie('accessToken', accessToken, {
     httpOnly: true,
     sameSite: 'lax',
     maxAge: TOKEN_LIFETIME,
+  });
+  // Refresh 토큰은 로그인 기록이 남는 7일 동안 — /api/v2/auth 로 시작하는 인증 주소에만 실려 가게 path 를 좁힌다.
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/api/v2/auth',
+    maxAge: SESSION_LIFETIME,
   });
 
   sendData(res, user);
