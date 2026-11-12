@@ -19,7 +19,7 @@
 // 축 ⑧ 리팩터링 — 비밀번호 로그인 응답이 `code/p3-44` 와 같다
 // 축 ⑨ 틀린 판 넷이 판정에 걸린다
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -190,11 +190,13 @@ const browser = (base) => {
   const jar = new Map();
   const send = async (method, path, body, extra = {}) => {
     const headers = { ...extra };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    // 폼(URLSearchParams)은 브라우저의 <form> 처럼 urlencoded 로, 그 밖의 본문은 JSON 으로 보낸다.
+    const isForm = body instanceof URLSearchParams;
+    if (body !== undefined) headers['Content-Type'] = isForm ? 'application/x-www-form-urlencoded' : 'application/json';
     // path 가 긴 쿠키를 앞에 싣는다(RFC 6265 §5.4)
     const carried = [...jar.values()].filter((c) => pathMatches(c.path, path)).sort((a, b) => b.path.length - a.path.length);
     if (carried.length > 0 && !headers.Cookie) headers.Cookie = carried.map((c) => `${c.name}=${c.value}`).join('; ');
-    const res = await fetch(`${base}${path}`, { method, headers, redirect: 'manual', body: body === undefined ? undefined : JSON.stringify(body) });
+    const res = await fetch(`${base}${path}`, { method, headers, redirect: 'manual', body: body === undefined ? undefined : isForm ? body.toString() : JSON.stringify(body) });
     const sets = res.headers.getSetCookie();
     for (const line of sets) {
       const [pair] = line.split(';');
@@ -1026,4 +1028,365 @@ describe('축 ⑨ 틀린 판 넷이 판정에 걸린다', () => {
     expect(await run(byEmail, unverified)).toBe('yuna');
     expect(await run(byEmail, verified)).toBe('yuna');
   }, 90_000);
+});
+
+// ── 직접 해보기·과제(lab/p3-45) ────────────────────────────────────────────
+// 실습 파일은 이 회차 북마크가 생기면 북마크에서, 아직 없으면 main 에서 읽는다(작업트리가 아니다).
+// 🔑 4001·4002 는 남이 쓸 수 있어서 직접 띄우지 않는다 — 사본의 글자 4001→3963 · 4002→3964 만 바꿔 띄운다
+//    (실습 서버 · 나눠 주는 인가 서버 `lab/p3-21/auth-server.js` 의 발급자·등록한 돌아올 주소·listen 모두).
+const LAB_AS_PORT = 3963;
+const LAB_PORT = 3964;
+const LAB_BASE = `http://localhost:${LAB_PORT}`;
+const LAB_REF = hasRef('refs/heads/code/p3-45') ? 'code/p3-45' : 'main';
+const showAt = (ref, rel) => execFileSync('git', ['show', `${ref}:${rel}`], { cwd: P('.'), encoding: 'utf8' });
+const LAB = (name) => showAt(LAB_REF, `lab/p3-45/${name}`);
+/** 글자를 모두 바꾼다 — 바꿀 글자가 없으면 던진다. */
+const swapAll = (text, pairs, what) => pairs.reduce((out, [a, b]) => {
+  if (!out.includes(a)) throw new Error(`${what} 에 바꿀 글자가 없다: ${a}`);
+  return out.replaceAll(a, b);
+}, text);
+const toLabPorts = (text, what) => swapAll(text, [['4001', String(LAB_AS_PORT)], ['4002', String(LAB_PORT)]], what);
+/** 사본의 한 덩어리를 바꾼다 — 바꿀 글자가 없으면 던진다(틀린 판을 만들 때). */
+const edit1 = (text, a, b) => {
+  if (!text.includes(a)) throw new Error(`바꿀 글자가 없다: ${a}`);
+  return text.replace(a, b);
+};
+
+/** 나눠 주는 인가 서버를 포트만 바꿔 띄운다. */
+const startAuthServer = () => {
+  const dir = studentDir(stepDir(7), (d) => {
+    mkdirSync(join(d, 'lab/p3-21'), { recursive: true });
+    writeFileSync(join(d, 'lab/p3-21/auth-server.js'), toLabPorts(showAt(LAB_REF, 'lab/p3-21/auth-server.js'), 'auth-server.js'));
+  });
+  return boot(join(dir, 'lab/p3-21/auth-server.js'), { port: LAB_AS_PORT, cwd: dir, env, ready: `${LAB_AS_PORT}번 포트에서` });
+};
+/** 실습 서버를 띄운다 — `source` 는 학생 파일(또는 틀린 판) 원문, 포트만 바꾼다. 학생처럼 프로젝트 폴더에서 `node lab/p3-45/…`. */
+const withLab = async (file, source, fn) => {
+  const dir = studentDir(stepDir(7), (d) => {
+    mkdirSync(join(d, 'lab/p3-45'), { recursive: true });
+    writeFileSync(join(d, `lab/p3-45/${file}`), toLabPorts(source, file));
+  });
+  const srv = await boot(join(dir, `lab/p3-45/${file}`), { port: LAB_PORT, cwd: dir, env, ready: `${LAB_PORT}번 포트에서` });
+  try {
+    await fn({ ...srv, base: LAB_BASE });
+  } finally {
+    await stop(srv);
+  }
+};
+/** 스크립트를 학생처럼 `node lab/p3-45/…` 로 돌려 출력을 돌려준다. */
+const runLabScript = (file, source) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p345-script-'));
+  dirs.push(dir);
+  mkdirSync(join(dir, 'lab/p3-45'), { recursive: true });
+  writeFileSync(join(dir, `lab/p3-45/${file}`), source);
+  return execFileSync(process.execPath, [`lab/p3-45/${file}`], { cwd: dir, encoding: 'utf8' });
+};
+/**
+ * 인가 서버로 로그인 한 바퀴 — /login → 동의 화면에서 아이디·비밀번호를 넣고 허용(또는 거부) → /callback.
+ * 동의 화면은 다른 출처(127.0.0.1)라 쿠키 없이 폼만 보낸다. `tamper` 는 돌아오는 주소의 state 를 바꾼다.
+ */
+const labLogin = async (tab, username, { decision = 'allow', tamper } = {}) => {
+  const begin = await tab.get('/login');
+  if (begin.status !== 302) return { begin };
+  const auth = new URL(begin.location);
+  const form = new URLSearchParams([...auth.searchParams, ['username', username], ['password', `${username}1234`], ['decision', decision]]);
+  const consent = await fetch(`${auth.origin}/authorize`, { method: 'POST', body: form, redirect: 'manual' });
+  const back = new URL(consent.headers.get('location'));
+  if (tamper !== undefined) back.searchParams.set('state', tamper);
+  expect(back.origin).toBe(LAB_BASE);
+  const callback = await tab.get(`${back.pathname}${back.search}`);
+  return { begin, consentStatus: consent.status, callback };
+};
+/** 같은 서버 안의 302 를 따라간다 — 지나간 주소와 마지막 응답. */
+const followIn = async (tab, res) => {
+  const path = [];
+  let cur = res;
+  while (cur.status >= 300 && cur.status < 400 && cur.location.startsWith('/')) {
+    path.push(cur.location);
+    cur = await tab.get(cur.location);
+  }
+  return { path, res: cur };
+};
+
+describe('직접 해보기·과제 — 실습용 인가 서버를 띄운 채', () => {
+  let authServer;
+  beforeAll(async () => {
+    authServer = await startAuthServer();
+  }, 30_000);
+  afterAll(async () => {
+    if (authServer) await stop(authServer);
+  });
+
+  describe('축 ⑩ 직접 해보기 1 — 실습용 인가 서버를 제공자로 삼는 전략 lab', () => {
+    // 요구사항 4 의 판 — 파일 안의 저장소 대신 수업의 stateStore 를 불러 쓴다(판정이 정답 판에서 만든다).
+    const classStore = () => {
+      const src = LAB('practice1.js');
+      const from = src.indexOf('// 인가 서버를 다녀오는 동안만 쓰는 쿠키');
+      const to = src.indexOf('const labStrategy = new OAuth2Strategy(');
+      expect(from).toBeGreaterThan(0);
+      expect(to).toBeGreaterThan(from);
+      return edit1(src.slice(0, from) + src.slice(to), "import OAuth2Strategy from 'passport-oauth2';\n",
+        "import OAuth2Strategy from 'passport-oauth2';\nimport { stateStore } from '../../strategies/stateStore.js';\n");
+    };
+
+    it('🔴 정답 판 — 허용하면 /callback 200 { provider: lab, id: 10001, email } · 인가 서버에 GET /userinfo 200 · state 를 고치면 403 Forbidden · 거부하면 401 Unauthorized', async () => {
+      await withLab('practice1.js', LAB('practice1.js'), async ({ base }) => {
+        const before = authServer.tail().length;
+        const ok = await labLogin(browser(base), 'jaehoon');
+        expect(ok.consentStatus).toBe(303);
+        expect(ok.callback.status).toBe(200);
+        expect(ok.callback.body).toEqual({ provider: 'lab', id: '10001', email: 'jaehoon@example.com' });
+        await sleep(100);
+        expect(authServer.tail().slice(before)).toContain('GET /userinfo 200');
+        const tampered = await labLogin(browser(base), 'jaehoon', { tamper: 'forged' });
+        expect([tampered.callback.status, tampered.callback.body]).toEqual([403, 'Forbidden']);
+        const denied = await labLogin(browser(base), 'jaehoon', { decision: 'deny' });
+        expect([denied.callback.status, denied.callback.body]).toEqual([401, 'Unauthorized']);
+      });
+    }, 30_000);
+
+    it('🔴 요구사항 4 — 수업의 stateStore 를 불러 쓰면 쿠키 둘이 Path=/api/v2/auth 라 /callback 에 안 실려 403 Forbidden', async () => {
+      await withLab('practice1.js', classStore(), async ({ base }) => {
+        const tab = browser(base);
+        const { begin, callback } = await labLogin(tab, 'jaehoon');
+        expect(begin.setCookies.map(cookieShape)).toEqual([
+          'oauth_state=…; Max-Age=600; Path=/api/v2/auth; Expires=…; HttpOnly; SameSite=Lax',
+          'oauth_verifier=…; Max-Age=600; Path=/api/v2/auth; Expires=…; HttpOnly; SameSite=Lax',
+        ]);
+        expect([callback.status, callback.body]).toEqual([403, 'Forbidden']);
+      });
+    }, 30_000);
+  });
+
+  describe('축 ⑬ 과제 [기초] — 인가 서버로 로그인한 사람을 회원으로', () => {
+    /** 확인 절차를 차례대로 돌려 관찰한 것을 돌려준다 — 정답 판과 틀린 판을 같은 절차로 잰다. */
+    const observe = (source) => {
+      let seen;
+      return withLab('homework1.js', source, async ({ base }) => {
+        const out = {};
+        const a = browser(base);
+        const first = await labLogin(a, 'jaehoon');
+        out.firstCallback = [first.callback.status, first.callback.location];
+        out.first = (await followIn(a, first.callback)).res.body;
+        const b = browser(base);
+        out.minji = (await followIn(b, (await labLogin(b, 'minji')).callback)).res.body;
+        const c = browser(base);
+        out.again = (await followIn(c, (await labLogin(c, 'jaehoon')).callback)).res.body;
+        const d = browser(base);
+        const denied = await labLogin(d, 'jaehoon', { decision: 'deny' });
+        out.deniedCallback = [denied.callback.status, denied.callback.location ?? denied.callback.body];
+        if (denied.callback.status === 302) {
+          const page = (await followIn(d, denied.callback)).res;
+          out.deniedPage = page.body.includes('로그인하지 못했어요. 다시 시도해 주세요.');
+        }
+        out.members = (await browser(base).get('/members')).body;
+        const nobody = await browser(base).get('/me');
+        out.nobody = [nobody.status, nobody.body];
+        seen = out;
+      }).then(() => seen);
+    };
+
+    it('🔴 정답 판 — jaehoon 302 /me → id 1 · minji id 2 · jaehoon 다시 id 1 · 거부 → /?error=LOGIN_FAILED 의 안내 · 회원 둘 · 쿠키 없으면 401', async () => {
+      expect(await observe(LAB('homework1.js'))).toEqual({
+        firstCallback: [302, '/me'],
+        first: { id: 1, nickname: 'jaehoon', email: 'jaehoon@example.com' },
+        minji: { id: 2, nickname: 'minji', email: 'minji@example.com' },
+        again: { id: 1, nickname: 'jaehoon', email: 'jaehoon@example.com' },
+        deniedCallback: [302, '/?error=LOGIN_FAILED'],
+        deniedPage: true,
+        members: [
+          { id: 1, nickname: 'jaehoon', email: 'jaehoon@example.com' },
+          { id: 2, nickname: 'minji', email: 'minji@example.com' },
+        ],
+        nobody: [401, { message: '로그인이 필요해요' }],
+      });
+    }, 60_000);
+
+    it('🔴 failureRedirect 를 빠뜨린 판 — 거부하면 401 Unauthorized 글자', async () => {
+      const wrong = edit1(LAB('homework1.js'), "{ session: false, failureRedirect: '/?error=LOGIN_FAILED' }", '{ session: false }');
+      const seen = await observe(wrong);
+      expect(seen.deniedCallback).toEqual([401, 'Unauthorized']);
+    }, 60_000);
+
+    it('🔎 이메일로 회원을 찾는 판 — 이 확인 절차로는 정답 판과 «같은» 관찰이 나온다(인가 서버의 계정 셋은 이메일이 겹치지도 바뀌지도 않는다)', async () => {
+      const wrong = edit1(LAB('homework1.js'),
+        '  const account = socialAccounts.find((item) => item.provider === provider && item.providerUserId === id);\n\n  if (account) return members.find((member) => member.id === account.memberId);\n',
+        '  const found = members.find((member) => member.email === email);\n\n  if (found) return found;\n');
+      expect(await observe(wrong)).toEqual(await observe(LAB('homework1.js')));
+    }, 90_000);
+  });
+
+  describe('축 ⑭ 과제 [응용] — 처음 온 사람은 별명을 직접 고른다', () => {
+    const form = (nickname) => new URLSearchParams({ nickname });
+    const observe = (source) => {
+      let seen;
+      return withLab('homework2.js', source, async ({ base }) => {
+        const out = {};
+        const a = browser(base);
+        const first = await labLogin(a, 'jaehoon');
+        out.firstCallback = [first.callback.status, first.callback.location];
+        const page = await a.get('/nickname');
+        out.formShown = page.status === 200 && page.body.includes('<form method="post" action="/nickname">');
+        out.membersAtForm = (await browser(base).get('/members')).body;
+        const pendingCookie = a.cookie('labPending');
+        const short = await a.send('POST', '/nickname', form('재'));
+        out.short = [short.status, short.body.includes('별명은 2자에서 10자까지 쓸 수 있어요')];
+        const done = await a.send('POST', '/nickname', form('재훈'));
+        out.done = [done.status, done.location];
+        out.me = (await followIn(a, done)).res.body;
+        const twice = await a.send('POST', '/nickname', form('재훈2'));
+        out.sameBrowserAgain = [twice.status, twice.location];
+        // 복사해 둔 임시 쿠키를 그대로 실어 한 번 더 — 서버가 임시 기록을 지웠는지
+        const replay = await browser(base).send('POST', '/nickname', form('재훈3'), { Cookie: `labPending=${pendingCookie}` });
+        out.copiedCookieAgain = [replay.status, replay.location];
+        const b = browser(base);
+        await labLogin(b, 'minji');
+        const taken = await b.send('POST', '/nickname', form('재훈'));
+        out.taken = [taken.status, taken.body.includes('이미 쓰고 있는 별명이에요')];
+        out.minji = (await followIn(b, await b.send('POST', '/nickname', form('민지')))).res.body;
+        const c = browser(base);
+        const again = await labLogin(c, 'jaehoon');
+        out.againCallback = [again.callback.status, again.callback.location];
+        out.again = (await followIn(c, again.callback)).res.body;
+        const nobody = await browser(base).get('/nickname');
+        out.nobody = [nobody.status, nobody.location];
+        out.members = (await browser(base).get('/members')).body.map((m) => `${m.id} ${m.nickname}`);
+        seen = out;
+      }).then(() => seen);
+    };
+    const RIGHT = {
+      firstCallback: [302, '/nickname'],
+      formShown: true,
+      membersAtForm: [],
+      short: [400, true],
+      done: [302, '/me'],
+      me: { id: 1, nickname: '재훈', email: 'jaehoon@example.com' },
+      sameBrowserAgain: [302, '/'],
+      copiedCookieAgain: [302, '/'],
+      taken: [409, true],
+      minji: { id: 2, nickname: '민지', email: 'minji@example.com' },
+      againCallback: [302, '/me'],
+      again: { id: 1, nickname: '재훈', email: 'jaehoon@example.com' },
+      nobody: [302, '/'],
+      members: ['1 재훈', '2 민지'],
+    };
+
+    it('🔴 정답 판 — 처음엔 /nickname 폼(회원 0) · 재 400 · 재훈 → /me id 1 · 같은 브라우저·복사한 쿠키로 다시 내면 / · minji 재훈 409 → 민지 id 2 · jaehoon 다시 → 폼 없이 /me · 쿠키 없이 /nickname → /', async () => {
+      expect(await observe(LAB('homework2.js'))).toEqual(RIGHT);
+    }, 60_000);
+
+    it('🔴 콜백에서 곧바로 회원을 만드는 판 — 폼을 내기 전에 /members 에 한 명', async () => {
+      const wrong = edit1(LAB('homework2.js'), '    const pendingId = randomUUID();\n',
+        "    createMember(req.user.pending, req.user.pending.email.split('@')[0]);\n    const pendingId = randomUUID();\n");
+      const seen = await observe(wrong);
+      expect(seen.membersAtForm).toHaveLength(1);
+      expect(seen).not.toEqual(RIGHT);
+      labWrongSeen.early = seen;
+    }, 60_000);
+
+    it('🔴 임시 기록을 안 지우는 판(지우는 두 줄을 뺀다) — 같은 브라우저로 폼을 한 번 더 내면 회원이 하나 더 생긴다', async () => {
+      const wrong = edit1(LAB('homework2.js'), "  pendings.delete(req.cookies.labPending);\n  res.clearCookie('labPending');\n", '');
+      const seen = await observe(wrong);
+      expect(seen.sameBrowserAgain).toEqual([302, '/me']);
+      expect(seen.members.length).toBeGreaterThan(RIGHT.members.length);
+      labWrongSeen.noDelete = seen;
+    }, 60_000);
+
+    it('🔴 서버의 임시 기록만 안 지우는 판(쿠키는 지운다) — 같은 브라우저 확인은 / 로 통과하지만, 복사해 둔 쿠키로 내면 회원이 하나 더 생긴다', async () => {
+      const wrong = edit1(LAB('homework2.js'), '  pendings.delete(req.cookies.labPending);\n', '');
+      const seen = await observe(wrong);
+      expect(seen.sameBrowserAgain).toEqual([302, '/']);
+      expect(seen.copiedCookieAgain).toEqual([302, '/me']);
+      expect(seen.members.length).toBeGreaterThan(RIGHT.members.length);
+      labWrongSeen.recordOnly = seen;
+    }, 60_000);
+  });
+});
+
+/** 틀린 판의 관찰 — 보고서용으로 실행 뒤 파일에 남긴다(판정 결과와 무관). */
+const labWrongSeen = {};
+afterAll(() => {
+  if (process.env.P345_DUMP) writeFileSync(process.env.P345_DUMP, JSON.stringify(labWrongSeen, null, 2));
+});
+
+describe('축 ⑪ 직접 해보기 2 — 메모리에서 찾거나 만들기', () => {
+  const RIGHT = [
+    'google 100 → 2번 minji (새로 만듦) 이메일 minji@gmail.com',
+    'google 100 → 2번 minji (다시 옴) 이메일 minji@gmail.com',
+    'kakao 100 → 3번 kakao (새로 만듦) 이메일 없음',
+    'google 200 → 4번 minji2 (새로 만듦) 이메일 없음',
+    'google 300 → 이미 가입한 이메일이에요',
+    '사람 4명 · 소셜 계정 3개',
+  ];
+  const run = (source) => runLabScript('practice2.js', source).trimEnd().split('\n');
+
+  it('🔴 정답 판 출력 6줄', () => {
+    expect(run(LAB('practice2.js'))).toEqual(RIGHT);
+  });
+
+  it('🔴 시작 코드는 정답 판에서 findOrCreate 본문(과 그 위 주석 한 줄)만 다르다 · 그대로 돌리면 다섯 줄이 «Cannot destructure property \'user\' …»', () => {
+    const start = read(SNAP('practice2-start.practice2.js'));
+    const right = LAB('practice2.js');
+    const body = (text) => {
+      const from = text.indexOf('function findOrCreate(');
+      return [text.slice(0, from), text.slice(text.indexOf('\n}\n', from))];
+    };
+    const [startHead, startTail] = body(start);
+    const [rightHead, rightTail] = body(right);
+    expect(startTail).toBe(rightTail);
+    expect(startHead).toBe(rightHead.replace('// 소셜 계정으로 우리 사람을 찾고, 처음 온 사람이면 만든다.\n',
+      '// 소셜 계정으로 우리 사람을 찾고, 처음 온 사람이면 만든다.\n// 돌려주는 값은 { user, created } — 새로 만들었으면 created 가 true 다.\n'));
+    expect(start.slice(start.indexOf('function findOrCreate('), start.indexOf('\n}\n', start.indexOf('function findOrCreate(')) + 3))
+      .toBe('function findOrCreate({ provider, id, email, emailVerified }) {\n  // 여기를 채워요.\n}\n');
+    const lines = run(start);
+    expect(lines).toHaveLength(6);
+    for (const line of lines.slice(0, 5)) expect(line).toMatch(/ → Cannot destructure property 'user' of /);
+    expect(lines[5]).toBe('사람 1명 · 소셜 계정 0개');
+    labWrongSeen.practice2Start = lines;
+  });
+
+  it('🔴 틀린 판 셋이 확인의 6줄과 어긋난다 — (a) 이메일로 먼저 찾기 (b) id 만으로 찾기 (c) 확인 안 된 이메일 넣기', () => {
+    const right = LAB('practice2.js');
+    const byEmail = run(edit1(right, '  // 찾는 기준은 «어느 제공자의 누구» 뿐이다 — 이메일로 찾지 않는다.\n',
+      '  const sameEmail = users.find((user) => user.email === email);\n\n  if (sameEmail) {\n    return { user: sameEmail, created: false };\n  }\n\n'));
+    const idOnly = run(edit1(right, 'item.provider === provider && item.providerUserId === id', 'item.providerUserId === id'));
+    const unverified = run(edit1(right, 'const verifiedEmail = emailVerified ? email : undefined;', 'const verifiedEmail = email;'));
+    for (const lines of [byEmail, idOnly, unverified]) expect(lines).not.toEqual(RIGHT);
+    expect(idOnly[2]).toBe('kakao 100 → 2번 minji (다시 옴) 이메일 minji@gmail.com');
+    expect(unverified[3]).toBe('google 200 → 4번 minji2 (새로 만듦) 이메일 minji@naver.com');
+    labWrongSeen.practice2 = { byEmail, idOnly, unverified };
+  });
+});
+
+const PRACTICE3_RIGHT = [
+  '통과  /jaehoon  →  http://localhost:3001/jaehoon',
+  '통과  /jaehoon/saved?tab=1  →  http://localhost:3001/jaehoon/saved?tab=1',
+  '거절  https://evil.example/login  →  https://evil.example/login',
+  '거절  //evil.example/login  →  http://evil.example/login',
+  '거절  /\\evil.example/login  →  http://evil.example/login',
+  '거절  javascript:alert(1)  →  javascript:alert(1)',
+];
+
+describe('축 ⑫ 직접 해보기 3 — 돌아갈 주소 검사', () => {
+  const run = (source) => runLabScript('practice3.js', source).trimEnd().split('\n');
+
+  it('🔴 시작 코드(startsWith 만 보는 판)는 //evil.example/login · /\\evil.example/login 을 통과시키고 둘 다 http://evil.example/login 으로 간다', () => {
+    const start = read(SNAP('practice3-start.practice3.js'));
+    expect(start).toBe(edit1(LAB('practice3.js'),
+      "  if (typeof next !== 'string' || !URL.canParse(next, SITE)) return false;\n\n  return new URL(next, SITE).origin === SITE;\n",
+      "  return typeof next === 'string' && next.startsWith('/');\n"));
+    const lines = run(start);
+    expect(lines.filter((line) => line.startsWith('통과') && line.endsWith('→  http://evil.example/login'))).toEqual([
+      '통과  //evil.example/login  →  http://evil.example/login',
+      '통과  /\\evil.example/login  →  http://evil.example/login',
+    ]);
+    labWrongSeen.practice3Start = lines;
+  });
+
+  it('🔴 정답 판 출력 6줄 — 통과 둘 · 거절 넷', () => {
+    const lines = run(LAB('practice3.js'));
+    expect(lines).toEqual(PRACTICE3_RIGHT);
+    expect(lines.filter((line) => line.startsWith('통과'))).toHaveLength(2);
+    expect(lines.filter((line) => line.startsWith('거절'))).toHaveLength(4);
+  });
 });
