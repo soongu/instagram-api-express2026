@@ -1231,52 +1231,80 @@ const sameOutside = (answer, start, from, to) => {
   expect(start.slice(start.indexOf(to))).toBe(answer.slice(answer.indexOf(to)));
 };
 
-describe('축 ⑩ 직접 해보기 1 — 카카오 응답 넷을 우리 모양으로(readKakao)', () => {
+describe('축 ⑩ 직접 해보기 1 — 닉네임으로 사용자 이름 정하기(pickUsername)', () => {
   const RIGHT = [
-    '{"provider":"kakao","id":"3812345678","emailVerified":false,"name":"민지"}',
-    '{"provider":"kakao","id":"3812345679","emailVerified":false}',
-    '{"provider":"kakao","id":"3812345680","emailVerified":false}',
-    '{"provider":"kakao","id":"4123456789","emailVerified":false,"name":"서준"}',
+    'minsu_dev  ← minsu_dev',
+    'kakao5679  ← 민수',
+    'MinSu  ← Min Su!',
+    'kakao5681  ← undefined',
+    'naver  ← js',
+    'minsu_dev5683  ← minsu_dev',
   ];
+  const run = (source) => runLabScript('practice1.js', source);
+  /** 정답과 다른 줄만(줄 번호와 함께). */
+  const wrongLines = (out) => out.trimEnd().split('\n').map((line, i) => (line === RIGHT[i] ? null : `${i + 1}: ${line}`)).filter(Boolean);
 
-  it('🔴 정답 판 — 네 줄 · 회원번호는 따옴표가 붙은 글자 · 닉네임이 없으면 name 키가 빠진다(undefined 는 JSON 에 안 나온다)', () => {
-    const { code, out } = runLabScript('practice1.js', LAB('practice1.js'));
+  it('🔴 정답 판 — 여섯 줄 · 닉네임을 쓸 수 있으면 닉네임 · 아니면 제공자 이름 · 이미 쓰는 이름이면 회원번호 끝 네 글자', () => {
+    const { code, out } = run(LAB('practice1.js'));
     expect(code).toBe(0);
     expect(out.trimEnd().split('\n')).toEqual(RIGHT);
     labSeen.practice1 = out;
   });
 
-  it('🔴 시작 파일 — 비운 채로 문법 검사를 통과하고 «undefined» 네 줄 · 정답과는 함수 하나만 다르다', () => {
+  it('🔴 쓸 수 없는 글자의 정규식은 수업 파일(services/userService.js)의 NOT_ALLOWED 와 글자까지 같다', () => {
+    const line = 'const NOT_ALLOWED = /[^A-Za-z0-9_.]/g;';
+    expect(read(stepDir(6)('services/userService.js'))).toContain(`\n${line}\n`);
+    expect(LAB('practice1.js')).toContain(`\n${line}\n`);
+    expect(SNAP('practice1-start.practice1.js')).toContain(`\n${line}\n`);
+  });
+
+  it('🔴 시작 파일 — 비운 채로 문법 검사를 통과하고 줄마다 «undefined» · 정답과는 함수 하나만 다르다', () => {
     const start = SNAP('practice1-start.practice1.js');
     nodeCheck(start);
-    sameOutside(LAB('practice1.js'), start, 'function readKakao(info) {', 'for (const sample of samples) {');
-    expect(start).toContain('function readKakao(info) {\n  // 여기를 채워요.\n}\n');
-    const { code, out } = runLabScript('practice1.js', start);
-    expect([code, out]).toEqual([0, 'undefined\nundefined\nundefined\nundefined\n']);
-  });
-
-  it('🔴 틀린 판 — String() 이 없으면 회원번호에 따옴표가 없다', () => {
-    const { code, out } = runLabScript('practice1.js', edit1(LAB('practice1.js'), '    id: String(info.id),', '    id: info.id,'));
+    sameOutside(LAB('practice1.js'), start, 'function pickUsername(profile, taken) {', 'for (const profile of visitors) {');
+    expect(start).toContain('function pickUsername(profile, taken) {\n  // 여기를 채워요.\n}\n');
+    const { code, out } = run(start);
     expect(code).toBe(0);
-    expect(out.split('\n')[0]).toBe('{"provider":"kakao","id":3812345678,"emailVerified":false,"name":"민지"}');
-    expect(out.trimEnd().split('\n')).not.toEqual(RIGHT);
-    labSeen.practice1NoString = out;
+    expect(out.trimEnd().split('\n')).toEqual(RIGHT.map((line) => line.replace(/^\S+/, 'undefined')));
   });
 
-  it('🔴 틀린 판 — ?. 가 없으면 둘째 응답에서 TypeError(reading nickname) · 뒤의 ?. 만 없어도 둘째에서 · 앞의 ?. 만 없으면 셋째에서(reading profile)', () => {
-    const none = runLabScript('practice1.js', edit1(LAB('practice1.js'), 'info.kakao_account?.profile?.nickname', 'info.kakao_account.profile.nickname'));
-    expect(none.code).toBe(1);
-    expect(none.out.split('\n')[0]).toBe(RIGHT[0]);
-    expect(none.out).toContain("TypeError: Cannot read properties of undefined (reading 'nickname')");
-    expect(none.out).not.toContain(RIGHT[1]);
-    const second = runLabScript('practice1.js', edit1(LAB('practice1.js'), 'info.kakao_account?.profile?.nickname', 'info.kakao_account?.profile.nickname'));
-    expect(second.out).toContain("TypeError: Cannot read properties of undefined (reading 'nickname')");
-    expect(second.out).not.toContain(RIGHT[1]);
-    const first = runLabScript('practice1.js', edit1(LAB('practice1.js'), 'info.kakao_account?.profile?.nickname', 'info.kakao_account.profile?.nickname'));
-    expect(first.out.split('\n').slice(0, 2)).toEqual(RIGHT.slice(0, 2));
-    expect(first.out).toContain("TypeError: Cannot read properties of undefined (reading 'profile')");
-    labSeen.practice1NoOptional = none.out;
-    labSeen.practice1FirstOptionalOnlyMissing = first.out;
+  it('🔴 틀린 판 ① — 닉네임이 없을 수 있다는 것을 안 보면(profile.name.replace) 넷째 사람에서 TypeError', () => {
+    const { code, out } = run(edit1(LAB('practice1.js'), "(profile.name ?? '').replace(NOT_ALLOWED, '')", "profile.name.replace(NOT_ALLOWED, '')"));
+    expect(code).toBe(1);
+    expect(out.split('\n').slice(0, 3)).toEqual(RIGHT.slice(0, 3));
+    expect(out).toContain("TypeError: Cannot read properties of undefined (reading 'replace')");
+    expect(out).not.toContain(RIGHT[3]);
+    labSeen.practice1NoName = out;
+  });
+
+  it('🔴 틀린 판 ② — 정규식에서 g 를 빼면 셋째 줄이 «MinSu!»(첫 글자 하나만 지운다)', () => {
+    const { code, out } = run(edit1(LAB('practice1.js'), 'const NOT_ALLOWED = /[^A-Za-z0-9_.]/g;', 'const NOT_ALLOWED = /[^A-Za-z0-9_.]/;'));
+    expect(code).toBe(0);
+    expect(wrongLines(out)).toEqual(['3: MinSu!  ← Min Su!']);
+    labSeen.practice1NoGlobal = out;
+  });
+
+  it('🔴 틀린 판 ③ — 이미 쓰는 이름인지 안 보면 둘째·넷째 줄이 «kakao», 여섯째 줄이 «minsu_dev»', () => {
+    const src = LAB('practice1.js');
+    const from = src.indexOf('  return taken.has(base)');
+    expect(from).toBeGreaterThan(0);
+    const wrong = `${src.slice(0, from)}  return base;\n${src.slice(src.indexOf('\n', from) + 1)}`;
+    const { code, out } = run(wrong);
+    expect(code).toBe(0);
+    expect(wrongLines(out)).toEqual(['2: kakao  ← 민수', '4: kakao  ← undefined', '6: minsu_dev  ← minsu_dev']);
+    labSeen.practice1NoTaken = out;
+  });
+
+  it('🔴 틀린 판 ④ — 3자 미만 규칙을 빼먹으면 다섯째 줄이 «js»', () => {
+    const { code, out } = run(edit1(LAB('practice1.js'), 'letters.length >= 3 ? letters : profile.provider', 'letters || profile.provider'));
+    expect(code).toBe(0);
+    expect(wrongLines(out)).toEqual(['5: js  ← js']);
+    labSeen.practice1NoMinLength = out;
+  });
+
+  it('🔎 26자까지만 남기는 규칙은 이 여섯 사람으로는 드러나지 않는다 — slice 를 빼도 출력이 같다(샘플의 닉네임이 모두 26자 안쪽)', () => {
+    const { out } = run(edit1(LAB('practice1.js'), ".replace(NOT_ALLOWED, '').slice(0, 26)", ".replace(NOT_ALLOWED, '')"));
+    expect(out.trimEnd().split('\n')).toEqual(RIGHT);
   });
 });
 
@@ -1751,7 +1779,7 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
       '      signal: AbortSignal.timeout(PROVIDER_TIMEOUT),',
       '      signal: AbortSignal.timeout(PROVIDER_TIMEOUT),',
       "  PROVIDER_TIMEOUT: '로그인하는 곳이 제때 답하지 않았어요. 잠시 뒤에 다시 시도해 주세요.',",
-      '  // 무엇 때문인지 코드로 가른다 — 시간 안에 답을 못 받으면 fetch 가 이름이 TimeoutError 인 에러를 던진다.',
+      '  // 무엇 때문에 실패했는지에 따라 에러 코드를 정한다 — 시간 안에 답을 못 받으면 fetch 가 이름이 TimeoutError 인 에러를 던진다.',
       "  let code = 'LOGIN_FAILED';",
       "  if (err.code === 'EMAIL_TAKEN') code = 'EMAIL_TAKEN';",
       "  if (err.name === 'TimeoutError') code = 'PROVIDER_TIMEOUT';",
