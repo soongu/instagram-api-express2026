@@ -1,6 +1,5 @@
 // ~/instagram-api/lab/p3-42/practice1.js
 import express from 'express';
-import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 
 const app = express();
@@ -8,19 +7,22 @@ const app = express();
 // 수업 서버와 같은 비밀키 — 실행할 때 --env-file=.env 로 같은 .env 를 읽는다.
 const SECRET = process.env.JWT_SECRET;
 
+// 비밀키가 없으면 뜨지 않게 — 수업 서버의 tokenService 와 같은 확인
+if (!SECRET) {
+  throw new Error('.env에 JWT_SECRET이 없어요');
+}
+
 // 공지 — 메모리에만 둔다. 이 서버는 데이터베이스에 연결하지 않는다.
 const notices = [{ id: 1, title: '서버 점검 안내', authorId: 1 }];
 
 app.use(express.json());
-app.use(cookieParser());
 
 // 토큰을 확인해 누가 보냈는지 정한다 — 수업 서버에 묻지 않고, 서명과 기한만 본다.
 function requireToken(req, res, next) {
-  const header = req.headers.authorization;
-  const token = header && header.startsWith('Bearer ') ? header.slice('Bearer '.length) : req.cookies.accessToken;
+  const header = req.headers.authorization ?? '';
 
   try {
-    const payload = jwt.verify(token, SECRET, { algorithms: ['HS256'] });
+    const payload = jwt.verify(header.slice('Bearer '.length), SECRET, { algorithms: ['HS256'] });
     res.locals.userId = Number(payload.sub);
     next();
   } catch {

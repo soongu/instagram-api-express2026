@@ -8,6 +8,11 @@ const app = express();
 const SECRET = process.env.LAB_SECRET;
 const OLD_SECRET = process.env.LAB_OLD_SECRET;
 
+// 지금 키는 꼭 있어야 한다 — 없으면 뜨지 않게. 옛 키는 바꾸는 동안에만 있다.
+if (!SECRET) {
+  throw new Error('.env에 LAB_SECRET이 없어요');
+}
+
 app.use(express.json());
 
 // 지금 키로 먼저 확인하고, 안 맞으면 옛 키로 한 번 더 — 둘 중 하나라도 맞으면 그 토큰을 받는다.
@@ -25,9 +30,9 @@ function readToken(token) {
   return null;
 }
 
-// 새 토큰은 언제나 지금 키로만 만든다.
+// 새 토큰은 언제나 지금 키로만 만든다. 키 바꾸기만 보는 실습이라 비밀번호 없이 보낸 사람 번호로 내준다.
 app.post('/login', (req, res) => {
-  const token = jwt.sign({}, SECRET, { subject: req.body.username, expiresIn: '10m', algorithm: 'HS256' });
+  const token = jwt.sign({}, SECRET, { subject: String(req.body.userId), expiresIn: '10m', algorithm: 'HS256' });
 
   res.json({ token });
 });
@@ -40,7 +45,7 @@ app.get('/me', (req, res) => {
     return res.status(401).json({ message: '로그인이 필요해요' });
   }
 
-  res.json({ username: payload.sub });
+  res.json({ userId: Number(payload.sub) });
 });
 
 app.listen(4002, () => {

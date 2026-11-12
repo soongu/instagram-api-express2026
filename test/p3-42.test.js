@@ -491,11 +491,13 @@ describe('축 ⑦ 직접 해보기 1 — DB 없이 토큰을 확인하는 공지
     expect(r.afterLogout).toMatchObject({ status: 201, body: { id: 3, authorId: 2 } });
     expect(r.serverOff).toMatchObject({ status: 201, body: { id: 4, authorId: 2 } });
     expect(read(LAB('practice1.js'))).not.toMatch(/db\.js|prisma|fetch\(/);
+    // Step 4 판(교안 직접 해보기 1 해설)은 algorithms 가 없고, 끝 판은 Step 5 가 그 옵션 하나만 더한다
+    expect(read(P('snapshots/p3-42.practice1-step4.practice1.js'))).toBe(read(LAB('practice1.js')).replace(", SECRET, { algorithms: ['HS256'] });", ', SECRET);'));
   }, 60000);
 
   it('🔴 틀린 판 둘 — 수업 서버의 나는 누구에 물어보는 판은 수업 서버를 끄면 실패 · Number 를 빠뜨리면 글쓴이가 "2"', async () => {
-    const ask = (d) => replaceIn(d, 'lab/p3-42/practice1.js', "  try {\n    const payload = jwt.verify(token, SECRET, { algorithms: ['HS256'] });\n    res.locals.userId = Number(payload.sub);\n    next();\n  } catch {\n    res.status(401).json({ message: '로그인이 필요해요' });\n  }",
-      `  fetch('http://localhost:${PORT}/api/v2/auth/me', { headers: { Authorization: \`Bearer \${token}\` } })\n    .then(async (response) => {\n      if (!response.ok) return res.status(401).json({ message: '로그인이 필요해요' });\n      res.locals.userId = (await response.json()).data.id;\n      next();\n    })\n    .catch(next);`);
+    const ask = (d) => replaceIn(d, 'lab/p3-42/practice1.js', "  try {\n    const payload = jwt.verify(header.slice('Bearer '.length), SECRET, { algorithms: ['HS256'] });\n    res.locals.userId = Number(payload.sub);\n    next();\n  } catch {\n    res.status(401).json({ message: '로그인이 필요해요' });\n  }",
+      `  fetch('http://localhost:${PORT}/api/v2/auth/me', { headers: { Authorization: header } })\n    .then(async (response) => {\n      if (!response.ok) return res.status(401).json({ message: '로그인이 필요해요' });\n      res.locals.userId = (await response.json()).data.id;\n      next();\n    })\n    .catch(next);`);
     const asked = await run(ask);
     expect(asked.posted.status).toBe(201);
     expect(asked.serverOff.status).toBe(500);
@@ -593,7 +595,15 @@ describe('축 ⑩ 과제', () => {
         let copied;
         for (const block of httpBlocks(LAB('homework1.http'))) {
           const res = await sendBlock(block, jar, { port: HW_PORT, swap: { COPIED_TOKEN: copied ?? '', CLASS_TOKEN: classToken } });
-          if (block.title === '로그인') copied = jar.cookie('clubToken');
+          if (block.title === '로그인') {
+            copied = jar.cookie('clubToken');
+            // sub 는 회원 번호(1)이고 이메일은 담지 않는다 · 30분
+            const [, payload] = parts(copied);
+            expect(payload.sub).toBe('1');
+            expect(JSON.stringify(payload)).not.toContain('bomi');
+            expect(payload.exp - payload.iat).toBe(1800);
+          }
+          if (block.title === '나는 누구') expect(res.body).toEqual({ email: 'bomi@example.com' });
           out.push([block.title, res.status]);
         }
       } finally {
@@ -624,6 +634,7 @@ describe('축 ⑩ 과제', () => {
       for (const block of httpBlocks(LAB('homework2.http'))) {
         const res = await sendBlock(block, jar, { port: HW_PORT + 1, swap: { OTHER_TOKEN: other ?? '' } });
         if (block.title === '로그인 — 다른 기기') other = cookieLine(res, 'clubToken').split(';')[0].split('=')[1];
+        if (block.title === '나는 누구 — 비밀번호를 바꾼 이 기기' && res.status === 200) expect(res.body).toEqual({ email: 'bomi@example.com' });
         out.push([block.title, res.status]);
       }
     } finally {
@@ -672,6 +683,7 @@ describe('축 ⑪ 교안·답안의 코드 블록과 출력은 실제와 같다'
     existsSync(R(rel)) ? read(R(rel)) : null,
     ...[2, 4, 5, 6].map((n) => showAt(commitOf(n), rel)),
     rel === 'services/tokenService.js' ? read(P('snapshots/p3-42.step2-no-guard.tokenService.js')) : null,
+    rel === 'lab/p3-42/practice1.js' ? read(P('snapshots/p3-42.practice1-step4.practice1.js')) : null,
   ].filter(Boolean);
   const meaningful = (b) => b.filter((l) => l.trim() !== '' && l.trim() !== '...');
   const fenceOf = (startsWith) => fences(DOCS[0], '').find((b) => b[0]?.startsWith(startsWith));
@@ -818,3 +830,21 @@ describe('축 ⑪ 교안·답안의 코드 블록과 출력은 실제와 같다'
     expect(await scene(stepDir(6), 'accessToken')).toEqual({ queries: 12, sessions: 1 });
   }, 60000);
 });
+
+describe('축 ⑫ 실습·과제 서버도 비밀키가 없으면 뜨지 않는다', () => {
+  it('🔴 practice1(JWT_SECRET) · practice2·practice3(LAB_SECRET) · homework1·homework2(CLUB_SECRET)', () => {
+    const dir = studentDir(stepDir(6));
+    for (const [file, name] of [['practice1.js', 'JWT_SECRET'], ['practice2.js', 'LAB_SECRET'], ['practice3.js', 'LAB_SECRET'], ['homework1.js', 'CLUB_SECRET'], ['homework2.js', 'CLUB_SECRET']]) {
+      let out;
+      try {
+        execFileSync(process.execPath, [`lab/p3-42/${file}`], { cwd: dir, env: { ...process.env, ...env, JWT_SECRET: '', LAB_SECRET: '', CLUB_SECRET: '' }, encoding: 'utf8', stdio: 'pipe', timeout: 8000 });
+        out = { code: 0 };
+      } catch (error) {
+        out = { code: error.status, text: `${error.stdout}${error.stderr}` };
+      }
+      expect(out.code, file).toBe(1);
+      expect(out.text, file).toContain(`Error: .env에 ${name}이 없어요`);
+    }
+  }, 60000);
+});
+
