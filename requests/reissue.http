@@ -27,3 +27,10 @@ GET http://localhost:3000/api/v2/admin/users
 # @no-cookie-jar
 POST http://localhost:3000/api/v2/auth/reissue
 Cookie: refreshToken=COPIED_REFRESH
+
+### 기한이 지난 토큰으로 로그아웃
+POST http://localhost:3000/api/v2/auth/logout
+Authorization: Bearer EXPIRED_TOKEN
+
+### 로그아웃
+POST http://localhost:3000/api/v2/auth/logout

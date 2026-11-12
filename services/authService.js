@@ -48,11 +48,10 @@ export async function whoAmI(userId) {
   return user;
 }
 
-// 로그아웃 — 토큰에 담긴 로그인 기록(sid)을 지운다. 토큰이 틀렸거나 기한이 지났으면 지울 것이 없다.
-export async function logout(token) {
-  const payload = tokenService.readAccessToken(token);
-
-  await sessionService.deleteSession(payload?.sid);
+// 로그아웃 — Refresh 토큰이 가리키는 로그인 기록을 지운다. 그 뒤로는 이 로그인으로 새 토큰을 받을 수 없다.
+// Access 토큰은 15분이면 끝나니, 기한이 지난 뒤에 로그아웃해도 Refresh 토큰으로 기록을 찾는다.
+export async function logout(refreshToken) {
+  await sessionService.deleteSessionByRefreshToken(refreshToken);
 }
 
 // 모든 기기에서 로그아웃 — 그 사람의 세션을 테이블에서 모두 지운다. 지운 세션 수를 돌려준다.

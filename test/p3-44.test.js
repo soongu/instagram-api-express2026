@@ -508,3 +508,82 @@ describe('축 ⑤ Step 5 — 슬라이딩 7일 · 절대 30일', () => {
     });
   });
 });
+
+describe('축 ⑥ Step 6 — 로그아웃은 Refresh 쿠키로 기록을 지운다', () => {
+  it('🔴 로그아웃하면 행이 지워지고 쿠키 둘이 지워진다 · 복사해 둔 Refresh 로는 401 · 복사해 둔 Access 토큰은 만료(15분)까지 200', async () => {
+    await freshGate();
+    await withServer(stepDir(6), async ({ base }) => {
+      const blocks = HTTP(6);
+      const jar = device(base);
+      await sendBlock(blockOf(blocks, '로그인'), jar, { port: PORT });
+      const copied = { access: jar.cookie('accessToken'), refresh: jar.cookie('refreshToken') };
+      const [sid] = copied.refresh.split('.');
+      const out = await sendBlock(blockOf(blocks, '로그아웃'), jar, { port: PORT });
+      expect(out.status).toBe(200);
+      expect(cookieLine(out, 'refreshToken')).toMatch(/Path=\/api\/v2\/auth;/);
+      expect(jar.cookies()).toEqual([]);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 0 }]);
+      expect((await sendBlock(blockOf(blocks, '새 토큰 받기'), jar, { port: PORT })).status).toBe(401);
+      const stolen = await sendBlock(blockOf(blocks, '복사해 둔 Refresh 토큰으로 새 토큰 받기'), jar, { port: PORT, swap: { COPIED_REFRESH: copied.refresh } });
+      expect(stolen.status).toBe(401);
+      const withAccess = await jar.send('GET', '/api/v2/posts?limit=1', undefined, jar.bearer(copied.access));
+      expect(withAccess.status).toBe(200);
+      const [, claims] = parts(copied.access);
+      expect(claims.exp - claims.iat).toBe(900);
+    });
+  });
+
+  it('🔴 비밀값이 틀린 Refresh 로 로그아웃을 보내면 행은 남는다(행 ID 는 Access 토큰에서 누구나 읽는다)', async () => {
+    await freshGate();
+    await withServer(stepDir(6), async ({ base }) => {
+      const jar = device(base);
+      await jar.login('jaehoon');
+      const [sid] = jar.cookie('refreshToken').split('.');
+      const res = await fetch(`${base}/api/v2/auth/logout`, { method: 'POST', headers: { Cookie: `refreshToken=${sid}.guess` } });
+      expect(res.status).toBe(200);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 1 }]);
+    });
+  });
+
+  it('🔴 모든 기기에서 로그아웃 — 그 사람의 행이 모두 지워져 다른 기기도 새 토큰을 못 받는다 · 쿠키 둘을 지운다', async () => {
+    await freshGate();
+    await withServer(stepDir(6), async ({ base }) => {
+      const a = device(base);
+      const b = device(base);
+      await a.login('jaehoon');
+      await b.login('jaehoon');
+      const res = await a.send('POST', '/api/v2/auth/logout-all');
+      expect(res.status).toBe(200);
+      expect(a.cookies()).toEqual([]);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE user_id = 2')).toEqual([{ n: 0 }]);
+      expect((await b.send('POST', '/api/v2/auth/reissue')).status).toBe(401);
+    });
+  });
+
+  it('🔴 clearCookie 에 path 를 빼면 Refresh 쿠키가 지워지지 않고 남는다(이름과 path 가 같아야 같은 쿠키)', async () => {
+    await freshGate();
+    await withServer(stepDir(6), async ({ base }) => {
+      const jar = device(base);
+      await jar.login('jaehoon');
+      await jar.send('POST', '/api/v2/auth/logout');
+      expect(jar.cookies()).toEqual([]);
+    });
+    await withServer(stepDir(6), async ({ base }) => {
+      const jar = device(base);
+      await jar.login('jaehoon');
+      await jar.send('POST', '/api/v2/auth/logout');
+      expect(jar.cookies()).toEqual(['refreshToken /api/v2/auth']);
+    }, { edit: (d) => replaceIn(d, 'controllers/authController.js', "res.clearCookie('refreshToken', { path: '/api/v2/auth' });", "res.clearCookie('refreshToken');") });
+  });
+
+  it('🔴 옛 주소 /api/auth/logout 에는 Refresh 쿠키가 실리지 않아 행이 남는다(새 주소에서 로그아웃)', async () => {
+    await freshGate();
+    await withServer(stepDir(6), async ({ base }) => {
+      const jar = device(base);
+      await jar.login('jaehoon');
+      const [sid] = jar.cookie('refreshToken').split('.');
+      expect((await jar.send('POST', '/api/auth/logout')).status).toBe(200);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 1 }]);
+    });
+  });
+});

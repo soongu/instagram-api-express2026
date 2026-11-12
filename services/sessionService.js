@@ -77,6 +77,15 @@ export async function rotateRefreshToken(refreshToken) {
   return { session, refreshToken: `${sessionId}.${nextSecret}` };
 }
 
+// Refresh 토큰이 가리키는 로그인 기록을 지운다 — 비밀값까지 맞을 때만(행 ID 는 Access 토큰에서 누구나 읽을 수 있어서).
+export async function deleteSessionByRefreshToken(refreshToken) {
+  const [sessionId, secret] = (refreshToken ?? '').split('.');
+
+  if (!sessionId || !secret) return;
+
+  await prisma.session.deleteMany({ where: { id: sessionId, refreshTokenHash: hashSecret(secret) } });
+}
+
 export async function deleteSession(sessionId) {
   // 세션 ID 가 없으면 여기서 끝낸다 — undefined 를 넘기면 조건이 사라져 모든 세션을 지운다.
   if (!sessionId) return;

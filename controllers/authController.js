@@ -5,13 +5,18 @@ import { sendData } from '../responses.js';
 import { MESSAGES } from '../errors.js';
 import { TOKEN_LIFETIME } from '../services/tokenService.js';
 import { SESSION_LIFETIME } from '../services/sessionService.js';
-import { readToken } from '../middlewares/auth.js';
 
 // 토큰 둘을 쿠키에 담는다 — 둘 다 스크립트가 못 읽게 httpOnly.
 // Access 토큰은 토큰이 끝나는 15분 뒤에 쿠키도 사라지게, Refresh 토큰은 로그인 기록이 남는 7일 동안 /api/v2/auth 로 시작하는 인증 주소에만.
 function setTokenCookies(res, { accessToken, refreshToken }) {
   res.cookie('accessToken', accessToken, { httpOnly: true, sameSite: 'lax', maxAge: TOKEN_LIFETIME });
   res.cookie('refreshToken', refreshToken, { httpOnly: true, sameSite: 'lax', path: '/api/v2/auth', maxAge: SESSION_LIFETIME });
+}
+
+// 토큰 쿠키 둘을 지우라고 알린다 — 쿠키는 이름과 path 가 같아야 같은 쿠키라, Refresh 쿠키는 path 를 함께 적는다.
+function clearTokenCookies(res) {
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken', { path: '/api/v2/auth' });
 }
 
 // 이미 쓰고 있을 때의 에러 코드 — 무엇을 찾았는지에 따라 다르다. 문장은 가입이 409 로 실패할 때와 같다.
@@ -59,15 +64,15 @@ export async function me(req, res) {
 }
 
 export async function logout(req, res) {
-  await authService.logout(readToken(req));
+  await authService.logout(req.cookies.refreshToken);
 
-  res.clearCookie('accessToken');
+  clearTokenCookies(res);
   sendData(res, { message: '로그아웃했어요' });
 }
 
 export async function logoutAll(req, res) {
   await authService.logoutAll(res.locals.userId);
 
-  res.clearCookie('accessToken');
+  clearTokenCookies(res);
   sendData(res, { message: '모든 기기에서 로그아웃했어요' });
 }
