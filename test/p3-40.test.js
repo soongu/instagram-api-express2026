@@ -409,7 +409,7 @@ describe('축 ⑥ Step 6 — 가짜 해시', () => {
   };
 
   it('🔴 가짜 해시를 checkPassword 안에서 늘 만들면 맞는 로그인까지 모두 느리고, 없을 때만 만들면 그쪽만 느리다', async () => {
-    expect(read(LECTURE6)).toContain('늘 만들면 맞는 로그인까지 모두 0.4초쯤 걸리고, 비교할 해시가 없을 때만 만들면 그쪽만 0.4초가 되어 시간이 다시 달라져요.');
+    expect(read(LECTURE6)).toContain('로그인마다 늘 만들면 맞는 로그인까지 모두 0.4초쯤 걸리고, 비교할 해시가 없을 때만 만들면 그 경우만 0.4초가 되어 시간이 다시 달라져요.');
     const S6 = stepDir(6);
     await freshGate();
     const always = editUserService((src) => src.replace(MATCHED, `  const DUMMY_HASH = await bcrypt.hash(randomUUID(), PASSWORD_COST);\n${MATCHED}`));
