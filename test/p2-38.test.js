@@ -250,8 +250,10 @@ describe('축 ⑦ — 값만 바꾸면 허락 범위가 달라진다', () => {
   afterAll(async () => { await s2?.stop(); });
 
   it('배포 주소를 값에 더하면 «코드를 안 고치고» 그쪽도 허락받는다', async () => {
+    // 🚨 (p3-42) 그 회차부터 수업 백엔드는 `JWT_SECRET` 이 없으면 뜨지 않는다 — 이 축도 직전 판 `code/p3-40` 을 띄운다.
     s2 = await boot('app.js', {
       port: P2,
+      cwd: PIN.dir,
       env: { ...ENV, PORT: String(P2), CORS_ORIGIN: 둘 },
       ready: `${P2}번 포트에서`,
     });
@@ -289,8 +291,9 @@ describe('축 ⑧ — 값이 없으면 «시끄럽게» 죽는다', () => {
     let 샜다 = null;
     let 던진것 = null;
     try {
+      // 🚨 (p3-42) 작업트리는 `JWT_SECRET` 이 없다는 에러가 먼저 난다 — `CORS_ORIGIN` 만 빠진 판은 직전 판 `code/p3-40` 이다.
       샜다 = await boot('app.js',
-        { port: 포트, env: { ...ENV, PORT: String(포트) }, ready: `${포트}번 포트에서`, timeoutMs: 6000 });
+        { port: 포트, cwd: PIN.dir, env: { ...ENV, PORT: String(포트) }, ready: `${포트}번 포트에서`, timeoutMs: 6000 });
     } catch (err) {
       던진것 = err;
     } finally {
