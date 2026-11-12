@@ -96,6 +96,13 @@ export async function setPassword(username, password) {
   }
 }
 
+// 지금 데이터베이스에 적힌 역할이 관리자인가 — 토큰의 역할은 만든 순간의 값이라, 관리자 권한을 쓸 때는 이것으로 다시 본다.
+export async function isAdmin(id) {
+  const user = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+
+  return user?.role === 'ADMIN';
+}
+
 // 사람 목록 — 관리자 주소가 부른다. 번호 차례로.
 export function getUsers() {
   return prisma.user.findMany({ select: userFields, orderBy: { id: 'asc' } });
