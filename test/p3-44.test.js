@@ -139,7 +139,8 @@ const device = (base) => {
     const headers = { ...extra };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const carried = [...jar.values()].filter((c) => pathMatches(c.path, path));
-    if (carried.length > 0 && !headers.Cookie && !headers.Authorization) headers.Cookie = carried.map((c) => `${c.name}=${c.value}`).join('; ');
+    // httpYac 처럼 — Authorization 헤더를 적어도 기억한 쿠키는 함께 싣는다(`# @no-cookie-jar` 요청은 sendBlock 이 빈 단지로 보낸다)
+    if (carried.length > 0 && !headers.Cookie) headers.Cookie = carried.map((c) => `${c.name}=${c.value}`).join('; ');
     const res = await fetch(`${base}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     const sets = res.headers.getSetCookie();
     for (const line of sets) {
@@ -162,6 +163,8 @@ const device = (base) => {
     login: (username, password = `${username}1234`, prefix = '/api/v2') => send('POST', `${prefix}/auth/login`, { username, password }),
     cookie: (name) => [...jar.values()].find((c) => c.name === name)?.value,
     cookies: () => [...jar.values()].map((c) => `${c.name} ${c.path}`).sort(),
+    // 다른 서버(같은 호스트)가 준 쿠키를 미리 넣어 둔다 — httpYac 의 쿠키 단지는 포트를 가리지 않는다.
+    put: (name, value, cookiePath = '/') => jar.set(`${name} ${cookiePath}`, { name, value, path: cookiePath }),
     bearer: (token) => ({ Authorization: `Bearer ${token}` }),
   };
 };
@@ -663,7 +666,11 @@ describe('축 ⑧ 직접 해보기 1 — 쿠키의 path', () => {
   const run = async (source) => {
     let got;
     await withLab('lab/p3-44/practice1.js', LAB_PORT, source, async ({ base }) => {
-      const res = await sendAll(httpBlocks(LAB_SRC('practice1.http')), device(base), LAB_PORT);
+      const jar = device(base);
+      // 학생의 httpYac 에는 수업 백엔드(3000)에서 받은 쿠키가 이미 있다 — 포트가 달라도 같은 localhost 라 함께 실린다
+      jar.put('accessToken', 'class-token');
+      jar.put('refreshToken', 'class-refresh', '/api/v2/auth');
+      const res = await sendAll(httpBlocks(LAB_SRC('practice1.http')), jar, LAB_PORT);
       got = res.map((r) => (r.body.cookies ? r.body.cookies.join(',') : r.status));
     }, { labPort: 4001 });
     return got;
@@ -804,5 +811,65 @@ describe('축 ⑫ 과제 [응용] — 로그인한 기기 목록과 내보내기
     const r = await run(wrong);
     expect(r.delC).toBe(200);
     expect(r.adminRows).toBe(0);
+  });
+});
+
+describe('축 ⑬ Step 4 — 직전 비밀값일 때만 지운다', () => {
+  it('🔴 행 ID 에 엉터리 비밀값을 붙여 보내면 401 · 행은 남고 진짜 Refresh 로는 그대로 새 토큰 · 직전 비밀값이면 지운다', async () => {
+    await freshGate();
+    await withServer(stepDir(4), async ({ base }) => {
+      const jar = device(base);
+      await jar.login('jaehoon');
+      const first = jar.cookie('refreshToken');
+      const [sid] = first.split('.');
+      const guess = await fetch(`${base}/api/v2/auth/reissue`, { method: 'POST', headers: { Cookie: `refreshToken=${sid}.guess` } });
+      expect(guess.status).toBe(401);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 1 }]);
+      expect((await jar.send('POST', '/api/v2/auth/reissue')).status).toBe(200);
+      const [row] = await gate('SELECT refresh_token_hash AS now, previous_refresh_token_hash AS prev FROM sessions WHERE id = $1', [sid]);
+      expect(row.prev).toBe(sha256(first.split('.')[1]));
+      expect(row.now).toBe(sha256(jar.cookie('refreshToken').split('.')[1]));
+      const reuse = await fetch(`${base}/api/v2/auth/reissue`, { method: 'POST', headers: { Cookie: `refreshToken=${first}` } });
+      expect(reuse.status).toBe(401);
+      expect(await gate('SELECT count(*)::int AS n FROM sessions WHERE id = $1', [sid])).toEqual([{ n: 0 }]);
+    });
+  });
+
+  it('🔴 Step 4 마이그레이션은 previous_refresh_token_hash(TEXT · NULL 허용) 하나', () => {
+    const dir = readdirSync(stepDir(4)('prisma/migrations')).find((name) => name.endsWith('_add_previous_refresh_token_hash'));
+    expect(dir).toBeDefined();
+    expect(read(stepDir(4)(`prisma/migrations/${dir}/migration.sql`))).toContain('ALTER TABLE "sessions" ADD COLUMN     "previous_refresh_token_hash" TEXT;');
+    expect(readdirSync(stepDir(3)('prisma/migrations')).some((name) => name.endsWith('_add_previous_refresh_token_hash'))).toBe(false);
+  });
+});
+
+describe('축 ⑭ Step 6 겪기 · Step 7 다른 비밀키', () => {
+  it('🔴 Step 5 판은 «기한이 지난 토큰으로 로그아웃» 뒤에도 새 토큰 200 · Step 6 판은 같은 요청이 기록을 지워 복사해 둔 Refresh 가 401', async () => {
+    const expired = expiredToken(6);
+    for (const [n, after] of [[5, 200], [6, 401]]) {
+      await freshGate();
+      await withServer(stepDir(n), async ({ base }) => {
+        const blocks = HTTP(6);
+        const jar = device(base);
+        await sendBlock(blockOf(blocks, '로그인'), jar, { port: PORT });
+        const copied = jar.cookie('refreshToken');
+        const out = await sendBlock(blockOf(blocks, '기한이 지난 토큰으로 로그아웃'), jar, { port: PORT, swap: { EXPIRED_TOKEN: expired } });
+        expect(out.status).toBe(200);
+        const res = await sendBlock(blockOf(blocks, '복사해 둔 Refresh 토큰으로 새 토큰 받기'), jar, { port: PORT, swap: { COPIED_REFRESH: copied } });
+        expect(res.status).toBe(after);
+      });
+    }
+  });
+
+  it('🔴 JWT_SECRET 을 다른 값으로 주고 expired-token.js 를 실행하면 그 토큰은 LOGIN_REQUIRED', async () => {
+    await freshGate();
+    const dir = studentDir(stepDir(7));
+    const forged = node(dir, 'lab/p3-44/expired-token.js', { JWT_SECRET: 'another-secret' }).out.trim();
+    expect(forged.split('.')).toHaveLength(3);
+    await withServer(stepDir(7), async ({ base }) => {
+      const res = await device(base).send('GET', '/api/v2/posts?limit=1', undefined, { Authorization: `Bearer ${forged}` });
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('LOGIN_REQUIRED');
+    });
   });
 });
