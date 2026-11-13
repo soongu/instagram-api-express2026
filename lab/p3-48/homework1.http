@@ -1,0 +1,5 @@
+### 회원 목록
+GET http://localhost:4002/members
+
+### 로그인하지 않고 내 로그인 방법
+GET http://localhost:4002/me/login-methods
