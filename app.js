@@ -20,13 +20,9 @@ app.use(cors({
   // credentials: true,
 }));
 app.use(express.json());
+
+
 app.use(cookieParser());
-
-
-app.use((req, res, next) => {
-  console.log('요청이 들어왔어요');
-  next()
-});
 
 
 app.get('/', (req, res) => {

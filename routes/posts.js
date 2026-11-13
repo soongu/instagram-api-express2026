@@ -56,11 +56,16 @@ router.post('/', validateBody(postCreateSchema), async (req, res) => {
   res.status(201).json(newPost);
 });
 
-router.patch('/:id', parseId, validateBody(postUpdateSchema), async (req, res) => {
-  const post = await postService.updatePost(req.postId, req.body);
+router.patch(
+  '/:id',
+  parseId,
+  validateBody(postUpdateSchema),
+  async (req, res) => {
+    const post = await postService.updatePost(req.postId, req.body);
 
-  res.json(post);
-});
+    res.json(post);
+  },
+);
 
 router.delete('/:id', parseId, async (req, res) => {
   const deleted = await postService.removePost(req.postId);

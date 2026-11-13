@@ -1,0 +1,16 @@
+### JSON이 아닌 형식으로 올리기
+POST http://localhost:3000/api/posts
+Content-Type: text/plain
+
+{
+  "authorId": 3,
+  "content": "글자 형식으로 보냈어요"
+}
+
+### 번호도 본문도 틀린 수정
+PATCH http://localhost:3000/api/posts/abc
+Content-Type: application/json
+
+{
+  "likeCount": -1
+}
