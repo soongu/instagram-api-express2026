@@ -32,6 +32,10 @@ function parseUserId(req, res, next) {
   next();
 }
 
+// 주소에 이 이름의 값이 있으면, 라우트로 들어가기 전에 이 함수부터 한 번 부른다.
+router.param('id', parseId);
+router.param('userId', parseUserId);
+
 router.get('/', async (req, res) => {
   const page = await postService.getPosts({
     username: req.query.username,
@@ -44,7 +48,7 @@ router.get('/', async (req, res) => {
   res.json(page);
 });
 
-router.get('/:id', parseId, async (req, res) => {
+router.get('/:id', async (req, res) => {
   const post = await postService.getPost(req.postId);
 
   res.json(post);
@@ -67,13 +71,13 @@ router.patch(
   },
 );
 
-router.delete('/:id', parseId, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   const deleted = await postService.removePost(req.postId);
 
   res.json(deleted);
 });
 
-router.get('/:id/likes', parseId, async (req, res) => {
+router.get('/:id/likes', async (req, res) => {
   const usernames = await likeService.getLikers(req.postId);
 
   res.json(usernames);
@@ -81,16 +85,19 @@ router.get('/:id/likes', parseId, async (req, res) => {
 
 // 「3번 게시물에 2번 사람이 누른 좋아요」 하나를 주소로 가리킨다.
 // 있게 만들기(PUT)와 없게 만들기(DELETE) — 둘 다 몇 번을 보내도 결과가 같다.
-router.put('/:id/likes/:userId', parseId, parseUserId, async (req, res) => {
+router.put('/:id/likes/:userId', async (req, res) => {
   const status = await likeService.likePost(req.postId, req.userId);
 
   res.json(status);
 });
 
-router.delete('/:id/likes/:userId', parseId, parseUserId, async (req, res) => {
+router.delete('/:id/likes/:userId', async (req, res) => {
   const status = await likeService.unlikePost(req.postId, req.userId);
 
   res.json(status);
 });
+
+
+
 
 export default router;

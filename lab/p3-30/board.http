@@ -16,3 +16,13 @@ X-Role: admin
 
 ### 역할 없이 2번 공지 숨기기
 PATCH http://localhost:4008/api/admin/notices/2/hide
+
+### 역할 없이 없는 관리자 주소
+GET http://localhost:4008/api/admin/nope
+
+### 관리자로 없는 관리자 주소
+GET http://localhost:4008/api/admin/nope
+X-Role: admin
+
+### 없는 주소
+GET http://localhost:4008/api/nope

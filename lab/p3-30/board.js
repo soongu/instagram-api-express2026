@@ -31,14 +31,18 @@ function requireAdmin(req, res, next) {
 
 const adminOnly = [readRole, requireAdmin];
 
+// 누구나 볼 수 있는 라우트
+const noticeRouter = express.Router();
+
 // 누구나 — 숨기지 않은 공지 목록
-app.get('/api/notices', (req, res) => {
+noticeRouter.get('/notices', (req, res) => {
   res.json(notices.filter((notice) => !notice.hidden));
 });
 
 
 // 관리자만 쓰는 라우트는 이 라우터에 모은다
 const adminRouter = express.Router();
+
 
 // 이 라우터에 들어온 요청은 모두 adminOnly 부터 지나간다
 adminRouter.use(adminOnly);
@@ -70,17 +74,18 @@ adminRouter.delete('/notices/:id', (req, res) => {
 // 관리자만 — 공지 숨기기
 adminRouter.patch('/notices/:id/hide', (req, res) => {
   const notice = notices.find((one) => one.id === Number(req.params.id));
-
+  
   if (!notice) {
     res.status(404).json({ message: '그런 공지는 없어요' });
     return;
   }
-
+  
   notice.hidden = true;
   res.json(notice);
 });
 
 app.use('/api/admin', adminRouter);
+app.use('/api', noticeRouter);
 
 
 app.use((req, res) => {

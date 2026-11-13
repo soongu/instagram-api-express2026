@@ -1,0 +1,17 @@
+### 공지 목록
+GET http://localhost:4002/api/notices
+
+### 2번 공지
+GET http://localhost:4002/api/notices/2
+
+### 2번 공지 제목 고치기
+PATCH http://localhost:4002/api/notices/2
+Content-Type: application/json
+
+{"title": "새 기능 소개 (수정)"}
+
+### 없는 9번 공지
+GET http://localhost:4002/api/notices/9
+
+### findNotice가 불린 횟수
+GET http://localhost:4002/api/found

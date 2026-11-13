@@ -1,0 +1,19 @@
+### 공지 목록
+GET http://localhost:4001/api/notices
+
+### 이름 없이 내 정보
+GET http://localhost:4001/api/me
+
+### 이름 없이 내 북마크
+GET http://localhost:4001/api/me/bookmarks
+
+### minji의 북마크
+GET http://localhost:4001/api/me/bookmarks
+X-User: minji
+
+### minji로 없는 주소
+GET http://localhost:4001/api/me/nope
+X-User: minji
+
+### 이름 없이 없는 주소
+GET http://localhost:4001/api/nope
