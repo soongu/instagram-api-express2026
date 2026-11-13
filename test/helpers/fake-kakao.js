@@ -27,7 +27,12 @@ export const DEFAULT_KAKAO_PROFILE = {
   id: 3812345678,
   connected_at: '2026-11-12T05:21:08Z',
   properties: { nickname: '민지' },
-  kakao_account: { profile_nickname_needs_agreement: false, profile: { nickname: '민지', is_default_nickname: false } },
+  // 진짜 카카오의 응답(2026-11-13 실측)과 같은 필드, 같은 차례 — 프로필 사진은 동의항목에 넣지 않아 needs_agreement 가 true 로 온다.
+  kakao_account: {
+    profile_nickname_needs_agreement: false,
+    profile_image_needs_agreement: true,
+    profile: { nickname: '민지', is_default_nickname: false },
+  },
 };
 /** 닉네임 제공에 동의하지 않은 사람의 응답 — `kakao_account.profile` 이 없다. */
 export const KAKAO_NO_NICKNAME = {

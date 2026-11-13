@@ -539,6 +539,7 @@ describe('축 ② Step 3 — 카카오 전략 첫 판(구글 파일을 복사해
   properties: { nickname: '민지' },
   kakao_account: {
     profile_nickname_needs_agreement: false,
+    profile_image_needs_agreement: true,
     profile: { nickname: '민지', is_default_nickname: false }
   }
 }`);
@@ -954,7 +955,7 @@ describe('축 ⑤ Step 6 — 네이버 전략(새 OIDC 경로)과 프로필', ()
     });
   }, 30_000);
 
-  it('🔴 동의 화면에서 취소 — 네이버는 ?state=…&error=access_denied&error_description=… · 카카오는 state 없이 — 둘 다 302 /login?error=SOCIAL_LOGIN_FAILED · 고친 state · 쿠키 없이 온 콜백도 · 행이 안 생긴다', async () => {
+  it('🔴 동의 화면에서 취소 — 네이버는 ?error=access_denied&error_description=Canceled%20By%20User&state=… · 카카오는 state 없이 — 둘 다 302 /login?error=SOCIAL_LOGIN_FAILED · 고친 state · 쿠키 없이 온 콜백도 · 행이 안 생긴다', async () => {
     await freshGate();
     await withServer(stepDir(6), async ({ base, tail }) => {
       const before = await counts();
@@ -964,7 +965,8 @@ describe('축 ⑤ Step 6 — 네이버 전략(새 OIDC 경로)과 프로필', ()
       fakes.kakao.state.mode = 'deny';
       const naver = await socialLogin(browser(base), 'naver');
       const back = new URL(naver.consent.location);
-      expect([...back.searchParams.keys()]).toEqual(['state', 'error', 'error_description']);
+      expect([...back.searchParams.keys()]).toEqual(['error', 'error_description', 'state']);
+      expect(back.search.startsWith('?error=access_denied&error_description=Canceled%20By%20User&state=')).toBe(true);
       expect(back.searchParams.get('error')).toBe('access_denied');
       expect([naver.callback.status, naver.callback.location]).toEqual([302, LOGIN_FAILED_PAGE]);
       const kakao = await socialLogin(browser(base), 'kakao');
