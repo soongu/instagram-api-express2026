@@ -15,7 +15,7 @@ const arrivals = [
   {
     label: '네이버에서 취소',
     saved: 'uR5yC2gW8fVx0NpL',
-    url: 'http://localhost:3001/api/v2/auth/naver/callback?state=uR5yC2gW8fVx0NpL&error=access_denied&error_description=Canceled+By+User',
+    url: 'http://localhost:3001/api/v2/auth/naver/callback?error=access_denied&error_description=Canceled%20By%20User&state=uR5yC2gW8fVx0NpL',
   },
   {
     label: 'state를 고친 주소',
