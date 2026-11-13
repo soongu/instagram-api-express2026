@@ -204,8 +204,16 @@ export async function getLoginMethods(userId) {
 }
 
 // 소셜 계정 연결을 끊는다 — 이 사람의 그 제공자 행만 지운다. 지울 행이 없으면 404.
+// 비밀번호도 없고 이어진 소셜 계정이 그것 하나뿐이면 끊지 않는다 — 끊는 순간 이 사람은 들어올 방법이 없다.
 export async function unlinkSocialAccount(userId, provider) {
-  const { count } = await prisma.socialAccount.deleteMany({ where: { userId, provider } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { passwordHash: true, socialAccounts: { select: { provider: true } } },
+  });
+  const providers = user?.socialAccounts.map((account) => account.provider) ?? [];
 
-  if (count === 0) throw new NotFoundError('SOCIAL_ACCOUNT_NOT_FOUND');
+  if (!providers.includes(provider)) throw new NotFoundError('SOCIAL_ACCOUNT_NOT_FOUND');
+  if (user.passwordHash === null && providers.length === 1) throw new ConflictError('LAST_LOGIN_METHOD');
+
+  await prisma.socialAccount.deleteMany({ where: { userId, provider } });
 }

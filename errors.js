@@ -28,6 +28,7 @@ export const MESSAGES = {
   PHONE_TAKEN: '이미 가입한 휴대폰 번호예요',
   SOCIAL_ACCOUNT_TAKEN: '이미 다른 계정에 연결된 소셜 계정이에요',
   PROVIDER_ALREADY_LINKED: '같은 제공자의 계정이 이미 연결돼 있어요',
+  LAST_LOGIN_METHOD: '마지막 로그인 방법은 끊을 수 없어요',
   INTERNAL_ERROR: '서버에서 문제가 생겼어요',
 };
 
