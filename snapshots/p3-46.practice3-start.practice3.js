@@ -8,7 +8,7 @@ const arrivals = [
     url: 'http://localhost:3001/api/v2/auth/google/callback?state=pX3kQ9vT2mZr8LwY&code=4%2F0AeanS0bX1cD&scope=email+profile',
   },
   {
-    label: '카카오에서 취소',
+    label: 'state 없이 온 취소',
     saved: 'Jm4tB7nH1sKd6QeA',
     url: 'http://localhost:3001/api/v2/auth/kakao/callback?error=access_denied&error_description=User%20denied%20access',
   },

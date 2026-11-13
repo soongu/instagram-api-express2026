@@ -8,7 +8,7 @@ const arrivals = [
     url: 'http://localhost:3001/api/v2/auth/google/callback?state=pX3kQ9vT2mZr8LwY&code=4%2F0AeanS0bX1cD&scope=email+profile',
   },
   {
-    label: '카카오에서 취소',
+    label: 'state 없이 온 취소',
     saved: 'Jm4tB7nH1sKd6QeA',
     url: 'http://localhost:3001/api/v2/auth/kakao/callback?error=access_denied&error_description=User%20denied%20access',
   },
@@ -49,7 +49,7 @@ function readCallback(url, savedState) {
   const query = new URL(url).searchParams;
   const error = query.get('error');
 
-  // 제공자가 알려 준 실패를 state 보다 먼저 본다 — 카카오는 취소했을 때 state 를 붙이지 않는다.
+  // 제공자가 알려 준 실패를 state 보다 먼저 본다 — 실패를 알리는 주소에 state 가 늘 실려 온다는 보장이 없다.
   if (error === 'access_denied') return 'denied';
   if (error !== null || !query.has('code')) return 'failed';
 
