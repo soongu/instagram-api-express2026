@@ -1260,3 +1260,562 @@ describe('축 ⑤ 파생 대조 — 세 전략 파일의 줄 수와 같은 줄',
     expect(same).toEqual(["import { createSocialStrategy } from './createSocialStrategy.js';", '  }),', '});']);
   });
 });
+
+// ── 실습·과제(lab/p3-47) ───────────────────────────────────────────────────────
+// 실습 파일은 이 회차 북마크가 생기면 북마크에서, 아직 없으면 main 에서 읽는다(작업트리가 아니다).
+// 짓는 동안 `P347_LAB_WT=1` 을 주면 작업트리에서 읽는다.
+// 🔑 4001·4002·4003 은 남이 쓸 수 있어서 직접 띄우지 않는다 — 사본의 글자만 바꿔 띄운다
+//    (톡 서버 4003→3984 · 실습용 인가 서버 4001→3985 · 서비스 4002→3986 — 등록한 돌아올 주소 · listen 모두).
+const TALK_PORT = 3984;
+const LAB_AS_PORT = 3985;
+const LAB_PORT = 3986;
+const LAB_BASE = `http://localhost:${LAB_PORT}`;
+const LAB_REF = hasRef('refs/heads/code/p3-47') ? 'code/p3-47' : 'main';
+const LAB_WT = process.env.P347_LAB_WT === '1';
+const labFile = (rel) => (LAB_WT ? read(P(rel)) : showAt(LAB_REF, rel));
+const LAB = (name) => labFile(`lab/p3-47/${name}`);
+const SNAP = (name) => labFile(`snapshots/p3-47.${name}`);
+/** 글자를 모두 바꾼다 — 바꿀 글자가 없으면 던진다. */
+const swapAll = (text, pairs, what) => pairs.reduce((out, [a, b]) => {
+  if (!out.includes(a)) throw new Error(`${what} 에 바꿀 글자가 없다: ${a}`);
+  return out.replaceAll(a, b);
+}, text);
+const PORT_PAIRS = { 4001: String(LAB_AS_PORT), 4002: String(LAB_PORT), 4003: String(TALK_PORT) };
+/** 사본의 실습 포트를 판정 포트로 바꾼다 — `ports` 에 적은 포트는 반드시 있어야 한다. */
+const toLabPorts = (text, what, ports) => swapAll(text, ports.map((port) => [String(port), PORT_PAIRS[port]]), what);
+/** 사본의 한 덩어리를 바꾼다 — 바꿀 글자가 없거나 여럿이면 던진다(틀린 판을 만들 때). */
+const edit1 = (text, a, b) => {
+  if (text.split(a).length !== 2) throw new Error(`바꿀 글자가 없거나 여럿이다: ${a}`);
+  return text.replace(a, b);
+};
+const labSeen = {};
+seen.labs = labSeen;
+
+/** 실습 파일을 학생 폴더 모양의 사본에 놓고 `node lab/p3-47/…` 로 띄운다. */
+const bootLab = (rel, source, port, extraEnv = {}) => {
+  const dir = studentDir(stepDir(6), (d) => {
+    mkdirSync(join(d, rel, '..'), { recursive: true });
+    writeFileSync(join(d, rel), source);
+  });
+  return boot(join(dir, rel), { port, cwd: dir, env: { ...env, ...extraEnv }, ready: `${port}번 포트에서` });
+};
+const startTalk = () => bootLab('lab/p3-47/talk-server.js', toLabPorts(LAB('talk-server.js'), 'talk-server.js', [4002, 4003]), TALK_PORT);
+const startAuthServer = () => bootLab('lab/p3-21/auth-server.js', toLabPorts(showAt('code/p3-46', 'lab/p3-21/auth-server.js'), 'auth-server.js', [4001, 4002]), LAB_AS_PORT);
+/** 서비스(실습·과제 파일)를 띄운 채 `fn` 을 부른다 — `source` 는 학생 파일(또는 틀린 판) 원문. */
+const withService = async (file, source, fn) => {
+  const srv = await bootLab(`lab/p3-47/${file}`, toLabPorts(source, file, [4001, 4002, 4003]), LAB_PORT);
+  try {
+    return await fn({ ...srv, base: LAB_BASE });
+  } finally {
+    await stop(srv);
+  }
+};
+const runLabScript = (file, source) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p347-script-'));
+  dirs.push(dir);
+  mkdirSync(join(dir, 'lab/p3-47'), { recursive: true });
+  writeFileSync(join(dir, `lab/p3-47/${file}`), source);
+  writeFileSync(join(dir, 'package.json'), '{ "type": "module" }\n');
+  try {
+    return { code: 0, out: execFileSync(process.execPath, [`lab/p3-47/${file}`], { cwd: dir, encoding: 'utf8', stdio: 'pipe' }) };
+  } catch (error) {
+    return { code: error.status, out: `${error.stdout}${error.stderr}`.replaceAll(`/private${dir}`, '~/instagram-api').replaceAll(dir, '~/instagram-api') };
+  }
+};
+const nodeCheck = (source) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p347-check-'));
+  dirs.push(dir);
+  writeFileSync(join(dir, 'file.js'), source);
+  writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
+  execFileSync(process.execPath, ['--check', 'file.js'], { cwd: dir, stdio: 'pipe' });
+};
+const execFileAsync = promisify(execFile);
+/** httpYac CLI 로 `.http` 한 파일을 통째로 보낸다(`--all`) — 이 프로세스의 서버들이 답할 수 있게 비동기로 부른다. */
+const httpyac = async (file, source) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p347-http-'));
+  dirs.push(dir);
+  writeFileSync(join(dir, file), toLabPorts(source, file, [4002]));
+  try {
+    return (await execFileAsync(P('node_modules/.bin/httpyac'), ['send', file, '--all'], { cwd: dir, encoding: 'utf8' })).stdout;
+  } catch (error) {
+    return `${error.stdout}${error.stderr}`;
+  }
+};
+
+/** 실습용 인가 서버의 동의 화면에서 아이디·비밀번호를 넣고 누른다 — 돌아올 주소(경로 + 쿼리)를 돌려준다. */
+const consentLab = async (started, username, decision = 'allow') => {
+  const auth = new URL(started.location);
+  const form = new URLSearchParams([...auth.searchParams, ['username', username], ['password', `${username}1234`], ['decision', decision]]);
+  const res = await fetch(`${auth.origin}/authorize`, { method: 'POST', body: form, redirect: 'manual' });
+  const back = new URL(res.headers.get('location'));
+  expect(back.origin).toBe(LAB_BASE);
+  return `${back.pathname}${back.search}`;
+};
+/** 톡의 동의 화면에서 계정을 고르고 누른다 — `nickname`·`email` 은 그 체크를 켜 둘지. */
+const consentTalk = async (started, account, { decision = 'allow', nickname = true, email = true } = {}) => {
+  const auth = new URL(started.location);
+  const fields = [...auth.searchParams, ['account', account], ['decision', decision]];
+  if (nickname) fields.push(['nickname', 'yes']);
+  if (email) fields.push(['email', 'yes']);
+  const res = await fetch(`${auth.origin}/oauth/authorize`, { method: 'POST', body: new URLSearchParams(fields), redirect: 'manual' });
+  const back = new URL(res.headers.get('location'));
+  expect(back.origin).toBe(LAB_BASE);
+  return `${back.pathname}${back.search}`;
+};
+/** 한 탭으로 로그인 한 바퀴 — 시작 → 동의 → 콜백. 콜백 응답과 /me 를 돌려준다. */
+const labLogin = async (base, provider, who, opts) => {
+  const tab = browser(base);
+  const started = await tab.get(provider === 'lab' ? '/login' : '/talk');
+  const back = provider === 'lab' ? await consentLab(started, who) : await consentTalk(started, who, opts);
+  const callback = await tab.get(back);
+  const me = callback.location === '/me' ? (await tab.get('/me')).body : null;
+  return { tab, started, back, callback: [callback.status, callback.location], me };
+};
+/**
+ * 탭 둘 — 탭 A 는 인가 서버(/login · jaehoon), 탭 B 는 톡(/talk · sora). 둘 다 동의 화면에 멈춰 둔 채
+ * `order` 차례로 «허용» 을 누른다(누르면 그 탭이 곧바로 돌아온다). 탭 둘은 쿠키 단지 하나다.
+ */
+const labTwoTabs = async (base, order = ['A', 'B']) => {
+  const tab = browser(base);
+  const startA = await tab.get('/login');
+  const startB = await tab.get('/talk');
+  const out = { jarAfterStarts: tab.cookies() };
+  out.stateA = new URL(startA.location).searchParams.get('state');
+  out.stateB = new URL(startB.location).searchParams.get('state');
+  const backs = { A: () => consentLab(startA, 'jaehoon'), B: () => consentTalk(startB, 'sora') };
+  for (const which of order) {
+    const res = await tab.get(await backs[which]());
+    out[which] = [res.status, res.location];
+  }
+  out.jarAtEnd = tab.cookies();
+  out.me = (await tab.get('/me')).body;
+  out.members = (await browser(base).get('/members')).body;
+  return out;
+};
+
+describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 띄운 채', () => {
+  let talk;
+  let authServer;
+  beforeAll(async () => {
+    talk = await startTalk();
+    authServer = await startAuthServer();
+  }, 30_000);
+  afterAll(async () => {
+    if (talk) await stop(talk);
+    if (authServer) await stop(authServer);
+  });
+  const talkLogSince = (from) => talk.tail().slice(from);
+
+  describe('축 ⑥ 나눠 주는 talk-server.js — 돌아올 주소 둘 · 이메일 동의항목', () => {
+    const TALK = `http://localhost:${TALK_PORT}`;
+    const query = (extra = {}) => new URLSearchParams({ response_type: 'code', client_id: 'lab-talk', redirect_uri: `${LAB_BASE}/talk/callback`, state: 'st4te', ...extra });
+    const tokenFor = async (fields) => {
+      const consent = await fetch(`${TALK}/oauth/authorize`, { method: 'POST', body: new URLSearchParams({ ...Object.fromEntries(query()), ...fields }), redirect: 'manual' });
+      const code = new URL(consent.headers.get('location')).searchParams.get('code');
+      const res = await fetch(`${TALK}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', client_id: 'lab-talk', client_secret: 'talk-secret', redirect_uri: fields.redirect_uri ?? `${LAB_BASE}/talk/callback`, code }) });
+      return (await res.json()).access_token;
+    };
+    const me = async (token) => (await fetch(`${TALK}/v2/me`, { headers: { Authorization: `Bearer ${token}` } })).json();
+
+    it('🔴 180줄 안쪽 · 첫 줄은 경로 주석 · 4003 번 포트 · 새 패키지 없이 · 지난 시간 톡 서버와 같은 import', () => {
+      const src = LAB('talk-server.js');
+      expect(src.trimEnd().split('\n').length).toBeLessThanOrEqual(180);
+      expect(src.split('\n')[0]).toBe('// ~/instagram-api/lab/p3-47/talk-server.js');
+      expect(src).toContain('app.listen(4003, () => {');
+      expect([...src.matchAll(/^import .* from '(.*)';$/gm)].map((m) => m[1])).toEqual(['express', 'node:crypto', 'node:timers/promises']);
+      expect(talk.log).toBe(`톡 서버가 ${TALK_PORT}번 포트에서 기다리고 있어요.\n`);
+      const { removed, added } = diffLines(showAt('code/p3-46', 'lab/p3-46/talk-server.js'), src);
+      labSeen.talkServerDiff = { lines: src.trimEnd().split('\n').length, removed: removed.length, added: added.length };
+    });
+
+    it('🔴 돌아올 주소 둘을 받는다 — /talk/callback · /callback · 그 밖은 400', async () => {
+      for (const path of ['/talk/callback', '/callback']) {
+        const page = await fetch(`${TALK}/oauth/authorize?${query({ redirect_uri: `${LAB_BASE}${path}` })}`);
+        expect([path, page.status]).toEqual([path, 200]);
+      }
+      const bad = await fetch(`${TALK}/oauth/authorize?${query({ redirect_uri: `${LAB_BASE}/kakao/callback` })}`);
+      expect(bad.status).toBe(400);
+      expect(await bad.text()).toContain('<p>등록하지 않은 redirect_uri예요</p>');
+    }, 30_000);
+
+    it('🔴 동의 화면 — 계정 넷(sora 가 골라져 있다) · «이메일 제공» 체크는 scope 에 talk_email 이 있을 때만(켜져 있다)', async () => {
+      const plain = await (await fetch(`${TALK}/oauth/authorize?${query()}`)).text();
+      for (const line of ['value="sora" checked> sora (소라)', 'value="haru"> haru (하루)', 'value="bomi"> bomi (보미)', 'value="dahye"> dahye (다혜)']) expect(plain).toContain(line);
+      expect(plain).toContain('<input type="checkbox" name="nickname" value="yes" checked> 닉네임 제공');
+      expect(plain).not.toContain('이메일 제공');
+      const withEmail = await (await fetch(`${TALK}/oauth/authorize?${query({ scope: 'talk_email' })}`)).text();
+      expect(withEmail).toContain('<input type="checkbox" name="email" value="yes" checked> 이메일 제공');
+      expect(withEmail).toContain('<input type="hidden" name="scope" value="talk_email">');
+      labSeen.talkConsentWithEmail = withEmail;
+    }, 30_000);
+
+    it('🔴 /v2/me — talk_email 을 달라고 안 했으면 이메일 칸이 없다 · 달라고 하고 동의했으면 email_agreed · email · email_checked · 동의 안 했으면 email_agreed: false 만', async () => {
+      expect(await me(await tokenFor({ account: 'sora', nickname: 'yes', email: 'yes', decision: 'allow' }))).toEqual(
+        { id: 10001, joined_at: '2026-03-02T09:00:00Z', account: { nickname_agreed: true, profile: { nickname: '소라' } } });
+      expect(await me(await tokenFor({ account: 'sora', nickname: 'yes', email: 'yes', decision: 'allow', scope: 'talk_email' }))).toEqual(
+        { id: 10001, joined_at: '2026-03-02T09:00:00Z', account: { nickname_agreed: true, profile: { nickname: '소라' }, email_agreed: true, email: 'sora@talk.example', email_checked: true } });
+      expect(await me(await tokenFor({ account: 'haru', nickname: 'yes', email: 'yes', decision: 'allow', scope: 'talk_email' }))).toEqual(
+        { id: 10002, joined_at: '2026-05-17T14:30:00Z', account: { nickname_agreed: true, profile: { nickname: '하루' }, email_agreed: true, email: 'haru@talk.example', email_checked: false } });
+      expect(await me(await tokenFor({ account: 'bomi', decision: 'allow', scope: 'talk_email' }))).toEqual(
+        { id: 10003, joined_at: '2026-07-08T11:15:00Z', account: { nickname_agreed: false, email_agreed: false } });
+      const dahye = await me(await tokenFor({ account: 'dahye', email: 'yes', decision: 'allow', scope: 'talk_email', redirect_uri: `${LAB_BASE}/callback` }));
+      expect(dahye.account).toEqual({ nickname_agreed: false, email_agreed: true, email: 'dahye@example.com', email_checked: true });
+    }, 30_000);
+  });
+
+  describe('축 ⑦ 나눠 주는 one-callback.js(교안 Step 3) — 돌아올 주소 하나 + 쿠키 lab_provider', () => {
+    it('🔴 한 탭씩이면 둘 다 된다 — 인가 서버 jaehoon 302 /me · 톡 sora 302 /me', async () => {
+      await withService('one-callback.js', LAB('one-callback.js'), async ({ base }) => {
+        const lab = await labLogin(base, 'lab', 'jaehoon');
+        expect([lab.callback, lab.me]).toEqual([[302, '/me'], { id: 3, nickname: 'jaehoon', email: 'jaehoon@example.com' }]);
+        const sora = await labLogin(base, 'talk', 'sora');
+        expect([sora.callback, sora.me]).toEqual([[302, '/me'], { id: 2, nickname: '소라' }]);
+      });
+    }, 30_000);
+
+    it('🔴 탭 둘(인가 서버 A 시작 → 톡 B 시작 → A 허용 → B 허용) — 둘 다 /?error=LOGIN_FAILED · 콜백 로그 두 줄이 모두 lab_provider=talk · A 의 코드는 state 비교에서 멈춰 토큰 교환까지 안 간다', async () => {
+      const before = talk.tail().length;
+      await withService('one-callback.js', LAB('one-callback.js'), async ({ base, tail }) => {
+        const got = await labTwoTabs(base, ['A', 'B']);
+        expect(got.A).toEqual([302, '/?error=LOGIN_FAILED']);
+        expect(got.B).toEqual([302, '/?error=LOGIN_FAILED']);
+        expect(got.jarAfterStarts).toEqual(['lab_provider /', 'lab_state_lab /', 'lab_state_talk /', 'lab_verifier_lab /', 'lab_verifier_talk /']);
+        await sleep(150);
+        const lines = tail().split('\n').filter((line) => line.startsWith('[콜백]'));
+        expect(lines).toEqual([`[콜백] lab_provider=talk 로 처리 · 돌아온 state=${got.stateA}`, `[콜백] lab_provider=talk 로 처리 · 돌아온 state=${got.stateB}`]);
+        // 톡 서버에는 토큰 요청이 오지 않았다 — A 의 코드는 톡 전략의 state 비교에서 멈췄고, B 는 그 비교가 쿠키를 지운 뒤라 쿠키가 없었다
+        expect(talkLogSince(before)).not.toContain('POST /oauth/token');
+        expect(tail()).not.toContain('Error');
+        expect(got.members).toHaveLength(2);
+        labSeen.oneCallbackTwoTabs = { A: got.A, B: got.B, log: lines.map((line) => line.replace(/state=.*$/, 'state=…')), jarAtEnd: got.jarAtEnd, talkLog: talkLogSince(before) };
+      });
+    }, 30_000);
+
+    it('🔎 탭 둘이어도 톡(B)을 먼저 허용하면 톡은 된다 — 인가 서버(A)만 실패(그 코드도 톡 전략이 받는다)', async () => {
+      await withService('one-callback.js', LAB('one-callback.js'), async ({ base, tail }) => {
+        const got = await labTwoTabs(base, ['B', 'A']);
+        expect(got.B).toEqual([302, '/me']);
+        expect(got.A).toEqual([302, '/?error=LOGIN_FAILED']);
+        await sleep(150);
+        expect(tail().split('\n').filter((line) => line.startsWith('[콜백]')).map((line) => line.replace(/state=.*$/, 'state=…'))).toEqual([
+          '[콜백] lab_provider=talk 로 처리 · 돌아온 state=…', '[콜백] lab_provider=talk 로 처리 · 돌아온 state=…',
+        ]);
+        labSeen.oneCallbackTalkFirst = { A: got.A, B: got.B };
+      });
+    }, 30_000);
+  });
+
+  describe('축 ⑧ 직접 해보기 1 — 임시 쿠키 이름을 제공자마다', () => {
+    it('🔴 시작 파일은 지난 과제(lab/p3-46/homework1.js)를 복사한 것 — 첫 줄 경로만 다르다 · 문법 검사 통과', () => {
+      const start = SNAP('practice1-start.practice1.js');
+      expect(start).toBe(showAt('code/p3-46', 'lab/p3-46/homework1.js').replace('// ~/instagram-api/lab/p3-46/homework1.js\n', '// ~/instagram-api/lab/p3-47/practice1.js\n'));
+      nodeCheck(start);
+    });
+
+    it('🔴 정답은 시작 파일에서 저장소를 함수(createStateStore)로 바꾸고 store 두 줄만 고쳤다', () => {
+      const { removed, added } = diffLines(SNAP('practice1-start.practice1.js'), LAB('practice1.js'));
+      expect(removed).toContain('const stateStore = {');
+      expect(added).toContain('function createStateStore(provider) {');
+      expect(added).toEqual(expect.arrayContaining(["    store: createStateStore('lab'),", "    store: createStateStore('talk'),", '  const stateCookie = `lab_state_${provider}`;', '  const verifierCookie = `lab_verifier_${provider}`;']));
+      expect(LAB('practice1.js').split('\n')[0]).toBe('// ~/instagram-api/lab/p3-47/practice1.js');
+    });
+
+    const check = (source) => withService('practice1.js', source, async ({ base, tail }) => {
+      const got = await labTwoTabs(base, ['A', 'B']);
+      await sleep(150);
+      return { A: got.A, B: got.B, jarAtEnd: got.jarAtEnd, members: got.members.map((m) => `${m.id} ${m.nickname} ${m.providers.join(',')}`), terminal: tail() };
+    });
+
+    it('🔴 확인 — 고치기 전(시작 파일)에는 탭 둘이 둘 다 /?error=LOGIN_FAILED · 고친 뒤에는 둘 다 /me · /members 에 둘 · 다 끝난 뒤 쿠키는 labSession 하나', async () => {
+      const before = await check(SNAP('practice1-start.practice1.js'));
+      expect([before.A, before.B]).toEqual([[302, '/?error=LOGIN_FAILED'], [302, '/?error=LOGIN_FAILED']]);
+      const after = await check(LAB('practice1.js'));
+      expect([after.A, after.B]).toEqual([[302, '/me'], [302, '/me']]);
+      expect(after.members).toEqual(['1 dahye ', '2 소라 talk', '3 jaehoon lab']);
+      expect(after.jarAtEnd).toEqual(['labSession /']);
+      labSeen.practice1 = { before: [before.A, before.B], after: [after.A, after.B], jarAtEnd: after.jarAtEnd, members: after.members };
+    }, 60_000);
+
+    it('🔴 틀린 판 (가) — lab_state 만 나누고 lab_verifier 는 하나: 둘 다 실패 · 인가 서버가 PKCE 로 거절한다(톡은 verifier 가 없어 토큰을 묻지도 않는다)', async () => {
+      const before = talk.tail().length;
+      const got = await check(edit1(LAB('practice1.js'), '  const verifierCookie = `lab_verifier_${provider}`;', "  const verifierCookie = 'lab_verifier';"));
+      expect([got.A, got.B]).toEqual([[302, '/?error=LOGIN_FAILED'], [302, '/?error=LOGIN_FAILED']]);
+      expect(got.terminal).toContain('TokenError: code_verifier가 맞지 않아요');
+      expect(talkLogSince(before)).not.toContain('POST /oauth/token');
+      labSeen.practice1SharedVerifier = { A: got.A, B: got.B, terminalFirst: got.terminal.slice(got.terminal.indexOf('TokenError')).split('\n')[0] };
+    }, 60_000);
+
+    it('🔴 틀린 판 (나) — 지우는 쪽(clearCookie)만 옛 이름: 로그인은 둘 다 되고 다음 로그인도 안 망가지지만, 다 끝난 뒤 쿠키에 lab_state_·lab_verifier_ 넷이 남는다(확인의 «쿠키는 labSession 하나» 가 가린다)', async () => {
+      const wrong = edit1(LAB('practice1.js'), '      req.res.clearCookie(stateCookie);\n      req.res.clearCookie(verifierCookie);\n', "      req.res.clearCookie('lab_state');\n      req.res.clearCookie('lab_verifier');\n");
+      const got = await check(wrong);
+      expect([got.A, got.B]).toEqual([[302, '/me'], [302, '/me']]);
+      expect(got.jarAtEnd).toEqual(['labSession /', 'lab_state_lab /', 'lab_state_talk /', 'lab_verifier_lab /', 'lab_verifier_talk /']);
+      // 남은 쿠키가 다음 로그인을 망치는지 — 같은 탭으로 두 제공자에 한 번 더 다녀와도 된다(시작할 때 새 값으로 덮어쓴다)
+      const again = await withService('practice1.js', wrong, async ({ base }) => {
+        const tab = browser(base);
+        const out = [];
+        for (const [path, consent] of [['/login', (s) => consentLab(s, 'jaehoon')], ['/talk', (s) => consentTalk(s, 'sora')], ['/login', (s) => consentLab(s, 'minji')]]) {
+          const res = await tab.get(await consent(await tab.get(path)));
+          out.push([res.status, res.location]);
+        }
+        return out;
+      });
+      expect(again).toEqual([[302, '/me'], [302, '/me'], [302, '/me']]);
+      labSeen.practice1OldClear = { jarAtEnd: got.jarAtEnd, againSameTab: again };
+    }, 60_000);
+  });
+
+  describe('축 ⑨ 직접 해보기 2 — 두 전략을 createLabStrategy 하나로', () => {
+    it('🔴 시작 파일은 직접 해보기 1 정답을 복사한 것 — 첫 줄 경로만 다르다', () => {
+      expect(SNAP('practice2-start.practice2.js')).toBe(LAB('practice1.js').replace('// ~/instagram-api/lab/p3-47/practice1.js\n', '// ~/instagram-api/lab/p3-47/practice2.js\n'));
+    });
+
+    it('🔴 확인 — grep -c "new OAuth2Strategy" lab/p3-47/practice2.js 는 1 (시작 파일은 2)', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'p347-grep-'));
+      dirs.push(dir);
+      mkdirSync(join(dir, 'lab/p3-47'), { recursive: true });
+      writeFileSync(join(dir, 'lab/p3-47/practice2.js'), LAB('practice2.js'));
+      expect(execFileSync('/usr/bin/grep', ['-c', 'new OAuth2Strategy', 'lab/p3-47/practice2.js'], { cwd: dir, encoding: 'utf8' })).toBe('1\n');
+      writeFileSync(join(dir, 'lab/p3-47/practice2.js'), SNAP('practice2-start.practice2.js'));
+      expect(execFileSync('/usr/bin/grep', ['-c', 'new OAuth2Strategy', 'lab/p3-47/practice2.js'], { cwd: dir, encoding: 'utf8' })).toBe('2\n');
+    });
+
+    it('🔴 확인 — 직접 해보기 1 의 탭 둘 차례 그대로 둘 다 /me · 한 탭씩도 된다', async () => {
+      const got = await withService('practice2.js', LAB('practice2.js'), async ({ base }) => {
+        const twoTabs = await labTwoTabs(base, ['A', 'B']);
+        const single = await labLogin(base, 'lab', 'minji');
+        return { twoTabs: [twoTabs.A, twoTabs.B], single: [single.callback, single.me] };
+      });
+      expect(got).toEqual({ twoTabs: [[302, '/me'], [302, '/me']], single: [[302, '/me'], { id: 4, nickname: 'minji', email: 'minji@example.com' }] });
+    }, 60_000);
+
+    it('🔴 틀린 판 — 저장소를 함수 밖에서 하나만 만들어 두 전략에 넘기면 탭 둘이 다시 둘 다 /?error=LOGIN_FAILED(확인이 가린다)', async () => {
+      const wrong = edit1(edit1(LAB('practice2.js'),
+        'function createLabStrategy({',
+        "const sharedStore = createStateStore('lab');\n\nfunction createLabStrategy({"),
+        'store: createStateStore(provider), pkce: true', 'store: sharedStore, pkce: true');
+      const got = await withService('practice2.js', wrong, async ({ base }) => labTwoTabs(base, ['A', 'B']));
+      expect([got.A, got.B]).toEqual([[302, '/?error=LOGIN_FAILED'], [302, '/?error=LOGIN_FAILED']]);
+    }, 60_000);
+
+    it('🔎 사용자 정보 실패 문장 — «사용자 정보를 받지 못했어요 (talk · 401)» 꼴(수업 함수와 같다)', () => {
+      expect(LAB('practice2.js')).toContain('throw new Error(`사용자 정보를 받지 못했어요 (${provider} · ${response.status})`);');
+    });
+  });
+
+  describe('축 ⑩ 직접 해보기 3 — readEmail(provider, info)', () => {
+    const RIGHT = [
+      'google  minji.kim@gmail.com   확인됨',
+      'google  minji.kim@gmail.com   확인 안 됨',
+      'kakao   minji.kim@kakao.com   확인됨',
+      'kakao   haru@kakao.com        확인 안 됨',
+      'kakao   mi***@kakao.com       확인 안 됨',
+      'kakao   -                     확인 안 됨',
+      'kakao   -                     확인 안 됨',
+      'naver   minji.kim@naver.com   확인 안 됨',
+    ];
+    const run = (source) => runLabScript('practice3.js', source);
+
+    it('🔴 정답 — 여덟 줄', () => {
+      const { code, out } = run(LAB('practice3.js'));
+      expect(code).toBe(0);
+      expect(out.trimEnd().split('\n')).toEqual(RIGHT);
+      labSeen.practice3 = out;
+    });
+
+    it('🔴 시작 파일 — 비운 채로 문법 검사를 통과하고 여덟 줄 모두 «-  확인 안 됨» · 정답과는 함수 하나만 다르다', () => {
+      const start = SNAP('practice3-start.practice3.js');
+      nodeCheck(start);
+      expect(run(start).out.trimEnd().split('\n')).toEqual(RIGHT.map((line) => `${line.slice(0, 8)}${'-'.padEnd(22)}확인 안 됨`));
+      const from = '// 제공자의 응답에서 이메일과, 확인된 이메일인지를 꺼낸다';
+      const to = 'for (const [provider, info] of samples)';
+      expect(start.slice(0, start.indexOf(from))).toBe(LAB('practice3.js').slice(0, LAB('practice3.js').indexOf(from)));
+      expect(start.slice(start.indexOf(to))).toBe(LAB('practice3.js').slice(LAB('practice3.js').indexOf(to)));
+    });
+
+    it('🔴 틀린 판 — || 면 넷째·다섯째 줄이 «확인됨»', () => {
+      const out = run(edit1(LAB('practice3.js'), 'is_email_valid === true && info', 'is_email_valid === true || info')).out.trimEnd().split('\n');
+      expect(out.filter((line, i) => line !== RIGHT[i])).toEqual(['kakao   haru@kakao.com        확인됨', 'kakao   mi***@kakao.com       확인됨']);
+    });
+
+    it('🔴 틀린 판 — is_email_verified 만 보면 다섯째 줄(유효하지 않은 마스킹 이메일)이 «확인됨»', () => {
+      const out = run(edit1(LAB('practice3.js'), 'info.kakao_account?.is_email_valid === true && info.kakao_account?.is_email_verified === true', 'info.kakao_account?.is_email_verified === true')).out.trimEnd().split('\n');
+      expect(out.filter((line, i) => line !== RIGHT[i])).toEqual(['kakao   mi***@kakao.com       확인됨']);
+    });
+
+    it('🔴 틀린 판 — ?. 없이 info.kakao_account.email 이면 여섯 줄을 찍고 일곱째 샘플에서 TypeError 로 멈춘다', () => {
+      const { code, out } = run(edit1(LAB('practice3.js'), '      email: info.kakao_account?.email,', '      email: info.kakao_account.email,'));
+      expect(code).toBe(1);
+      const lines = out.split('\n');
+      expect(lines.slice(0, 6)).toEqual(RIGHT.slice(0, 6));
+      expect(out).toContain("TypeError: Cannot read properties of undefined (reading 'email')");
+      labSeen.practice3NoOptional = out.slice(out.indexOf(RIGHT[5]) + RIGHT[5].length + 1);
+    });
+
+    it('🔴 틀린 판 — 네이버를 맨 위에서 읽으면(info.email) 여덟째 줄의 이메일이 «-»', () => {
+      const out = run(edit1(LAB('practice3.js'), '  return { email: info.response.email, emailVerified: false };', '  return { email: info.email, emailVerified: false };')).out.trimEnd().split('\n');
+      expect(out.filter((line, i) => line !== RIGHT[i])).toEqual([`naver   ${'-'.padEnd(22)}확인 안 됨`]);
+    });
+  });
+
+  describe('축 ⑪ 과제 [기초] — 톡에서 이메일을 받는다', () => {
+    /** 확인 절차를 차례대로 돌려 관찰한 것을 돌려준다 — 정답 판과 틀린 판을 같은 절차로 잰다. */
+    const observe = (source) => withService('homework1.js', source, async ({ base, tail }) => {
+      const got = {};
+      got.bomi = (await labLogin(base, 'talk', 'bomi')).me;
+      got.haru = (await labLogin(base, 'talk', 'haru')).me;
+      got.dahyeEmailOn = (await labLogin(base, 'talk', 'dahye')).callback;
+      got.membersAfterTaken = (await browser(base).get('/members')).body.length;
+      got.dahyeEmailOff = (await labLogin(base, 'talk', 'dahye', { email: false })).me;
+      got.soraAgain = (await labLogin(base, 'talk', 'sora')).me;
+      got.jaehoonLab = (await labLogin(base, 'lab', 'jaehoon')).me;
+      got.members = (await browser(base).get('/members')).body;
+      await sleep(150);
+      got.terminal = tail();
+      return got;
+    });
+    const RIGHT = {
+      bomi: { id: 3, nickname: '보미', email: 'bomi@talk.example' },
+      haru: { id: 4, nickname: '하루' },
+      dahyeEmailOn: [302, '/?error=EMAIL_TAKEN'],
+      membersAfterTaken: 4,
+      dahyeEmailOff: { id: 5, nickname: '다혜' },
+      soraAgain: { id: 2, nickname: '소라' },
+      jaehoonLab: { id: 6, nickname: 'jaehoon' },
+      members: [
+        { id: 1, nickname: 'dahye', email: 'dahye@example.com', providers: [] },
+        { id: 2, nickname: '소라', providers: ['talk'] },
+        { id: 3, nickname: '보미', email: 'bomi@talk.example', providers: ['talk'] },
+        { id: 4, nickname: '하루', providers: ['talk'] },
+        { id: 5, nickname: '다혜', providers: ['talk'] },
+        { id: 6, nickname: 'jaehoon', providers: ['lab'] },
+      ],
+    };
+    const withoutTerminal = ({ terminal, ...rest }) => rest;
+    const wrongKeys = (got) => Object.keys(RIGHT).filter((key) => JSON.stringify(got[key]) !== JSON.stringify(RIGHT[key]));
+
+    it('🔴 시작 파일은 직접 해보기 2 정답을 복사한 것 — 첫 줄 경로만 다르다', () => {
+      expect(SNAP('homework1-start.homework1.js')).toBe(LAB('practice2.js').replace('// ~/instagram-api/lab/p3-47/practice2.js\n', '// ~/instagram-api/lab/p3-47/homework1.js\n'));
+    });
+
+    it('🔴 정답 — 보미(확인됨)는 이메일과 함께 · 하루(확인 안 됨)는 이메일 없이 · 다혜는 이메일을 켜면 EMAIL_TAKEN, 끄면 이메일 없이 · 이미 가입한 소라는 그대로 · 인가 서버의 이메일은 확인 여부가 없어 적지 않는다', async () => {
+      const got = await observe(LAB('homework1.js'));
+      expect(withoutTerminal(got)).toEqual(RIGHT);
+      expect(got.terminal).not.toContain('Error');
+      labSeen.homework1 = withoutTerminal(got);
+    }, 60_000);
+
+    it('🔴 톡 설정은 scope 에 talk_email · toProfile 이 email · emailVerified(email_checked) 를 읽는다', () => {
+      const src = LAB('homework1.js');
+      expect(src).toContain("  scope: ['talk_email'],\n");
+      expect(src).toContain('    email: info.account?.email,\n    emailVerified: info.account?.email_checked === true,\n');
+    });
+
+    it('🔴 homework1.http — 요청 둘 · 회원 목록 200(처음에는 둘) · 로그인하지 않은 «나는 누구» 401', async () => {
+      const http = LAB('homework1.http');
+      expect(http).toBe('### 회원 목록\nGET http://localhost:4002/members\n\n### 로그인하지 않고 나는 누구\nGET http://localhost:4002/me\n');
+      await withService('homework1.js', LAB('homework1.js'), async () => {
+        const out = await httpyac('homework1.http', http);
+        expect(out).toContain('2 requests processed (2 succeeded)');
+        expect(out.match(/^HTTP\/1\.1 (\d+)/gm)).toEqual(['HTTP/1.1 200', 'HTTP/1.1 401']);
+      });
+    }, 60_000);
+
+    it('🔴 (a) 확인 여부를 안 보고 넣는 판 — 하루(확인 안 됨)와 인가 서버 jaehoon 의 이메일이 회원에 적힌다', async () => {
+      const got = await observe(edit1(LAB('homework1.js'), '  const verifiedEmail = emailVerified ? email : undefined;', '  const verifiedEmail = email;'));
+      expect(got.haru).toEqual({ id: 4, nickname: '하루', email: 'haru@talk.example' });
+      expect(wrongKeys(got)).toEqual(expect.arrayContaining(['haru', 'members']));
+      labSeen.homework1NoCheck = { haru: got.haru, jaehoonLab: got.jaehoonLab };
+    }, 60_000);
+
+    it('🔴 (b) 겹치는 이메일을 그 회원에 잇는 판(자동 연결) — 톡의 다혜가 1번 dahye 로 로그인된다', async () => {
+      const got = await observe(edit1(LAB('homework1.js'),
+        "  if (verifiedEmail && members.some((member) => member.email === verifiedEmail)) {\n    throw Object.assign(new Error('이미 가입한 이메일이에요'), { code: 'EMAIL_TAKEN' });\n  }\n",
+        '  const sameEmail = members.find((member) => verifiedEmail && member.email === verifiedEmail);\n\n  if (sameEmail) {\n    socialAccounts.push({ provider, providerUserId: id, memberId: sameEmail.id });\n    return sameEmail;\n  }\n'));
+      expect(got.dahyeEmailOn).toEqual([302, '/me']);
+      expect(wrongKeys(got)).toContain('dahyeEmailOn');
+      expect(got.members.find((m) => m.id === 1)).toEqual({ id: 1, nickname: 'dahye', email: 'dahye@example.com', providers: ['talk'] });
+    }, 60_000);
+
+    it('🔴 (c) 톡의 이름 대신 카카오의 이름(is_email_verified)으로 읽은 판 — 늘 확인 안 됨이라 보미도 이메일 없이 · 다혜도 EMAIL_TAKEN 이 아니다', async () => {
+      const got = await observe(edit1(LAB('homework1.js'), 'emailVerified: info.account?.email_checked === true,', 'emailVerified: info.account?.is_email_verified === true,'));
+      expect(got.bomi).toEqual({ id: 3, nickname: '보미' });
+      expect(got.dahyeEmailOn).toEqual([302, '/me']);
+      expect(wrongKeys(got)).toEqual(expect.arrayContaining(['bomi', 'dahyeEmailOn']));
+    }, 60_000);
+  });
+
+  describe('축 ⑫ 과제 [응용] — 돌아올 주소를 제공자마다', () => {
+    it('🔴 시작 파일은 나눠 준 one-callback.js 를 복사한 것 — 첫 줄 경로만 다르다', () => {
+      expect(SNAP('homework2-start.homework2.js')).toBe(LAB('one-callback.js').replace('// ~/instagram-api/lab/p3-47/one-callback.js\n', '// ~/instagram-api/lab/p3-47/homework2.js\n'));
+      expect(LAB('homework2.js')).not.toContain('lab_provider');
+    });
+
+    const twoTabsWithLog = (source) => withService('homework2.js', source, async ({ base, tail }) => {
+      const got = await labTwoTabs(base, ['A', 'B']);
+      await sleep(150);
+      return { A: got.A, B: got.B, stateA: got.stateA, stateB: got.stateB, log: tail().split('\n').filter((line) => line.startsWith('[콜백]')), jarAfterStarts: got.jarAfterStarts };
+    });
+
+    it('🔴 확인 — 탭 둘(교안 Step 3 와 같은 차례) 둘 다 /me · 콜백 로그가 «주소가 고른 전략» 을 찍는다', async () => {
+      const got = await twoTabsWithLog(LAB('homework2.js'));
+      expect([got.A, got.B]).toEqual([[302, '/me'], [302, '/me']]);
+      expect(got.log).toEqual([`[콜백] /callback → lab 로 처리 · 돌아온 state=${got.stateA}`, `[콜백] /talk/callback → talk 로 처리 · 돌아온 state=${got.stateB}`]);
+      expect(got.jarAfterStarts).toEqual(['lab_state_lab /', 'lab_state_talk /', 'lab_verifier_lab /', 'lab_verifier_talk /']);
+      labSeen.homework2TwoTabs = { A: got.A, B: got.B, log: got.log.map((line) => line.replace(/state=.*$/, 'state=…')) };
+    }, 60_000);
+
+    it('🔴 homework2.http — 쿠키 없이 톡 콜백 · 인가 서버 콜백 주소로 오면 둘 다 302 Location: /?error=LOGIN_FAILED', async () => {
+      const http = LAB('homework2.http');
+      expect(http).toBe('### 쿠키 없이 톡 콜백 주소로\n# @no-redirect\nGET http://localhost:4002/talk/callback?code=x&state=y\n\n### 쿠키 없이 인가 서버 콜백 주소로\n# @no-redirect\nGET http://localhost:4002/callback?code=x&state=y\n');
+      await withService('homework2.js', LAB('homework2.js'), async () => {
+        const out = await httpyac('homework2.http', http);
+        expect(out).toContain('2 requests processed (2 succeeded)');
+        expect(out.match(/^HTTP\/1\.1 (\d+)/gm)).toEqual(['HTTP/1.1 302', 'HTTP/1.1 302']);
+        expect(out.match(/^location: (.*)$/gim)).toEqual(['location: /?error=LOGIN_FAILED', 'location: /?error=LOGIN_FAILED']);
+        labSeen.homework2Http = out.replace(/^(date|etag|x-powered-by|connection|keep-alive): .*\n/gim, '');
+      });
+    }, 60_000);
+
+    it('🔴 인가 서버의 코드를 톡 콜백 주소로 가져가면 302 /?error=LOGIN_FAILED — 톡 전략의 state 비교에서 멈춰 톡에 토큰을 묻지 않는다 · 원래 주소(/callback)로 가져가면 그대로 로그인된다', async () => {
+      const before = talk.tail().length;
+      const got = await withService('homework2.js', LAB('homework2.js'), async ({ base, tail }) => {
+        const tab = browser(base);
+        const back = await consentLab(await tab.get('/login'), 'jaehoon');
+        const moved = await tab.get(back.replace('/callback?', '/talk/callback?'));
+        const original = await tab.get(back);
+        await sleep(150);
+        return { moved: [moved.status, moved.location], original: [original.status, original.location], log: tail().split('\n').filter((line) => line.startsWith('[콜백]')).map((line) => line.replace(/state=.*$/, 'state=…')) };
+      });
+      expect(got.moved).toEqual([302, '/?error=LOGIN_FAILED']);
+      expect(got.original).toEqual([302, '/me']);
+      expect(got.log).toEqual(['[콜백] /talk/callback → talk 로 처리 · 돌아온 state=…', '[콜백] /callback → lab 로 처리 · 돌아온 state=…']);
+      expect(talkLogSince(before)).not.toContain('POST /oauth/token');
+      labSeen.homework2MovedCode = got;
+    }, 60_000);
+
+    it('🔴 틀린 판 (가) — 콜백은 나눴지만 lab_provider 쿠키로 전략을 고르는 줄이 남은 판: 탭 둘이 둘 다 /?error=LOGIN_FAILED(확인이 가린다)', async () => {
+      const wrong = LAB('homework2.js')
+        .replace("app.get('/login', passport.authenticate('lab', { session: false }));", "app.get('/login', (req, res, next) => {\n  res.cookie('lab_provider', 'lab', tempCookie);\n  next();\n}, passport.authenticate('lab', { session: false }));")
+        .replace("app.get('/talk', passport.authenticate('talk', { session: false }));", "app.get('/talk', (req, res, next) => {\n  res.cookie('lab_provider', 'talk', tempCookie);\n  next();\n}, passport.authenticate('talk', { session: false }));")
+        .replaceAll("passport.authenticate('lab', { session: false, failureRedirect: '/?error=LOGIN_FAILED' })", "(req, res, next) => passport.authenticate(req.cookies.lab_provider, { session: false, failureRedirect: '/?error=LOGIN_FAILED' })(req, res, next)")
+        .replaceAll("passport.authenticate('talk', { session: false, failureRedirect: '/?error=LOGIN_FAILED' })", "(req, res, next) => passport.authenticate(req.cookies.lab_provider, { session: false, failureRedirect: '/?error=LOGIN_FAILED' })(req, res, next)");
+      expect(wrong.match(/req\.cookies\.lab_provider/g)).toHaveLength(2);
+      const got = await twoTabsWithLog(wrong);
+      expect([got.A, got.B]).toEqual([[302, '/?error=LOGIN_FAILED'], [302, '/?error=LOGIN_FAILED']]);
+    }, 60_000);
+
+    it('🔴 틀린 판 (나) — 톡 콜백 주소만 바꾸고 톡 설정의 callbackURL 은 /callback 그대로 둔 판: 톡이 /callback 으로 돌려보내(그 주소도 톡에 등록돼 있다) 인가 서버 전략이 받고 state 에서 멈춘다 — 톡 로그인 302 /?error=LOGIN_FAILED', async () => {
+      const before = talk.tail().length;
+      const wrong = edit1(LAB('homework2.js'), "    clientSecret: 'talk-secret',\n    callbackURL: 'http://localhost:4002/talk/callback',", "    clientSecret: 'talk-secret',\n    callbackURL: 'http://localhost:4002/callback',");
+      const got = await withService('homework2.js', wrong, async ({ base, tail }) => {
+        const sora = await labLogin(base, 'talk', 'sora');
+        await sleep(150);
+        return { back: sora.back.split('?')[0], callback: sora.callback, log: tail().split('\n').filter((line) => line.startsWith('[콜백]')).map((line) => line.replace(/state=.*$/, 'state=…')) };
+      });
+      expect(got).toEqual({ back: '/callback', callback: [302, '/?error=LOGIN_FAILED'], log: ['[콜백] /callback → lab 로 처리 · 돌아온 state=…'] });
+      expect(talkLogSince(before)).not.toContain('POST /oauth/token');
+      labSeen.homework2OldTalkCallback = got;
+    }, 60_000);
+  });
+});
