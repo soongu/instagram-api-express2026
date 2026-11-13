@@ -22,7 +22,7 @@ import { naverStrategy } from './strategies/naver.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 
-// 어떤 방법으로 로그인을 확인할지 등록한다 — 라우트에서 이름 'google' 로 꺼내 쓴다.
+// 어떤 방법으로 로그인을 확인할지 등록한다 — 라우트에서 이 이름('google' · 'kakao' · 'naver')으로 꺼내 쓴다.
 passport.use('google', googleStrategy);
 passport.use('kakao', kakaoStrategy);
 passport.use('naver', naverStrategy);
