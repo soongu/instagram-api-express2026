@@ -1482,7 +1482,7 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
         expect(got.jarAfterStarts).toEqual(['lab_provider /', 'lab_state_lab /', 'lab_state_talk /', 'lab_verifier_lab /', 'lab_verifier_talk /']);
         await sleep(150);
         const lines = tail().split('\n').filter((line) => line.startsWith('[콜백]'));
-        expect(lines).toEqual([`[콜백] lab_provider=talk 로 처리 · 돌아온 state=${got.stateA}`, `[콜백] lab_provider=talk 로 처리 · 돌아온 state=${got.stateB}`]);
+        expect(lines).toEqual([`[콜백] lab_provider=talk · 돌아온 state=${got.stateA}`, `[콜백] lab_provider=talk · 돌아온 state=${got.stateB}`]);
         // 톡 서버에는 토큰 요청이 오지 않았다 — A 의 코드는 톡 전략의 state 비교에서 멈췄고, B 는 그 비교가 쿠키를 지운 뒤라 쿠키가 없었다
         expect(talkLogSince(before)).not.toContain('POST /oauth/token');
         expect(tail()).not.toContain('Error');
@@ -1498,7 +1498,7 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
         expect(got.A).toEqual([302, '/?error=LOGIN_FAILED']);
         await sleep(150);
         expect(tail().split('\n').filter((line) => line.startsWith('[콜백]')).map((line) => line.replace(/state=.*$/, 'state=…'))).toEqual([
-          '[콜백] lab_provider=talk 로 처리 · 돌아온 state=…', '[콜백] lab_provider=talk 로 처리 · 돌아온 state=…',
+          '[콜백] lab_provider=talk · 돌아온 state=…', '[콜백] lab_provider=talk · 돌아온 state=…',
         ]);
         labSeen.oneCallbackTalkFirst = { A: got.A, B: got.B };
       });
@@ -1760,7 +1760,7 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
     it('🔴 확인 — 탭 둘(교안 Step 3 와 같은 차례) 둘 다 /me · 콜백 로그가 «주소가 고른 전략» 을 찍는다', async () => {
       const got = await twoTabsWithLog(LAB('homework2.js'));
       expect([got.A, got.B]).toEqual([[302, '/me'], [302, '/me']]);
-      expect(got.log).toEqual([`[콜백] /callback → lab 로 처리 · 돌아온 state=${got.stateA}`, `[콜백] /talk/callback → talk 로 처리 · 돌아온 state=${got.stateB}`]);
+      expect(got.log).toEqual([`[콜백] /callback · 전략 lab · 돌아온 state=${got.stateA}`, `[콜백] /talk/callback · 전략 talk · 돌아온 state=${got.stateB}`]);
       expect(got.jarAfterStarts).toEqual(['lab_state_lab /', 'lab_state_talk /', 'lab_verifier_lab /', 'lab_verifier_talk /']);
       labSeen.homework2TwoTabs = { A: got.A, B: got.B, log: got.log.map((line) => line.replace(/state=.*$/, 'state=…')) };
     }, 60_000);
@@ -1789,7 +1789,7 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       });
       expect(got.moved).toEqual([302, '/?error=LOGIN_FAILED']);
       expect(got.original).toEqual([302, '/me']);
-      expect(got.log).toEqual(['[콜백] /talk/callback → talk 로 처리 · 돌아온 state=…', '[콜백] /callback → lab 로 처리 · 돌아온 state=…']);
+      expect(got.log).toEqual(['[콜백] /talk/callback · 전략 talk · 돌아온 state=…', '[콜백] /callback · 전략 lab · 돌아온 state=…']);
       expect(talkLogSince(before)).not.toContain('POST /oauth/token');
       labSeen.homework2MovedCode = got;
     }, 60_000);
@@ -1813,7 +1813,7 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
         await sleep(150);
         return { back: sora.back.split('?')[0], callback: sora.callback, log: tail().split('\n').filter((line) => line.startsWith('[콜백]')).map((line) => line.replace(/state=.*$/, 'state=…')) };
       });
-      expect(got).toEqual({ back: '/callback', callback: [302, '/?error=LOGIN_FAILED'], log: ['[콜백] /callback → lab 로 처리 · 돌아온 state=…'] });
+      expect(got).toEqual({ back: '/callback', callback: [302, '/?error=LOGIN_FAILED'], log: ['[콜백] /callback · 전략 lab · 돌아온 state=…'] });
       expect(talkLogSince(before)).not.toContain('POST /oauth/token');
       labSeen.homework2OldTalkCallback = got;
     }, 60_000);

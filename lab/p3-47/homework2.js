@@ -150,7 +150,7 @@ function startSession(req, res) {
 // 콜백에 들어올 때 한 줄 — 어느 주소로 돌아왔는지가 전략을 고른다.
 function logCallback(provider) {
   return (req, res, next) => {
-    console.log(`[콜백] ${req.path} → ${provider} 로 처리 · 돌아온 state=${req.query.state}`);
+    console.log(`[콜백] ${req.path} · 전략 ${provider} · 돌아온 state=${req.query.state}`);
     next();
   };
 }

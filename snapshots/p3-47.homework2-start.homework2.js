@@ -162,7 +162,7 @@ app.get('/talk', (req, res, next) => {
 app.get('/callback', (req, res, next) => {
   const provider = req.cookies.lab_provider;
 
-  console.log(`[콜백] lab_provider=${provider} 로 처리 · 돌아온 state=${req.query.state}`);
+  console.log(`[콜백] lab_provider=${provider} · 돌아온 state=${req.query.state}`);
   passport.authenticate(provider, { session: false, failureRedirect: '/?error=LOGIN_FAILED' })(req, res, next);
 }, startSession);
 
