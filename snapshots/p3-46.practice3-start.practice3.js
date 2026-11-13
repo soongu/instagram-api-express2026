@@ -28,7 +28,7 @@ const arrivals = [
     url: 'http://localhost:3001/api/v2/auth/naver/callback?error=server_error&state=uR5yC2gW8fVx0NpL',
   },
   {
-    label: 'state 없이 온 서버 문제',
+    label: 'state 없이 온 제공자 쪽 문제',
     saved: 'Jm4tB7nH1sKd6QeA',
     url: 'http://localhost:3001/api/v2/auth/kakao/callback?error=server_error',
   },

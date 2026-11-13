@@ -935,9 +935,12 @@ describe('축 ⑤ Step 6 — 네이버 전략(새 OIDC 경로)과 프로필', ()
     await withServer(stepDir(6), async ({ base }) => {
       const google = browser(base);
       expect((await socialLogin(google, 'google')).callback.location).toBe('/');
-      expect((await google.get('/api/v2/auth/me')).body.data.username).toBe('minji.kim');
+      const googleMe = (await google.get('/api/v2/auth/me')).body.data;
+      expect(googleMe.username).toBe('minji.kim');
       const { me } = await asNaver(base);
       expect(me.username).toMatch(/^minji\.kim\d{4}$/);
+      // 교안 Step 6 — «그때는 id도 54를 건너뛰고 55가 돼요» · 겹친 이름으로 먼저 넣어 보다 실패한 시도가 번호 하나를 쓴다
+      expect(me.id).toBe(googleMe.id + 2);
       const onlyId = await asNaver(base, { id: 'onlyIdOnlyIdOnlyIdOnlyIdOnlyIdOnlyIdOnlyId1' });
       expect(onlyId.callback.location).toBe('/');
       expect(await userRow(onlyId.me.id)).toMatchObject({ username: 'naver', email: null, name: null });
@@ -1230,7 +1233,7 @@ const LAB_AS_PORT = GOOGLE_PORT;
 const LAB_BASE = `http://localhost:${LAB_PORT}`;
 const LAB_REF = hasRef('refs/heads/code/p3-46') ? 'code/p3-46' : 'main';
 const LAB_WT = process.env.P346_LAB_WT === '1';
-// 🔀 2026-11-14 학생 낭독 집중 검수 — 직접 해보기 2·3 의 샘플을 하나씩 더했다(constructor · state 없이 온 서버 문제).
+// 🔀 2026-11-14 학생 낭독 집중 검수 — 직접 해보기 2·3 의 샘플을 하나씩 더했다(constructor · state 없이 온 제공자 쪽 문제).
 //    `main` 에서만 고쳤다(북마크 code/p3-46 은 옛 판) — 이 파일들만 작업트리에서 읽는다.
 const MAIN_LAB = ['lab/p3-46/practice2.js', 'lab/p3-46/practice3.js', 'snapshots/p3-46.practice2-start.practice2.js', 'snapshots/p3-46.practice3-start.practice3.js'];
 const labFile = (rel) => (LAB_WT || MAIN_LAB.includes(rel) ? read(P(rel)) : showAt(LAB_REF, rel));
@@ -1448,7 +1451,7 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
     'denied  네이버에서 취소',
     'forged  state를 고친 주소',
     'failed  네이버 쪽 문제',
-    'failed  state 없이 온 서버 문제',
+    'failed  state 없이 온 제공자 쪽 문제',
     'failed  code도 error도 없는 주소',
     'ok  state에 error라는 글자가 든 성공',
     'forged  쿠키도 state도 없는 주소',
@@ -1487,7 +1490,7 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
     expect(results(start)).toEqual(RIGHT.map((line) => line.replace(/^\w+/, 'undefined')));
   });
 
-  it('🔴 틀린 판 — state 부터 보면 state 없이 온 취소와 서버 문제가 forged 로 읽힌다', () => {
+  it('🔴 틀린 판 — state 부터 보면 state 없이 온 취소와 제공자 쪽 문제가 forged 로 읽힌다', () => {
     const got = results(withBody(`  const query = new URL(url).searchParams;
   const error = query.get('error');
 
@@ -1498,11 +1501,11 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
   return 'ok';
 `));
     expect(got[1]).toBe('forged  state 없이 온 취소');
-    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  state 없이 온 취소', 'forged  state 없이 온 서버 문제']);
+    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  state 없이 온 취소', 'forged  state 없이 온 제공자 쪽 문제']);
     labSeen.practice3StateFirst = got.join('\n');
   });
 
-  it('🔴 틀린 판 — 취소는 먼저 보되 forged 를 failed 보다 먼저 보면(요구사항 3 의 차례를 어기면) state 없이 온 서버 문제만 forged 로 읽힌다', () => {
+  it('🔴 틀린 판 — 취소는 먼저 보되 forged 를 failed 보다 먼저 보면(요구사항 3 의 차례를 어기면) state 없이 온 제공자 쪽 문제만 forged 로 읽힌다', () => {
     const got = results(withBody(`  const query = new URL(url).searchParams;
   const error = query.get('error');
 
@@ -1512,7 +1515,7 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
 
   return 'ok';
 `));
-    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  state 없이 온 서버 문제']);
+    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  state 없이 온 제공자 쪽 문제']);
     labSeen.practice3FailedLate = got.join('\n');
   });
 
