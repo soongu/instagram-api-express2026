@@ -3,6 +3,7 @@
 // 🔑 판정은 진짜 카카오(kauth.kakao.com · kapi.kakao.com)에 요청을 보내지 않는다. 학생 파일 사본의 카카오 주소 셋
 //    (인가 · 토큰 · 사용자 정보)만 이 서버 주소로 바꿔 띄운다(`p3-46` 판정).
 // 🔑 동의 화면은 없다 — `/oauth/authorize` 는 받은 쿼리를 기록하고 곧바로 돌아올 주소로 302 한다.
+// 🔑 `p3-47` 판정이 이메일 동의항목 흉내(아래 KAKAO_EMAIL_* 넷 · KAKAO_NO_ACCOUNT)를 더했다 — 기본 동작은 그대로다.
 // 🔑 진짜 카카오처럼 굴려고 고른 것(문서 `developers.kakao.com/docs/ko/kakaologin/rest-api` 확인 2026-11-12):
 //    - 거부는 `?error=access_denied&error_description=User%20denied%20access` — state 를 안 붙인다(문서의 예시 주소 — 그 예시는 요청에도 state 가 없다).
 //      🚨 진짜 카카오가 state 를 실은 요청의 취소에 state 를 돌려주는지는 못 쟀다 — PC 웹 동의 화면에는 «취소» 버튼이 없다(2026-11-13 사용자 실측 ·
@@ -42,6 +43,26 @@ export const KAKAO_NO_NICKNAME = {
   connected_at: '2026-11-12T05:21:08Z',
   kakao_account: { profile_nickname_needs_agreement: true },
 };
+
+// ── 동의항목 «카카오계정(이메일)» 흉내(`p3-47` 판정) ─────────────────────────────
+// 🔑 기본 동작(위 DEFAULT_KAKAO_PROFILE)은 그대로다 — 이 넷은 판정이 `state.profile` 에 넣어 쓴다.
+// 🔑 필드와 차례는 문서의 사용자 정보 예제(`kakao_account` 안 — profile 다음에 email_needs_agreement ·
+//    is_email_valid · is_email_verified · email)를 따른다. 진짜 카카오가 이메일을 어떻게 주는지는 사용자 실측으로 정한다.
+//    인가 요청의 scope 는 `state.log.authorize[n].scope` 에 그대로 남는다(동의항목을 scope 로 거르는 흉내는 하지 않는다).
+const withEmail = (fields) => ({
+  ...structuredClone(DEFAULT_KAKAO_PROFILE),
+  kakao_account: { ...structuredClone(DEFAULT_KAKAO_PROFILE.kakao_account), ...fields },
+});
+/** 이메일 «유효 + 확인» — 진짜 응답 모양. */
+export const KAKAO_EMAIL_VALID = withEmail({ email_needs_agreement: false, is_email_valid: true, is_email_verified: true, email: 'minji.kim@kakao.com' });
+/** 유효하지 않은 이메일 — 문서 «이메일이 다른 카카오계정에 사용돼 만료» · «일부 마스킹(예: ka***@kakao.com)해서 제공». */
+export const KAKAO_EMAIL_INVALID = withEmail({ email_needs_agreement: false, is_email_valid: false, is_email_verified: true, email: 'mi***@kakao.com' });
+/** 확인(인증)되지 않은 이메일 — 문서 «false: 인증되지 않은 이메일». */
+export const KAKAO_EMAIL_UNVERIFIED = withEmail({ email_needs_agreement: false, is_email_valid: true, is_email_verified: false, email: 'haru@kakao.com' });
+/** 이메일 제공에 동의하지 않은 사람 — `email_needs_agreement: true` 만 오고 `email`·`is_email_*` 는 없다. */
+export const KAKAO_EMAIL_NOT_AGREED = withEmail({ email_needs_agreement: true });
+/** 카카오계정 정보가 아예 없는 응답 — `{ id, connected_at }` 만. */
+export const KAKAO_NO_ACCOUNT = { id: 3812345678, connected_at: '2026-11-12T05:21:08Z' };
 
 /** 가짜 카카오를 띄운다 — `profile`·`mode`·`clientSecret` 을 테스트가 바꿔 끼운다. */
 export function startFakeKakao({ port = 3971, clientId = 'test-kakao', clientSecret = 'test-kakao-secret' } = {}) {
