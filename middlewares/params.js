@@ -2,6 +2,9 @@
 import { NotFoundError } from '../errors.js';
 
 export function parseId(req, res, next) {
+
+  console.log('params: ', req.params);
+
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -14,6 +17,9 @@ export function parseId(req, res, next) {
 }
 
 export function parseUserId(req, res, next) {
+
+  console.log('params: ', req.params);
+
   const userId = Number(req.params.userId);
 
   if (!Number.isInteger(userId)) {

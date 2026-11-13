@@ -3,10 +3,11 @@ import express from 'express';
 import * as likeService from '../services/likeService.js';
 import { parseId, parseUserId } from '../middlewares/params.js';
 
-const router = express.Router();
+// app.js 가 붙인 주소(/api/posts/:id/likes)의 :id 까지 req.params 로 받는다.
+const router = express.Router({ mergeParams: true });
 
 // 주소에 이 이름의 값이 있으면, 라우트로 들어가기 전에 이 함수부터 한 번 부른다.
-router.param('id', parseId);
+router.use(parseId);
 router.param('userId', parseUserId);
 
 router.get('/', async (req, res) => {
