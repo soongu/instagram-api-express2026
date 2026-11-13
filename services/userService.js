@@ -186,3 +186,26 @@ export async function createSocialUser({ provider, id, email, emailVerified, nam
 
   throw new ConflictError('USERNAME_TAKEN');
 }
+
+// 이 사람의 로그인 방법 — 비밀번호가 있는지와, 이어진 소셜 계정(이은 차례로). 그 사람이 없으면 null.
+// 해시는 이 함수 안에서만 보고, 돌려줄 때는 «있는지» 만 남긴다.
+export async function getLoginMethods(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      passwordHash: true,
+      socialAccounts: { select: { provider: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
+    },
+  });
+
+  if (!user) return null;
+
+  return { hasPassword: user.passwordHash !== null, socialAccounts: user.socialAccounts };
+}
+
+// 소셜 계정 연결을 끊는다 — 이 사람의 그 제공자 행만 지운다. 지울 행이 없으면 404.
+export async function unlinkSocialAccount(userId, provider) {
+  const { count } = await prisma.socialAccount.deleteMany({ where: { userId, provider } });
+
+  if (count === 0) throw new NotFoundError('SOCIAL_ACCOUNT_NOT_FOUND');
+}

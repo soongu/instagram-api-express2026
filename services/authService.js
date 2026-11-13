@@ -53,6 +53,20 @@ export async function linkSocialAccount(userId, { provider, id }) {
   await userService.addSocialAccount(userId, { provider, id });
 }
 
+// 내 로그인 방법 — 비밀번호가 있는지와 이어진 소셜 계정. 토큰은 살아 있어도 그 사람이 지워졌으면 401.
+export async function getLoginMethods(userId) {
+  const methods = await userService.getLoginMethods(userId);
+
+  if (!methods) throw new UnauthorizedError('LOGIN_REQUIRED');
+
+  return methods;
+}
+
+// 소셜 계정 연결 끊기 — 로그인한 사람 자신의 연결만 끊는다.
+export function unlinkSocialAccount(userId, provider) {
+  return userService.unlinkSocialAccount(userId, provider);
+}
+
 // 새 토큰 받기 — Refresh 토큰을 새것으로 바꾸고, 그 사람을 다시 찾아 «지금» 역할로 Access 토큰을 만든다.
 // 사람을 지우면 그 사람의 기록도 함께 지워지니(Cascade), 기록이 있으면 사람도 있다.
 export async function reissue(refreshToken) {
