@@ -1,0 +1,9 @@
+### 틀린 관리자 키로 연결 끊기 알림
+POST http://localhost:4002/talk/unlink-webhook
+Authorization: TalkAK wrong-key
+Content-Type: application/x-www-form-urlencoded
+
+app_id=lab-talk&user_id=10001&referrer_type=UNLINK_FROM_APPS
+
+### 회원 목록
+GET http://localhost:4002/members
