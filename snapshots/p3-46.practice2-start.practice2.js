@@ -1,6 +1,6 @@
 // ~/instagram-api/lab/p3-46/practice2.js
 
-// 제공자 셋이 사용자 정보로 준 응답과, 우리가 모르는 제공자 하나.
+// 제공자 셋이 사용자 정보로 준 응답과, 우리가 붙이지 않은 제공자의 이름 둘.
 const samples = [
   ['google', { sub: '108123456789012345678', email: 'minji.kim@gmail.com', email_verified: true, name: '김민지' }],
   [
@@ -20,6 +20,8 @@ const samples = [
     },
   ],
   ['github', { id: 583231, login: 'octocat', name: 'The Octocat' }],
+  // 객체가 원래 가진 이름 — 이 이름의 제공자도 우리는 붙이지 않았다.
+  ['constructor', {}],
 ];
 
 // 제공자마다 응답을 읽는 함수 — 같은 뜻의 값이 다른 이름, 다른 위치에 있다.
