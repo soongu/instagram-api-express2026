@@ -766,7 +766,7 @@ import OAuth2Strategy from 'passport-oauth2';
 import { createStateStore } from './stateStore.js';
 import * as authService from '../services/authService.js';
 
-// 소셜 로그인 전략을 만든다 — 제공자마다 다른 것만 받는다(주소 · 클라이언트 ID와 시크릿 · scope · 사용자 정보를 읽는 법).
+// 소셜 로그인 전략을 만든다 — 제공자마다 다른 것만 받는다(주소 · 클라이언트 ID와 비밀값 · scope · 사용자 정보를 읽는 법).
 // 나머지(state 저장소 · PKCE · 돌아올 주소의 모양 · 사람을 찾거나 만드는 일)는 세 제공자가 같다.
 export function createSocialStrategy({ provider, authorizationURL, tokenURL, clientID, clientSecret, scope, userInfoURL, toProfile }) {
   const strategy = new OAuth2Strategy(
