@@ -928,9 +928,9 @@ const RUNS = 30;
  * 동시 요청 30번 — 비밀번호 없이 구글·카카오 둘이 이어진 시험용 사람을 만들고, 그 사람의 토큰으로
  * DELETE …/google 과 DELETE …/kakao 를 함께 보낸다. 상태 코드 둘(차례대로)과 남은 소셜 계정 수를 모은다.
  */
-const race = async (base) => {
+const race = async (base, runs = RUNS, { warmOne = false } = {}) => {
   const out = [];
-  for (let run = 0; run < RUNS; run += 1) {
+  for (let run = 0; run < runs; run += 1) {
     const tag = randomUUID().slice(0, 8);
     const [{ id }] = await gate("INSERT INTO users (username) VALUES ($1) RETURNING id", [`race.${tag}`]);
     await gate("INSERT INTO social_accounts (user_id, provider, provider_user_id) VALUES ($1, 'google', $2), ($1, 'kakao', $3)", [id, `race-google-${tag}`, `race-kakao-${tag}`]);
@@ -938,6 +938,8 @@ const race = async (base) => {
     await gate("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, now() + interval '1 day')", [sid, id]);
     const token = jwt.sign({ sid, role: 'USER' }, SECRET, { subject: String(id), expiresIn: 900, algorithm: 'HS256' });
     const del = (provider) => fetch(`${base}${LIST}/${provider}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).then((res) => res.status);
+    // 서버의 연결 풀에 연결 하나만 열어 둔 채 — 학생이 방금 화면을 한 번 쓴 서버
+    if (warmOne) expect((await fetch(`${base}${LIST}`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
     const statuses = await Promise.all([del('google'), del('kakao')]);
     const [{ n }] = await gate('SELECT count(*)::int AS n FROM social_accounts WHERE user_id = $1', [id]);
     out.push(`${[...statuses].sort().join('+')} → ${n}개`);
@@ -1000,13 +1002,31 @@ describe('축 ⑦ Step 7 — 판 다섯과 unlink-race.js', () => {
     expect(races.fixed).toEqual({ '200+409 → 1개': RUNS });
   }, 120_000);
 
-  it('🔴 unlink-race.js — Step 6 서버면 200 · 200 · 0개, Step 7 서버면 200 하나 + 409 하나 · 1개 · 끝나면 시험용 사람이 없다 · 서버가 없으면 알아볼 문장', async () => {
+  it('🔎 연결이 하나만 열려 있는 서버(띄운 뒤 요청 하나를 보낸 서버)에서 — Step 6 판 · 늦춘 판, 띄울 때마다 한 번씩 10번', async () => {
+    const warmOne = async (edit) => {
+      await freshGate(stepDir(6));
+      const tally = {};
+      for (let i = 0; i < 10; i += 1) {
+        const got = await withServer(stepDir(6), async ({ base }) => race(base, 1, { warmOne: true }), { edit });
+        for (const [key, n] of Object.entries(got)) tally[key] = (tally[key] ?? 0) + n;
+      }
+      return tally;
+    };
+    races.step6WarmOne = await warmOne();
+    races.slowWarmOne = await warmOne(useSnapshot('p3-48.step7-slow.userService.js'));
+    expect(races.slowWarmOne).toEqual({ '200+200 → 0개': 10 });
+  }, 180_000);
+
+  it('🔴 unlink-race.js — Step 6 서버면 200 · 200 · 0개(세 번 가운데 한 번 이상), Step 7 서버면 200 하나 + 409 하나 · 1개 · 끝나면 시험용 사람이 없다 · 서버가 없으면 알아볼 문장', async () => {
     const src = read(stepDir(7)('lab/p3-48/unlink-race.js'));
     expect(src.split('\n')[0]).toBe('// ~/instagram-api/lab/p3-48/unlink-race.js');
     await freshGate(stepDir(7));
     const users = await count('users');
-    const before = await withServer(stepDir(6), async ({ base }) => runRace(stepDir(7), base));
+    // 띄운 뒤 처음 보내는 동시 요청이라 거의 언제나 둘 다 지운다 — 동시 요청 30번 판정에서 30번 가운데 29번이 그랬던 적이 있어 세 번까지 본다
+    const tries = await withServer(stepDir(6), async ({ base }) => [await runRace(stepDir(7), base), await runRace(stepDir(7), base), await runRace(stepDir(7), base)]);
+    const before = tries.find((out) => out.endsWith('남은 소셜 계정: 0개\n'));
     expect(before).toBe('google 끊기: 200\nkakao 끊기: 200\n남은 소셜 계정: 0개\n');
+    seen.unlinkRaceStep6Tries = tries;
     const after = await withServer(stepDir(7), async ({ base }) => runRace(stepDir(7), base));
     expect(after.split('\n').slice(0, 2).map((line) => line.replace(/^\w+ /, '')).sort()).toEqual(['끊기: 200', '끊기: 409']);
     expect(after.endsWith('남은 소셜 계정: 1개\n')).toBe(true);
