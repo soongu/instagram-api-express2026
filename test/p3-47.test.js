@@ -1598,6 +1598,21 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       expect([got.A, got.B]).toEqual([[302, '/?error=LOGIN_FAILED'], [302, '/?error=LOGIN_FAILED']]);
     }, 60_000);
 
+    it('🔎 톡 userInfoURL 을 틀린 경로(/v2/user/me)로 바꾸면 302 /?error=LOGIN_FAILED · 서비스 터미널 첫 줄 «Error: 사용자 정보를 받지 못했어요 (talk · 404)»(톡 서버는 없는 주소에 404)', async () => {
+      const wrong = edit1(LAB('practice2.js'), "  userInfoURL: `${TALK_SERVER}/v2/me`,", "  userInfoURL: `${TALK_SERVER}/v2/user/me`,");
+      const got = await withService('practice2.js', wrong, async ({ base, tail }) => {
+        const before = tail().length;
+        const sora = await labLogin(base, 'talk', 'sora');
+        await sleep(150);
+        return { callback: sora.callback, terminal: tail().slice(before) };
+      });
+      expect(got.callback).toEqual([302, '/?error=LOGIN_FAILED']);
+      const lines = got.terminal.split('\n').filter(Boolean);
+      expect(lines[0]).toBe('Error: 사용자 정보를 받지 못했어요 (talk · 404)');
+      expect(lines[1]).toMatch(/^ {4}at strategy\.userProfile \(file:\/\/.*lab\/p3-47\/practice2\.js:\d+:\d+\)$/);
+      labSeen.practice2WrongUserInfo = lines.slice(0, 2).map((l) => l.replace(/file:\/\/\S*\/lab\//, 'file://~/instagram-api/lab/'));
+    }, 60_000);
+
     it('🔎 사용자 정보 실패 문장 — «사용자 정보를 받지 못했어요 (talk · 401)» 꼴(수업 함수와 같다)', () => {
       expect(LAB('practice2.js')).toContain('throw new Error(`사용자 정보를 받지 못했어요 (${provider} · ${response.status})`);');
     });
@@ -1669,6 +1684,10 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       got.dahyeEmailOff = (await labLogin(base, 'talk', 'dahye', { email: false })).me;
       got.soraAgain = (await labLogin(base, 'talk', 'sora')).me;
       got.jaehoonLab = (await labLogin(base, 'lab', 'jaehoon')).me;
+      // ⑦ 인가 서버 dahye — 1번 dahye 와 이메일이 같지만, 인가 서버의 이메일은 확인되지 않은 것이라 비교하지 않는다
+      const dahyeLab = await labLogin(base, 'lab', 'dahye');
+      got.dahyeLabCallback = dahyeLab.callback;
+      got.dahyeLab = dahyeLab.me;
       got.members = (await browser(base).get('/members')).body;
       await sleep(150);
       got.terminal = tail();
@@ -1682,6 +1701,8 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       dahyeEmailOff: { id: 5, nickname: '다혜' },
       soraAgain: { id: 2, nickname: '소라' },
       jaehoonLab: { id: 6, nickname: 'jaehoon' },
+      dahyeLabCallback: [302, '/me'],
+      dahyeLab: { id: 7, nickname: 'dahye' },
       members: [
         { id: 1, nickname: 'dahye', email: 'dahye@example.com', providers: [] },
         { id: 2, nickname: '소라', providers: ['talk'] },
@@ -1689,6 +1710,7 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
         { id: 4, nickname: '하루', providers: ['talk'] },
         { id: 5, nickname: '다혜', providers: ['talk'] },
         { id: 6, nickname: 'jaehoon', providers: ['lab'] },
+        { id: 7, nickname: 'dahye', providers: ['lab'] },
       ],
     };
     const withoutTerminal = ({ terminal, ...rest }) => rest;
@@ -1726,6 +1748,18 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       expect(got.haru).toEqual({ id: 4, nickname: '하루', email: 'haru@talk.example' });
       expect(wrongKeys(got)).toEqual(expect.arrayContaining(['haru', 'members']));
       labSeen.homework1NoCheck = { haru: got.haru, jaehoonLab: got.jaehoonLab };
+    }, 60_000);
+
+    it('🔴 (d) 확인 안 된 이메일까지 비교하는 판(시작 파일의 if (email && members.some(…)) 그대로) — 인가 서버 dahye 가 /?error=EMAIL_TAKEN · 나머지 차례는 정답과 같다', async () => {
+      const got = await observe(edit1(LAB('homework1.js'),
+        '  if (verifiedEmail && members.some((member) => member.email === verifiedEmail)) {',
+        '  if (email && members.some((member) => member.email === email)) {'));
+      expect(got.dahyeLabCallback).toEqual([302, '/?error=EMAIL_TAKEN']);
+      expect(got.dahyeLab).toBeNull();
+      expect(wrongKeys(got)).toEqual(['dahyeLabCallback', 'dahyeLab', 'members']);
+      // 시작 파일에 있던 줄 그대로다
+      expect(SNAP('homework1-start.homework1.js')).toContain('  if (email && members.some((member) => member.email === email)) {');
+      labSeen.homework1CompareUnverified = { dahyeLabCallback: got.dahyeLabCallback };
     }, 60_000);
 
     it('🔴 (b) 겹치는 이메일을 그 회원에 잇는 판(자동 연결) — 톡의 다혜가 1번 dahye 로 로그인된다', async () => {
@@ -1792,6 +1826,43 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       expect(got.log).toEqual(['[콜백] /talk/callback · 전략 talk · 돌아온 state=…', '[콜백] /callback · 전략 lab · 돌아온 state=…']);
       expect(talkLogSince(before)).not.toContain('POST /oauth/token');
       labSeen.homework2MovedCode = got;
+    }, 60_000);
+
+    // 확인 하나 더 — 톡 설정의 clientSecret 을 잠깐 talk-secret-x 로 바꿔 «톡 콜백에서 에러가 나는» 장면을 만든다.
+    const secretSceneRaw = async (source) => withService('homework2.js', edit1(source, "    clientSecret: 'talk-secret',", "    clientSecret: 'talk-secret-x',"), async ({ base, tail }) => {
+      const tab = browser(base);
+      const back = await consentTalk(await tab.get('/talk'), 'sora');
+      const res = await fetch(`${base}${back}`, { redirect: 'manual', headers: { Cookie: ['lab_state_talk', 'lab_verifier_talk'].map((n) => `${n}=${tab.cookie(n)}`).join('; ') } });
+      const body = await res.text();
+      await sleep(150);
+      return { status: res.status, location: res.headers.get('location'), contentType: res.headers.get('content-type'), body, terminal: tail() };
+    });
+    const MIDDLEWARE_BOTH = "app.use(['/callback', '/talk/callback'], (err, req, res, next) => {";
+    const MIDDLEWARE_ONE = "app.use('/callback', (err, req, res, next) => {";
+
+    it('🔴 확인 — 톡 설정의 clientSecret 을 talk-secret-x 로 바꾸고 sora 로 허용하면 302 /?error=LOGIN_FAILED · 서비스 터미널에 콜백 줄 다음 «TokenError: 앱을 확인하지 못했어요»', async () => {
+      const got = await secretSceneRaw(LAB('homework2.js'));
+      expect([got.status, got.location]).toEqual([302, '/?error=LOGIN_FAILED']);
+      const lines = got.terminal.split('\n');
+      const at = lines.findIndex((line) => line.startsWith('[콜백] /talk/callback · 전략 talk · 돌아온 state='));
+      expect(at).toBeGreaterThan(0);
+      expect(lines[at + 1]).toBe('TokenError: 앱을 확인하지 못했어요');
+      expect(got.terminal).toContain("  code: 'invalid_client',");
+      labSeen.homework2WrongSecret = { status: got.status, location: got.location, terminal: lines.slice(at, at + 4).join('\n').replace(/state=\S+/, 'state=…').replace(/\(\/[^)]*node_modules/g, '(…/node_modules') };
+    }, 60_000);
+
+    it('🔴 (다) 에러 미들웨어를 /callback 에만 둔 판(나눠 준 one-callback 그대로의 app.use) — 탭 둘 · .http 확인은 정답과 같아 못 가리고, clientSecret 장면에서 500 · text/html · Express 기본 에러 화면', async () => {
+      expect(LAB('one-callback.js')).toContain(MIDDLEWARE_ONE);
+      const wrong = edit1(LAB('homework2.js'), MIDDLEWARE_BOTH, MIDDLEWARE_ONE);
+      // 다른 확인으로는 안 가려진다
+      const twoTabs = await twoTabsWithLog(wrong);
+      expect([twoTabs.A, twoTabs.B]).toEqual([[302, '/me'], [302, '/me']]);
+      const got = await secretSceneRaw(wrong);
+      expect(got.status).toBe(500);
+      expect(got.location).toBeNull();
+      expect(got.contentType).toBe('text/html; charset=utf-8');
+      expect(got.body.startsWith('<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>Error</title>\n</head>\n<body>\n<pre>TokenError: 앱을 확인하지 못했어요<br>')).toBe(true);
+      labSeen.homework2WrongSecretOneMiddleware = { status: got.status, contentType: got.contentType, bodyHead: got.body.split('<br>')[0], bodyLines: got.body.split('\n').slice(0, 8), terminalHead: got.terminal.split('\n').filter((l) => l && !l.startsWith('3986')).slice(0, 3) };
     }, 60_000);
 
     it('🔴 틀린 판 (가) — 콜백은 나눴지만 lab_provider 쿠키로 전략을 고르는 줄이 남은 판: 탭 둘이 둘 다 /?error=LOGIN_FAILED(확인이 가린다)', async () => {
