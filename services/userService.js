@@ -132,6 +132,11 @@ export async function findUserBySocialAccount(provider, providerUserId) {
   return account?.user ?? null;
 }
 
+// 사람에게 소셜 계정을 잇는다 — 사람은 그대로 두고 social_accounts 에 한 행을 넣는다.
+export async function addSocialAccount(userId, { provider, id }) {
+  await prisma.socialAccount.create({ data: { userId, provider, providerUserId: id } });
+}
+
 // 소셜 로그인으로 처음 온 사람을 만든다 — 사람과 소셜 계정을 함께 넣는다(둘 다 들어가거나 둘 다 안 들어간다).
 // 비밀번호는 없고(password_hash 는 NULL), 이메일은 제공자가 확인했다고 한 것만 넣는다.
 export async function createSocialUser({ provider, id, email, emailVerified, name }) {

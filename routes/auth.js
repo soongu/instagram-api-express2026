@@ -24,7 +24,15 @@ router.get(
   passport.authenticate('google', { session: false, failureRedirect: '/login?error=SOCIAL_LOGIN_FAILED' }),
   authController.socialCallback('google'),
 );
-// 위 두 주소에서 난 에러는 여기서 받는다 — 앱의 에러 미들웨어까지 가면 JSON 으로 답하게 된다.
+// 로그인한 사람이 자기 계정에 구글 계정을 잇는 시작 주소 — 구글에 다녀온 뒤에는 로그인과 같은 콜백으로 돌아온다.
+router.get(
+  '/google/link',
+  requireLogin,
+  authController.rememberNext('google'),
+  authController.rememberLink('google'),
+  passport.authenticate('google', { session: false }),
+);
+// 위 세 주소에서 난 에러는 여기서 받는다 — 앱의 에러 미들웨어까지 가면 JSON 으로 답하게 된다.
 router.use('/google', authController.socialFailed);
 // 카카오 로그인 — 구글과 같은 주소 둘이다. 전략의 이름만 다르다.
 router.get('/kakao', authController.rememberNext('kakao'), passport.authenticate('kakao', { session: false }));
@@ -33,6 +41,14 @@ router.get(
   passport.authenticate('kakao', { session: false, failureRedirect: '/login?error=SOCIAL_LOGIN_FAILED' }),
   authController.socialCallback('kakao'),
 );
+// 로그인한 사람이 자기 계정에 카카오 계정을 잇는 시작 주소 — 카카오에 다녀온 뒤에는 로그인과 같은 콜백으로 돌아온다.
+router.get(
+  '/kakao/link',
+  requireLogin,
+  authController.rememberNext('kakao'),
+  authController.rememberLink('kakao'),
+  passport.authenticate('kakao', { session: false }),
+);
 router.use('/kakao', authController.socialFailed);
 // 네이버 로그인 — 구글, 카카오와 같은 주소 둘이다. 전략의 이름만 다르다.
 router.get('/naver', authController.rememberNext('naver'), passport.authenticate('naver', { session: false }));
@@ -40,6 +56,14 @@ router.get(
   '/naver/callback',
   passport.authenticate('naver', { session: false, failureRedirect: '/login?error=SOCIAL_LOGIN_FAILED' }),
   authController.socialCallback('naver'),
+);
+// 로그인한 사람이 자기 계정에 네이버 계정을 잇는 시작 주소 — 네이버에 다녀온 뒤에는 로그인과 같은 콜백으로 돌아온다.
+router.get(
+  '/naver/link',
+  requireLogin,
+  authController.rememberNext('naver'),
+  authController.rememberLink('naver'),
+  passport.authenticate('naver', { session: false }),
 );
 router.use('/naver', authController.socialFailed);
 
@@ -52,9 +76,12 @@ router.all('/logout', allowOnly('POST'));
 router.all('/logout-all', allowOnly('POST'));
 router.all('/google', allowOnly('GET'));
 router.all('/google/callback', allowOnly('GET'));
+router.all('/google/link', allowOnly('GET'));
 router.all('/kakao', allowOnly('GET'));
 router.all('/kakao/callback', allowOnly('GET'));
+router.all('/kakao/link', allowOnly('GET'));
 router.all('/naver', allowOnly('GET'));
 router.all('/naver/callback', allowOnly('GET'));
+router.all('/naver/link', allowOnly('GET'));
 
 export default router;

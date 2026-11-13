@@ -1,8 +1,10 @@
 // ~/instagram-api/controllers/authController.js
 import * as authService from '../services/authService.js';
 import * as userService from '../services/userService.js';
+import * as tokenService from '../services/tokenService.js';
 import { sendData } from '../responses.js';
-import { HttpError, MESSAGES } from '../errors.js';
+import { HttpError, MESSAGES, UnauthorizedError } from '../errors.js';
+import { readToken } from '../middlewares/auth.js';
 import { SESSION_LIFETIME } from '../services/sessionService.js';
 import { tempCookie } from '../strategies/stateStore.js';
 
@@ -91,21 +93,42 @@ function safeNextPath(next) {
 
 // 제공자로 떠나기 전에, 다녀온 뒤 돌아갈 곳(주소의 ?next=)을 쿠키에 맡겨 둔다.
 // 쿠키 이름에 제공자 이름을 붙인다 — 두 제공자에 함께 다녀와도 돌아갈 곳이 섞이지 않게.
+// 지난번에 남은 연결 표시 쿠키는 지운다 — 연결하러 떠나는 길이면 바로 뒤의 rememberLink 가 다시 둔다.
 export function rememberNext(provider) {
   const nextCookie = `oauth_next_${provider}`;
+  const linkCookie = `oauth_link_${provider}`;
 
   return (req, res, next) => {
     res.cookie(nextCookie, safeNextPath(req.query.next), tempCookie);
+    res.clearCookie(linkCookie, { path: tempCookie.path });
+    next();
+  };
+}
+
+// 소셜 계정을 이으러 떠난다는 것을 연결 표시 쿠키에 적어 둔다 — 같은 콜백으로 돌아와도 로그인이 아니라 연결로 처리하려고.
+// 사람 번호가 아니라 지금 로그인 기록 번호를 담는다 — 돌아왔을 때 떠날 때와 같은 로그인인지 확인한다.
+export function rememberLink(provider) {
+  const linkCookie = `oauth_link_${provider}`;
+
+  return (req, res, next) => {
+    res.cookie(linkCookie, res.locals.sessionId, tempCookie);
     next();
   };
 }
 
 // 제공자에게 다녀온 사람을 로그인시킨다 — req.user 는 제공자가 확인해 준 프로필이라, 거기에 이어진 users 의 사람을 먼저 찾는다(처음 온 사람이면 만든다).
 // 그 뒤는 비밀번호 로그인과 같다 — 같은 로그인 기록을 남기고, 같은 쿠키 둘을 준다. 브라우저가 문서로 연 주소라 JSON 대신 보던 곳으로 보낸다.
+// 연결 표시 쿠키가 있으면 로그인이 아니라 연결이다 — 지금 로그인한 사람에게 잇는다.
 export function socialCallback(provider) {
   const nextCookie = `oauth_next_${provider}`;
+  const linkCookie = `oauth_link_${provider}`;
 
   return async (req, res) => {
+    if (req.cookies[linkCookie]) {
+      await linkToCurrentUser(req, res, provider);
+      return;
+    }
+
     const user = await authService.findOrCreateSocialUser(req.user);
     const tokens = await authService.startSession(user);
 
@@ -113,6 +136,42 @@ export function socialCallback(provider) {
     res.clearCookie(nextCookie, { path: tempCookie.path });
     res.redirect(safeNextPath(req.cookies[nextCookie]));
   };
+}
+
+// 연결 — 제공자가 확인해 준 계정(req.user)을 지금 로그인한 사람에게 잇는다. 로그인 기록도 토큰 쿠키도 새로 만들지 않는다.
+// 실패해도 로그인 화면이 아니라 보던 화면으로 보낸다 — 로그인한 사람에게 로그인 화면은 곧바로 피드로 넘어가 문장이 보이지 않는다.
+async function linkToCurrentUser(req, res, provider) {
+  const nextCookie = `oauth_next_${provider}`;
+  const linkCookie = `oauth_link_${provider}`;
+  const back = new URL(safeNextPath(req.cookies[nextCookie]), process.env.SITE_URL);
+  const userId = linkingUserId(req, req.cookies[linkCookie]);
+
+  res.clearCookie(nextCookie, { path: tempCookie.path });
+  res.clearCookie(linkCookie, { path: tempCookie.path });
+
+  try {
+    if (userId === null) throw new UnauthorizedError('LOGIN_REQUIRED');
+    await authService.linkSocialAccount(userId, req.user);
+    back.searchParams.set('linked', provider);
+  } catch (error) {
+    // 에러 코드가 있는 실패만 보던 화면의 주소에 싣는다 — 그 밖의 에러는 아래 socialFailed 가 받는다.
+    if (!(error instanceof HttpError)) throw error;
+    back.searchParams.set('error', error.code);
+  }
+
+  res.redirect(back.pathname + back.search);
+}
+
+// 연결 표시 쿠키를 둔 로그인이 지금도 그 로그인인지 — 요청에 실려 온 Access 토큰이 살아 있고
+// 그 sid 가 쿠키의 값과 같으면 그 사람의 번호를, 아니면(토큰 없음 · 기한 지남 · 다른 로그인) null 을 돌려준다.
+function linkingUserId(req, sessionId) {
+  try {
+    const payload = tokenService.verifyAccessToken(readToken(req));
+
+    return payload.sid === sessionId ? Number(payload.sub) : null;
+  } catch {
+    return null;
+  }
 }
 
 // 소셜 로그인이 실패했을 때 — 이 주소도 브라우저가 문서로 연 것이라, JSON 대신 로그인 화면으로 보낸다.
