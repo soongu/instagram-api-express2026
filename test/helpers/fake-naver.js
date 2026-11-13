@@ -4,7 +4,7 @@
 //    (인가 · 토큰 · 사용자 정보)만 이 서버 주소로 바꿔 띄운다(`p3-46` 판정).
 // 🔑 새 OIDC 경로 `/oauth2/…` 다(문서 `developers.naver.com/docs/login/devguide/devguide.md` 3.5 확인 2026-11-12):
 //    - `/oauth2/authorize` 는 `scope` 에 `openid` 가 없으면 400(문서 «'openid' scope 필수»)
-//    - 거부는 `?state=…&error=access_denied&error_description=…`(state 가 붙는다 — 카카오와 다르다)
+//    - 거부는 `?error=access_denied&error_description=Canceled%20By%20User&state=…`(state 가 붙는다 — 카카오와 다르다 · 2026-11-13 실측)
 //    - `/oauth2/token` 은 `redirect_uri` 필수 · `code_verifier`(challenge 를 받았으면 S256 대조) · 응답에 `id_token`
 //    - 틀린 클라이언트는 401 `{ error: 'invalid_client' }`(설명 없음) · 틀린 코드는 400 `{ error: 'invalid_grant' }`
 //    - 사용자 정보 `/v1/nid/me` 는 `{ resultcode, message, response: { id, email, name } }` — 값이 `response` 안에 있다
@@ -51,11 +51,12 @@ export function startFakeNaver({ port = 3972, clientId = 'test-naver', clientSec
         return;
       }
       const back = new URL(query.redirect_uri);
-      if (query.state !== undefined) back.searchParams.set('state', query.state);
       if (state.mode === 'deny') {
-        back.searchParams.set('error', 'access_denied');
-        back.searchParams.set('error_description', 'Canceled By User');
+        // 진짜 네이버의 취소 주소(2026-11-13 실측) — error · error_description · state 차례이고 빈칸은 %20 이다.
+        const tail = query.state === undefined ? '' : `&state=${encodeURIComponent(query.state)}`;
+        back.search = `?error=access_denied&error_description=Canceled%20By%20User${tail}`;
       } else {
+        if (query.state !== undefined) back.searchParams.set('state', query.state);
         const code = randomBytes(12).toString('base64url');
         state.codes.set(code, {
           redirectUri: query.redirect_uri,
