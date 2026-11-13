@@ -1,4 +1,4 @@
-# 소셜로 로그인한 브라우저의 accessToken 쿠키 값을 복사해 아래 COPIED_TOKEN 자리에 넣는다
+# 소셜로 로그인한 브라우저의 accessToken 쿠키 값을 복사해 아래 COPIED_TOKEN 을 그 값으로 바꾼다
 @token = COPIED_TOKEN
 
 ### 내 로그인 방법

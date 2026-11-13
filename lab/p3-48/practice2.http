@@ -1,4 +1,4 @@
-# 브라우저로 로그인한 뒤 labSession 쿠키 값을 복사해 아래 COPIED_SESSION 자리에 넣는다
+# 브라우저로 로그인한 뒤 labSession 쿠키 값을 복사해 아래 COPIED_SESSION 을 그 값으로 바꾼다
 @session = COPIED_SESSION
 
 ### 내 로그인 방법
