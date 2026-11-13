@@ -1,6 +1,6 @@
 // ~/instagram-api/strategies/naver.js
 import OAuth2Strategy from 'passport-oauth2';
-import { stateStore } from './stateStore.js';
+import { createStateStore } from './stateStore.js';
 import * as authService from '../services/authService.js';
 
 // 네이버 로그인 전략 — 네이버의 주소 둘과, 네이버 개발자 센터에서 받은 클라이언트 ID·시크릿을 넣어 만든다.
@@ -13,7 +13,7 @@ export const naverStrategy = new OAuth2Strategy(
     clientSecret: process.env.NAVER_CLIENT_SECRET,
     callbackURL: `${process.env.SITE_URL}/api/v2/auth/naver/callback`,
     scope: ['openid'],
-    store: stateStore,
+    store: createStateStore('naver'),
     pkce: true,
   },
   // 네이버가 확인해 준 사람(profile)을 users 의 사람으로 바꾸는 곳 — 여기서 넘긴 값이 req.user 가 된다.

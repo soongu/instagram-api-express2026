@@ -1,6 +1,6 @@
 // ~/instagram-api/strategies/google.js
 import OAuth2Strategy from 'passport-oauth2';
-import { stateStore } from './stateStore.js';
+import { createStateStore } from './stateStore.js';
 import * as authService from '../services/authService.js';
 
 // 구글 로그인 전략 — 구글의 주소 둘과, 구글 콘솔에서 받은 클라이언트 ID·비밀값을 넣어 만든다.
@@ -13,7 +13,7 @@ export const googleStrategy = new OAuth2Strategy(
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: `${process.env.SITE_URL}/api/v2/auth/google/callback`,
     scope: ['email', 'profile'],
-    store: stateStore,
+    store: createStateStore('google'),
     pkce: true,
   },
   // 구글이 확인해 준 사람(profile)을 우리 사람으로 바꾸는 곳 — 여기서 넘긴 값이 req.user 가 된다.
