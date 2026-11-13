@@ -1431,7 +1431,7 @@ describe('축 ⑪ 직접 해보기 2 — 제공자 셋의 응답을 한 함수�
 describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', () => {
   const RIGHT = [
     'ok  구글에서 허용',
-    'denied  카카오에서 취소',
+    'denied  state 없이 온 취소',
     'denied  네이버에서 취소',
     'forged  state를 고친 주소',
     'failed  네이버 쪽 문제',
@@ -1483,8 +1483,8 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
 
   return 'ok';
 `));
-    expect(got[1]).toBe('forged  카카오에서 취소');
-    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  카카오에서 취소']);
+    expect(got[1]).toBe('forged  state 없이 온 취소');
+    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  state 없이 온 취소']);
     labSeen.practice3StateFirst = got.join('\n');
   });
 

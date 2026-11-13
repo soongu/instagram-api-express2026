@@ -4,7 +4,9 @@
 //    (인가 · 토큰 · 사용자 정보)만 이 서버 주소로 바꿔 띄운다(`p3-46` 판정).
 // 🔑 동의 화면은 없다 — `/oauth/authorize` 는 받은 쿼리를 기록하고 곧바로 돌아올 주소로 302 한다.
 // 🔑 진짜 카카오처럼 굴려고 고른 것(문서 `developers.kakao.com/docs/ko/kakaologin/rest-api` 확인 2026-11-12):
-//    - 거부는 `?error=access_denied&error_description=User%20denied%20access` — **state 를 안 붙인다**
+//    - 거부는 `?error=access_denied&error_description=User%20denied%20access` — state 를 안 붙인다(문서의 예시 주소 — 그 예시는 요청에도 state 가 없다).
+//      🚨 진짜 카카오가 state 를 실은 요청의 취소에 state 를 돌려주는지는 못 쟀다 — PC 웹 동의 화면에는 «취소» 버튼이 없다(2026-11-13 사용자 실측 ·
+//         버튼은 «전체 선택하기» → 항목을 체크하면 «동의하고 계속하기»). 교안은 «카카오는 state 를 안 붙인다» 고 말하지 않는다.
 //    - 토큰 주소의 틀린 시크릿은 401 `{ error: 'invalid_client', error_description: 'Bad client credentials', error_code: 'KOE010' }`
 //    - 틀린 코드는 400 `KOE320` · PKCE 는 «challenge 를 받았으면 확인» 만(문서의 파라미터 표에는 없고 디스커버리에만 S256)
 //    - 사용자 정보 `/v2/user/me` 는 `Authorization: Bearer` 헤더만 · 회원번호 `id` 는 **숫자** · 닉네임은 `kakao_account.profile.nickname`
