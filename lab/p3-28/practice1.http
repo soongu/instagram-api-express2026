@@ -1,0 +1,34 @@
+### 1번 공지 제목 고치기
+PATCH http://localhost:4001/api/notices/1
+Content-Type: application/json
+
+{
+  "title": "서버 점검 시간 변경"
+}
+
+### 1번 공지를 빈 제목으로
+PATCH http://localhost:4001/api/notices/1
+Content-Type: application/json
+
+{
+  "title": ""
+}
+
+### 없는 9번 공지를 빈 제목으로
+PATCH http://localhost:4001/api/notices/9
+Content-Type: application/json
+
+{
+  "title": ""
+}
+
+### 번호 대신 글자를 넣고 빈 제목으로
+PATCH http://localhost:4001/api/notices/abc
+Content-Type: application/json
+
+{
+  "title": ""
+}
+
+### 1번 공지 지금 상태
+GET http://localhost:4001/api/notices/1
