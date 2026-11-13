@@ -1,0 +1,18 @@
+### 공지 목록
+GET http://localhost:4008/api/notices
+
+### 역할 없이 공지 올리기
+POST http://localhost:4008/api/admin/notices
+Content-Type: application/json
+
+{"title": "아무나 올린 공지"}
+
+### 관리자로 공지 올리기
+POST http://localhost:4008/api/admin/notices
+Content-Type: application/json
+X-Role: admin
+
+{"title": "새 공지"}
+
+### 역할 없이 2번 공지 숨기기
+PATCH http://localhost:4008/api/admin/notices/2/hide
