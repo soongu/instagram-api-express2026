@@ -1,0 +1,7 @@
+### 쿠키 없이 톡 콜백 주소로
+# @no-redirect
+GET http://localhost:4002/talk/callback?code=x&state=y
+
+### 쿠키 없이 인가 서버 콜백 주소로
+# @no-redirect
+GET http://localhost:4002/callback?code=x&state=y
