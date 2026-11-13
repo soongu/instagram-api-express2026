@@ -25,6 +25,8 @@ export const MESSAGES = {
   USERNAME_TAKEN: '이미 쓰고 있는 사용자 이름이에요',
   EMAIL_TAKEN: '이미 가입한 이메일이에요',
   PHONE_TAKEN: '이미 가입한 휴대폰 번호예요',
+  SOCIAL_ACCOUNT_TAKEN: '이미 다른 계정에 연결된 소셜 계정이에요',
+  PROVIDER_ALREADY_LINKED: '같은 제공자의 계정이 이미 연결돼 있어요',
   INTERNAL_ERROR: '서버에서 문제가 생겼어요',
 };
 

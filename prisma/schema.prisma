@@ -124,6 +124,7 @@ model SocialAccount {
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@unique([provider, providerUserId])
+  @@unique([userId, provider])
   @@index([userId])
   @@map("social_accounts")
 }
