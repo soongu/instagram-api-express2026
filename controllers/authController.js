@@ -89,20 +89,29 @@ function safeNextPath(next) {
   return url.origin === new URL(site).origin ? url.pathname + url.search : '/';
 }
 
-// 구글로 떠나기 전에, 다녀온 뒤 돌아갈 곳(주소의 ?next=)을 쿠키에 맡겨 둔다.
-export function rememberNext(req, res, next) {
-  res.cookie('oauth_next', safeNextPath(req.query.next), tempCookie);
-  next();
+// 제공자로 떠나기 전에, 다녀온 뒤 돌아갈 곳(주소의 ?next=)을 쿠키에 맡겨 둔다.
+// 쿠키 이름에 제공자 이름을 붙인다 — 두 제공자에 함께 다녀와도 돌아갈 곳이 섞이지 않게.
+export function rememberNext(provider) {
+  const nextCookie = `oauth_next_${provider}`;
+
+  return (req, res, next) => {
+    res.cookie(nextCookie, safeNextPath(req.query.next), tempCookie);
+    next();
+  };
 }
 
-// 구글을 다녀온 사람(req.user)에게 로그인을 준다 — 비밀번호 로그인과 같은 로그인 기록, 같은 쿠키 둘.
+// 제공자에게 다녀온 사람(req.user)을 로그인시킨다 — 비밀번호 로그인과 같은 로그인 기록을 남기고, 같은 쿠키 둘을 준다.
 // 브라우저가 문서로 연 주소라 JSON 대신 보던 곳으로 보낸다.
-export async function socialCallback(req, res) {
-  const tokens = await authService.startSession(req.user);
+export function socialCallback(provider) {
+  const nextCookie = `oauth_next_${provider}`;
 
-  setTokenCookies(res, tokens);
-  res.clearCookie('oauth_next', { path: tempCookie.path });
-  res.redirect(safeNextPath(req.cookies.oauth_next));
+  return async (req, res) => {
+    const tokens = await authService.startSession(req.user);
+
+    setTokenCookies(res, tokens);
+    res.clearCookie(nextCookie, { path: tempCookie.path });
+    res.redirect(safeNextPath(req.cookies[nextCookie]));
+  };
 }
 
 // 소셜 로그인이 실패했을 때 — 이 주소도 브라우저가 문서로 연 것이라, JSON 대신 로그인 화면으로 보낸다.

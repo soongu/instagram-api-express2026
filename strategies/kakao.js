@@ -1,6 +1,6 @@
 // ~/instagram-api/strategies/kakao.js
 import OAuth2Strategy from 'passport-oauth2';
-import { stateStore } from './stateStore.js';
+import { createStateStore } from './stateStore.js';
 import * as authService from '../services/authService.js';
 
 // 카카오 로그인 전략 — 카카오의 주소 둘과, 카카오 콘솔에서 받은 REST API 키·클라이언트 시크릿을 넣어 만든다.
@@ -13,7 +13,7 @@ export const kakaoStrategy = new OAuth2Strategy(
     clientSecret: process.env.KAKAO_CLIENT_SECRET,
     callbackURL: `${process.env.SITE_URL}/api/v2/auth/kakao/callback`,
     scope: ['profile_nickname'],
-    store: stateStore,
+    store: createStateStore('kakao'),
     pkce: true,
   },
   // 카카오가 확인해 준 사람(profile)을 users 의 사람으로 바꾸는 곳 — 여기서 넘긴 값이 req.user 가 된다.
