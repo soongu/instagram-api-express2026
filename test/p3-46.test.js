@@ -1230,7 +1230,10 @@ const LAB_AS_PORT = GOOGLE_PORT;
 const LAB_BASE = `http://localhost:${LAB_PORT}`;
 const LAB_REF = hasRef('refs/heads/code/p3-46') ? 'code/p3-46' : 'main';
 const LAB_WT = process.env.P346_LAB_WT === '1';
-const labFile = (rel) => (LAB_WT ? read(P(rel)) : showAt(LAB_REF, rel));
+// 🔀 2026-11-14 학생 낭독 집중 검수 — 직접 해보기 2·3 의 샘플을 하나씩 더했다(constructor · state 없이 온 서버 문제).
+//    `main` 에서만 고쳤다(북마크 code/p3-46 은 옛 판) — 이 파일들만 작업트리에서 읽는다.
+const MAIN_LAB = ['lab/p3-46/practice2.js', 'lab/p3-46/practice3.js', 'snapshots/p3-46.practice2-start.practice2.js', 'snapshots/p3-46.practice3-start.practice3.js'];
+const labFile = (rel) => (LAB_WT || MAIN_LAB.includes(rel) ? read(P(rel)) : showAt(LAB_REF, rel));
 const LAB = (name) => labFile(`lab/p3-46/${name}`);
 const SNAP = (name) => labFile(`snapshots/p3-46.${name}`);
 /** 글자를 모두 바꾼다 — 바꿀 글자가 없으면 던진다. */
@@ -1386,22 +1389,23 @@ describe('축 ⑪ 직접 해보기 2 — 제공자 셋의 응답을 한 함수�
     '{"provider":"kakao","id":"3812345678","emailVerified":false,"name":"민지"}',
     '{"provider":"naver","id":"aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7bC9d","email":"minji.kim@naver.com","emailVerified":false,"name":"김민지"}',
     '모르는 제공자예요: github',
+    '모르는 제공자예요: constructor',
   ];
   const run = (source) => runLabScript('practice2.js', source);
 
-  it('🔴 정답 판 — 네 줄 · 넷째 줄은 잡은 에러의 문장', () => {
+  it('🔴 정답 판 — 다섯 줄 · 넷째·다섯째 줄은 잡은 에러의 문장', () => {
     const { code, out } = run(LAB('practice2.js'));
     expect(code).toBe(0);
     expect(out.trimEnd().split('\n')).toEqual(RIGHT);
     labSeen.practice2 = out;
   });
 
-  it('🔴 시작 파일 — 비운 채로 문법 검사를 통과하고 «undefined» 네 줄 · 정답과는 READERS 와 함수만 다르다', () => {
+  it('🔴 시작 파일 — 비운 채로 문법 검사를 통과하고 «undefined» 다섯 줄 · 정답과는 READERS 와 함수만 다르다', () => {
     const start = SNAP('practice2-start.practice2.js');
     nodeCheck(start);
     sameOutside(LAB('practice2.js'), start, '// 제공자마다 응답을 읽는 함수', 'for (const [provider, info] of samples) {');
     const { code, out } = run(start);
-    expect([code, out]).toEqual([0, 'undefined\nundefined\nundefined\nundefined\n']);
+    expect([code, out]).toEqual([0, 'undefined\nundefined\nundefined\nundefined\nundefined\n']);
   });
 
   it('🔴 틀린 판 — 네이버를 맨 위에서 읽으면 셋째 줄에 id·email·name 이 빠진다', () => {
@@ -1410,16 +1414,25 @@ describe('축 ⑪ 직접 해보기 2 — 제공자 셋의 응답을 한 함수�
       'naver: (info) => ({ id: info.id, email: info.email, emailVerified: false, name: info.name }),');
     const { code, out } = run(wrong);
     expect(code).toBe(0);
-    expect(out.trimEnd().split('\n')).toEqual([RIGHT[0], RIGHT[1], '{"provider":"naver","emailVerified":false}', RIGHT[3]]);
+    expect(out.trimEnd().split('\n')).toEqual([RIGHT[0], RIGHT[1], '{"provider":"naver","emailVerified":false}', RIGHT[3], RIGHT[4]]);
     labSeen.practice2NaverTop = out;
   });
 
-  it('🔴 틀린 판 — 모르는 제공자를 확인하지 않으면 넷째 줄이 «READERS[provider] is not a function»', () => {
+  it('🔴 틀린 판 — 모르는 제공자를 확인하지 않으면 넷째 줄이 «READERS[provider] is not a function» · 다섯째 줄은 에러 없이 {"provider":"constructor"}', () => {
     const wrong = edit1(LAB('practice2.js'), "  if (!Object.hasOwn(READERS, provider)) throw new Error(`모르는 제공자예요: ${provider}`);\n\n", '');
     const { code, out } = run(wrong);
     expect(code).toBe(0);
-    expect(out.trimEnd().split('\n')).toEqual([...RIGHT.slice(0, 3), 'READERS[provider] is not a function']);
+    expect(out.trimEnd().split('\n')).toEqual([...RIGHT.slice(0, 3), 'READERS[provider] is not a function', '{"provider":"constructor"}']);
     labSeen.practice2NoCheck = out;
+  });
+
+  it('🔴 틀린 판 — Object.hasOwn 대신 READERS[provider] 가 있는지 · in 으로 확인하면 넷째 줄까지는 정답과 같고 다섯째 줄만 {"provider":"constructor"}(객체가 원래 가진 이름이 통과한다)', () => {
+    const line = "  if (!Object.hasOwn(READERS, provider)) throw new Error(`모르는 제공자예요: ${provider}`);";
+    for (const check of ['!READERS[provider]', '!(provider in READERS)']) {
+      const { code, out } = run(edit1(LAB('practice2.js'), line, line.replace('!Object.hasOwn(READERS, provider)', check)));
+      expect(code).toBe(0);
+      expect(out.trimEnd().split('\n')).toEqual([...RIGHT.slice(0, 4), '{"provider":"constructor"}']);
+    }
   });
 
   it('🔴 틀린 판 — 네이버 이메일을 확인된 것으로 두면 셋째 줄이 emailVerified:true', () => {
@@ -1435,6 +1448,7 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
     'denied  네이버에서 취소',
     'forged  state를 고친 주소',
     'failed  네이버 쪽 문제',
+    'failed  state 없이 온 서버 문제',
     'failed  code도 error도 없는 주소',
     'ok  state에 error라는 글자가 든 성공',
     'forged  쿠키도 state도 없는 주소',
@@ -1455,7 +1469,7 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
     return out.trimEnd().split('\n');
   };
 
-  it('🔴 정답 판 — 여덟 줄', () => {
+  it('🔴 정답 판 — 아홉 줄', () => {
     expect(results(LAB('practice3.js'))).toEqual(RIGHT);
     // 주석의 낱말 — 교안 본문과 같은 «저장해 둔» · «제공자에게 다녀온»
     for (const src of [LAB('practice3.js'), SNAP('practice3-start.practice3.js')]) {
@@ -1473,7 +1487,7 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
     expect(results(start)).toEqual(RIGHT.map((line) => line.replace(/^\w+/, 'undefined')));
   });
 
-  it('🔴 틀린 판 — state 부터 보면 카카오의 취소가 forged 로 읽힌다(카카오는 취소했을 때 state 를 붙이지 않는다)', () => {
+  it('🔴 틀린 판 — state 부터 보면 state 없이 온 취소와 서버 문제가 forged 로 읽힌다', () => {
     const got = results(withBody(`  const query = new URL(url).searchParams;
   const error = query.get('error');
 
@@ -1484,8 +1498,22 @@ describe('축 ⑫ 직접 해보기 3 — 콜백 주소 읽기(readCallback)', ()
   return 'ok';
 `));
     expect(got[1]).toBe('forged  state 없이 온 취소');
-    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  state 없이 온 취소']);
+    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  state 없이 온 취소', 'forged  state 없이 온 서버 문제']);
     labSeen.practice3StateFirst = got.join('\n');
+  });
+
+  it('🔴 틀린 판 — 취소는 먼저 보되 forged 를 failed 보다 먼저 보면(요구사항 3 의 차례를 어기면) state 없이 온 서버 문제만 forged 로 읽힌다', () => {
+    const got = results(withBody(`  const query = new URL(url).searchParams;
+  const error = query.get('error');
+
+  if (error === 'access_denied') return 'denied';
+  if (!savedState || query.get('state') !== savedState) return 'forged';
+  if (error !== null || !query.has('code')) return 'failed';
+
+  return 'ok';
+`));
+    expect(got.filter((line, i) => line !== RIGHT[i])).toEqual(['forged  state 없이 온 서버 문제']);
+    labSeen.practice3FailedLate = got.join('\n');
   });
 
   it('🔴 틀린 판 — 주소 글자에 error 가 들었는지로 보면 state 에 error 가 든 성공이 failed 로 읽힌다', () => {
@@ -1714,15 +1742,16 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
         const b = browser(base);
         got.jaehoon = await endOf(b, (await labLogin(b, 'jaehoon')).callback);
         got.membersAfterTwo = (await browser(base).get('/members')).body;
-        // ③ 톡에서 닉네임 제공을 끄고 haru — 별명 없이 가입된다
+        // ③ 톡 haru(닉네임 제공을 켠 채) — 처음 온 톡 사람 · 별명은 톡이 준 닉네임
+        //    (🔀 2026-11-14 학생 검수 — 닉네임을 끈 haru 만 있으면 «이름을 안 쓰는 판» 이 정답과 같았다)
         const c = browser(base);
-        const haru = await talkLogin(c, 'haru', { nickname: false });
+        const haru = await talkLogin(c, 'haru');
         got.haruCallback = [haru.callback.status, haru.callback.location];
         got.haru = await endOf(c, haru.callback);
         // ④ 톡 sora 다시 — 같은 회원
         const d = browser(base);
         got.soraAgain = await endOf(d, (await talkLogin(d, 'sora')).callback);
-        // ⑤ 톡 haru 다시(이번에는 닉네임 제공을 켜고) — 같은 회원 · 별명은 그대로 없다
+        // ⑤ 톡 haru 다시 — 같은 회원
         const e = browser(base);
         got.haruAgain = await endOf(e, (await talkLogin(e, 'haru')).callback);
         // ⑥ 거부 · 고친 state
@@ -1742,7 +1771,15 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
         await sleep(100);
         got.terminal = tail();
         out = got;
-      }).then(() => out);
+      }).then(() => withHomework('homework1.js', source, async ({ base, tail }) => {
+        // ⑧ 서버를 다시 띄운 직후 — 닉네임 제공을 끄고 haru(다시 처음 온 사람) · 이름도 이메일도 없어 별명 없이 만들어진다
+        const g = browser(base);
+        const haru = await talkLogin(g, 'haru', { nickname: false });
+        out.haruNoNicknameCallback = [haru.callback.status, haru.callback.location];
+        out.haruNoNickname = await endOf(g, haru.callback);
+        await sleep(100);
+        out.terminal += tail();
+      })).then(() => out);
     };
     const RIGHT = {
       home: '<!doctype html><meta charset="utf-8"><a href="/login">인가 서버로 로그인</a> <a href="/talk">톡으로 로그인</a>',
@@ -1755,9 +1792,9 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
         { id: 3, nickname: 'jaehoon', email: 'jaehoon@example.com', providers: ['lab'] },
       ],
       haruCallback: [302, '/me'],
-      haru: { id: 4 },
+      haru: { id: 4, nickname: '하루' },
       soraAgain: { id: 2, nickname: '소라' },
-      haruAgain: { id: 4 },
+      haruAgain: { id: 4, nickname: '하루' },
       deniedBack: `${TALK_CALLBACK}?error=access_denied&error_description=User%20denied%20access`,
       denied: [302, '/?error=LOGIN_FAILED'],
       deniedNotice: '로그인하지 못했어요. 다시 시도해 주세요.',
@@ -1767,15 +1804,17 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
         { id: 1, nickname: 'dahye', email: 'dahye@example.com', providers: [] },
         { id: 2, nickname: '소라', providers: ['talk'] },
         { id: 3, nickname: 'jaehoon', email: 'jaehoon@example.com', providers: ['lab'] },
-        { id: 4, providers: ['talk'] },
+        { id: 4, nickname: '하루', providers: ['talk'] },
       ],
       nobody: [401, { message: '로그인이 필요해요' }],
+      haruNoNicknameCallback: [302, '/me'],
+      haruNoNickname: { id: 3 },
     };
     const withoutTerminal = ({ terminal, ...rest }) => rest;
     /** 정답과 다른 칸의 이름. */
     const wrongKeys = (got) => Object.keys(RIGHT).filter((key) => JSON.stringify(got[key]) !== JSON.stringify(RIGHT[key]));
 
-    it('🔴 정답 판 — sora 는 2번 소라 · jaehoon 은 3번(번호가 같아도 다른 회원) · 닉네임을 끈 haru 는 별명 없는 4번 · 다시 와도 같은 회원 · 거부·고친 state 는 LOGIN_FAILED · 회원 넷에 제공자가 함께', async () => {
+    it('🔴 정답 판 — sora 는 2번 소라 · jaehoon 은 3번(번호가 같아도 다른 회원) · haru 는 4번 하루 · 다시 와도 같은 회원 · 거부·고친 state 는 LOGIN_FAILED · 회원 넷에 제공자가 함께 · 다시 띄운 서버에 닉네임을 끈 haru 는 별명 없는 3번', async () => {
       const got = await observe(LAB('homework1.js'));
       expect(withoutTerminal(got)).toEqual(RIGHT);
       // 거부·이메일 겹침은 터미널에 에러를 찍지 않는다
@@ -1816,12 +1855,20 @@ describe('직접 해보기·과제 — 톡 서버와 실습용 인가 서버를 
       labSeen.homework1IdOnly = { jaehoon: got.jaehoon, membersAfterTwo: got.membersAfterTwo };
     }, 60_000);
 
-    it('🔴 (c) ?. 없이 닉네임을 읽는 판 — 닉네임 제공을 끈 haru 가 /?error=LOGIN_FAILED 로 돌아오고 터미널에 TypeError', async () => {
+    it('🔴 (c) ?. 없이 닉네임을 읽는 판 — 닉네임 제공을 끈 haru(다시 띄운 서버)가 /?error=LOGIN_FAILED 로 돌아오고 터미널에 TypeError · 닉네임을 켠 haru 는 된다', async () => {
       const got = await observe(edit1(LAB('homework1.js'), 'info.account?.profile?.nickname', 'info.account.profile.nickname'));
-      expect(got.haruCallback).toEqual([302, '/?error=LOGIN_FAILED']);
+      expect(got.haruNoNicknameCallback).toEqual([302, '/?error=LOGIN_FAILED']);
+      expect(got.haru).toEqual(RIGHT.haru);
       expect(got.terminal).toContain("TypeError: Cannot read properties of undefined (reading 'nickname')");
       expect(got.sora).toEqual(RIGHT.sora);
-      labSeen.homework1NoOptional = { haruCallback: got.haruCallback, terminalFirstLine: got.terminal.slice(got.terminal.indexOf('TypeError')).split('\n')[0] };
+      labSeen.homework1NoOptional = { haruNoNicknameCallback: got.haruNoNicknameCallback, terminalFirstLine: got.terminal.slice(got.terminal.indexOf('TypeError')).split('\n')[0] };
+    }, 60_000);
+
+    it('🔴 (f) 별명을 정할 때 제공자가 준 이름을 안 쓰는 판(nickname: email?.split) — 닉네임을 켠 haru 가 별명 없는 4번이 된다(이 칸 말고는 정답과 같다)', async () => {
+      const got = await observe(edit1(LAB('homework1.js'), "nickname: name ?? email?.split('@')[0], email", "nickname: email?.split('@')[0], email"));
+      expect(got.haru).toEqual({ id: 4 });
+      expect(wrongKeys(got)).toEqual(['haru', 'haruAgain', 'members']);
+      labSeen.homework1NoName = { haru: got.haru };
     }, 60_000);
 
     it('🔴 (d) 별명을 지난 과제처럼 이메일에서만 정하는 판(email.split) — 이메일이 없는 톡 사람은 새로 가입하지 못한다(먼저 가입해 둔 소라는 된다)', async () => {
@@ -2057,6 +2104,45 @@ describe('축 ⑮ 과제 [응용] — 제공자가 늦게 답할 때(AbortSignal
       });
     }, 60_000);
 
+    // 🔀 2026-11-14 학생 검수 — 확인에 «그 밖의 실패» 장면이 없어 «모두 PROVIDER_TIMEOUT» 판 · «터미널에 안 찍는» 판이 정답과 같았다.
+    //    [기초]처럼 톡 전략의 clientSecret 을 잠깐 틀리게 바꿔 토큰 교환에서 실패하게 한다.
+    const secretScene2 = async (source) => {
+      let got;
+      await withHomework('homework2.js', edit1(source, "    clientSecret: 'talk-secret',", "    clientSecret: 'talk-secret-x',"), async ({ base, tail }) => {
+        const tab = browser(base);
+        const { callback } = await talkLogin(tab, 'sora');
+        await sleep(150);
+        got = {
+          callback: [callback.status, callback.location],
+          notice: callback.status === 302 ? noticeOf(await endOf(tab, callback)) : null,
+          terminal: tail().replace(/^.*번 포트에서 과제 서버가 돌아가요\n/, ''),
+        };
+      });
+      return got;
+    };
+    const MIDDLEWARE_TIMEOUT_LINE = "  if (err.name === 'TimeoutError') code = 'PROVIDER_TIMEOUT';\n";
+    const MIDDLEWARE_LOG = "  // 우리가 아는 실패가 아닐 때만 터미널에 남긴다.\n  if (code === 'LOGIN_FAILED') console.error(err);\n";
+
+    it('🔴 확인 — 톡 전략의 clientSecret 을 talk-secret-x 로 바꾸고 sora 로 허용하면 302 /?error=LOGIN_FAILED · 기본 문장 · 터미널 첫 줄은 «TokenError: 앱을 확인하지 못했어요»', async () => {
+      const got = await secretScene2(LAB('homework2.js'));
+      expect(got.callback).toEqual([302, '/?error=LOGIN_FAILED']);
+      expect(got.notice).toBe(LOGIN_FAILED_TEXT);
+      expect(got.terminal.split('\n')[0]).toBe('TokenError: 앱을 확인하지 못했어요');
+      labSeen.homework2WrongSecret = { callback: got.callback, terminalFirstLine: got.terminal.split('\n')[0] };
+    }, 60_000);
+
+    it('🔴 틀린 판 (d) — EMAIL_TAKEN 말고는 모두 PROVIDER_TIMEOUT 으로 보내는 판 · (e) 터미널에 아무것도 안 찍는 판 — 틀린 시크릿 장면에서 정답과 갈린다', async () => {
+      const allTimeout = edit1(LAB('homework2.js'), MIDDLEWARE_TIMEOUT_LINE, "  if (err.code !== 'EMAIL_TAKEN') code = 'PROVIDER_TIMEOUT';\n");
+      const d = await secretScene2(allTimeout);
+      expect(d.callback).toEqual([302, '/?error=PROVIDER_TIMEOUT']);
+      // 답안 «흔한 실수» — «창 6에는 아무것도 찍히지 않아요»
+      expect(d.terminal.trim()).toBe('');
+      const silent = edit1(LAB('homework2.js'), MIDDLEWARE_LOG, '');
+      const e = await secretScene2(silent);
+      expect(e.callback).toEqual([302, '/?error=LOGIN_FAILED']);
+      expect(e.terminal).not.toContain('Error');
+    }, 60_000);
+
     it('🔴 첫 화면 — 코드마다 다른 문장 · 표에 없는 코드(<b>x</b> · constructor)는 기본 문장이고 주소의 글자가 본문에 없다', async () => {
       await withHomework('homework2.js', LAB('homework2.js'), async ({ base }) => {
         const page = async (query) => (await browser(base).get(`/?error=${query}`)).body;
@@ -2271,6 +2357,20 @@ describe('축 ⑯ 교안·답안이 말한 글자 = 실제', () => {
     // 실습 2 해설의 펜스는 그 한 줄뿐이다
     const fence = practiceFence(2, (one) => one.solution && one.lang === '');
     expect(fence.body).toEqual(['{"provider":"naver","emailVerified":false}']);
+  });
+
+  // 🔀 2026-11-14 학생 낭독 집중 검수 — 확인 절차가 «그것만 어긴 판» 을 가려내게 더한 장면·줄을 교안·답안이 말한다.
+  //    (판의 동작은 축 ⑪·⑫·⑭·⑮ 가 잠갔다 — 여기서는 교안이 그 장면을 시키는지만 본다.)
+  it('🔴 학생 검수로 더한 확인 — [기초] 닉네임을 켠 haru(4번 하루) · 다시 띄운 뒤 닉네임을 끈 haru(별명 없는 3번) · [기초]·[응용] 의 틀린 시크릿 장면 · 직접 해보기 2 해설의 constructor 줄', () => {
+    const lecture = read(LECTURE_MD);
+    const answers = read(ANSWERS_MD);
+    expect(lecture).toContain('이번에는 `haru`로 허용하면 `/me`에 `{"id":4,"nickname":"하루"}`가 보여요.');
+    expect(lecture).toContain('«닉네임 제공»을 끄고 `haru`로 허용하면 `/me`에 `{"id":3}`이 보여요.');
+    expect(lecture).not.toContain('`/me`에 `{"id":4}`가 보여요');
+    expect(lecture.split("톡 전략의 `clientSecret`을 `'talk-secret-x'`로 잠깐 바꿔 저장하고")).toHaveLength(3);
+    expect(lecture).toContain('다섯째 줄이 `{"provider":"constructor"}`로 찍혀요.');
+    expect(answers).toContain('{"id":4,"nickname":"하루"}');
+    expect(answers).not.toContain('/me에 {"id":4}');
   });
 
   describe('수업 백엔드를 띄워서', () => {
