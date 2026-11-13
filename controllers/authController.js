@@ -100,13 +100,14 @@ export function rememberNext(provider) {
   };
 }
 
-// 제공자에게 다녀온 사람(req.user)을 로그인시킨다 — 비밀번호 로그인과 같은 로그인 기록을 남기고, 같은 쿠키 둘을 준다.
-// 브라우저가 문서로 연 주소라 JSON 대신 보던 곳으로 보낸다.
+// 제공자에게 다녀온 사람을 로그인시킨다 — req.user 는 제공자가 확인해 준 프로필이라, 거기에 이어진 users 의 사람을 먼저 찾는다(처음 온 사람이면 만든다).
+// 그 뒤는 비밀번호 로그인과 같다 — 같은 로그인 기록을 남기고, 같은 쿠키 둘을 준다. 브라우저가 문서로 연 주소라 JSON 대신 보던 곳으로 보낸다.
 export function socialCallback(provider) {
   const nextCookie = `oauth_next_${provider}`;
 
   return async (req, res) => {
-    const tokens = await authService.startSession(req.user);
+    const user = await authService.findOrCreateSocialUser(req.user);
+    const tokens = await authService.startSession(user);
 
     setTokenCookies(res, tokens);
     res.clearCookie(nextCookie, { path: tempCookie.path });
