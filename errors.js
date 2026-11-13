@@ -20,6 +20,7 @@ export const MESSAGES = {
   POST_NOT_FOUND: '그런 게시물은 없어요',
   USER_NOT_FOUND: '그런 사용자는 없어요',
   POST_OR_USER_NOT_FOUND: '그런 게시물이나 사용자는 없어요',
+  SOCIAL_ACCOUNT_NOT_FOUND: '연결된 소셜 계정이 없어요',
   ROUTE_NOT_FOUND: '그런 주소는 없어요',
   METHOD_NOT_ALLOWED: '이 주소는 그 HTTP 메서드를 받지 않아요',
   USERNAME_TAKEN: '이미 쓰고 있는 사용자 이름이에요',

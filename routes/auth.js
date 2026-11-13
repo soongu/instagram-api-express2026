@@ -17,6 +17,9 @@ router.get('/me', requireLogin, authController.me);
 router.post('/logout', authController.logout);
 // 이 라우터는 로그인 확인보다 위에 붙어 있다 — 로그인이 필요한 라우트에는 직접 끼운다.
 router.post('/logout-all', requireLogin, authController.logoutAll);
+// 내 로그인 방법 목록과 소셜 계정 연결 끊기 — 로그인한 사람 자신의 것만 다룬다.
+router.get('/social-accounts', requireLogin, authController.loginMethods);
+router.delete('/social-accounts/:provider', requireLogin, authController.unlinkSocialAccount);
 // 구글 로그인 — 브라우저가 문서로 여는 주소 둘. 시작 주소는 구글로 보내고, 구글은 콜백 주소로 돌려보낸다.
 router.get('/google', authController.rememberNext('google'), passport.authenticate('google', { session: false }));
 router.get(
@@ -75,6 +78,8 @@ router.all('/reissue', allowOnly('POST'));
 router.all('/me', allowOnly('GET'));
 router.all('/logout', allowOnly('POST'));
 router.all('/logout-all', allowOnly('POST'));
+router.all('/social-accounts', allowOnly('GET'));
+router.all('/social-accounts/:provider', allowOnly('DELETE'));
 router.all('/google', allowOnly('GET'));
 router.all('/google/callback', allowOnly('GET'));
 router.all('/google/link', allowOnly('GET'));

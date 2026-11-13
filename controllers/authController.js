@@ -80,6 +80,20 @@ export async function logoutAll(req, res) {
   sendData(res, { message: '모든 기기에서 로그아웃했어요' });
 }
 
+// 내 로그인 방법 — 비밀번호가 있는지와, 이어진 소셜 계정(이은 차례로).
+export async function loginMethods(req, res) {
+  const methods = await authService.getLoginMethods(res.locals.userId);
+
+  sendData(res, methods);
+}
+
+// 소셜 계정 연결 끊기 — 주소의 제공자 이름으로, 로그인한 사람 자신의 연결만 끊는다.
+export async function unlinkSocialAccount(req, res) {
+  await authService.unlinkSocialAccount(res.locals.userId, req.params.provider);
+
+  sendData(res, { message: '연결을 끊었어요' });
+}
+
 // 로그인한 뒤 돌아갈 주소 — 우리 화면 안의 경로일 때만 쓰고, 아니면 피드로 간다.
 function safeNextPath(next) {
   const site = process.env.SITE_URL;
