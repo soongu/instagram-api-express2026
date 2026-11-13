@@ -5,6 +5,7 @@ import postsRouter from './routes/posts.js';
 import authRouter from './routes/auth.js';
 import { HttpError } from './errors.js';
 import cookieParser from 'cookie-parser';
+import { logger } from './middlewares/logger.js';
 
 const app = express();
 
@@ -12,12 +13,21 @@ const allowedOrigins = process.env.CORS_ORIGIN.split(',').map((one) =>
   one.trim(),
 );
 
+
+app.use(logger);
 app.use(cors({
   origin: allowedOrigins,
   // credentials: true,
 }));
 app.use(express.json());
 app.use(cookieParser());
+
+
+app.use((req, res, next) => {
+  console.log('요청이 들어왔어요');
+  next()
+});
+
 
 app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
