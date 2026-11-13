@@ -14,3 +14,6 @@ Content-Type: application/json
 {
   "likeCount": -1
 }
+
+### 앞뒤에 공백이 든 이메일로 중복 확인
+GET http://localhost:3000/api/auth/check-duplicate?type=username&value=%20minji%20

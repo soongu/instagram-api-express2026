@@ -2,7 +2,7 @@
 import express from 'express';
 import * as userService from '../services/userService.js';
 import * as sessionService from '../services/sessionService.js';
-import { validateBody } from '../middlewares/validate.js';
+import { validateBody, validateQuery } from '../middlewares/validate.js';
 import { loginSchema, signupSchema, checkDuplicateSchema, PHONE } from '../schemas/authSchema.js';
 import { UnauthorizedError, BadRequestError } from '../errors.js';
 
@@ -17,15 +17,9 @@ const TAKEN = {
   username: '이미 쓰고 있는 사용자 이름이에요',
 };
 
-router.get('/check-duplicate', async (req, res) => {
-  // validateBody 는 req.body 를 보니, 쿼리 문자열은 여기서 직접 검사한다.
-  const result = checkDuplicateSchema.safeParse(req.query);
+router.get('/check-duplicate', validateQuery(checkDuplicateSchema), async (req, res) => {
 
-  if (!result.success) {
-    throw new BadRequestError('보낸 내용이 규칙에 안 맞아요', z.treeifyError(result.error));
-  }
-
-  const { type, value } = result.data;
+  const { type, value } = res.locals.query;
   const taken = await userService.isTaken(type, type === 'phone' ? value.replaceAll('-', '') : value);
 
   res.json({ available: !taken, message: taken ? TAKEN[type] : '쓸 수 있어요' });
