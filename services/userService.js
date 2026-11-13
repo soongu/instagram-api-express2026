@@ -14,6 +14,12 @@ const TAKEN_BY_INDEX = {
   users_phone_key: 'PHONE_TAKEN',
 };
 
+// 소셜 계정을 이을 때의 UNIQUE 제약 이름 — 어느 제약에 막혔는지에 따라 에러 코드가 다르다.
+const LINK_TAKEN_BY_INDEX = {
+  social_accounts_provider_provider_user_id_key: 'SOCIAL_ACCOUNT_TAKEN',
+  social_accounts_user_id_provider_key: 'PROVIDER_ALREADY_LINKED',
+};
+
 // 휴대폰 번호는 하이픈을 빼고 숫자만 다룬다 — 010-1234-5678 과 01012345678 은 같은 번호다.
 const digitsOnly = (phone) => phone.replaceAll('-', '');
 
@@ -132,9 +138,28 @@ export async function findUserBySocialAccount(provider, providerUserId) {
   return account?.user ?? null;
 }
 
+// 이 사람에게 그 제공자의 소셜 계정이 이어져 있는가 — 한 사람에게 제공자마다 하나라 (사람, 제공자)로 찾는다.
+export async function hasSocialAccount(userId, provider) {
+  const account = await prisma.socialAccount.findUnique({
+    where: { userId_provider: { userId, provider } },
+    select: { id: true },
+  });
+
+  return account !== null;
+}
+
 // 사람에게 소셜 계정을 잇는다 — 사람은 그대로 두고 social_accounts 에 한 행을 넣는다.
 export async function addSocialAccount(userId, { provider, id }) {
-  await prisma.socialAccount.create({ data: { userId, provider, providerUserId: id } });
+  try {
+    await prisma.socialAccount.create({ data: { userId, provider, providerUserId: id } });
+  } catch (error) {
+    // 확인한 뒤 넣기 전에 다른 요청이 먼저 넣었으면 UNIQUE 제약이 막는다 — 제약 이름으로 어느 쪽인지 구분한다.
+    if (error.code === 'P2002') {
+      const code = LINK_TAKEN_BY_INDEX[error.meta.driverAdapterError.cause.constraint.index];
+      if (code) throw new ConflictError(code);
+    }
+    throw error;
+  }
 }
 
 // 소셜 로그인으로 처음 온 사람을 만든다 — 사람과 소셜 계정을 함께 넣는다(둘 다 들어가거나 둘 다 안 들어간다).

@@ -2,7 +2,7 @@
 import * as userService from './userService.js';
 import * as sessionService from './sessionService.js';
 import * as tokenService from './tokenService.js';
-import { UnauthorizedError } from '../errors.js';
+import { ConflictError, UnauthorizedError } from '../errors.js';
 import { PHONE } from '../schemas/authSchema.js';
 
 // 가입 — 연락처가 휴대폰 번호 모양이면 phone 에, 아니면 email 에 넣는다.
@@ -45,6 +45,10 @@ export async function linkSocialAccount(userId, { provider, id }) {
   const owner = await userService.findUserBySocialAccount(provider, id);
 
   if (owner?.id === userId) return;
+  // 다른 사람에게 이어진 소셜 계정은 잇지 않는다 — 그 계정으로 로그인하면 그 사람이 되는 계정이다.
+  if (owner) throw new ConflictError('SOCIAL_ACCOUNT_TAKEN');
+  // 한 사람에게 제공자마다 계정 하나 — 카카오가 이미 있는 사람에게 다른 카카오 계정은 잇지 않는다.
+  if (await userService.hasSocialAccount(userId, provider)) throw new ConflictError('PROVIDER_ALREADY_LINKED');
 
   await userService.addSocialAccount(userId, { provider, id });
 }
