@@ -1,0 +1,27 @@
+# 브라우저로 로그인한 뒤 labSession 쿠키 값을 복사해 아래 COPIED_SESSION 자리에 넣는다
+@session = COPIED_SESSION
+
+### 내 로그인 방법
+# @no-cookie-jar
+GET http://localhost:4002/me/login-methods
+Cookie: labSession={{session}}
+
+### 톡 연결 끊기
+# @no-cookie-jar
+DELETE http://localhost:4002/me/social-accounts/talk
+Cookie: labSession={{session}}
+
+### 톡 연결 한 번 더 끊기
+# @no-cookie-jar
+DELETE http://localhost:4002/me/social-accounts/talk
+Cookie: labSession={{session}}
+
+### 인가 서버 연결 끊기
+# @no-cookie-jar
+DELETE http://localhost:4002/me/social-accounts/lab
+Cookie: labSession={{session}}
+
+### 다시 내 로그인 방법
+# @no-cookie-jar
+GET http://localhost:4002/me/login-methods
+Cookie: labSession={{session}}
