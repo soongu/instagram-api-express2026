@@ -206,14 +206,19 @@ export async function getLoginMethods(userId) {
 // 소셜 계정 연결을 끊는다 — 이 사람의 그 제공자 행만 지운다. 지울 행이 없으면 404.
 // 비밀번호도 없고 이어진 소셜 계정이 그것 하나뿐이면 끊지 않는다 — 끊는 순간 이 사람은 들어올 방법이 없다.
 export async function unlinkSocialAccount(userId, provider) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { passwordHash: true, socialAccounts: { select: { provider: true } } },
+  await prisma.$transaction(async (tx) => {
+    // 같은 사람의 끊기 요청이 동시에 와도 한 번에 하나씩 세고 지우게, 그 사람 행을 먼저 잠근다 — 다른 요청은 이 트랜잭션이 끝날 때까지 기다린다.
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true, socialAccounts: { select: { provider: true } } },
+    });
+    const providers = user?.socialAccounts.map((account) => account.provider) ?? [];
+
+    if (!providers.includes(provider)) throw new NotFoundError('SOCIAL_ACCOUNT_NOT_FOUND');
+    if (user.passwordHash === null && providers.length === 1) throw new ConflictError('LAST_LOGIN_METHOD');
+
+    await tx.socialAccount.deleteMany({ where: { userId, provider } });
   });
-  const providers = user?.socialAccounts.map((account) => account.provider) ?? [];
-
-  if (!providers.includes(provider)) throw new NotFoundError('SOCIAL_ACCOUNT_NOT_FOUND');
-  if (user.passwordHash === null && providers.length === 1) throw new ConflictError('LAST_LOGIN_METHOD');
-
-  await prisma.socialAccount.deleteMany({ where: { userId, provider } });
 }
