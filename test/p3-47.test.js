@@ -547,7 +547,7 @@ export async function socialCallback(req, res) {
   setTokenCookies(res, tokens);
   res.clearCookie('oauth_next', { path: tempCookie.path });
   res.redirect(safeNextPath(req.cookies.oauth_next));
-}`, `// 제공자에게 다녀온 사람(req.user)에게 로그인을 준다 — 비밀번호 로그인과 같은 로그인 기록, 같은 쿠키 둘.
+}`, `// 제공자에게 다녀온 사람(req.user)을 로그인시킨다 — 비밀번호 로그인과 같은 로그인 기록을 남기고, 같은 쿠키 둘을 준다.
 // 브라우저가 문서로 연 주소라 JSON 대신 보던 곳으로 보낸다.
 export function socialCallback(provider) {
   const nextCookie = \`oauth_next_\${provider}\`;
@@ -800,7 +800,7 @@ export function createSocialStrategy({ provider, authorizationURL, tokenURL, cli
 
       if (!response.ok) throw new Error(\`사용자 정보를 받지 못했어요 (\${provider} · \${response.status})\`);
 
-      // 응답을 우리 이름(id · email · emailVerified · name)으로 맞추는 일은 제공자마다 달라서 toProfile 이 한다.
+      // 응답을 우리가 정한 이름(id · email · emailVerified · name)으로 맞추는 일은 제공자마다 달라서 toProfile 이 한다.
       done(null, { provider, ...toProfile(await response.json()) });
     } catch (error) {
       done(error);
@@ -822,7 +822,7 @@ export const googleStrategy = createSocialStrategy({
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   scope: ['email', 'profile'],
   userInfoURL: 'https://openidconnect.googleapis.com/v1/userinfo',
-  // 구글이 준 사용자 정보를 우리 이름으로 맞춘다 — id 는 구글이 그 계정에 매긴, 바뀌지 않는 값(sub)이다.
+  // 구글이 준 사용자 정보를 우리가 정한 이름으로 맞춘다 — id 는 구글이 그 계정에 매긴, 바뀌지 않는 값(sub)이다.
   toProfile: (info) => ({
     id: info.sub,
     email: info.email,
