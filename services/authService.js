@@ -39,6 +39,16 @@ export async function findOrCreateSocialUser(profile) {
   return user ?? userService.createSocialUser(profile);
 }
 
+// 연결 — 로그인한 사람에게 소셜 계정(어느 제공자의 누구)을 잇는다. 이미 이 사람에게 이어져 있으면 할 일이 없다(다시 눌러도 성공).
+// 이메일은 건드리지 않는다 — 연결은 로그인 방법을 더하는 일이지 프로필을 바꾸는 일이 아니다.
+export async function linkSocialAccount(userId, { provider, id }) {
+  const owner = await userService.findUserBySocialAccount(provider, id);
+
+  if (owner?.id === userId) return;
+
+  await userService.addSocialAccount(userId, { provider, id });
+}
+
 // 새 토큰 받기 — Refresh 토큰을 새것으로 바꾸고, 그 사람을 다시 찾아 «지금» 역할로 Access 토큰을 만든다.
 // 사람을 지우면 그 사람의 기록도 함께 지워지니(Cascade), 기록이 있으면 사람도 있다.
 export async function reissue(refreshToken) {

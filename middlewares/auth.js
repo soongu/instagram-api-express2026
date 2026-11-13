@@ -30,6 +30,8 @@ export function requireLogin(req, res, next) {
   res.locals.userId = Number(payload.sub);
   // 역할도 토큰에서 꺼낸다 — 역할을 담기 전에 만든 토큰이면 undefined 라 관리자가 아니다.
   res.locals.role = payload.role;
+  // 어느 로그인 기록으로 들어온 요청인지도 담아 둔다 — 소셜 계정을 이을 때 떠날 때와 돌아올 때가 같은 로그인인지 확인한다.
+  res.locals.sessionId = payload.sid;
   next();
 }
 
