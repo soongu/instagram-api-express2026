@@ -1,0 +1,11 @@
+### 1번 공지
+GET http://localhost:4006/api/notices/1
+
+### 없는 9번 공지
+GET http://localhost:4006/api/notices/9
+
+### 1번 공지 조회 수 남기기
+POST http://localhost:4006/api/notices/1/views
+
+### 3번 공지 조회 수 남기기
+POST http://localhost:4006/api/notices/3/views
