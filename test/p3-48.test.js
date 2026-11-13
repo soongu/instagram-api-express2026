@@ -449,6 +449,25 @@ describe('축 ② Step 2 — verify 함수에서 «사람 정하기» 를 뗀다
   }, 120_000);
 });
 
+/** 두 글의 다른 줄 — `diff` 가 지운 줄(`<`)과 더한 줄(`>`)을 차례대로 돌려준다. */
+const diffLines = (a, b) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p348-diff-'));
+  dirs.push(dir);
+  writeFileSync(join(dir, 'a'), a);
+  writeFileSync(join(dir, 'b'), b);
+  let out = '';
+  try {
+    out = execFileSync('diff', ['a', 'b'], { cwd: dir, encoding: 'utf8' });
+  } catch (error) {
+    if (error.status !== 1) throw error;
+    out = error.stdout;
+  }
+  const lines = out.split('\n');
+  return {
+    removed: lines.filter((l) => l.startsWith('< ') || l === '<').map((l) => l.slice(2)),
+    added: lines.filter((l) => l.startsWith('> ') || l === '>').map((l) => l.slice(2)),
+  };
+};
 /** 두 판 사이에 바뀐 학생 파일. */
 const changedStudentFiles = (from, to) => execFileSync('git', ['diff', '--name-only', from, ...(to ? [to] : []), '--', ...STUDENT_FILES], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').filter(Boolean);
 
@@ -1019,11 +1038,478 @@ describe('축 ⑧ 학생 파일 차이 — code/p3-47 에서 Step 마다', () =>
     seen.changedFiles = changed;
   });
 
-  it('🔴 학생 파일에 내부 어휘가 없다 — 게이트 · 판정 · TDD · Step 번호 · 회차 번호', () => {
-    const files = changedStudentFiles('code/p3-47', stepRef(7)).concat(['lab/p3-48/unlink-race.js']);
+  it('🔴 학생 파일에 내부 어휘가 없다 — 게이트 · 판정 · TDD · Step 번호 · 회차 번호(경로 lab/p3-48/ 는 빼고)', () => {
+    const labs = execFileSync('git', ['ls-tree', '--name-only', LINE, 'lab/p3-48/'], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n');
+    expect(labs.length).toBeGreaterThanOrEqual(10);
+    const files = changedStudentFiles('code/p3-47', LINE).concat(labs);
     for (const rel of files) {
-      const text = showAt(stepRef(7), rel);
+      const text = showAt(LINE, rel);
       expect([rel, /게이트|판정|TDD|Step \d|p3-\d\d/.test(text.replace(/lab\/p3-48\//g, ''))]).toEqual([rel, false]);
     }
+  });
+});
+
+// ── 축 ⑨ 실습·과제(lab/p3-48) ──────────────────────────────────────────────────
+// 실습 파일은 이 회차 북마크가 생기면 북마크에서, 아직 없으면 main 에서 읽는다(작업트리가 아니다).
+// 짓는 동안 `P348_LAB_WT=1` 을 주면 작업트리에서 읽는다.
+// 🔑 4001·4002·4003 은 남이 쓸 수 있어서 직접 띄우지 않는다 — 사본의 글자만 바꿔 띄운다
+//    (톡 서버 4003→3994 · 실습용 인가 서버 4001→3995 · 서비스 4002→3996 — 등록한 돌아올 주소 · 알림 주소 · listen 모두).
+const TALK_PORT = 3994;
+const LAB_AS_PORT = 3995;
+const LAB_PORT = 3996;
+const LAB_BASE = `http://localhost:${LAB_PORT}`;
+const TALK_BASE = `http://localhost:${TALK_PORT}`;
+const LAB_REF = hasRef('refs/heads/code/p3-48') ? 'code/p3-48' : 'main';
+const LAB_WT = process.env.P348_LAB_WT === '1';
+const labFile = (rel) => (LAB_WT ? read(P(rel)) : showAt(LAB_REF, rel));
+const LAB = (name) => labFile(`lab/p3-48/${name}`);
+const SNAP = (name) => labFile(`snapshots/p3-48.${name}`);
+/** 글자를 모두 바꾼다 — 바꿀 글자가 없으면 던진다. */
+const swapAll = (text, pairs, what) => pairs.reduce((out, [a, b]) => {
+  if (!out.includes(a)) throw new Error(`${what} 에 바꿀 글자가 없다: ${a}`);
+  return out.replaceAll(a, b);
+}, text);
+const PORT_PAIRS = { 4001: String(LAB_AS_PORT), 4002: String(LAB_PORT), 4003: String(TALK_PORT) };
+/** 사본의 실습 포트를 판정 포트로 바꾼다 — `ports` 에 적은 포트는 반드시 있어야 한다. */
+const toLabPorts = (text, what, ports) => swapAll(text, ports.map((port) => [String(port), PORT_PAIRS[port]]), what);
+/** 사본의 한 덩어리를 바꾼다 — 바꿀 글자가 없거나 여럿이면 던진다(틀린 판을 만들 때). */
+const edit1 = (text, a, b) => {
+  if (text.split(a).length !== 2) throw new Error(`바꿀 글자가 없거나 여럿이다: ${a}`);
+  return text.replace(a, b);
+};
+const labSeen = {};
+seen.labs = labSeen;
+
+/** 실습 파일을 학생 폴더 모양의 사본에 놓고 `node lab/p3-48/…` 로 띄운다. */
+const bootLab = (rel, source, port) => {
+  const dir = studentDir(stepDir(7), (d) => {
+    mkdirSync(join(d, rel, '..'), { recursive: true });
+    writeFileSync(join(d, rel), source);
+  });
+  return boot(join(dir, rel), { port, cwd: dir, env, ready: `${port}번 포트에서` });
+};
+const withService = async (file, source, fn) => {
+  const srv = await bootLab(`lab/p3-48/${file}`, toLabPorts(source, file, [4001, 4002, 4003]), LAB_PORT);
+  try {
+    return await fn({ ...srv, base: LAB_BASE });
+  } finally {
+    await stop(srv);
+  }
+};
+/** DB 를 쓰는 실습 스크립트를 학생 폴더 모양의 사본에서 돌린다(`node --env-file=.env lab/p3-48/…` 와 같게 환경을 준다). */
+const runDbScript = (file, source) => {
+  const dir = studentDir(stepDir(7), (d) => {
+    mkdirSync(join(d, 'lab/p3-48'), { recursive: true });
+    writeFileSync(join(d, `lab/p3-48/${file}`), source);
+  });
+  return execFileAsync(process.execPath, [`lab/p3-48/${file}`], { cwd: dir, encoding: 'utf8', env: { ...process.env, ...env } })
+    .then(({ stdout }) => stdout, (error) => `${error.stdout}${error.stderr}`);
+};
+const httpyacLab = (file, source) => httpyac(file, toLabPorts(source, file, [4002]));
+const nodeCheck = (source) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p348-check-'));
+  dirs.push(dir);
+  writeFileSync(join(dir, 'file.js'), source);
+  writeFileSync(join(dir, 'package.json'), '{"type":"module"}');
+  execFileSync(process.execPath, ['--check', 'file.js'], { cwd: dir, stdio: 'pipe' });
+};
+
+/** 실습용 인가 서버의 동의 화면에서 아이디·비밀번호를 넣고 누른다 — 돌아올 주소(경로 + 쿼리)를 돌려준다. */
+const consentLab = async (started, username) => {
+  const auth = new URL(started.location);
+  const form = new URLSearchParams([...auth.searchParams, ['username', username], ['password', `${username}1234`], ['decision', 'allow']]);
+  const res = await fetch(`${auth.origin}/authorize`, { method: 'POST', body: form, redirect: 'manual' });
+  const back = new URL(res.headers.get('location'));
+  expect(back.origin).toBe(LAB_BASE);
+  return `${back.pathname}${back.search}`;
+};
+/** 톡의 동의 화면에서 계정을 고르고 «허용» 을 누른다(닉네임 · 이메일 제공을 켠 채). */
+const consentTalk = async (started, account) => {
+  const auth = new URL(started.location);
+  const fields = [...auth.searchParams, ['account', account], ['decision', 'allow'], ['nickname', 'yes'], ['email', 'yes']];
+  const res = await fetch(`${auth.origin}/oauth/authorize`, { method: 'POST', body: new URLSearchParams(fields), redirect: 'manual' });
+  const back = new URL(res.headers.get('location'));
+  expect(back.origin).toBe(LAB_BASE);
+  return `${back.pathname}${back.search}`;
+};
+/** 한 탭으로 한 바퀴 — `path` 는 시작 주소(/login · /talk · /talk/link). 시작이 제공자로 가지 않으면 그 응답을 돌려준다. */
+const labGo = async (tab, path, who) => {
+  const started = await tab.get(path);
+  if (!started.location?.startsWith('http')) return [started.status, started.location];
+  const back = path === '/login' ? await consentLab(started, who) : await consentTalk(started, who);
+  const res = await tab.get(back);
+  return [res.status, res.location];
+};
+const meOf = async (tab) => (await tab.get('/me')).body;
+const membersOf = async (base) => Object.fromEntries((await browser(base).get('/members')).body.map((m) => [m.id, m.providers]));
+/** 톡 계정 페이지에서 «연결 끊기» 를 누른다 — 결과 화면의 글자를 돌려준다. */
+const unlinkAtTalk = async (account) => (await fetch(`${TALK_BASE}/account/apps/lab-talk/unlink`, { method: 'POST', body: new URLSearchParams({ account }) })).text();
+
+describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 띄운 채', () => {
+  let talk;
+  let authServer;
+  beforeAll(async () => {
+    talk = await bootLab('lab/p3-48/talk-server.js', toLabPorts(LAB('talk-server.js'), 'talk-server.js', [4002, 4003]), TALK_PORT);
+    authServer = await bootLab('lab/p3-21/auth-server.js', toLabPorts(showAt('code/p3-47', 'lab/p3-21/auth-server.js'), 'auth-server.js', [4001, 4002]), LAB_AS_PORT);
+  }, 30_000);
+  afterAll(async () => {
+    if (talk) await stop(talk);
+    if (authServer) await stop(authServer);
+  });
+
+  describe('직접 해보기 1 — 톡 연결하기', () => {
+    it('🔴 시작 파일은 지난 과제(lab/p3-47/homework1.js) 정답을 복사한 것 — 첫 줄 경로 · 1번 dahye 가 인가 서버의 dahye(10003)로 로그인하는 한 줄과 그 주석만 다르다', () => {
+      const start = SNAP('practice1-start.practice1.js');
+      const { removed, added } = diffLines(showAt('code/p3-47', 'lab/p3-47/homework1.js'), start);
+      expect(removed).toEqual([
+        '// ~/instagram-api/lab/p3-47/homework1.js',
+        '// 1번 dahye 는 이메일로 먼저 가입해 둔 회원이고, 2번 소라는 톡으로 먼저 가입해 둔 회원이다.',
+        "const socialAccounts = [{ provider: 'talk', providerUserId: '10001', memberId: 2 }];",
+      ]);
+      expect(added).toEqual([
+        '// ~/instagram-api/lab/p3-48/practice1.js',
+        '// 1번 dahye 는 이메일로 먼저 가입해 둔 회원이고(인가 서버의 dahye 로 로그인한다), 2번 소라는 톡으로 먼저 가입해 둔 회원이다.',
+        'const socialAccounts = [',
+        "  { provider: 'lab', providerUserId: '10003', memberId: 1 },",
+        "  { provider: 'talk', providerUserId: '10001', memberId: 2 },",
+        '];',
+      ]);
+      nodeCheck(start);
+      nodeCheck(LAB('practice1.js'));
+    });
+
+    /** 확인 절차 — 인가 서버 dahye 로그인 → 톡 연결(dahye) → 회원 목록 → 톡 dahye 로 로그인 → 로그인하지 않고 연결 시작. */
+    const observe = (source) => withService('practice1.js', source, async ({ base }) => {
+      const tab = browser(base);
+      const got = {};
+      got.labLogin = await labGo(tab, '/login', 'dahye');
+      got.meBefore = await meOf(tab);
+      got.link = await labGo(tab, '/talk/link', 'dahye');
+      got.members = await membersOf(base);
+      got.talkLogin = await labGo(tab, '/talk', 'dahye');
+      got.meAfter = await meOf(tab);
+      got.noLogin = await labGo(browser(base), '/talk/link', 'dahye');
+      got.memberCount = Object.keys(await membersOf(base)).length;
+      return got;
+    });
+    const RIGHT = {
+      labLogin: [302, '/me'],
+      meBefore: { id: 1, nickname: 'dahye', email: 'dahye@example.com' },
+      link: [302, '/members'],
+      members: { 1: ['lab', 'talk'], 2: ['talk'] },
+      talkLogin: [302, '/me'],
+      meAfter: { id: 1, nickname: 'dahye', email: 'dahye@example.com' },
+      noLogin: [302, '/?error=LOGIN_REQUIRED'],
+      memberCount: 2,
+    };
+    const wrongKeys = (got) => Object.keys(RIGHT).filter((key) => JSON.stringify(got[key]) !== JSON.stringify(RIGHT[key]));
+
+    it('🔴 정답 — 연결하면 /members 에서 1번이 lab · talk · 그 뒤 톡의 dahye 로 로그인하면 /me 에 1번(지난 과제의 «이미 가입한 이메일이에요» 가 사라진다) · 로그인하지 않으면 /?error=LOGIN_REQUIRED', async () => {
+      const got = await observe(LAB('practice1.js'));
+      expect(got).toEqual(RIGHT);
+      labSeen.practice1 = got;
+    }, 60_000);
+
+    it('🔴 시작 파일 — 톡의 dahye 로그인은 /?error=EMAIL_TAKEN(지난 과제 그대로) · /talk/link 는 없는 주소', async () => {
+      await withService('practice1.js', SNAP('practice1-start.practice1.js'), async ({ base }) => {
+        expect(await labGo(browser(base), '/talk', 'dahye')).toEqual([302, '/?error=EMAIL_TAKEN']);
+        const tab = browser(base);
+        expect(await labGo(tab, '/login', 'dahye')).toEqual([302, '/me']);
+        expect((await meOf(tab)).id).toBe(1);
+        expect((await tab.get('/talk/link')).status).toBe(404);
+      });
+    }, 60_000);
+
+    it('🔴 틀린 판 (가) — 연결 표시 쿠키를 어디서도 지우지 않으면 다음 톡 로그인도 연결로 처리돼 /members 로 간다', async () => {
+      const wrong = LAB('practice1.js').replace("  res.clearCookie('lab_link_talk');\n\n  // 떠날 때와", '\n  // 떠날 때와').replace("app.get('/talk', (req, res, next) => {\n  res.clearCookie('lab_link_talk');\n  next();\n}, ", "app.get('/talk', ");
+      expect(wrong.match(/clearCookie\('lab_link_talk'\)/g)).toBeNull();
+      const got = await observe(wrong);
+      expect(got.talkLogin).toEqual([302, '/members']);
+      expect(wrongKeys(got)).toContain('talkLogin');
+    }, 60_000);
+
+    it('🔴 틀린 판 (나) — verify 가 여전히 회원을 찾거나 만들면 톡 연결이 /?error=EMAIL_TAKEN', async () => {
+      const wrong = edit1(LAB('practice1.js'), '    (accessToken, refreshToken, profile, done) => done(null, profile),\n', '    (accessToken, refreshToken, profile, done) => {\n      try {\n        findOrCreateMember(profile);\n        done(null, profile);\n      } catch (error) {\n        done(error);\n      }\n    },\n');
+      const got = await observe(wrong);
+      expect(got.link).toEqual([302, '/?error=EMAIL_TAKEN']);
+      expect(wrongKeys(got)).toContain('link');
+    }, 60_000);
+
+    it('🔴 틀린 판 (다) — 연결하면서 새 로그인 기록을 만들면(startSession) /members 가 아니라 /me 로 간다', async () => {
+      const wrong = edit1(LAB('practice1.js'), "  if (!linked) socialAccounts.push({ provider, providerUserId: id, memberId });\n\n  res.redirect('/members');", "  if (!linked) socialAccounts.push({ provider, providerUserId: id, memberId });\n\n  startSession(req, res);");
+      const got = await observe(wrong);
+      expect(got.link).toEqual([302, '/me']);
+      expect(wrongKeys(got)).toContain('link');
+    }, 60_000);
+  });
+
+  describe('직접 해보기 2 — 로그인 방법 목록 · 끊기 · 마지막 로그인 방법', () => {
+    it('🔴 시작 파일은 직접 해보기 1 정답을 복사한 것 — 첫 줄 경로만 다르다', () => {
+      expect(SNAP('practice2-start.practice2.js')).toBe(LAB('practice1.js').replace('// ~/instagram-api/lab/p3-48/practice1.js\n', '// ~/instagram-api/lab/p3-48/practice2.js\n'));
+    });
+
+    /** 확인 절차 — dahye(인가 서버 + 톡 연결)의 .http 다섯 요청 · 인가 서버 로그인 · 소라 409 · 없는 제공자 404 · 로그인 없이 401 · 회원 목록. */
+    const observe = (source) => withService('practice2.js', source, async ({ base }) => {
+      const tab = browser(base);
+      await labGo(tab, '/login', 'dahye');
+      await labGo(tab, '/talk/link', 'dahye');
+      const http = LAB('practice2.http').replace('@session = COPIED_SESSION', `@session = ${tab.cookie('labSession')}`);
+      const out = await httpyacLab('practice2.http', http);
+      const got = {};
+      got.http = out.match(/^HTTP\/1\.1 (\d+)/gm)?.map((line) => Number(line.slice(9)));
+      got.bodies = [...out.matchAll(/^\{\s*"providers": \[[^\]]*\]\s*\}$/gm)].map((m) => JSON.stringify(JSON.parse(m[0])));
+      got.labAgain = await labGo(browser(base), '/login', 'dahye');
+      const sora = browser(base);
+      await labGo(sora, '/talk', 'sora');
+      const soraRes = await sora.del('/me/social-accounts/talk');
+      got.sora = [soraRes.status, soraRes.body];
+      const kakao = await tab.del('/me/social-accounts/kakao');
+      got.kakao = [kakao.status, kakao.body];
+      got.noLogin = (await browser(base).del('/me/social-accounts/talk')).status;
+      got.members = await membersOf(base);
+      return got;
+    });
+    const RIGHT = {
+      http: [200, 200, 404, 409, 200],
+      bodies: ['{"providers":["lab","talk"]}', '{"providers":["lab"]}'],
+      labAgain: [302, '/me'],
+      sora: [409, { message: '마지막 로그인 방법은 끊을 수 없어요' }],
+      kakao: [404, { message: '연결된 소셜 계정이 없어요' }],
+      noLogin: 401,
+      members: { 1: ['lab'], 2: ['talk'] },
+    };
+    const wrongKeys = (got) => Object.keys(RIGHT).filter((key) => JSON.stringify(got[key]) !== JSON.stringify(RIGHT[key]));
+
+    it('🔴 practice2.http — 요청 다섯 · 자리표시 COPIED_SESSION · # @no-cookie-jar', () => {
+      const http = LAB('practice2.http');
+      expect(http.split('\n').filter((line) => line.startsWith('### '))).toEqual(['### 내 로그인 방법', '### 톡 연결 끊기', '### 톡 연결 한 번 더 끊기', '### 인가 서버 연결 끊기', '### 다시 내 로그인 방법']);
+      expect(http.match(/^# @no-cookie-jar$/gm)).toHaveLength(5);
+    });
+
+    it('🔴 정답 — .http 200 · 200 · 404 · 409 · 200 · 톡을 끊어도 인가 서버로는 로그인 · 소라 409 · 없는 제공자 404 · 로그인 없이 401 · 소라의 톡은 그대로', async () => {
+      const got = await observe(LAB('practice2.js'));
+      labSeen.practice2Http = got.http;
+      expect(got).toEqual(RIGHT);
+      labSeen.practice2 = got;
+    }, 60_000);
+
+    it('🔴 틀린 판 — 하나 남았을 때가 아니라 둘 남았을 때부터 막으면(<= 2) dahye 의 톡 끊기가 409', async () => {
+      const got = await observe(edit1(LAB('practice2.js'), '  if (providersOf(memberId).length === 1) {', '  if (providersOf(memberId).length <= 2) {'));
+      expect(got.http).toEqual([200, 409, 409, 409, 200]);
+      expect(wrongKeys(got)).toContain('http');
+    }, 60_000);
+
+    it('🔴 틀린 판 — 마지막 로그인 방법 검사가 없으면 소라가 200', async () => {
+      const got = await observe(edit1(LAB('practice2.js'), "  if (providersOf(memberId).length === 1) {\n    res.status(409).json({ message: '마지막 로그인 방법은 끊을 수 없어요' });\n    return;\n  }\n\n", ''));
+      expect(got.sora[0]).toBe(200);
+      expect(wrongKeys(got)).toEqual(expect.arrayContaining(['sora', 'members']));
+    }, 60_000);
+
+    it('🔴 틀린 판 — 제공자 이름으로만 찾으면 dahye 가 소라의 톡을 지운다(회원 목록이 가린다)', async () => {
+      const got = await observe(edit1(LAB('practice2.js'), 'socialAccounts.findIndex((account) => account.memberId === memberId && account.provider === req.params.provider)', 'socialAccounts.findIndex((account) => account.provider === req.params.provider)'));
+      expect(wrongKeys(got)).toContain('members');
+    }, 60_000);
+  });
+
+  describe('직접 해보기 3 — 마지막 관리자 지키기(동시 요청)', () => {
+    const OK = ['관리자 1 내리기: 내렸어요', '관리자 2 내리기: 마지막 관리자라 내리지 않았어요'];
+    /** 스크립트를 n 번 돌려 결과(마지막 줄 · 두 줄의 차례 없는 모양)를 센다 · 끝나면 사람 수와 admin.hong 역할이 그대로인지. */
+    const runs = async (source, n) => {
+      const tally = {};
+      for (let i = 0; i < n; i += 1) {
+        const out = await runDbScript('practice3.js', source);
+        const lines = out.trimEnd().split('\n');
+        const key = `${lines.slice(0, 2).map((line) => line.replace(/^관리자 \d /, '')).sort().join(' / ')} → ${lines[2]}`;
+        tally[key] = (tally[key] ?? 0) + 1;
+      }
+      return tally;
+    };
+    const guard = async (fn) => {
+      await freshGate(stepDir(7));
+      await gate("INSERT INTO users (username, role) VALUES ('admin.hong', 'ADMIN')");
+      const users = await count('users');
+      const result = await fn();
+      expect(await count('users')).toBe(users);
+      expect((await gate("SELECT role FROM users WHERE username = 'admin.hong'"))[0].role).toBe('ADMIN');
+      return result;
+    };
+
+    it('🔴 시작 파일(세고 내리기) — 10번 모두 둘 다 내려 0명 · 정답 — 10번 모두 하나만 내려 1명 · 시험용 사람만 다루고 admin.hong 은 그대로', async () => {
+      nodeCheck(SNAP('practice3-start.practice3.js'));
+      const before = await guard(() => runs(SNAP('practice3-start.practice3.js'), 10));
+      expect(before).toEqual({ '내리기: 내렸어요 / 내리기: 내렸어요 → 남은 시험용 관리자: 0명': 10 });
+      const after = await guard(() => runs(LAB('practice3.js'), 10));
+      expect(after).toEqual({ '내리기: 내렸어요 / 내리기: 마지막 관리자라 내리지 않았어요 → 남은 시험용 관리자: 1명': 10 });
+      const sample = await guard(() => runDbScript('practice3.js', LAB('practice3.js')));
+      labSeen.practice3 = { before, after, sample, startSample: await guard(() => runDbScript('practice3.js', SNAP('practice3-start.practice3.js'))) };
+      expect(OK.map((line) => line.replace(/^관리자 \d /, '')).sort()).toEqual(['내리기: 내렸어요', '내리기: 마지막 관리자라 내리지 않았어요']);
+    }, 120_000);
+
+    it('🔴 정답은 시작 파일에서 demote 하나만 바뀐다 — 트랜잭션 + FOR UPDATE', () => {
+      const { removed, added } = diffLines(SNAP('practice3-start.practice3.js'), LAB('practice3.js'));
+      expect(removed).toContain('  const admins = await prisma.user.count({ where: { role: \'ADMIN\', username: { startsWith: PREFIX } } });');
+      expect(added).toContain('    const admins = await tx.$queryRaw`SELECT id FROM users WHERE role = \'ADMIN\' AND username LIKE ${`${PREFIX}%`} FOR UPDATE`;');
+    });
+
+    it('🔴 틀린 판 둘 — 트랜잭션만(FOR UPDATE 없이 세기) · 내릴 사람 행 하나만 잠그기 — 둘 다 0명이 나온다', async () => {
+      const txOnly = edit1(LAB('practice3.js'), "    const admins = await tx.$queryRaw`SELECT id FROM users WHERE role = 'ADMIN' AND username LIKE ${`${PREFIX}%`} FOR UPDATE`;\n\n    if (admins.length <= 1)", "    const admins = await tx.user.count({ where: { role: 'ADMIN', username: { startsWith: PREFIX } } });\n\n    if (admins <= 1)");
+      const oneRow = edit1(LAB('practice3.js'), "    const admins = await tx.$queryRaw`SELECT id FROM users WHERE role = 'ADMIN' AND username LIKE ${`${PREFIX}%`} FOR UPDATE`;\n\n    if (admins.length <= 1)", "    await tx.$queryRaw`SELECT id FROM users WHERE id = ${id} FOR UPDATE`;\n    const admins = await tx.user.count({ where: { role: 'ADMIN', username: { startsWith: PREFIX } } });\n\n    if (admins <= 1)");
+      const a = await guard(() => runs(txOnly, 10));
+      const b = await guard(() => runs(oneRow, 10));
+      expect(a['내리기: 내렸어요 / 내리기: 내렸어요 → 남은 시험용 관리자: 0명']).toBeGreaterThan(0);
+      expect(b['내리기: 내렸어요 / 내리기: 내렸어요 → 남은 시험용 관리자: 0명']).toBeGreaterThan(0);
+      labSeen.practice3Wrong = { txOnly: a, oneRow: b };
+    }, 120_000);
+  });
+
+  describe('과제 [기초] — 연결 거절 둘', () => {
+    it('🔴 시작 파일은 직접 해보기 2 정답을 복사한 것 — 첫 줄 경로만 다르다', () => {
+      expect(SNAP('homework1-start.homework1.js')).toBe(LAB('practice2.js').replace('// ~/instagram-api/lab/p3-48/practice2.js\n', '// ~/instagram-api/lab/p3-48/homework1.js\n'));
+    });
+
+    /** 확인 절차 — dahye 가 소라의 톡 · 자기 톡 · 하루의 톡 · 자기 톡 다시 · 소라 로그인 · 회원 목록. */
+    const observe = (source) => withService('homework1.js', source, async ({ base }) => {
+      const tab = browser(base);
+      await labGo(tab, '/login', 'dahye');
+      const got = {};
+      got.soraTalk = await labGo(tab, '/talk/link', 'sora');
+      got.afterSora = await membersOf(base);
+      got.ownTalk = await labGo(tab, '/talk/link', 'dahye');
+      got.haruTalk = await labGo(tab, '/talk/link', 'haru');
+      got.ownAgain = await labGo(tab, '/talk/link', 'dahye');
+      const sora = browser(base);
+      got.soraLogin = await labGo(sora, '/talk', 'sora');
+      got.soraMe = (await meOf(sora)).id;
+      got.members = await membersOf(base);
+      return got;
+    });
+    const RIGHT = {
+      soraTalk: [302, '/?error=SOCIAL_ACCOUNT_TAKEN'],
+      afterSora: { 1: ['lab'], 2: ['talk'] },
+      ownTalk: [302, '/members'],
+      haruTalk: [302, '/?error=PROVIDER_ALREADY_LINKED'],
+      ownAgain: [302, '/members'],
+      soraLogin: [302, '/me'],
+      soraMe: 2,
+      members: { 1: ['lab', 'talk'], 2: ['talk'] },
+    };
+    const wrongKeys = (got) => Object.keys(RIGHT).filter((key) => JSON.stringify(got[key]) !== JSON.stringify(RIGHT[key]));
+
+    it('🔴 정답 — 소라의 톡 계정을 dahye 가 이으면 거절 · 자기 톡은 이어지고 · 하루의 톡(둘째)은 거절 · 다시 이어도 성공 · 소라는 여전히 2번', async () => {
+      const got = await observe(LAB('homework1.js'));
+      expect(got).toEqual(RIGHT);
+      labSeen.homework1 = got;
+    }, 60_000);
+
+    it('🔴 homework1.http — 회원 목록 200 · 로그인 없이 내 로그인 방법 401', async () => {
+      const http = LAB('homework1.http');
+      await withService('homework1.js', LAB('homework1.js'), async () => {
+        const out = await httpyacLab('homework1.http', http);
+        expect(out).toContain('2 requests processed (2 succeeded)');
+        expect(out.match(/^HTTP\/1\.1 (\d+)/gm)).toEqual(['HTTP/1.1 200', 'HTTP/1.1 401']);
+      });
+    }, 60_000);
+
+    it('🔴 틀린 판 — 거절하지 않고 덮어쓰면(그 톡 계정을 dahye 에게 옮기면) 소라가 톡으로 1번이 된다', async () => {
+      const got = await observe(edit1(LAB('homework1.js'), "  if (owner) {\n    res.redirect('/?error=SOCIAL_ACCOUNT_TAKEN');\n    return;\n  }\n", "  if (owner) {\n    owner.memberId = memberId;\n    res.redirect('/members');\n    return;\n  }\n"));
+      expect(got.soraMe).toBe(1);
+      expect(wrongKeys(got)).toEqual(expect.arrayContaining(['soraTalk', 'soraMe']));
+    }, 60_000);
+
+    it('🔴 틀린 판 — 시작 파일(거절 없음) 그대로면 소라의 톡이 dahye 에게도 이어진 것처럼 보인다', async () => {
+      const got = await observe(SNAP('homework1-start.homework1.js'));
+      expect(got.soraTalk).toEqual([302, '/members']);
+      expect(wrongKeys(got)).toEqual(expect.arrayContaining(['soraTalk', 'afterSora']));
+    }, 60_000);
+  });
+
+  describe('과제 [응용] — 톡의 연결 끊기 알림 받기', () => {
+    it('🔴 새 talk-server.js — 220줄 안쪽 · 첫 줄 경로 · 지난 톡 서버에 더하기만 했다 · 4003 번 포트', () => {
+      const src = LAB('talk-server.js');
+      expect(src.trimEnd().split('\n').length).toBeLessThanOrEqual(220);
+      expect(src.split('\n')[0]).toBe('// ~/instagram-api/lab/p3-48/talk-server.js');
+      expect(src).toContain('app.listen(4003, () => {');
+      const { removed, added } = diffLines(showAt('code/p3-47', 'lab/p3-47/talk-server.js'), src);
+      expect(removed).toEqual([
+        '// ~/instagram-api/lab/p3-47/talk-server.js',
+        '// 사용자 정보를 이만큼(밀리초) 늦게 답한다 — 예: TALK_DELAY=5000 node lab/p3-47/talk-server.js',
+      ]);
+      labSeen.talkServerDiff = { lines: src.trimEnd().split('\n').length, added: added.length };
+      expect(talk.log).toBe(`톡 서버가 ${TALK_PORT}번 포트에서 기다리고 있어요.\n`);
+    });
+
+    it('🔴 시작 파일은 직접 해보기 2 정답을 복사한 것 — 첫 줄 경로만 다르다', () => {
+      expect(SNAP('homework2-start.homework2.js')).toBe(LAB('practice2.js').replace('// ~/instagram-api/lab/p3-48/practice2.js\n', '// ~/instagram-api/lab/p3-48/homework2.js\n'));
+    });
+
+    /** 확인 절차 — 틀린 키 .http · dahye 톡 연결 · 톡에서 sora 연결 끊기 · sora 로그인 · dahye 연결 끊기 · dahye 로그인 · 같은 알림 다시 · 다른 앱 알림. */
+    const observe = (source) => withService('homework2.js', source, async ({ base }) => {
+      const got = {};
+      const out = await httpyacLab('homework2.http', LAB('homework2.http'));
+      got.http = out.match(/^HTTP\/1\.1 (\d+)/gm)?.map((line) => Number(line.slice(9)));
+      got.afterWrongKey = await membersOf(base);
+      const dahye = browser(base);
+      await labGo(dahye, '/login', 'dahye');
+      got.dahyeLink = await labGo(dahye, '/talk/link', 'dahye');
+      got.soraUnlinkPage = await unlinkAtTalk('sora');
+      got.afterSoraUnlink = await membersOf(base);
+      const sora = browser(base);
+      got.soraLogin = await labGo(sora, '/talk', 'sora');
+      got.soraMe = await meOf(sora);
+      got.dahyeUnlinkPage = await unlinkAtTalk('dahye');
+      got.dahyeTalkLogin = await labGo(browser(base), '/talk', 'dahye');
+      got.again = await unlinkAtTalk('dahye');
+      const otherApp = await fetch(`${base}/talk/unlink-webhook`, { method: 'POST', headers: { Authorization: 'TalkAK talk-admin-key' }, body: new URLSearchParams({ app_id: 'other-app', user_id: '10002', referrer_type: 'UNLINK_FROM_APPS' }) });
+      got.otherApp = otherApp.status;
+      got.members = await membersOf(base);
+      return got;
+    });
+    const RIGHT = {
+      http: [401, 200],
+      afterWrongKey: { 1: ['lab'], 2: ['talk'] },
+      dahyeLink: [302, '/members'],
+      soraUnlinkPage: '<!doctype html><meta charset="utf-8"><p>실습 서비스와의 연결을 끊었어요.</p><p>앱에 알렸어요.</p>',
+      afterSoraUnlink: { 1: ['lab', 'talk'], 2: [] },
+      soraLogin: [302, '/me'],
+      soraMe: { id: 3, nickname: '소라', email: 'sora@talk.example' },
+      dahyeUnlinkPage: '<!doctype html><meta charset="utf-8"><p>실습 서비스와의 연결을 끊었어요.</p><p>앱에 알렸어요.</p>',
+      dahyeTalkLogin: [302, '/?error=EMAIL_TAKEN'],
+      again: '<!doctype html><meta charset="utf-8"><p>실습 서비스와의 연결을 끊었어요.</p><p>앱에 알렸어요.</p>',
+      otherApp: 400,
+      members: { 1: ['lab'], 2: [], 3: ['talk'] },
+    };
+    const wrongKeys = (got) => Object.keys(RIGHT).filter((key) => JSON.stringify(got[key]) !== JSON.stringify(RIGHT[key]));
+
+    it('🔴 정답 — 틀린 키 401 · 행 그대로 · 톡에서 sora 가 연결을 끊으면 소라(2번)의 톡 행이 지워지고 들어올 방법이 없다 · 톡 sora 로그인은 새 회원 · dahye 는 끊긴 뒤 톡 로그인이 EMAIL_TAKEN · 같은 알림 다시 200 · 다른 앱 400', async () => {
+      const before = talk.tail().length;
+      const got = await observe(LAB('homework2.js'));
+      expect(got).toEqual(RIGHT);
+      const talkLog = talk.tail().slice(before).split('\n').filter((line) => line.startsWith('[톡] 연결 끊기 알림'));
+      expect(talkLog).toEqual(Array(3).fill(`[톡] 연결 끊기 알림 ${LAB_BASE}/talk/unlink-webhook 200`));
+      labSeen.homework2 = { ...got, talkLog: talkLog.map((line) => line.replace(LAB_BASE, 'http://localhost:4002')) };
+    }, 60_000);
+
+    it('🔴 homework2.http — 틀린 관리자 키 알림 · 회원 목록', () => {
+      expect(LAB('homework2.http')).toBe('### 틀린 관리자 키로 연결 끊기 알림\nPOST http://localhost:4002/talk/unlink-webhook\nAuthorization: TalkAK wrong-key\nContent-Type: application/x-www-form-urlencoded\n\napp_id=lab-talk&user_id=10001&referrer_type=UNLINK_FROM_APPS\n\n### 회원 목록\nGET http://localhost:4002/members\n');
+    });
+
+    it('🔴 틀린 판 — 관리자 키를 보지 않으면 틀린 키 알림이 200 이고 소라의 톡 행이 지워진다', async () => {
+      const got = await observe(edit1(LAB('homework2.js'), "  if (req.headers.authorization !== `TalkAK ${TALK_ADMIN_KEY}`) {\n    res.status(401).json({ message: '관리자 키가 맞지 않아요' });\n    return;\n  }\n\n", ''));
+      expect(got.http).toEqual([200, 200]);
+      expect(wrongKeys(got)).toEqual(expect.arrayContaining(['http', 'afterWrongKey']));
+    }, 60_000);
+
+    it('🔴 틀린 판 — 이미 없으면 404 로 답하면 같은 알림을 다시 받을 때 톡 화면이 «앱이 404로 답했어요.»', async () => {
+      const got = await observe(edit1(LAB('homework2.js'), '  if (index !== -1) socialAccounts.splice(index, 1);\n', "  if (index === -1) {\n    res.sendStatus(404);\n    return;\n  }\n\n  socialAccounts.splice(index, 1);\n"));
+      expect(got.again).toContain('<p>앱이 404로 답했어요.</p>');
+      expect(wrongKeys(got)).toContain('again');
+    }, 60_000);
+
+    it('🔴 틀린 판 — 톡 계정 번호를 보지 않고 제공자 이름으로만 지우면 sora 가 끊을 때 dahye 의 톡도 지워진다', async () => {
+      const got = await observe(edit1(LAB('homework2.js'), "socialAccounts.findIndex((account) => account.provider === 'talk' && account.providerUserId === req.body.user_id)", "socialAccounts.findIndex((account) => account.provider === 'talk')"));
+      // sora 를 끊을 때는 우연히 맞고(처음 만난 톡 행이 소라의 것), 같은 알림을 다시 받을 때 새로 가입한 소라(3번)의 행이 지워진다
+      expect(got.members[3]).toEqual([]);
+      expect(wrongKeys(got)).toContain('members');
+    }, 60_000);
   });
 });
