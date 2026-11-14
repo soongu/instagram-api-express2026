@@ -13,6 +13,8 @@
 // 축 ⑤ Step 5·7 — `res.json` 을 부르는 줄은 responses.js 둘과 app.js 의 문서 한 줄뿐
 // 축 ⑥ Step 6 — 던지는 코드는 모두 표에 있고, 표의 코드는 모두 어딘가에서 쓴다 · 서비스에는 문장이 없다
 // 축 ⑦ 이 회차 학생 파일 — code/p3-36 에서 바뀐 파일
+// 축 ⑫ Step 8 — 새 주소의 실패 응답에 path(쿼리를 뺀 주소)·timestamp(ISO UTC) · status 는 없다 · 옛 주소는 그대로
+//    (2026-11-15 사용자 결정 — Step 7 까지의 판은 snapshots/p3-37.step7.*)
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -92,6 +94,9 @@ const getRes = async (url, init) => {
   return { status: res.status, headers: res.headers, body: type.includes('json') && text !== '' ? JSON.parse(text) : text };
 };
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+// 새 주소의 실패 응답 — path 는 쿼리를 뺀 주소, timestamp 는 서버 시계의 ISO 8601 UTC
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const failure = (code, message, path, details) => ({ error: { code, message, ...(details === undefined ? {} : { details }), path, timestamp: expect.stringMatching(ISO_UTC) } });
 
 beforeAll(async () => {
   await admin(async (client) => {
@@ -168,9 +173,9 @@ describe('축 ① Step 2 — 가입 409 두 가지', () => {
   it('이 판의 새 주소 — 같은 409 둘이 코드로 갈린다', async () => {
     const { phone, name } = await scene(R, '/api/v2');
     expect(phone.status).toBe(409);
-    expect(phone.body).toEqual({ error: { code: 'PHONE_TAKEN', message: '이미 가입한 휴대폰 번호예요' } });
+    expect(phone.body).toEqual(failure('PHONE_TAKEN', '이미 가입한 휴대폰 번호예요', '/api/v2/auth/signup'));
     expect(name.status).toBe(409);
-    expect(name.body).toEqual({ error: { code: 'USERNAME_TAKEN', message: '이미 쓰고 있는 사용자 이름이에요' } });
+    expect(name.body).toEqual(failure('USERNAME_TAKEN', '이미 쓰고 있는 사용자 이름이에요', '/api/v2/auth/signup'));
   }, 60000);
 
   it('이 판의 옛 주소 — 모양은 그대로 { message } · 문장만 칸에 맞게 갈린다', async () => {
@@ -200,7 +205,7 @@ const SCRIPT = async (base, api) => {
     const raw = JSON.stringify(res.body);
     if (new RegExp(UUID.source).test(raw) || new RegExp(ISO.source).test(raw)) headers.etag = headers.etag && '<본문 따라 바뀜>';
     if (headers.location) headers.location = headers.location.replace(/\d+$/, '<id>');
-    out.push({ label, status: res.status, headers, body: res.body });
+    out.push({ label, path: new URL(`${base}${path.startsWith('/api') ? api + path.slice(4) : path}`).pathname, status: res.status, headers, body: res.body });
     return res;
   };
   const first = await send('목록 둘', '/api/posts?limit=2');
@@ -349,12 +354,16 @@ describe('축 ②·③ 같은 요청 54개 — 옛 주소와 새 주소', () => 
       }
       errors += 1;
       expect(Object.keys(now.body), old.label).toEqual(['error']);
-      const { code, message, details } = now.body.error;
+      const { code, message, details, path, timestamp } = now.body.error;
       expect(code, old.label).toBe(CODES[old.label]);
       expect(message, old.label).toBe(old.body.message);
       expect(details, old.label).toEqual(old.body.details);
-      // details 가 없으면 키도 없다 — { "code", "message" } 만 실린다.
-      if (old.body.details === undefined) expect(Object.keys(now.body.error), old.label).toEqual(['code', 'message']);
+      // Step 8 — 어느 주소로 온 요청인지(쿼리 문자열은 뺀다)와 언제(ISO UTC — normalize 가 <time> 으로 바꿨다)
+      expect(path, old.label).toBe(now.path);
+      expect(path, old.label).not.toContain('?');
+      expect(timestamp, old.label).toBe('<time>');
+      // details 가 없으면 키도 없다 — { "code", "message", "path", "timestamp" } 만 실린다. status 는 싣지 않는다.
+      expect(Object.keys(now.body.error), old.label).toEqual(old.body.details === undefined ? ['code', 'message', 'path', 'timestamp'] : ['code', 'message', 'details', 'path', 'timestamp']);
     }
     expect(errors).toBe(Object.values(CODES).filter(Boolean).length);
     // 봉투에 success 를 두지 않는다 — 성공·실패는 상태 줄이 말한다.
@@ -378,7 +387,7 @@ describe('축 ④ 봉투를 씌우지 않는 응답과 없는 주소', () => {
       expect(doc.status).toBe(200);
       expect(doc.body.openapi).toBe('3.2.0');
       expect(doc.body.data).toBeUndefined();
-      expect((await getRes(`${base}/api/v2/nope`)).body).toEqual({ error: { code: 'ROUTE_NOT_FOUND', message: '그런 주소는 없어요' } });
+      expect((await getRes(`${base}/api/v2/nope`)).body).toEqual(failure('ROUTE_NOT_FOUND', '그런 주소는 없어요', '/api/v2/nope'));
       expect((await getRes(`${base}/api/v2/post`)).status).toBe(404);
       expect((await getRes(`${base}/api/nope`)).body).toEqual({ message: '그런 주소는 없어요' });
       expect((await getRes(`${base}/nope`)).body).toEqual({ message: '그런 주소는 없어요' });
@@ -496,6 +505,8 @@ describe('축 ⑧ Step 7 — 본문을 못 읽은 실패는 라우터에 닿기 
     }
     symlinkSync(P('node_modules'), join(dir, 'node_modules'));
     cpSync(src, join(dir, 'app.js'));
+    // Step 7 의 판(앱 파일이 snapshots/p3-37.step7*)이면 sendError 도 Step 7 판(req 를 받지 않는다)을 깐다.
+    if (src.includes('snapshots/p3-37.step7')) cpSync(P('snapshots/p3-37.step7.responses.js'), join(dir, 'responses.js'));
     const srv = await boot(join(dir, 'app.js'), { port: PORT, cwd: dir, env: { ...env, PORT: String(PORT) }, ready: `${PORT}번 포트에서` });
     try {
       await fn(`http://localhost:${PORT}`);
@@ -506,8 +517,26 @@ describe('축 ⑧ Step 7 — 본문을 못 읽은 실패는 라우터에 닿기 
   };
   const broken = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":' };
 
-  it('중간 판은 이 판의 app.js 에서 버전 줄만 마운트 줄로 되돌린 것이다(파생 대조)', () => {
-    const final = read(R('app.js'));
+  it('Step 7 판은 이 판에서 Step 8 의 변경(sendError 의 req · path · timestamp)만 되돌린 것이다(파생 대조)', () => {
+    const app = read(R('app.js'));
+    expect(app.split('sendError(req, res, ').length - 1).toBe(3);
+    expect(read(P('snapshots/p3-37.step7.app.js'))).toBe(app.replaceAll('sendError(req, res, ', 'sendError(res, '));
+    const res = read(R('responses.js'));
+    const step8 = "    // 어느 주소로 온 요청이었는지 — 쿼리 문자열(? 뒤)에는 이메일 같은 값이 실리기도 해서 뺀다.\n    const path = req.originalUrl.split('?')[0];\n    // 서버 시계의 지금 시각 — 끝의 Z 는 UTC 라는 뜻이다.\n    const timestamp = new Date().toISOString();\n";
+    expect(res).toContain(step8);
+    const derived = res.replace(step8, '')
+      .replace('// 실패 — 새 주소는 { error: { code, message, details, path, timestamp } }, 옛 주소는 { message, details }', '// 실패 — 새 주소는 { error: { code, message, details } }, 옛 주소는 { message, details }')
+      .replace('export function sendError(req, res, error) {', 'export function sendError(res, error) {')
+      .replace('res.json({ error: { code, message, details, path, timestamp } });', 'res.json({ error: { code, message, details } });');
+    expect(read(P('snapshots/p3-37.step7.responses.js'))).toBe(derived);
+    // 직접 해보기 3 을 Step 8 로 옮기기 전의 정답 판 — sendError 만 다르다
+    const notices = read(R('lab/p3-37/notices.js'));
+    const old = read(P('snapshots/p3-37.step7.notices.js'));
+    expect(notices.replaceAll('sendError(req, res, ', 'sendError(res, ').replace(/\/\/ 새 주소면 \{ error: \{ code, message, path, timestamp \} \}[\s\S]*?\n}\n/, '')).toBe(old.replace(/\/\/ 새 주소면 \{ error: \{ code, message \} \}[\s\S]*?\n}\n/, ''));
+  });
+
+  it('중간 판은 Step 7 판 app.js 에서 버전 줄만 마운트 줄로 되돌린 것이다(파생 대조)', () => {
+    const final = read(P('snapshots/p3-37.step7.app.js'));
     const mark = "// 새 주소로 온 요청이라는 것을 본문을 읽기 전에 적어 둔다 — 본문을 못 읽은 실패도 새 형식으로 답하려고.\napp.use('/api/v2', apiVersion(2));\n";
     const derived = final.replace(mark, '').replace("// 새 주소 — 버전은 위에서 적어 두었다.\napp.use('/api/v2', api);", "// 새 주소 — 버전 2 라고 적어 두고 같은 API 로 보낸다.\napp.use('/api/v2', apiVersion(2), api);");
     expect(derived).not.toBe(final);
@@ -522,10 +551,20 @@ describe('축 ⑧ Step 7 — 본문을 못 읽은 실패는 라우터에 닿기 
     });
   }, 60000);
 
-  it('이 판(express.json() 위에서 버전을 적는다) — 깨진 JSON 도 새 모양', async () => {
+  it('Step 7 판(express.json() 위에서 버전을 적는다) — 깨진 JSON 도 새 모양 · 교안 Step 7 의 두 본문과 글자까지 같다', async () => {
+    await freshGate();
+    await withApp(P('snapshots/p3-37.step7.app.js'), async (base) => {
+      const res = await getRes(`${base}/api/v2/posts`, broken);
+      expect(res).toMatchObject({ status: 400, body: { error: { code: 'INVALID_BODY', message: '보낸 내용을 읽을 수 없어요' } } });
+      expect(LECTURE()).toContain(`저장하고 «깨진 JSON으로 게시물 올리기»를 다시 보내면 \`${JSON.stringify(res.body)}\`가 와요.`);
+      expect(LECTURE()).toContain(`브라우저 주소 창에 \`http://localhost:3000/api/v2/nope\`도 열어 보세요. \`${JSON.stringify((await getRes(`${base}/api/v2/nope`)).body)}\`가 와요.`);
+    });
+  }, 60000);
+
+  it('이 판(Step 8) — 깨진 JSON 도 새 모양에 path·timestamp', async () => {
     await freshGate();
     await withApp(R('app.js'), async (base) => {
-      expect(await getRes(`${base}/api/v2/posts`, broken)).toMatchObject({ status: 400, body: { error: { code: 'INVALID_BODY', message: '보낸 내용을 읽을 수 없어요' } } });
+      expect(pick(await getRes(`${base}/api/v2/posts`, broken))).toEqual({ status: 400, body: failure('INVALID_BODY', '보낸 내용을 읽을 수 없어요', '/api/v2/posts') });
     });
   }, 60000);
 });
@@ -633,6 +672,7 @@ const errorScene = async (base) => {
   return [
     pick(await getRes(`${base}/api/v2/notices`, json('POST', {}))),
     pick(await getRes(`${base}/api/v2/notice`)),
+    pick(await getRes(`${base}/api/v2/notice?keyword=event`)),
     pick(await getRes(`${base}/api/v2/notices`, broken)),
     pick(await getRes(`${base}/api/notices`, json('POST', {}))),
     pick(await getRes(`${base}/api/notice`)),
@@ -646,12 +686,13 @@ const OLD_ERRORS = [
 ];
 
 describe('축 ⑨ 직접 해보기 3 — 공지 서버의 실패 응답도 봉투에', () => {
-  it('정답 판 — 새 주소의 실패 셋이 모두 { error: { code, message } } · 옛 주소는 그대로', async () => {
+  it('정답 판 — 새 주소의 실패 넷이 모두 { error: { code, message, path, timestamp } } · 옛 주소는 그대로', async () => {
     await withLab(read(R('lab/p3-37/notices.js')), 4001, async (base) => {
       expect(await errorScene(base)).toEqual([
-        { status: 400, body: { error: { code: 'TITLE_REQUIRED', message: '제목을 적어 주세요' } } },
-        { status: 404, body: { error: { code: 'ROUTE_NOT_FOUND', message: '그런 주소는 없어요' } } },
-        { status: 400, body: { error: { code: 'INVALID_BODY', message: '보낸 내용을 읽을 수 없어요' } } },
+        { status: 400, body: failure('TITLE_REQUIRED', '제목을 적어 주세요', '/api/v2/notices') },
+        { status: 404, body: failure('ROUTE_NOT_FOUND', '그런 주소는 없어요', '/api/v2/notice') },
+        { status: 404, body: failure('ROUTE_NOT_FOUND', '그런 주소는 없어요', '/api/v2/notice') },
+        { status: 400, body: failure('INVALID_BODY', '보낸 내용을 읽을 수 없어요', '/api/v2/notices') },
         ...OLD_ERRORS,
       ]);
       // 성공 응답은 직접 해보기 1 그대로
@@ -671,7 +712,20 @@ describe('축 ⑨ 직접 해보기 3 — 공지 서버의 실패 응답도 봉�
       const scene = await errorScene(base);
       expect(scene[0].body.error.code).toBe('TITLE_REQUIRED');
       expect(scene[1].body.error.code).toBe('ROUTE_NOT_FOUND');
-      expect(scene[2]).toEqual({ status: 400, body: { message: '보낸 내용을 읽을 수 없어요' } });
+      expect(scene[2].body.error.code).toBe('ROUTE_NOT_FOUND');
+      expect(scene[3]).toEqual({ status: 400, body: { message: '보낸 내용을 읽을 수 없어요' } });
+    });
+  }, 30000);
+  it('틀린 판(path 에 req.originalUrl 을 그대로) — 셋째 요청만 쿼리 문자열이 실려 온다(해설의 확인)', async () => {
+    const final = read(R('lab/p3-37/notices.js'));
+    const wrong = final.replace("const path = req.originalUrl.split('?')[0];", 'const path = req.originalUrl;');
+    expect(wrong).not.toBe(final);
+    await withLab(wrong, 4001, async (base) => {
+      const scene = await errorScene(base);
+      expect(scene[0].body.error.path).toBe('/api/v2/notices');
+      expect(scene[1].body.error.path).toBe('/api/v2/notice');
+      expect(scene[2].body.error.path).toBe('/api/v2/notice?keyword=event');
+      expect(LECTURE()).toContain('셋째에서 `"path": "/api/v2/notice?keyword=event"`가 와요.');
     });
   }, 30000);
 });
@@ -740,9 +794,21 @@ describe('축 ⑨ 과제 [기초] — 배열 응답 옆에 meta', () => {
       expect(pick(await getRes(`${base}/api/posts/1/likers`))).toEqual({ status: 200, body: ['jaehoon', 'minji', 'dahye'] });
       expect(pick(await getRes(`${base}/api/v2/posts/1/likers`))).toEqual({ status: 200, body: { data: ['jaehoon', 'minji', 'dahye'], meta: { count: 3 } } });
       expect(pick(await getRes(`${base}/api/v2/posts/2/likers`))).toEqual({ status: 200, body: { data: [], meta: { count: 0 } } });
-      expect(pick(await getRes(`${base}/api/v2/posts/9/likers`))).toEqual({ status: 404, body: { error: { code: 'POST_NOT_FOUND', message: '그런 게시물은 없어요' } } });
+      expect(pick(await getRes(`${base}/api/v2/posts/9/likers`))).toEqual({ status: 404, body: failure('POST_NOT_FOUND', '그런 게시물은 없어요', '/api/v2/posts/9/likers') });
+      expect(pick(await getRes(`${base}/api/v2/posts/9/likers?sort=new`))).toEqual({ status: 404, body: failure('POST_NOT_FOUND', '그런 게시물은 없어요', '/api/v2/posts/9/likers') });
       expect(pick(await getRes(`${base}/api/posts/9/likers`))).toEqual({ status: 404, body: { message: '그런 게시물은 없어요' } });
     });
+  }, 30000);
+  it('틀린 판(path 에 req.originalUrl 을 그대로) — 다른 다섯 요청은 같고 쿼리를 붙인 9번에서만 쿼리가 실린다(요구사항 6·7 · 답안의 흔한 실수)', async () => {
+    const final = read(R('lab/p3-37/homework1.js'));
+    const wrong = final.replace("const path = req.originalUrl.split('?')[0];", 'const path = req.originalUrl;');
+    expect(wrong).not.toBe(final);
+    expect(read(R('lab/p3-37/homework1.http'))).toContain('GET http://localhost:4011/api/v2/posts/9/likers?sort=new');
+    await withLab(wrong, 4011, async (base) => {
+      expect((await getRes(`${base}/api/v2/posts/9/likers`)).body.error.path).toBe('/api/v2/posts/9/likers');
+      expect((await getRes(`${base}/api/v2/posts/9/likers?sort=new`)).body.error.path).toBe('/api/v2/posts/9/likers?sort=new');
+    });
+    expect(ANSWERS()).toContain('`"path":"/api/v2/posts/9/likers?sort=new"`로 와요.');
   }, 30000);
 });
 
@@ -809,9 +875,9 @@ const STEP4_APP = () => {
 describe('축 ⑩ 교안 · 답안의 블록', () => {
   it('🔴 자바스크립트 블록 — 줄마다 그 파일(또는 그 Step 의 판)에 실재한다', () => {
     const owners = {
-      '// ~/instagram-api/app.js': [read(R('app.js')), read(P('snapshots/p3-37.step7-version-late.app.js')), read(B('app.js'))],
+      '// ~/instagram-api/app.js': [read(R('app.js')), read(P('snapshots/p3-37.step7.app.js')), read(P('snapshots/p3-37.step7-version-late.app.js')), read(B('app.js'))],
       '// ~/instagram-api/middlewares/version.js': [read(R('middlewares/version.js'))],
-      '// ~/instagram-api/responses.js': [read(R('responses.js'))],
+      '// ~/instagram-api/responses.js': [read(R('responses.js')), read(P('snapshots/p3-37.step7.responses.js'))],
       '// ~/instagram-api/controllers/postController.js': [read(R('controllers/postController.js'))],
       '// ~/instagram-api/controllers/authController.js': [read(R('controllers/authController.js'))],
       '// ~/instagram-api/middlewares/legacyCursor.js': [read(R('middlewares/legacyCursor.js'))],
@@ -857,10 +923,11 @@ describe('축 ⑩ 교안 · 답안의 블록', () => {
     }
   });
 
-  it('🔴 요청 블록 — envelope.http 는 Step 1 블록 + Step 7 블록 · 실습 .http 는 블록을 이어 붙인 것과 byte 같다', () => {
+  it('🔴 요청 블록 — envelope.http 는 Step 1 블록 + Step 7 블록 + Step 8 블록 · 실습 .http 는 블록을 이어 붙인 것과 byte 같다', () => {
     const http = fences(LECTURE()).filter((f) => f.lang === 'http');
-    expect(read(R('requests/envelope.http'))).toBe(`${http[0].body}\n\n${http[3].body}\n`);
-    expect(read(R('lab/p3-37/notices.http'))).toBe(`${http[1].body}\n\n${http[4].body}\n`);
+    expect(http.length).toBe(6);
+    expect(read(R('requests/envelope.http'))).toBe(`${http[0].body}\n\n${http[3].body}\n\n${http[4].body}\n`);
+    expect(read(R('lab/p3-37/notices.http'))).toBe(`${http[1].body}\n\n${http[5].body}\n`);
     expect(read(R('lab/p3-37/coupons.http'))).toBe(`${http[2].body}\n`);
     const ah = fences(ANSWERS()).filter((f) => f.lang === 'http');
     expect(read(R('lab/p3-37/homework1.http'))).toBe(`${ah[0].body}\n`);
@@ -888,9 +955,19 @@ describe('축 ⑩ 교안 · 답안의 블록', () => {
     }
     expect(run(BEFORE.dir, ['-rn', '그런 게시물은 없어요', 'services', 'middlewares', 'controllers'])).toEqual(outOf(SENT));
     expect(run(ROUND.dir, ['-rn', '그런 게시물은 없어요', 'errors.js', 'services', 'middlewares', 'controllers'])).toEqual(outOf(SENT2));
-    // Step 7 — 두 번째로 나오는 같은 명령
+    // Step 7 — 두 번째로 나오는 같은 명령. Step 8 앞이라 app.js · responses.js 는 Step 7 판이다.
     const second = bash.findIndex((f, i) => f.body === RES && i > bash.findIndex((g) => g.body === RES));
-    expect(run(ROUND.dir, resArgs)).toEqual(bash[second + 1].body.split('\n').sort());
+    const step7 = mkdtempSync(join(tmpdir(), 'p337-grep7-'));
+    try {
+      for (const name of ['routes', 'controllers', 'services', 'middlewares']) cpSync(R(name), join(step7, name), { recursive: true });
+      cpSync(P('snapshots/p3-37.step7.app.js'), join(step7, 'app.js'));
+      cpSync(P('snapshots/p3-37.step7.responses.js'), join(step7, 'responses.js'));
+      expect(run(step7, resArgs)).toEqual(bash[second + 1].body.split('\n').sort());
+    } finally {
+      rmSync(step7, { recursive: true, force: true });
+    }
+    // Step 8 뒤에도 res.json 줄은 responses.js 넷 · app.js 둘 그대로다(줄 번호만 바뀐다)
+    expect(run(ROUND.dir, resArgs).map((l) => l.replace(/:\d+:/, ':')).sort()).toEqual(bash[second + 1].body.split('\n').map((l) => l.replace(/:\d+:/, ':')).map((l) => l.replace('res.json({ error: { code, message, details } });', 'res.json({ error: { code, message, details, path, timestamp } });')).sort());
   });
 
   it('🔴 which-key.js 출력 블록 — 실제 출력과 글자까지 같다', async () => {
@@ -1108,5 +1185,79 @@ describe('축 ⑪ 학생 낭독 집중 검수 — 지시를 글자 그대로 따
     expect(md).toContain('| JSON:API 1.1 |');
     expect(bodyOnly(md)).not.toContain('| JSON:API 1.1 |');
     expect(bodyOnly(md)).toContain('널리 쓰이는 API 규칙들도 `success`를 두지 않아요.');
+  });
+});
+
+// ───────── 축 ⑫ Step 8 — 어느 요청이 언제 실패했는지(2026-11-15 사용자 결정) ─────────
+describe('축 ⑫ Step 8 — 실패 응답의 path · timestamp', () => {
+  const broken = (body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  const lecture = () => LECTURE().slice(LECTURE().indexOf('## Step 8:'), LECTURE().indexOf('## 마무리'));
+  const step8Blocks = () => fences(lecture());
+
+  it('Step 7 판 — 게시물 올리기와 가입에 보낸 깨진 JSON 의 본문이 글자까지 같다(교안 첫 표)', async () => {
+    await freshGate();
+    let posts = null;
+    let signup = null;
+    await withServer((rel) => (rel === 'app.js' ? P('snapshots/p3-37.step7.app.js') : rel === 'responses.js' ? P('snapshots/p3-37.step7.responses.js') : R(rel)), async ({ base }) => {
+      posts = await getRes(`${base}/api/v2/posts`, broken('{"content":'));
+      signup = await getRes(`${base}/api/v2/auth/signup`, broken('{"username":'));
+    });
+    expect(posts.status).toBe(400);
+    expect(signup.status).toBe(400);
+    expect(signup.body).toEqual(posts.body);
+    const table = step8Blocks().find((f) => f.lang === '' && f.body.includes('깨진 JSON으로 가입') && f.body.includes('응답 본문'));
+    const rows = table.body.split('\n').slice(2);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row).toContain(`400    ${JSON.stringify(posts.body)}`);
+  }, 60000);
+
+  it('이 판 — 두 요청이 path 로 갈린다 · 쿼리는 빠진다 · timestamp 는 UTC · status 는 없다 · 옛 주소는 그대로', async () => {
+    await freshGate();
+    await withServer(R, async ({ base, tail }) => {
+      const posts = await getRes(`${base}/api/v2/posts`, broken('{"content":'));
+      const signup = await getRes(`${base}/api/v2/auth/signup`, broken('{"username":'));
+      const limit = await getRes(`${base}/api/v2/posts?limit=0`);
+      const email = await getRes(`${base}/api/v2/auth/check-duplicate?type=nickname&value=yuna@example.com`);
+      expect(posts.body).toEqual(failure('INVALID_BODY', '보낸 내용을 읽을 수 없어요', '/api/v2/posts'));
+      expect(signup.body).toEqual(failure('INVALID_BODY', '보낸 내용을 읽을 수 없어요', '/api/v2/auth/signup'));
+      expect(limit.body.error.path).toBe('/api/v2/posts');
+      expect(limit.body.error.details.properties.limit).toBeDefined();
+      expect(email.status).toBe(400);
+      expect(email.body.error.path).toBe('/api/v2/auth/check-duplicate');
+      expect(JSON.stringify(email.body)).not.toContain('yuna@example.com');
+      for (const one of [posts, signup, limit, email]) expect(one.body.error.status).toBeUndefined();
+      // 응답 머리글의 Date 와 같은 때(초 단위)
+      const date = new Date(signup.headers.get('date')).getTime();
+      expect(Math.abs(new Date(signup.body.error.timestamp).getTime() - date)).toBeLessThan(2000);
+      // 옛 주소는 그대로
+      expect((await getRes(`${base}/api/posts`, broken('{"content":'))).body).toEqual({ message: '보낸 내용을 읽을 수 없어요' });
+      expect((await getRes(`${base}/api/auth/signup`, broken('{"username":'))).body).toEqual({ message: '보낸 내용을 읽을 수 없어요' });
+      // 교안의 서버 터미널 두 줄 — 요청 기록 미들웨어가 찍는 모양(걸린 시간만 다르다)
+      const logBlock = step8Blocks().find((f) => f.lang === 'bash');
+      const shape = (line) => line.replace(/ \d+\.\dms$/, ' <ms>');
+      const logged = (srvTail) => srvTail.split('\n').filter((l) => l.startsWith('POST /api/v2/')).slice(0, 2).map(shape);
+      expect(logged(tail())).toEqual(logBlock.body.split('\n').map(shape));
+      // 교안의 JSON 블록 — 가입 쪽 응답(시각만 다르다)
+      const pretty = step8Blocks().find((f) => f.lang === 'json');
+      const shown = JSON.parse(pretty.body);
+      expect({ ...shown, error: { ...shown.error, timestamp: 'T' } }).toEqual({ ...signup.body, error: { ...signup.body.error, timestamp: 'T' } });
+      expect(shown.error.timestamp).toMatch(ISO_UTC);
+    });
+  }, 60000);
+
+  it('교안의 표 둘 — path 는 실제 응답과 같고, 예로 든 시각은 JSON 블록 · 첫 요청보다 늦은 둘째 요청', () => {
+    const tables = step8Blocks().filter((f) => f.lang === '');
+    const fieldTable = tables.find((f) => f.body.includes('담는 것'));
+    const pathTable = tables.find((f) => f.body.includes('timestamp') && f.body.includes('깨진 JSON으로 가입') && !f.body.includes('응답 본문'));
+    const rows = pathTable.body.split('\n').slice(2).map((l) => l.trim().split(/ {3,}/));
+    expect(rows).toEqual([
+      ['깨진 JSON으로 게시물 올리기', '/api/v2/posts', expect.stringMatching(ISO_UTC)],
+      ['깨진 JSON으로 가입', '/api/v2/auth/signup', expect.stringMatching(ISO_UTC)],
+    ]);
+    expect(rows[0][2] < rows[1][2]).toBe(true);
+    const shown = JSON.parse(step8Blocks().find((f) => f.lang === 'json').body);
+    expect(rows[1][2]).toBe(shown.error.timestamp);
+    expect(fieldTable.body).toContain(`/api/v2/auth/signup`);
+    expect(fieldTable.body).toContain(shown.error.timestamp);
   });
 });

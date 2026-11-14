@@ -32,6 +32,9 @@ import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { startFakeGoogle } from './helpers/fake-google.js';
 
+// p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
+const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
+
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
@@ -389,7 +392,7 @@ describe('축 ③ Step 3 — state·PKCE 를 쿠키에', () => {
     await withServer(stepDir(2), async ({ base, tail }) => {
       const res = await browser(base).get('/api/v2/auth/google');
       expect(res.status).toBe(500);
-      expect(res.body).toEqual({ error: { code: 'INTERNAL_ERROR', message: '서버에서 문제가 생겼어요' } });
+      expect(res.body).toEqual(v2Error('INTERNAL_ERROR', '서버에서 문제가 생겼어요'));
       await sleep(100);
       expect(tail()).toContain('Error: OAuth 2.0 authentication requires session support when using state. Did you forget to use express-session middleware?');
       expect(tail()).toContain('GET /api/v2/auth/google 500');
@@ -503,7 +506,7 @@ describe('축 ④ Step 4 — 콜백과 프로필(req.user 는 아직 «구글의
       google.state.userinfoFails = true;
       const { callback } = await googleLogin(browser(base));
       expect(callback.status).toBe(500);
-      expect(callback.body).toEqual({ error: { code: 'INTERNAL_ERROR', message: '서버에서 문제가 생겼어요' } });
+      expect(callback.body).toEqual(v2Error('INTERNAL_ERROR', '서버에서 문제가 생겼어요'));
       await sleep(100);
       expect(tail()).toContain('Error: 구글이 사용자 정보를 주지 않았어요 (401)');
     });
@@ -683,7 +686,7 @@ describe('축 ⑥ Step 6 — 찾거나 만들기(req.user 가 «우리 사람»)
       const [users, socials] = [await count('users'), await count('social_accounts')];
       const res = await asGoogle(base, { sub: '4001', email: 'yuna@example.com', name: '김유나' });
       expect(res.status).toBe(409);
-      expect(res.body).toEqual({ error: { code: 'EMAIL_TAKEN', message: '이미 가입한 이메일이에요' } });
+      expect(res.body).toEqual(v2Error('EMAIL_TAKEN', '이미 가입한 이메일이에요'));
       expect([await count('users'), await count('social_accounts')]).toEqual([users, socials]);
     });
   }, 30_000);
@@ -706,7 +709,7 @@ describe('축 ⑥ Step 6 — 찾거나 만들기(req.user 가 «우리 사람»)
       const res = await asGoogle(base);
       expect(google.state.log.token).toHaveLength(1);
       expect(res.status).toBe(500);
-      expect(res.body).toEqual({ error: { code: 'INVALID_BODY', message: '보낸 내용을 읽을 수 없어요' } });
+      expect(res.body).toEqual(v2Error('INVALID_BODY', '보낸 내용을 읽을 수 없어요'));
       expect(await count('social_accounts')).toBe(0);
     });
   }, 30_000);
@@ -833,8 +836,9 @@ describe('축 ⑦ Step 7 — 로그인 기록과 토큰 둘 · 302 · ?next= · 
       const social = await browser(base).login('minji.kim', 'anything1234');
       const nobody = await browser(base).login('nobody', 'anything1234');
       expect(social.status).toBe(401);
-      expect(social.body).toEqual({ error: { code: 'LOGIN_FAILED', message: '사용자 이름이나 비밀번호가 맞지 않아요' } });
-      expect(social.body).toEqual(nobody.body);
+      expect(social.body).toEqual(v2Error('LOGIN_FAILED', '사용자 이름이나 비밀번호가 맞지 않아요'));
+      // 응답한 시각(timestamp)만 다르다 — p3-37 Step 8
+      expect({ ...social.body.error, timestamp: '<time>' }).toEqual({ ...nobody.body.error, timestamp: '<time>' });
     });
   }, 30_000);
 
@@ -932,7 +936,8 @@ describe('축 ⑧ 리팩터링 — 비밀번호 로그인은 code/p3-44 와 같�
         const [x, y] = [await browser(before).login(username, password, prefix), await browser(after).login(username, password, prefix)];
         const view = (r) => ({
           status: r.status,
-          body: r.body,
+          // 새 주소의 실패 본문에는 응답한 시각(timestamp)이 실린다 — 두 판의 시각은 다르다(p3-37 Step 8)
+          body: r.body?.error?.timestamp ? { error: { ...r.body.error, timestamp: '<time>' } } : r.body,
           cookies: r.setCookies.map(cookieShape),
           deprecation: r.headers.get('deprecation'),
           contentType: r.headers.get('content-type'),

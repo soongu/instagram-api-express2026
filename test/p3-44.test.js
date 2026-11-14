@@ -18,6 +18,9 @@ import jwt from 'jsonwebtoken';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 
+// p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
+const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
+
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
@@ -606,7 +609,7 @@ describe('축 ⑦ Step 7 — 만료만 TOKEN_EXPIRED · Access 쿠키는 로그�
       const jar = device(base);
       const res = await sendBlock(blockOf(blocks, '기한이 지난 토큰으로 게시물 목록'), jar, { port: PORT, swap: { EXPIRED_TOKEN: expired } });
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ error: { code: 'TOKEN_EXPIRED', message: '토큰의 기한이 지났어요' } });
+      expect(res.body).toEqual(v2Error('TOKEN_EXPIRED', '토큰의 기한이 지났어요'));
       const none = await sendBlock(blockOf(blocks, '쿠키 없이 게시물 목록'), jar, { port: PORT });
       expect(none.body.error.code).toBe('LOGIN_REQUIRED');
       for (const token of [forged, 'abc']) {

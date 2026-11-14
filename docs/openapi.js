@@ -27,11 +27,13 @@ function errorOf(...codes) {
     properties: {
       error: {
         type: 'object',
-        required: ['code', 'message'],
+        required: ['code', 'message', 'path', 'timestamp'],
         properties: {
           code: { type: 'string', enum: codes },
           message: { type: 'string' },
           details: { type: 'object', description: '검사에 실패했을 때 — 필드마다 무엇이 틀렸는지' },
+          path: { type: 'string', description: '실패한 요청의 주소 — 쿼리 문자열은 뺀다' },
+          timestamp: { type: 'string', format: 'date-time', description: '서버가 실패를 알린 시각(UTC)' },
         },
       },
     },

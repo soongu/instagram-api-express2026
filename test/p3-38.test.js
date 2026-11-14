@@ -233,7 +233,7 @@ describe('축 ① Step 6 — 옛 주소에만 Deprecation · Sunset · Link', ()
   });
   it('새 주소 · 새 주소의 없는 주소 · 문서 · 뿌리 주소 — 없다', () => {
     for (const path of ['/api/v2/posts?limit=2', '/api/v2/nope', '/api/openapi.json', '/api/docs/', '/']) expect(noticeOf(got[path]), path).toEqual(NONE);
-    expect(got['/api/v2/nope'].body).toEqual({ error: { code: 'ROUTE_NOT_FOUND', message: '그런 주소는 없어요' } });
+    expect(got['/api/v2/nope'].body).toEqual({ error: { code: 'ROUTE_NOT_FOUND', message: '그런 주소는 없어요', path: '/api/v2/nope', timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
   });
   it('옛 커서 — 새 주소에서도 같은 값 하나씩(상수 한 곳)', () => {
     for (const path of ['/api/posts?cursor=2', '/api/v2/posts?cursor=2']) expect(noticeOf(got[path]), path).toEqual(NOTICE);

@@ -22,11 +22,13 @@ function sendData(res, data, meta) {
   res.json(data);
 }
 
-// 새 주소면 { error: { code, message } }, 옛 주소면 { message }.
-function sendError(res, status, code) {
+// 새 주소면 { error: { code, message, path, timestamp } }, 옛 주소면 { message }.
+function sendError(req, res, status, code) {
   res.status(status);
   if (res.locals.apiVersion === 2) {
-    res.json({ error: { code, message: MESSAGES[code] } });
+    const path = req.originalUrl.split('?')[0];
+    const timestamp = new Date().toISOString();
+    res.json({ error: { code, message: MESSAGES[code], path, timestamp } });
     return;
   }
   res.json({ message: MESSAGES[code] });
@@ -38,7 +40,7 @@ api.get('/posts/:id/likers', (req, res) => {
   const names = likers[req.params.id];
 
   if (names === undefined) {
-    sendError(res, 404, 'POST_NOT_FOUND');
+    sendError(req, res, 404, 'POST_NOT_FOUND');
     return;
   }
 

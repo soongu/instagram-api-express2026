@@ -17,6 +17,9 @@ import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { applyMigrationsAfter, SOCIAL_ACCOUNTS_MIGRATION } from './helpers/tip-schema.js';
 
+// p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
+const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
+
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
@@ -219,7 +222,7 @@ describe('축 ② Step 2 — 토큰을 만드는 곳과 비밀키', () => {
       const me = device(`http://localhost:${PORT}`);
       const login = await me.login('jaehoon');
       expect(login.status).toBe(500);
-      expect(login.body).toEqual({ error: { code: 'INTERNAL_ERROR', message: '서버에서 문제가 생겼어요' } });
+      expect(login.body).toEqual(v2Error('INTERNAL_ERROR', '서버에서 문제가 생겼어요'));
       await sleep(300);
       expect(srv.tail()).toContain('Error: secretOrPrivateKey must have a value');
       expect(srv.tail()).toContain('POST /api/v2/auth/login 500 ');

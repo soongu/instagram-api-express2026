@@ -29,6 +29,9 @@ import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { applyMigrationsAfter, SOCIAL_ACCOUNTS_MIGRATION } from './helpers/tip-schema.js';
 
+// p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
+const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
+
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
@@ -250,7 +253,7 @@ describe('축 ② Step 2 — sessionService 를 표로', () => {
       expect(login.setCookie).toMatch(/^sessionId=j%3A%7B%7D; Max-Age=604800;/);
       const who = await me.get('/api/v2/auth/me');
       expect(who.status).toBe(500);
-      expect(who.body).toEqual({ error: { code: 'INTERNAL_ERROR', message: '서버에서 문제가 생겼어요' } });
+      expect(who.body).toEqual(v2Error('INTERNAL_ERROR', '서버에서 문제가 생겼어요'));
       await sleep(800);
       await expect(fetch(`${srv.base}/api/v2/auth/me`)).rejects.toThrow();
       const log = srv.tail();
