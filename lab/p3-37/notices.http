@@ -25,6 +25,9 @@ Content-Type: application/json
 ### 새 주소의 없는 주소
 GET http://localhost:4001/api/v2/notice
 
+### 새 주소의 없는 주소에 쿼리를 붙여서
+GET http://localhost:4001/api/v2/notice?keyword=event
+
 ### 새 주소로 깨진 JSON 보내기
 POST http://localhost:4001/api/v2/notices
 Content-Type: application/json

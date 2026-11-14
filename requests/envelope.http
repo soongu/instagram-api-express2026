@@ -41,3 +41,9 @@ POST {{api}}/posts
 Content-Type: application/json
 
 {"content":
+
+### 깨진 JSON으로 가입
+POST {{api}}/auth/signup
+Content-Type: application/json
+
+{"username":
