@@ -1612,11 +1612,18 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       expect(await without(wrong)).toEqual(await without(LAB('homework2.js')));
     }, 60_000);
 
-    it('🔴 틀린 판 — 톡 계정 번호를 보지 않고 제공자 이름으로만 지우면 sora 가 끊을 때 dahye 의 톡도 지워진다', async () => {
+    it('🔴 틀린 판 — 톡 계정 번호를 보지 않고 제공자 이름(talk)으로만 지우면 bomi 의 알림이 2번 소라의 톡을 지운다(bomi 줄이 처음으로 가린다)', async () => {
+      const before = talk.tail().length;
       const got = await observe(edit1(LAB('homework2.js'), "socialAccounts.findIndex((account) => account.provider === 'talk' && account.providerUserId === req.body.user_id)", "socialAccounts.findIndex((account) => account.provider === 'talk')"));
-      // sora 를 끊을 때는 우연히 맞고(처음 만난 톡 행이 소라의 것), 같은 알림을 다시 받을 때 새로 가입한 소라(3번)의 행이 지워진다
-      expect(got.members[3]).toEqual([]);
-      expect(wrongKeys(got)).toContain('members');
+      const talkLog = talk.tail().slice(before).split('\n').filter((line) => line.startsWith('[톡] 연결 끊기 알림'));
+      // 지울 때마다 «처음 만난 톡 행» 을 지운다 — bomi 알림에 소라(2번)의 것, sora 알림에 dahye(1번)의 것, dahye 알림에 새로 가입한 소라(3번)의 것
+      expect(got.bomiUnlinkPage).toBe(RIGHT.bomiUnlinkPage);
+      expect(got.afterBomiUnlink).toEqual({ 1: ['lab'], 2: [] });
+      expect(got.afterSoraUnlink).toEqual({ 1: ['lab'], 2: [] });
+      expect(got.members).toEqual({ 1: ['lab'], 2: [], 3: [] });
+      expect(talkLog).toEqual(Array(4).fill(`[톡] 연결 끊기 알림 ${LAB_BASE}/talk/unlink-webhook 200`));
+      expect(wrongKeys(got)[0]).toBe('afterBomiUnlink');
+      labSeen.homework2ProviderOnly = { ...got, talkLog: talkLog.map((line) => line.replace(LAB_BASE, 'http://localhost:4002')), wrongKeys: wrongKeys(got) };
     }, 60_000);
   });
 });
