@@ -32,11 +32,13 @@ function sendData(res, data) {
   res.json(data);
 }
 
-// 새 주소면 { error: { code, message } }, 옛 주소면 { message }.
-function sendError(res, error) {
+// 새 주소면 { error: { code, message, path, timestamp } }, 옛 주소면 { message }.
+function sendError(req, res, error) {
   res.status(error.status);
   if (res.locals.apiVersion === 2) {
-    res.json({ error: { code: error.code, message: error.message } });
+    const path = req.originalUrl.split('?')[0];
+    const timestamp = new Date().toISOString();
+    res.json({ error: { code: error.code, message: error.message, path, timestamp } });
     return;
   }
   res.json({ message: error.message });
@@ -92,8 +94,13 @@ function errorOf(...codes) {
     properties: {
       error: {
         type: 'object',
-        required: ['code', 'message'],
-        properties: { code: { type: 'string', enum: codes }, message: { type: 'string' } },
+        required: ['code', 'message', 'path', 'timestamp'],
+        properties: {
+          code: { type: 'string', enum: codes },
+          message: { type: 'string' },
+          path: { type: 'string' },
+          timestamp: { type: 'string', format: 'date-time' },
+        },
       },
     },
   };
@@ -181,15 +188,15 @@ app.use((req, res, next) => {
 
 app.use((err, req, res, next) => {
   if (err instanceof HttpError) {
-    sendError(res, err);
+    sendError(req, res, err);
     return;
   }
   if (err.status) {
-    sendError(res, new HttpError(err.status, 'INVALID_BODY'));
+    sendError(req, res, new HttpError(err.status, 'INVALID_BODY'));
     return;
   }
   console.error(err);
-  sendError(res, new HttpError(500, 'INTERNAL_ERROR'));
+  sendError(req, res, new HttpError(500, 'INTERNAL_ERROR'));
 });
 
 app.listen(4011, () => {
