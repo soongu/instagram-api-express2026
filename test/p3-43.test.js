@@ -25,6 +25,9 @@ import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { applyMigrationsAfter, SOCIAL_ACCOUNTS_MIGRATION } from './helpers/tip-schema.js';
 
+// p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
+const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
+
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
@@ -274,8 +277,9 @@ describe('축 ① Step 1 — 관리자도 403', () => {
       const out = [];
       for (const block of blocks) out.push(await sendBlock(block, jar, { port: PORT, named }));
       expect(out.map((r) => r.status)).toEqual([200, 201, 200, 403, 403]);
-      expect(out[3].body).toEqual({ error: { code: 'NOT_POST_AUTHOR', message: '내가 쓴 게시물만 고치거나 지울 수 있어요' } });
-      expect(out[4].body).toEqual(out[3].body);
+      expect(out[3].body).toEqual(v2Error('NOT_POST_AUTHOR', '내가 쓴 게시물만 고치거나 지울 수 있어요'));
+      // 마지막 둘의 본문은 timestamp 말고는 같다(p3-37 Step 8 — 응답한 시각이 실린다)
+      expect({ ...out[4].body.error, timestamp: '<time>' }).toEqual({ ...out[3].body.error, timestamp: '<time>' });
       expect(out[2].body).toEqual({ data: { id: 45, username: 'admin.hong', profileImage: null } });
       expect(await gate('SELECT author_id FROM posts WHERE id = $1', [named.reported.data.id])).toEqual([{ author_id: 2 }]);
     });
@@ -354,7 +358,7 @@ describe('축 ④ Step 4 — 토큰에 역할', () => {
       expect(parts(forged)[1].role).toBe('ADMIN');
       expect(await device(base).get('/api/v2/auth/me', { Authorization: `Bearer ${forged}` })).toMatchObject({ status: 401, body: { error: { code: 'LOGIN_REQUIRED' } } });
       const [{ id }] = await gate('SELECT id FROM posts WHERE author_id = 2 ORDER BY id DESC LIMIT 1');
-      expect((await a.send('DELETE', `/api/v2/posts/${id}`)).body).toEqual({ error: { code: 'NOT_POST_AUTHOR', message: '내가 쓴 게시물만 고치거나 지울 수 있어요' } });
+      expect((await a.send('DELETE', `/api/v2/posts/${id}`)).body).toEqual(v2Error('NOT_POST_AUTHOR', '내가 쓴 게시물만 고치거나 지울 수 있어요'));
     });
   }, 60000);
 });
@@ -405,7 +409,7 @@ describe('축 ⑤ Step 5 — 관리자는 지우기만', () => {
 
   it('🔴 끝 판 — 고치기 403 · 지우기 200 · 없는 게시물 404 · jaehoon 은 남의 것을 그대로 403', async () => {
     const out = await scene();
-    expect(out.patch.body).toEqual({ error: { code: 'NOT_POST_AUTHOR', message: '내가 쓴 게시물만 고치거나 지울 수 있어요' } });
+    expect(out.patch.body).toEqual(v2Error('NOT_POST_AUTHOR', '내가 쓴 게시물만 고치거나 지울 수 있어요'));
     expect(out.content).toBe('지금 가입하면 100만 원을 드려요');
     expect(out.del).toMatchObject({ status: 200, body: { data: { authorId: 2, content: '지금 가입하면 100만 원을 드려요' } } });
     expect(out.missing).toMatchObject({ status: 404, body: { error: { code: 'POST_NOT_FOUND' } } });
@@ -443,7 +447,7 @@ describe('축 ⑥ Step 6 — 관리자만 들어오는 주소', () => {
       const before = queryLines(tail()).length;
       const denied = await sendBlock(blockOf(blocks, '사람 목록'), j, { port: PORT });
       await sleep(200);
-      expect(denied.body).toEqual({ error: { code: 'ADMIN_ONLY', message: '관리자만 할 수 있어요' } });
+      expect(denied.body).toEqual(v2Error('ADMIN_ONLY', '관리자만 할 수 있어요'));
       expect(denied.status).toBe(403);
       expect(queryLines(tail()).length - before).toBe(0);
       const a = device(base);
@@ -509,11 +513,11 @@ describe('축 ⑧ Step 8 — 관리자 권한을 쓸 때만 다시 확인', () =
     makeAdmin(8);
     await withServer(stepDir(8), async ({ tail }) => {
       const r = await demoteScene(8, tail);
-      expect(r.list.body).toEqual({ error: { code: 'ADMIN_ONLY', message: '관리자만 할 수 있어요' } });
+      expect(r.list.body).toEqual(v2Error('ADMIN_ONLY', '관리자만 할 수 있어요'));
       expect(r.listQueries).toBe(1);
       expect(r.self.status).toBe(403);
       const del = await sendBlock(blockOf(r.blocks, '복사해 둔 jaehoon의 토큰으로 남의 게시물 지우기'), r.a, { port: PORT, swap: r.swap });
-      expect(del.body).toEqual({ error: { code: 'NOT_POST_AUTHOR', message: '내가 쓴 게시물만 고치거나 지울 수 있어요' } });
+      expect(del.body).toEqual(v2Error('NOT_POST_AUTHOR', '내가 쓴 게시물만 고치거나 지울 수 있어요'));
       expect(await gate('SELECT role FROM users WHERE id = 2')).toEqual([{ role: 'USER' }]);
       expect(await gate('SELECT count(*)::int AS n FROM posts WHERE id = 2')).toEqual([{ n: 1 }]);
     }, { edit: queryLog });
@@ -983,7 +987,7 @@ describe('축 ⑬ 교안·답안의 블록은 코드베이스와 실제 실행�
 
   it('🔴 json 블록 — 403 본문 · admin.hong 로그인 응답 · 지운 게시물은 «관리자가 고친 글»', () => {
     const jsons = fences(DOCS[0], 'json');
-    expect(JSON.parse(jsons[0])).toEqual({ error: { code: 'NOT_POST_AUTHOR', message: '내가 쓴 게시물만 고치거나 지울 수 있어요' } });
+    expect(JSON.parse(jsons[0])).toEqual(v2Error('NOT_POST_AUTHOR', '내가 쓴 게시물만 고치거나 지울 수 있어요'));
     expect(JSON.parse(jsons[1])).toEqual({ data: { id: 45, username: 'admin.hong', profileImage: null, role: 'ADMIN' } });
     expect(jsons[2]).toContain('"content": "관리자가 고친 글"');
     expect(jsons[4]).toContain('"role": "ADMIN"');

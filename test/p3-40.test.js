@@ -32,6 +32,9 @@ import { roundDir } from './helpers/round.js';
 import { applyMigration, ROLE_MIGRATION } from './helpers/tip-schema.js';
 import { sendAll } from './helpers/send-http.js';
 
+// p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
+const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
+
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
@@ -236,12 +239,12 @@ describe('축 ② Step 2 — 해시와 비교', () => {
       expect(ok.ms).toBeGreaterThan(100);
       const wrong = await post(base, '/api/v2/auth/login', { username: 'seoyeon', password: 'wrong-password' });
       expect(wrong.status).toBe(401);
-      expect(wrong.body).toEqual({ error: { code: 'LOGIN_FAILED', message: '그런 사용자는 없어요' } });
+      expect(wrong.body).toEqual(v2Error('LOGIN_FAILED', '그런 사용자는 없어요'));
       const nobody = await post(base, '/api/v2/auth/login', { username: 'hana', password: 'hana1234' });
       expect(nobody.status).toBe(401);
       const jaehoon = await post(base, '/api/v2/auth/login', { username: 'jaehoon', password: 'jaehoon1234' });
       expect(jaehoon.status).toBe(500);
-      expect(jaehoon.body).toEqual({ error: { code: 'INTERNAL_ERROR', message: '서버에서 문제가 생겼어요' } });
+      expect(jaehoon.body).toEqual(v2Error('INTERNAL_ERROR', '서버에서 문제가 생겼어요'));
       await sleep(200); // 로거 줄은 응답을 다 보낸 뒤에 찍힌다 — 스택보다 늦다
       expect(tail()).toContain('Error: data and hash arguments required');
       expect(tail()).toMatch(/POST \/api\/v2\/auth\/login 500 [\d.]+ms/);
@@ -270,7 +273,7 @@ describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
       await post(base, '/api/v2/auth/login', { username: 'hana', password: 'hana1234' }); // 서버가 막 떠서 느린 첫 DB 요청을 걸러 낸다
       const before = await post(base, '/api/v2/auth/login', { username: 'jaehoon', password: 'jaehoon1234' });
       expect(before.status).toBe(401);
-      expect(before.body).toEqual({ error: { code: 'LOGIN_FAILED', message: '그런 사용자는 없어요' } });
+      expect(before.body).toEqual(v2Error('LOGIN_FAILED', '그런 사용자는 없어요'));
       expect(before.ms).toBeLessThan(80);
       const { code, out } = run(dir, 'lab/p3-40/set-password.js', { DATABASE_URL: GATE_URL });
       expect(code).toBe(0);
@@ -364,7 +367,7 @@ describe('축 ⑤ Step 5 — 문장은 하나 · 시간은 다르다', () => {
     await freshGate();
     await withServer(S5, async ({ base }) => {
       const v2 = await post(base, '/api/v2/auth/login', { username: 'hana', password: 'hana1234' });
-      expect(v2.body).toEqual({ error: { code: 'LOGIN_FAILED', message: '사용자 이름이나 비밀번호가 맞지 않아요' } });
+      expect(v2.body).toEqual(v2Error('LOGIN_FAILED', '사용자 이름이나 비밀번호가 맞지 않아요'));
       const old = await post(base, '/api/auth/login', { username: 'hana', password: 'hana1234' });
       expect(old.status).toBe(401);
       expect(old.body).toEqual({ message: '사용자 이름이나 비밀번호가 맞지 않아요' });
@@ -438,8 +441,9 @@ describe('축 ⑥ Step 6 — 가짜 해시', () => {
     }, { edit: onlyMissing });
   }, 90000);
 
-  it('🔴 세 실패는 옛 주소·새 주소 모두 상태 줄·헤더(Date 빼고)·본문까지 같다', async () => {
+  it('🔴 세 실패는 옛 주소·새 주소 모두 상태 줄·헤더(Date 빼고)·본문까지 같다 — 새 주소는 응답한 시각(timestamp)과 그 본문의 ETag 만 다르다', async () => {
     expect(read(LECTURE6)).toContain('상태 코드와 헤더도 같아요');
+    expect(read(LECTURE6)).toContain('새 주소로 보내면 본문의 `timestamp`와 그 본문으로 계산하는 `ETag`도 요청마다 다르지만');
     const S6 = stepDir(6);
     await freshGate();
     await withServer(S6, async ({ base }) => {
@@ -448,8 +452,11 @@ describe('축 ⑥ Step 6 — 가짜 해시', () => {
         const seen = [];
         for (const body of [{ username: 'nobody', password: 'wrong-password' }, { username: 'minji', password: 'wrong-password' }, { username: 'seoyeon', password: 'wrong-password' }]) {
           const res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-          const headers = [...res.headers].filter(([name]) => name !== 'date');
-          seen.push(JSON.stringify({ status: res.status, headers, body: await res.text() }));
+          // 새 주소는 본문에 응답한 시각(timestamp)이 실려 ETag 도 그것을 따라 바뀐다 — 그 둘만 지우고 대조한다(옛 주소는 그대로 전부).
+          const v2 = path.startsWith('/api/v2/');
+          const headers = [...res.headers].filter(([name]) => name !== 'date' && !(v2 && name === 'etag'));
+          const text = await res.text();
+          seen.push(JSON.stringify({ status: res.status, headers, body: v2 ? text.replace(/"timestamp":"[^"]+"/, '"timestamp":"<time>"') : text }));
         }
         expect(JSON.parse(seen[0]).status).toBe(401);
         expect(new Set(seen).size, path).toBe(1);
