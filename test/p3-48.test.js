@@ -1143,10 +1143,10 @@ const consentLab = async (started, username) => {
   expect(back.origin).toBe(LAB_BASE);
   return `${back.pathname}${back.search}`;
 };
-/** 톡의 동의 화면에서 계정을 고르고 «허용» 을 누른다(닉네임 · 이메일 제공을 켠 채). */
-const consentTalk = async (started, account) => {
+/** 톡의 동의 화면에서 계정을 고르고 «허용»(또는 «거부») 을 누른다(닉네임 · 이메일 제공을 켠 채). */
+const consentTalk = async (started, account, decision = 'allow') => {
   const auth = new URL(started.location);
-  const fields = [...auth.searchParams, ['account', account], ['decision', 'allow'], ['nickname', 'yes'], ['email', 'yes']];
+  const fields = [...auth.searchParams, ['account', account], ['decision', decision], ['nickname', 'yes'], ['email', 'yes']];
   const res = await fetch(`${auth.origin}/oauth/authorize`, { method: 'POST', body: new URLSearchParams(fields), redirect: 'manual' });
   const back = new URL(res.headers.get('location'));
   expect(back.origin).toBe(LAB_BASE);
@@ -1198,7 +1198,14 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       nodeCheck(LAB('practice1.js'));
     });
 
-    /** 확인 절차 — 인가 서버 dahye 로그인 → 톡 연결(dahye) → 회원 목록 → 톡 dahye 로 로그인 → 로그인하지 않고 연결 시작. */
+    /** 처음 화면(`/?error=…`)에 보이는 문장. */
+    const noticeOf = async (base, location) => /<p>([^<]*)<\/p>/.exec((await browser(base).get(location)).body)?.[1] ?? null;
+    /**
+     * 확인 절차 — 인가 서버 dahye 로그인 → 톡 연결(dahye) → 회원 목록 → 톡 dahye 로 로그인
+     * → (탭 둘) 첫 탭에서 연결을 시작해 톡 동의 화면에 멈춘 채 둘째 탭에서 인가 서버 jaehoon 으로 로그인하고, 첫 탭에서 haru 로 허용
+     * → 연결을 시작해 톡 화면에서 «거부» 한 뒤 처음 화면에서 «톡으로 로그인»(sora) → 로그인하지 않고 연결 시작 → 회원 목록.
+     * 브라우저의 탭 둘은 쿠키 단지를 함께 쓰므로 쿠키 단지 하나로 잰다.
+     */
     const observe = (source) => withService('practice1.js', source, async ({ base }) => {
       const tab = browser(base);
       const got = {};
@@ -1208,8 +1215,23 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       got.members = await membersOf(base);
       got.talkLogin = await labGo(tab, '/talk', 'dahye');
       got.meAfter = await meOf(tab);
+      // 탭 둘 — 첫 탭은 톡 동의 화면에 멈춰 있다
+      const waiting = await tab.get('/talk/link');
+      got.otherTabLogin = await labGo(tab, '/login', 'jaehoon');
+      got.otherTabMe = await meOf(tab);
+      const back = await tab.get(await consentTalk(waiting, 'haru'));
+      got.otherLoginLink = [back.status, back.location];
+      got.otherLoginNotice = back.location ? await noticeOf(base, back.location) : null;
+      got.membersAfterOtherLogin = await membersOf(base);
+      // 거부한 뒤 로그인
+      const started = await tab.get('/talk/link');
+      const denied = await tab.get(await consentTalk(started, 'sora', 'deny'));
+      got.denied = [denied.status, denied.location];
+      got.deniedNotice = denied.location ? await noticeOf(base, denied.location) : null;
+      got.loginAfterDeny = await labGo(tab, '/talk', 'sora');
+      got.meAfterDeny = await meOf(tab);
       got.noLogin = await labGo(browser(base), '/talk/link', 'dahye');
-      got.memberCount = Object.keys(await membersOf(base)).length;
+      got.membersAtEnd = await membersOf(base);
       return got;
     });
     const RIGHT = {
@@ -1219,8 +1241,17 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       members: { 1: ['lab', 'talk'], 2: ['talk'] },
       talkLogin: [302, '/me'],
       meAfter: { id: 1, nickname: 'dahye', email: 'dahye@example.com' },
+      otherTabLogin: [302, '/me'],
+      otherTabMe: { id: 3, nickname: 'jaehoon' },
+      otherLoginLink: [302, '/?error=LOGIN_REQUIRED'],
+      otherLoginNotice: '로그인이 필요해요.',
+      membersAfterOtherLogin: { 1: ['lab', 'talk'], 2: ['talk'], 3: ['lab'] },
+      denied: [302, '/?error=LOGIN_FAILED'],
+      deniedNotice: '로그인하지 못했어요. 다시 시도해 주세요.',
+      loginAfterDeny: [302, '/me'],
+      meAfterDeny: { id: 2, nickname: '소라' },
       noLogin: [302, '/?error=LOGIN_REQUIRED'],
-      memberCount: 2,
+      membersAtEnd: { 1: ['lab', 'talk'], 2: ['talk'], 3: ['lab'] },
     };
     const wrongKeys = (got) => Object.keys(RIGHT).filter((key) => JSON.stringify(got[key]) !== JSON.stringify(RIGHT[key]));
 
@@ -1246,6 +1277,28 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       const got = await observe(wrong);
       expect(got.talkLogin).toEqual([302, '/members']);
       expect(wrongKeys(got)).toContain('talkLogin');
+    }, 60_000);
+
+    it('🔴 틀린 판 (라) — 연결 표시 쿠키의 값과 지금 labSession 을 비교하지 않으면(로그인만 돼 있으면 잇는다) 탭 둘에서 haru 가 둘째 탭의 jaehoon 에게 이어진다', async () => {
+      const wrong = edit1(LAB('practice1.js'), '  if (memberId === undefined || linkSession !== req.cookies.labSession) {', '  if (memberId === undefined) {');
+      const got = await observe(wrong);
+      expect(got.otherLoginLink).toEqual([302, '/members']);
+      expect(got.membersAfterOtherLogin).toEqual({ 1: ['lab', 'talk'], 2: ['talk'], 3: ['lab', 'talk'] });
+      // 앞의 확인(다섯 줄)은 정답과 같다 — 탭 둘 줄이 처음으로 가린다
+      expect(wrongKeys(got)[0]).toBe('otherLoginLink');
+      labSeen.practice1NoCompare = { otherLoginLink: got.otherLoginLink, membersAfterOtherLogin: got.membersAfterOtherLogin, wrongKeys: wrongKeys(got) };
+    }, 60_000);
+
+    it('🔴 틀린 판 (마) — 로그인 시작(/talk)에서만 연결 표시 쿠키를 안 지우면(콜백에서는 지운다) 거부한 뒤 «톡으로 로그인» 이 연결로 처리돼 sora 가 jaehoon 에게 이어진다', async () => {
+      const wrong = edit1(LAB('practice1.js'), "app.get('/talk', (req, res, next) => {\n  res.clearCookie('lab_link_talk');\n  next();\n}, passport.authenticate('talk', { session: false }));", "app.get('/talk', passport.authenticate('talk', { session: false }));");
+      expect(wrong.match(/clearCookie\('lab_link_talk'\)/g)).toHaveLength(1);
+      const got = await observe(wrong);
+      expect(got.loginAfterDeny).toEqual([302, '/members']);
+      expect(got.meAfterDeny).toEqual({ id: 3, nickname: 'jaehoon' });
+      expect(got.membersAtEnd).toEqual({ 1: ['lab', 'talk'], 2: ['talk'], 3: ['lab', 'talk'] });
+      // 거부 줄까지는 정답과 같다 — 거부한 뒤 로그인 줄이 처음으로 가린다
+      expect(wrongKeys(got)[0]).toBe('loginAfterDeny');
+      labSeen.practice1StartKeepsLink = { loginAfterDeny: got.loginAfterDeny, meAfterDeny: got.meAfterDeny, membersAtEnd: got.membersAtEnd, wrongKeys: wrongKeys(got) };
     }, 60_000);
 
     it('🔴 틀린 판 (나) — verify 가 여전히 회원을 찾거나 만들면 톡 연결이 /?error=EMAIL_TAKEN', async () => {
@@ -1462,12 +1515,15 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       expect(SNAP('homework2-start.homework2.js')).toBe(LAB('practice2.js').replace('// ~/instagram-api/lab/p3-48/practice2.js\n', '// ~/instagram-api/lab/p3-48/homework2.js\n'));
     });
 
-    /** 확인 절차 — 틀린 키 .http · dahye 톡 연결 · 톡에서 sora 연결 끊기 · sora 로그인 · dahye 연결 끊기 · dahye 로그인 · 같은 알림 다시 · 다른 앱 알림. */
+    /** 확인 절차 — 틀린 키 .http · 톡에서 bomi(실습 서비스 회원이 아니다) 연결 끊기 · dahye 톡 연결 · 톡에서 sora 연결 끊기 · sora 로그인 · dahye 연결 끊기 · dahye 로그인 · 같은 알림 다시 · 다른 앱 알림. */
     const observe = (source) => withService('homework2.js', source, async ({ base }) => {
       const got = {};
       const out = await httpyacLab('homework2.http', LAB('homework2.http'));
       got.http = out.match(/^HTTP\/1\.1 (\d+)/gm)?.map((line) => Number(line.slice(9)));
       got.afterWrongKey = await membersOf(base);
+      // bomi 의 톡 회원번호 10003 은 인가 서버 dahye 의 값(1번의 lab 연결)과 글자가 같다
+      got.bomiUnlinkPage = await unlinkAtTalk('bomi');
+      got.afterBomiUnlink = await membersOf(base);
       const dahye = browser(base);
       await labGo(dahye, '/login', 'dahye');
       got.dahyeLink = await labGo(dahye, '/talk/link', 'dahye');
@@ -1487,6 +1543,8 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
     const RIGHT = {
       http: [401, 200],
       afterWrongKey: { 1: ['lab'], 2: ['talk'] },
+      bomiUnlinkPage: '<!doctype html><meta charset="utf-8"><p>실습 서비스와의 연결을 끊었어요.</p><p>앱에 알렸어요.</p>',
+      afterBomiUnlink: { 1: ['lab'], 2: ['talk'] },
       dahyeLink: [302, '/members'],
       soraUnlinkPage: '<!doctype html><meta charset="utf-8"><p>실습 서비스와의 연결을 끊었어요.</p><p>앱에 알렸어요.</p>',
       afterSoraUnlink: { 1: ['lab', 'talk'], 2: [] },
@@ -1505,7 +1563,7 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       const got = await observe(LAB('homework2.js'));
       expect(got).toEqual(RIGHT);
       const talkLog = talk.tail().slice(before).split('\n').filter((line) => line.startsWith('[톡] 연결 끊기 알림'));
-      expect(talkLog).toEqual(Array(3).fill(`[톡] 연결 끊기 알림 ${LAB_BASE}/talk/unlink-webhook 200`));
+      expect(talkLog).toEqual(Array(4).fill(`[톡] 연결 끊기 알림 ${LAB_BASE}/talk/unlink-webhook 200`));
       labSeen.homework2 = { ...got, talkLog: talkLog.map((line) => line.replace(LAB_BASE, 'http://localhost:4002')) };
     }, 60_000);
 
@@ -1523,6 +1581,35 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       const got = await observe(edit1(LAB('homework2.js'), '  if (index !== -1) socialAccounts.splice(index, 1);\n', "  if (index === -1) {\n    res.sendStatus(404);\n    return;\n  }\n\n  socialAccounts.splice(index, 1);\n"));
       expect(got.again).toContain('<p>앱이 404로 답했어요.</p>');
       expect(wrongKeys(got)).toContain('again');
+    }, 60_000);
+
+    it('🔴 틀린 판 — 제공자를 보지 않고 계정 번호(user_id)로만 지우면 bomi(10003)의 알림에 1번 dahye 의 인가 서버 연결(10003)이 지워진다', async () => {
+      const wrong = edit1(LAB('homework2.js'), "socialAccounts.findIndex((account) => account.provider === 'talk' && account.providerUserId === req.body.user_id)", 'socialAccounts.findIndex((account) => account.providerUserId === req.body.user_id)');
+      const got = await observe(wrong);
+      expect(got.bomiUnlinkPage).toBe(RIGHT.bomiUnlinkPage);
+      expect(got.afterBomiUnlink).toEqual({ 1: [], 2: ['talk'] });
+      // bomi 줄이 처음으로 가린다(그 앞의 틀린 키 줄은 정답과 같다)
+      expect(wrongKeys(got)[0]).toBe('afterBomiUnlink');
+      labSeen.homework2UserIdOnly = { afterBomiUnlink: got.afterBomiUnlink, wrongKeys: wrongKeys(got) };
+    }, 60_000);
+
+    it('🔎 bomi 줄이 없던 확인 절차(열 줄)로는 위 틀린 판이 정답과 같았다 — bomi 줄 다음부터의 관찰이 모두 정답과 같다', async () => {
+      const wrong = edit1(LAB('homework2.js'), "socialAccounts.findIndex((account) => account.provider === 'talk' && account.providerUserId === req.body.user_id)", 'socialAccounts.findIndex((account) => account.providerUserId === req.body.user_id)');
+      const without = (source) => withService('homework2.js', source, async ({ base }) => {
+        const dahye = browser(base);
+        await labGo(dahye, '/login', 'dahye');
+        const got = { dahyeLink: await labGo(dahye, '/talk/link', 'dahye'), soraUnlinkPage: await unlinkAtTalk('sora') };
+        got.afterSoraUnlink = await membersOf(base);
+        const sora = browser(base);
+        got.soraLogin = await labGo(sora, '/talk', 'sora');
+        got.soraMe = await meOf(sora);
+        got.dahyeUnlinkPage = await unlinkAtTalk('dahye');
+        got.dahyeTalkLogin = await labGo(browser(base), '/talk', 'dahye');
+        got.again = await unlinkAtTalk('dahye');
+        got.members = await membersOf(base);
+        return got;
+      });
+      expect(await without(wrong)).toEqual(await without(LAB('homework2.js')));
     }, 60_000);
 
     it('🔴 틀린 판 — 톡 계정 번호를 보지 않고 제공자 이름으로만 지우면 sora 가 끊을 때 dahye 의 톡도 지워진다', async () => {
