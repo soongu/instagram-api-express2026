@@ -35,7 +35,7 @@ const postFields = {
   images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' } },
 };
 
-// 보는 사람이 누른 좋아요를 센다 — 목록과 상세가 같은 기준이다.
+// 보는 사람이 누른 좋아요를 센다 — 목록 · 상세 · 고치기 응답이 같은 기준이다.
 // 누가 보는지 알 때만 센다. userId 가 undefined 면 `where` 가 «조건 없음» 이 되어 누가 누른 좋아요든 다 센다.
 function fieldsFor(userId) {
   return userId
@@ -164,7 +164,7 @@ export async function updatePost(id, userId, data) {
     const post = await prisma.post.update({
       where: { id },
       data,
-      select: postFields,
+      select: fieldsFor(userId),
     });
 
     return flatten(post);
