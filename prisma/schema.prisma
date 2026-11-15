@@ -29,6 +29,7 @@ model User {
   likes        PostLike[]
   sessions     Session[]
   socialAccounts SocialAccount[]
+  uploads      Upload[]
 
   @@map("users")
 }
@@ -46,6 +47,7 @@ model Post {
   comments     Comment[]
   images       PostImage[]
   likes        PostLike[]
+  uploads      Upload[]
 
   // 목록의 정렬과 같은 순서로 인덱스를 둔다 — 최신 글부터 정렬 없이 읽어 나갈 수 있다.
   @@index([createdAt(sort: Desc), id(sort: Desc)])
@@ -127,4 +129,20 @@ model SocialAccount {
   @@unique([userId, provider])
   @@index([userId])
   @@map("social_accounts")
+}
+
+// 올린 사진 — 사진 파일 하나가 한 행이다. 누가 올렸는지와, 어느 게시물에 썼는지를 적어 둔다.
+// 아직 어느 게시물에도 쓰지 않은 사진은 postId 가 비어 있다.
+// 올린 사람을 지우면 그 사람이 올린 사진의 기록도, 게시물을 지우면 그 게시물에 쓴 사진의 기록도 함께 지운다(onDelete: Cascade).
+model Upload {
+  id         Int      @id @default(autoincrement())
+  fileName   String   @unique @map("file_name")
+  uploaderId Int      @map("uploader_id")
+  uploader   User     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  postId     Int?     @map("post_id")
+  post       Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([postId])
+  @@map("uploads")
 }
