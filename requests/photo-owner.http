@@ -77,3 +77,9 @@ Content-Type: application/json
   "postAlt": "바닷가 사진",
   "content": "같은 사진을 한 번 더 올려요"
 }
+
+### jaehoon의 게시물 지우기
+DELETE http://localhost:3000/api/v2/posts/{{jaehoonPost.data.id}}
+
+### 사진 다시 열기
+GET http://localhost:3000{{uploaded.data.imageUrls[0]}}

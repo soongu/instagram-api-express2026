@@ -1,8 +1,8 @@
 // ~/instagram-api/services/postService.js
-import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '../db.js';
 import * as userService from './userService.js';
+import * as uploadService from './uploadService.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { cursorSchema } from '../schemas/postSchema.js';
 
@@ -172,21 +172,6 @@ export async function updatePost(id, userId, data) {
   }
 }
 
-// 우리 서버에 올린 사진 파일을 지운다. 바깥 주소(https://…)의 사진은 우리 파일이 아니라 건너뛴다.
-async function removeUploadedFiles(imageUrls) {
-  const uploaded = imageUrls.filter((imageUrl) => imageUrl.startsWith('/uploads/'));
-
-  for (const imageUrl of uploaded) {
-    try {
-      // 주소에서 파일 이름만 꺼낸다 — 주소에 ../ 가 섞여 와도 uploads 폴더 밖은 못 건드린다.
-      await rm(path.join('uploads', path.basename(imageUrl)), { force: true });
-    } catch (error) {
-      // 게시물은 이미 지웠다 — 파일 하나를 못 지웠다고 요청을 실패로 돌리지 않고, 기록만 남기고 다음 파일로 간다.
-      console.error(error);
-    }
-  }
-}
-
 export async function removePost(id, userId, role) {
   // 관리자는 남의 게시물도 지울 수 있다 — 신고된 게시물을 내리는 일이라, 고치기는 열지 않고 지우기에만 연다.
   // 토큰이 관리자라고 하면 데이터베이스에서 지금 역할을 한 번 더 본다.
@@ -194,19 +179,21 @@ export async function removePost(id, userId, role) {
   if (!admin) await checkAuthor(id, userId);
 
   let post;
+  let fileNames;
   try {
-    post = await prisma.post.delete({
-      where: { id },
-      select: postFields,
+    // 게시물을 지우면 그 게시물에 쓴 사진의 기록도 함께 지워진다(onDelete: Cascade) — 지우기 전에 파일 이름을 읽어 둔다.
+    [fileNames, post] = await prisma.$transaction(async (tx) => {
+      const uploads = await tx.upload.findMany({ where: { postId: id }, select: { fileName: true } });
+      const deleted = await tx.post.delete({ where: { id }, select: postFields });
+      return [uploads.map((upload) => upload.fileName), deleted];
     });
   } catch (error) {
     if (error.code === 'P2025') throw new NotFoundError('POST_NOT_FOUND');
     throw error;
   }
 
-  // 테이블에서 먼저 지우고, 파일은 그다음에 지운다.
-  const deleted = flatten(post);
-  await removeUploadedFiles(deleted.imageUrls);
+  // 테이블에서 먼저 지우고, 파일은 그다음에 지운다 — 이 게시물에 쓴 기록이 있던 파일만 지운다.
+  await uploadService.removeFiles(fileNames);
 
-  return deleted;
+  return flatten(post);
 }
