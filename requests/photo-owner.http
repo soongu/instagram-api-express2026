@@ -1,0 +1,60 @@
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 사진 올리기
+# @name uploaded
+POST http://localhost:3000/api/v2/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ./photos/beach.jpg
+--photo-boundary--
+
+### 그 사진으로 게시물 만들기
+# @name jaehoonPost
+POST http://localhost:3000/api/v2/posts
+Content-Type: application/json
+
+{
+  "imageUrls": {{uploaded.data.imageUrls}},
+  "postAlt": "바닷가 사진",
+  "content": "지난 주말에 다녀온 바다"
+}
+
+### seoyeon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### seoyeon이 jaehoon의 사진 주소로 게시물 만들기
+# @name seoyeonPost
+POST http://localhost:3000/api/v2/posts
+Content-Type: application/json
+
+{
+  "imageUrls": {{uploaded.data.imageUrls}},
+  "postAlt": "바닷가 사진",
+  "content": "피드에서 본 사진이에요"
+}
+
+### seoyeon이 그 게시물 지우기
+DELETE http://localhost:3000/api/v2/posts/{{seoyeonPost.data.id}}
+
+### 사진 열기
+GET http://localhost:3000{{uploaded.data.imageUrls[0]}}
+
+### jaehoon의 게시물 다시 보기
+GET http://localhost:3000/api/v2/posts/{{jaehoonPost.data.id}}
