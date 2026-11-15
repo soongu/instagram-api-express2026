@@ -1,0 +1,29 @@
+### 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 게시물 하나 받기
+GET http://localhost:3000/api/v2/posts/9
+
+### 같은 게시물을 목록으로 받기
+GET http://localhost:3000/api/v2/posts?username=minji&limit=1
+
+### 그 게시물 좋아요 누르기
+PUT http://localhost:3000/api/v2/posts/9/likes/me
+
+### seoyeon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### seoyeon이 같은 게시물 받기
+GET http://localhost:3000/api/v2/posts/9
