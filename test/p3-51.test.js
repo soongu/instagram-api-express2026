@@ -16,6 +16,7 @@
 // 축 ④ 쿼리 수 — 상세 하나에 3 · 고치기 전·뒤 같다 · 누가 보는지 모르면 세지 않는다
 // 축 ⑤ requests/post-detail.http 를 httpYac CLI(--all)로 두 판에
 // 축 ⑥ 학생 파일 차이
+// 축 ⑦ 교안 블록 대조 — Step 4 의 .http(완성본) · 컨트롤러·서비스 발췌 넷(고치기 전 둘 · 고친 뒤 둘) · 응답 표
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -604,15 +605,23 @@ describe('축 ④ 쿼리 수 — 상세 하나에 쿼리 3 · 고치기 전·뒤
 });
 
 // ── 축 ⑤ requests/post-detail.http ──────────────────────────────────────────────
-describe('축 ⑤ requests/post-detail.http — httpYac CLI(--all)로 두 판에', () => {
-  it('🔴 여섯 요청 — 고치기 전·뒤 상태가 같고, 두 판 응답 본문의 차이는 «게시물 하나 받기» 의 liked 한 줄(false → true)', async () => {
+/** post-detail.http 를 두 판에 한 번씩 — 축 ⑤ 와 축 ⑦(교안의 응답 표)이 같은 실측을 본다. */
+let httpRuns;
+const sendHttpBoth = () => {
+  httpRuns ??= (async () => {
     const source = read(after()(HTTP_FILE));
     const send = async (from, db) => {
       await copyDb(db);
       return withServer(from, db, () => httpyac(source));
     };
-    const a = await send(before(), GATE_DB);
-    const b = await send(after(), GATE2_DB);
+    return { a: await send(before(), GATE_DB), b: await send(after(), GATE2_DB) };
+  })();
+  return httpRuns;
+};
+
+describe('축 ⑤ requests/post-detail.http — httpYac CLI(--all)로 두 판에', () => {
+  it('🔴 여섯 요청 — 고치기 전·뒤 상태가 같고, 두 판 응답 본문의 차이는 «게시물 하나 받기» 의 liked 한 줄(false → true)', async () => {
+    const { a, b } = await sendHttpBoth();
     const titles = [['로그인', 200], ['게시물 하나 받기', 200], ['같은 게시물을 목록으로 받기', 200], ['그 게시물 좋아요 누르기', 200], ['seoyeon으로 로그인', 200], ['seoyeon이 같은 게시물 받기', 200]];
     expect(a.map((r) => [r.title, r.status])).toEqual(titles);
     expect(b.map((r) => [r.title, r.status])).toEqual(titles);
@@ -702,4 +711,110 @@ describe('축 ⑥ 학생 파일 차이 — code/p3-50 에서', () => {
     expect(added.length).toBeGreaterThan(0);
     expect(added.filter((line) => banned.test(line))).toEqual([]);
   });
+});
+
+// ── 축 ⑦ 교안 블록 대조 ─────────────────────────────────────────────────────────
+// 원고는 읽기만 한다(어긋나면 판정이 빨개질 뿐 원고를 고치지 않는다). 경로는 앞 회차 판정처럼 트랙 폴더에서 찾고 `P351_LECTURE` 로 바꿀 수 있다.
+// 🚨 원고가 없으면 건너뛰지 않고 실패한다(읽는 순간 ENOENT).
+const LECTURE_MD = process.env.P351_LECTURE ?? new URL('../../part3/8-fullstack-features/p3-51-post-detail-lecture.md', ROOT).pathname;
+const API_PATH = '// ~/instagram-api/';
+/** 원고의 펜스를 차례대로 — 언어 · 본문(줄들) · 시작 줄 번호 · 그 펜스가 속한 Step(`## Step N`). */
+const fencesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let step = null;
+  read(file).split('\n').forEach((line, i) => {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.body.push(line);
+      return;
+    }
+    if (line.startsWith('```')) {
+      cur = { lang: line.slice(3).trim(), body: [], line: i + 1, step };
+      return;
+    }
+    if (line.startsWith('## ')) step = Number(/^## Step (\d+)/.exec(line)?.[1]) || null;
+  });
+  if (cur) throw new Error(`${file} — 닫히지 않은 펜스(${cur.line}번 줄)`);
+  return out;
+};
+/** 발췌의 «줄임» 줄 — `// ...`. */
+const isElision = (line) => line.trim() === '// ...';
+/** 줄임 줄과 빈 줄을 뺀 줄이 `haystack`(줄들)에 차례대로 있는가 — 없으면 처음 못 찾은 줄을 돌려준다. */
+const firstMissing = (wanted, haystack) => {
+  let at = 0;
+  for (const line of wanted.filter((one) => one.trim() !== '' && !isElision(one))) {
+    const found = haystack.indexOf(line, at);
+    if (found === -1) return line;
+    at = found + 1;
+  }
+  return null;
+};
+/** 교안의 백엔드 학생 파일 블록 — ```http 는 모두 post-detail.http(이 회차 백엔드 .http 는 그것 하나) · ```js 는 첫 줄이 경로 주석인 것. */
+const studentFences = () => fencesOf(LECTURE_MD).flatMap((fence) => {
+  if (fence.lang === 'http') return [{ ...fence, rel: HTTP_FILE, how: 'full' }];
+  if (fence.lang === 'js' && (fence.body[0] ?? '').startsWith(API_PATH)) return [{ ...fence, rel: fence.body[0].slice(API_PATH.length), how: 'excerpt' }];
+  return [];
+});
+/** 각 블록이 어느 판을 보여 주는지 — Step 4 는 고치기 전 판을 먼저 보이고 고친 판을 뒤에 보인다. */
+const EXPECTED_FENCES = [
+  [4, 'http', HTTP_FILE, 'full', 'after'],
+  [4, 'js', 'controllers/postController.js', 'excerpt', 'before'],
+  [4, 'js', 'services/postService.js', 'excerpt', 'before'],
+  [4, 'js', 'services/postService.js', 'excerpt', 'after'],
+  [4, 'js', 'controllers/postController.js', 'excerpt', 'after'],
+];
+
+describe('축 ⑦ 교안 블록 대조 — 교안이 보여 주는 ~/instagram-api 학생 파일 = 그 판', () => {
+  it('🔴 대조할 블록 다섯 — Step · 언어 · 파일 · 대조 방식이 이 목록과 같다(빠뜨리거나 새로 생긴 블록이 있으면 먼저 여기서 빨개진다)', () => {
+    expect(studentFences().map((f) => [f.step, f.lang, f.rel, f.how])).toEqual(EXPECTED_FENCES.map(([step, lang, rel, how]) => [step, lang, rel, how]));
+  });
+
+  it('🔴 .http 는 글자까지 같고 · 발췌는 `// ...` 를 뺀 모든 줄이 그 판(고치기 전 = code/p3-50 · 고친 뒤 = Step 4 끝 커밋) 파일에 차례대로 있다 — 그리고 다른 판 파일에는 없다', () => {
+    const fences = studentFences();
+    const results = fences.map((fence, i) => {
+      const which = EXPECTED_FENCES[i][4];
+      const own = read((which === 'before' ? before() : after())(fence.rel));
+      if (fence.how === 'full') return [fence.line, fence.rel, which, `${fence.body.join('\n')}\n` === own];
+      const other = read((which === 'before' ? after() : before())(fence.rel));
+      return [fence.line, fence.rel, which, firstMissing(fence.body, own.split('\n')), firstMissing(fence.body, other.split('\n')) !== null];
+    });
+    expect(results).toEqual(fences.map((fence, i) => (fence.how === 'full'
+      ? [fence.line, fence.rel, EXPECTED_FENCES[i][4], true]
+      : [fence.line, fence.rel, EXPECTED_FENCES[i][4], null, true])));
+  });
+
+  it('🔴 Step 4 의 응답 표(언어 없는 펜스)가 post-detail.http 의 실측과 같다 — 적힌 칸마다 그 값 · 좋아요 누르기 줄은 본문 그대로 · 고치기 전 판의 값이다(고친 판이면 첫 줄이 어긋난다)', async () => {
+    const { a, b } = await sendHttpBoth();
+    const ROWS = { '게시물 하나 받기': '게시물 하나 받기', '같은 게시물을 목록으로': '같은 게시물을 목록으로 받기', '그 게시물 좋아요 누르기': '그 게시물 좋아요 누르기' };
+    const table = fencesOf(LECTURE_MD).filter((f) => f.step === 4 && f.lang === '' && f.body.some((line) => line.includes('"liked"')));
+    expect(table).toHaveLength(1);
+    const rows = table[0].body.filter((line) => line.trim() !== '').map((line) => {
+      const label = Object.keys(ROWS).find((key) => line.trim().startsWith(key));
+      return { label, title: ROWS[label], value: line.trim().slice(label.length).trim() };
+    });
+    expect(rows.map((r) => r.label)).toEqual(Object.keys(ROWS));
+    /** 적힌 칸(`"키": 값` — 값이 글자 · 숫자 · 참거짓인 것)이 모두 같은 객체가 응답 어딘가에 있는가. */
+    const pairsOf = (text) => [...text.matchAll(/"(\w+)": (true|false|-?\d+|"[^"]*")/g)].map(([, key, value]) => [key, JSON.parse(value)]);
+    const holds = (node, pairs) => {
+      if (node === null || typeof node !== 'object') return false;
+      if (!Array.isArray(node) && pairs.every(([key, value]) => node[key] === value)) return true;
+      return Object.values(node).some((child) => holds(child, pairs));
+    };
+    const check = (runs) => rows.map((row) => {
+      const res = runs.find((r) => r.title === row.title);
+      return [row.label, holds(res.body, pairsOf(row.value))];
+    });
+    expect(check(a)).toEqual(rows.map((r) => [r.label, true]));
+    expect(check(b)).toEqual([['게시물 하나 받기', false], ['같은 게시물을 목록으로', true], ['그 게시물 좋아요 누르기', true]]);
+    // 줄임표(…) 없는 줄은 본문 그대로다
+    const exact = rows.filter((r) => !r.value.includes('…'));
+    expect(exact.map((r) => r.label)).toEqual(['그 게시물 좋아요 누르기']);
+    for (const row of exact) expect(JSON.parse(row.value)).toEqual(a.find((r) => r.title === row.title).body);
+    // 첫 두 줄의 칸이 실제로 무엇을 말하는지 — 9번 · likeCount 1 · liked
+    expect(rows.map((r) => pairsOf(r.value))).toEqual([
+      [['id', 9], ['likeCount', 1], ['liked', false]],
+      [['id', 9], ['likeCount', 1], ['liked', true]],
+      [['liked', true], ['likeCount', 1]],
+    ]);
+  }, 60_000);
 });
