@@ -1185,6 +1185,114 @@ describe('축 ⑥ 학생 파일 차이 — code/p3-48 에서 Step 마다', () =>
   });
 });
 
+// ── 축 ⑥-b 교안 블록 대조 ───────────────────────────────────────────────────────
+// 원고는 읽기만 한다(어긋나면 판정이 빨개질 뿐 원고를 고치지 않는다). 경로는 앞 회차 판정처럼 트랙 폴더에서 찾고 `P350_LECTURE` 로 바꿀 수 있다.
+// 🚨 원고가 없으면 건너뛰지 않고 실패한다(읽는 순간 ENOENT).
+const LECTURE_MD = process.env.P350_LECTURE ?? new URL('../../part3/8-fullstack-features/p3-50-unfinished-upload-lecture.md', ROOT).pathname;
+const API_PATH = '// ~/instagram-api/';
+/** 원고의 펜스를 차례대로 — 언어 · 본문(줄들) · 시작 줄 번호 · 그 펜스가 속한 Step(`## Step N`) · 해설(`💡 해설`) 안인지. */
+const fencesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let step = null;
+  let solution = false;
+  read(file).split('\n').forEach((line, i) => {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.body.push(line);
+      return;
+    }
+    if (line.startsWith('```')) {
+      cur = { lang: line.slice(3).trim(), body: [], line: i + 1, step, solution };
+      return;
+    }
+    if (line.startsWith('## ')) { step = Number(/^## Step (\d+)/.exec(line)?.[1]) || null; solution = false; }
+    if (line.includes('<summary>') && line.includes('해설')) solution = true;
+    if (line.startsWith('</details>')) solution = false;
+  });
+  if (cur) throw new Error(`${file} — 닫히지 않은 펜스(${cur.line}번 줄)`);
+  return out;
+};
+/** 발췌의 «줄임» 줄 — `...`(prisma) · `// ...`(js). */
+const isElision = (line) => ['...', '// ...'].includes(line.trim());
+/** 줄임 줄과 빈 줄을 뺀 줄이 `haystack`(줄들)에 차례대로 있는가 — 없으면 처음 못 찾은 줄을 돌려준다. */
+const firstMissing = (wanted, haystack) => {
+  let at = 0;
+  for (const line of wanted.filter((one) => one.trim() !== '' && !isElision(one))) {
+    const found = haystack.indexOf(line, at);
+    if (found === -1) return line;
+    at = found + 1;
+  }
+  return null;
+};
+/** 교안의 백엔드 학생 파일 블록 — 어느 파일인지와 어떻게 대조할지(full = 글자까지 같다 · tail = 그 판 파일의 끝과 같다 · excerpt = 줄마다 차례대로 있다). */
+const studentFence = (fence) => {
+  const first = fence.body[0] ?? '';
+  if (fence.lang === 'js' && first.startsWith(API_PATH)) {
+    const rel = first.slice(API_PATH.length);
+    if (rel.startsWith('lab/')) return { rel, how: fence.solution ? 'solution' : 'start' };
+    return { rel, how: fence.body.some(isElision) ? 'excerpt' : 'full' };
+  }
+  if (fence.lang === 'prisma') return { rel: 'prisma/schema.prisma', how: 'excerpt' };
+  if (fence.lang === 'sql' && first === '-- CreateTable') return { rel: `prisma/migrations/${step5Migration().name}/migration.sql`, how: 'full' };
+  if (fence.lang === 'http') return { rel: 'requests/photo-owner.http', how: fence.step === 4 ? 'full' : 'tail' };
+  return null;
+};
+const labCommit = () => {
+  const log = execFileSync('git', ['log', '-n', '400', '--format=%H %s', LINE], { cwd: P('.'), encoding: 'utf8' });
+  const hit = log.split('\n').find((l) => / feat\(p3-50\): 직접 해보기 3 /.test(l));
+  if (!hit) throw new Error('직접 해보기 3 커밋이 없다');
+  return hit.split(' ')[0];
+};
+
+describe('축 ⑥-b 교안 블록 대조 — 교안이 보여 주는 ~/instagram-api 학생 파일 = 그 Step 의 커밋', () => {
+  it('🔴 대조할 블록 열다섯 — Step 과 파일 · 대조 방식이 이 목록과 같다(빠뜨리거나 새로 생긴 블록이 있으면 먼저 여기서 빨개진다)', () => {
+    const list = fencesOf(LECTURE_MD).map((fence) => [fence, studentFence(fence)]).filter(([, one]) => one)
+      .map(([fence, one]) => `${fence.step} ${fence.lang} ${one.rel.replace(/\d{14}_add_uploads/, '…_add_uploads')} ${one.how}`);
+    expect(list).toEqual([
+      '4 http requests/photo-owner.http full',
+      '5 prisma prisma/schema.prisma excerpt',
+      '5 sql prisma/migrations/…_add_uploads/migration.sql full',
+      '5 js services/uploadService.js full',
+      '5 js controllers/uploadController.js full',
+      '5 js seed.js excerpt',
+      '6 js errors.js excerpt',
+      '6 js services/postService.js excerpt',
+      '6 http requests/photo-owner.http tail',
+      '6 js lab/p3-50/practice3.js start',
+      '6 js lab/p3-50/practice3.js solution',
+      '7 js services/postService.js excerpt',
+      '7 http requests/photo-owner.http tail',
+      '8 js services/uploadService.js excerpt',
+      '8 js app.js excerpt',
+    ]);
+  });
+
+  it('🔴 완성본은 글자까지 같고 · .http 끝 블록은 그 판 파일의 끝과 같고 · 발췌는 줄임 줄을 뺀 모든 줄이 그 판 파일에 차례대로 있다 · 직접 해보기 3 은 시작 판 = 스냅숏 · 해설 = 커밋', () => {
+    const problems = [];
+    let checked = 0;
+    for (const fence of fencesOf(LECTURE_MD)) {
+      const one = studentFence(fence);
+      if (!one) continue;
+      const where = `교안 ${fence.line}번 줄(Step ${fence.step} · ${one.rel} · ${one.how})`;
+      const text = `${fence.body.join('\n')}\n`;
+      let source;
+      if (one.how === 'start') source = read(P('snapshots/p3-50/practice3-start.js'));
+      else if (one.how === 'solution') source = showAt(labCommit(), one.rel);
+      else if (fence.step >= 4 && fence.step <= 8) source = read(stepDir(fence.step)(one.rel));
+      else { problems.push(`${where} — Step 4~8 밖`); continue; }
+      if (['full', 'start', 'solution'].includes(one.how) && text !== source) problems.push(`${where} — 파일과 글자가 다르다`);
+      if (one.how === 'tail' && !source.endsWith(text)) problems.push(`${where} — 그 판 파일의 끝과 다르다`);
+      if (one.how === 'excerpt') {
+        const missing = firstMissing(fence.body, source.split('\n'));
+        if (missing !== null) problems.push(`${where} — 이 줄이 그 판에 (차례대로) 없다: ${missing}`);
+      }
+      checked += 1;
+    }
+    expect(problems).toEqual([]);
+    expect(checked).toBe(15);
+  });
+});
+
 // ── 축 ⑦ 직접 해보기 3 ─────────────────────────────────────────────────────────
 const LAB = (name) => showAt(LINE, `lab/p3-50/${name}`);
 const ANSWER_WHERE = '    where: { fileName, uploaderId: userId, postId: null },\n';
