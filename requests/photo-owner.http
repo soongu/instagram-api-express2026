@@ -58,3 +58,22 @@ GET http://localhost:3000{{uploaded.data.imageUrls[0]}}
 
 ### jaehoon의 게시물 다시 보기
 GET http://localhost:3000/api/v2/posts/{{jaehoonPost.data.id}}
+
+### jaehoon으로 다시 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 같은 사진으로 게시물 하나 더
+POST http://localhost:3000/api/v2/posts
+Content-Type: application/json
+
+{
+  "imageUrls": {{uploaded.data.imageUrls}},
+  "postAlt": "바닷가 사진",
+  "content": "같은 사진을 한 번 더 올려요"
+}

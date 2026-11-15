@@ -111,20 +111,36 @@ export async function getPost(id) {
 }
 
 export async function createPost({ imageUrls, ...data }) {
-  try {
-    // 게시물과 사진을 `create` 한 번으로 만든다.
-    // 사진이 없는 게시물이 잠깐이라도 남는 일이 아예 안 생긴다.
-    const post = await prisma.post.create({
-      data: {
-        ...data,
-        images: {
-          create: imageUrls.map((imageUrl, order) => ({ imageUrl, imgOrder: order + 1 })),
-        },
-      },
-      select: postFields,
-    });
+  // 우리 서버에 올린 사진(/uploads/…)만 기록에서 찾는다. 바깥 주소(https://…)는 우리 파일이 아니라 그대로 넣는다.
+  const fileNames = imageUrls
+    .filter((imageUrl) => imageUrl.startsWith('/uploads/'))
+    .map((imageUrl) => path.basename(imageUrl));
 
-    return flatten(post);
+  try {
+    // 게시물 만들기와, 사진 기록에 그 게시물을 적는 일을 한 트랜잭션으로 묶는다 — 사진을 못 넣으면 게시물 만들기도 없던 일이 된다.
+    return await prisma.$transaction(async (tx) => {
+      // 게시물과 사진을 `create` 한 번으로 만든다.
+      // 사진이 없는 게시물이 잠깐이라도 남는 일이 아예 안 생긴다.
+      const post = await tx.post.create({
+        data: {
+          ...data,
+          images: {
+            create: imageUrls.map((imageUrl, order) => ({ imageUrl, imgOrder: order + 1 })),
+          },
+        },
+        select: postFields,
+      });
+
+      // 내가 올렸고 아직 어느 게시물에도 쓰지 않은 사진의 기록에만 이 게시물을 적는다.
+      // 적은 기록 수가 사진 수와 다르면, 남의 사진이나 이미 쓴 사진이 섞여 있다는 뜻이다.
+      const { count } = await tx.upload.updateMany({
+        where: { fileName: { in: fileNames }, uploaderId: data.authorId, postId: null },
+        data: { postId: post.id },
+      });
+      if (count !== fileNames.length) throw new BadRequestError('IMAGE_NOT_AVAILABLE');
+
+      return flatten(post);
+    });
   } catch (error) {
     if (error.code === 'P2003') throw new BadRequestError('USER_NOT_FOUND');
     throw error;
