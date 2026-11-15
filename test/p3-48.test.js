@@ -36,6 +36,9 @@ import { startFakeGoogle, DEFAULT_PROFILE as GOOGLE_PROFILE } from './helpers/fa
 import { startFakeKakao, KAKAO_EMAIL_VALID } from './helpers/fake-kakao.js';
 import { startFakeNaver, DEFAULT_NAVER_PROFILE } from './helpers/fake-naver.js';
 
+// p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
+const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
+
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
@@ -814,7 +817,7 @@ describe('축 ⑤ Step 5 — 내 로그인 방법 목록과 연결 끊기', () =
       expect(providersOf((await tab.get(LIST)).body)).toEqual(['google']);
       // 네이버는 네이버로 가입한 사람의 것이다 — 구글 사람의 행이 아니라 404 이고 그 행은 그대로
       const other = await tab.del(`${LIST}/naver`);
-      expect([other.status, other.body]).toEqual([404, { error: { code: 'SOCIAL_ACCOUNT_NOT_FOUND', message: '연결된 소셜 계정이 없어요' } }]);
+      expect([other.status, other.body]).toEqual([404, v2Error('SOCIAL_ACCOUNT_NOT_FOUND', '연결된 소셜 계정이 없어요')]);
       expect(await socialOf(nId)).toEqual([`naver:${N.providerUserId}`]);
       const noToken = await browser(base).del(`${LIST}/kakao`);
       expect([noToken.status, noToken.body.error.code]).toEqual([401, 'LOGIN_REQUIRED']);
@@ -895,7 +898,7 @@ describe('축 ⑥ Step 6 — 비밀번호가 없는 사람의 마지막 소셜 �
       const tab = browser(base);
       await social(tab, 'naver');
       const res = await tab.del(`${LIST}/naver`);
-      expect([res.status, res.body]).toEqual([409, { error: { code: 'LAST_LOGIN_METHOD', message: '마지막 로그인 방법은 끊을 수 없어요' } }]);
+      expect([res.status, res.body]).toEqual([409, v2Error('LAST_LOGIN_METHOD', '마지막 로그인 방법은 끊을 수 없어요')]);
       expect(providersOf((await tab.get(LIST)).body)).toEqual(['naver']);
       expect((await tab.del(`${LIST}/kakao`)).body.error.code).toBe('SOCIAL_ACCOUNT_NOT_FOUND');
       seen.step6Last = res.body;
