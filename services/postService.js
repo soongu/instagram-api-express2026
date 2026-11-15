@@ -35,6 +35,14 @@ const postFields = {
   images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' } },
 };
 
+// 보는 사람이 누른 좋아요를 센다 — 목록과 상세가 같은 기준이다.
+// 누가 보는지 알 때만 센다. userId 가 undefined 면 `where` 가 «조건 없음» 이 되어 누가 누른 좋아요든 다 센다.
+function fieldsFor(userId) {
+  return userId
+    ? { ...postFields, _count: { select: { likes: { where: { userId } } } } }
+    : postFields;
+}
+
 // 커서는 «마지막으로 내준 게시물의 시각과 번호» 를 문자열 하나로 인코딩한 것이다.
 // 받는 쪽은 뜻을 몰라도 된다 — 받아 두었다가 다음 요청에 그대로 돌려주기만 한다.
 function encodeCursor({ createdAt, id }) {
@@ -60,12 +68,6 @@ function afterCursor({ createdAt, id }) {
 }
 
 export async function getPosts({ username, userId, limit = 5, cursor }) {
-  // 누가 보는지 알 때만 그 사람이 누른 좋아요를 센다.
-  // userId 가 undefined 면 `where` 가 «조건 없음» 이 되어 누가 누른 좋아요든 다 센다.
-  const fields = userId
-    ? { ...postFields, _count: { select: { likes: { where: { userId } } } } }
-    : postFields;
-
   // 하나 더 달라고 한다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
   const posts = await prisma.post.findMany({
     where: {
@@ -73,7 +75,7 @@ export async function getPosts({ username, userId, limit = 5, cursor }) {
       // 커서가 오면 «그 게시물 다음»부터다. 커서의 값만 쓰므로 그 게시물이 지워졌어도 이어진다.
       ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
     },
-    select: fields,
+    select: fieldsFor(userId),
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
   });
@@ -99,10 +101,10 @@ export async function cursorOf(id) {
   return post === null ? null : encodeCursor(post);
 }
 
-export async function getPost(id) {
+export async function getPost(id, userId) {
   const post = await prisma.post.findUnique({
     where: { id },
-    select: postFields,
+    select: fieldsFor(userId),
   });
 
   if (!post) throw new NotFoundError('POST_NOT_FOUND');
