@@ -299,7 +299,8 @@ const httpyac = async (source, port = PORT) => {
     try { return JSON.parse(text); } catch { return text; }
   };
   return JSON.parse(read(join(dir, 'out.json'))).requests.map((r) => ({
-    title: r.title, status: r.response?.statusCode, headers: r.response?.headers, rawBody: r.response?.body, body: parse(r.response?.body),
+    title: r.title, status: r.response?.statusCode, statusLine: `${r.response?.protocol} ${r.response?.statusCode} ${r.response?.statusMessage}`,
+    headers: r.response?.headers, rawBody: r.response?.body, body: parse(r.response?.body),
   }));
 };
 /** .http 의 블록 — 제목 · 요청 줄. 맨 위(첫 ### 앞)는 `head` 로 따로. */
@@ -382,6 +383,8 @@ describe('축 ① Step 1 판 — requests/post-author.http 를 httpYac CLI(--all
     expect(runs.map((r) => [r.title, r.status])).toEqual([
       ['jaehoon으로 로그인', 200], ['나는 누구', 200], ['9번 게시물 받기', 200], ['9번 게시물의 글 고치기', 403], ['9번 게시물 지우기', 403],
     ]);
+    // 상태 줄 — httpYac 이 응답 첫 줄에 보여 주는 글자
+    expect(runs.map((r) => r.statusLine)).toEqual(['HTTP/1.1 200 OK', 'HTTP/1.1 200 OK', 'HTTP/1.1 200 OK', 'HTTP/1.1 403 Forbidden', 'HTTP/1.1 403 Forbidden']);
     expect(runs[1].body).toEqual({ data: { id: jaehoonRow.id, username: 'jaehoon', profileImage: jaehoonRow.profile_image, role: 'USER' } });
     expect(Object.keys(runs[1].body.data)).toEqual(['id', 'username', 'profileImage', 'role']);
     expect(runs[2].body.data).toMatchObject({ id: 9, authorId: minjiId, username: 'minji', content: '제주 왔어요 🌊', liked: true });
@@ -392,7 +395,7 @@ describe('축 ① Step 1 판 — requests/post-author.http 를 httpYac CLI(--all
     }
     expect(await dbState(GATE_DB)).toEqual(before);
     expect(filesAfter).toEqual(files);
-    seen.step1 = { file: text, runs: runs.map((r) => ({ title: r.title, status: r.status, contentType: r.headers?.['content-type'], body: r.rawBody })) };
+    seen.step1 = { file: text, runs: runs.map((r) => ({ title: r.title, statusLine: r.statusLine, contentType: r.headers?.['content-type'], body: r.rawBody })) };
   }, 60_000);
 });
 
@@ -551,6 +554,7 @@ describe('축 ③ Step 5 겪기 판 — 좋아요를 누른 내 게시물을 고
   it('🔴 받기 liked false · 누르기 { liked: true, likeCount: 1 } · 고치기 200 인데 응답 liked false · likeCount 1 · 같은 순간 상세는 true', async () => {
     const t = await sendTrap();
     expect(t.runs.map((r) => [r.title, r.status])).toEqual(STEP5_STATUSES);
+    expect(t.runs.slice(5).map((r) => r.statusLine)).toEqual(['HTTP/1.1 200 OK', 'HTTP/1.1 200 OK', 'HTTP/1.1 200 OK']);
     const [got, put, patched] = t.runs.slice(5);
     expect([got.body.data.id, got.body.data.liked, got.body.data.likeCount]).toEqual([t.id, false, 0]);
     expect(put.body).toEqual({ data: { liked: true, likeCount: 1 } });
@@ -599,7 +603,7 @@ describe('축 ④ Step 5 고친 판 — 고치기 응답도 목록·상세와 �
     });
     expect(changed).toEqual([['내 게시물의 글 고치기', '"liked": false', '"liked": true']]);
     expect(f.runs[7].body.data.updatedAt).toMatch(ISO);
-    const keep = (r) => ({ title: r.title, status: r.status, contentType: r.headers?.['content-type'], body: r.rawBody });
+    const keep = (r) => ({ title: r.title, statusLine: r.statusLine, contentType: r.headers?.['content-type'], body: r.rawBody });
     seen.step5 = { trap: t.runs.map(keep), fixed: f.runs.map(keep), seoyeonAfterFix: f.seoyeon.text, jaehoonAfterTrap: t.jaehoon.text };
   }, 60_000);
 
