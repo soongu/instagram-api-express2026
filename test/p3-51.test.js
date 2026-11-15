@@ -33,11 +33,14 @@ const execFileAsync = promisify(execFile);
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
-const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
+// 🔑 `P351_PG_PORT` 를 주면 그 호스트 포트의 PostgreSQL 을 쓴다(공유 DB 가 없을 때 일회 컨테이너로 돌리려고 — 기본 5432).
+//    판정은 `docker exec` 를 쓰지 않으니 컨테이너 이름은 받지 않는다.
+const PG_PORT = Number(process.env.P351_PG_PORT ?? 5432);
+const ADMIN = { host: 'localhost', port: PG_PORT, database: 'postgres', user: 'postgres', password: 'postgres' };
 const TPL_DB = 'p351_api_tpl';
 const GATE_DB = 'p351_api_gate';
 const GATE2_DB = 'p351_api_gate2';
-const dbUrl = (name) => `postgresql://postgres:postgres@localhost:5432/${name}`;
+const dbUrl = (name) => `postgresql://postgres:postgres@localhost:${PG_PORT}/${name}`;
 const PORT = 3890;
 const PORT2 = 3891;
 const SECRET = 'q2Xh0v9bGm4RkT7sYp1wLc8nZf3uJd6eHa5iVo0rQyE';
