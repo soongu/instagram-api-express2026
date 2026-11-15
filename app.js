@@ -19,6 +19,7 @@ import { requireLogin } from './middlewares/auth.js';
 import { googleStrategy } from './strategies/google.js';
 import { kakaoStrategy } from './strategies/kakao.js';
 import { naverStrategy } from './strategies/naver.js';
+import * as uploadService from './services/uploadService.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 
@@ -101,6 +102,24 @@ app.use((err, req, res, next) => {
   console.error(err);
   sendError(req, res, new HttpError(500, 'INTERNAL_ERROR'));
 });
+
+// 아무 게시물에도 쓰이지 않은 사진을 치운다 — 서버가 뜰 때 한 번, 그 뒤로는 10분마다.
+const CLEANUP_INTERVAL = 10 * 60 * 1000;
+
+async function cleanUpUploads() {
+  try {
+    const removed = await uploadService.removeUnusedUploads();
+    if (removed.length > 0) {
+      console.log(`아무 게시물에도 쓰이지 않은 사진 ${removed.length}장을 지웠어요.`);
+    }
+  } catch (error) {
+    // 치우다가 실패해도(데이터베이스가 잠깐 꺼지는 등) 서버는 꺼지지 않는다 — 다음 차례에 다시 해 본다.
+    console.error(error);
+  }
+}
+
+cleanUpUploads();
+setInterval(cleanUpUploads, CLEANUP_INTERVAL);
 
 const PORT = process.env.PORT ?? 3000;
 

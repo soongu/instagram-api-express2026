@@ -26,3 +26,26 @@ export async function recordUploads(uploaderId, fileNames) {
     throw error;
   }
 }
+
+// 올린 지 이만큼이 지나도록 아무 게시물에도 쓰지 않은 사진은 치운다 — 사진을 올리고 글을 쓰기에 넉넉한 시간이다.
+const UNUSED_UPLOAD_LIFETIME = 60 * 60 * 1000; // 1시간(밀리초)
+
+// 올린 지 오래됐는데 아직 아무 게시물에도 쓰지 않은 사진의 기록과 파일을 지운다. 지운 파일 이름 목록을 돌려준다.
+export async function removeUnusedUploads() {
+  const unused = await prisma.upload.findMany({
+    where: { postId: null, createdAt: { lt: new Date(Date.now() - UNUSED_UPLOAD_LIFETIME) } },
+    select: { id: true, fileName: true },
+  });
+
+  const removed = [];
+  for (const upload of unused) {
+    // 고른 뒤에 그 사진 주소를 게시물에 넣었을 수도 있다 — 지금도 아무 게시물에 쓰지 않았을 때만 기록을 지운다.
+    const { count } = await prisma.upload.deleteMany({ where: { id: upload.id, postId: null } });
+    if (count === 1) {
+      await removeFiles([upload.fileName]);
+      removed.push(upload.fileName);
+    }
+  }
+
+  return removed;
+}
