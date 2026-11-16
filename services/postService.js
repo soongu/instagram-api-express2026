@@ -4,7 +4,7 @@ import { prisma } from '../db.js';
 import * as userService from './userService.js';
 import * as uploadService from './uploadService.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
-import { cursorSchema } from '../schemas/postSchema.js';
+import { encodeCursor, decodeCursor } from '../utils/cursor.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
 // 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
@@ -41,31 +41,6 @@ function fieldsFor(userId) {
   return userId
     ? { ...postFields, _count: { select: { likes: { where: { userId } } } } }
     : postFields;
-}
-
-// 커서는 «마지막으로 내준 게시물의 시각과 번호» 를 문자열 하나로 인코딩한 것이다.
-// 받는 쪽은 뜻을 몰라도 된다 — 받아 두었다가 다음 요청에 그대로 돌려주기만 한다.
-function encodeCursor({ createdAt, id }) {
-  return Buffer.from(JSON.stringify({ createdAt, id })).toString('base64url');
-}
-
-function decodeCursor(cursor) {
-  let value;
-
-  // try 는 보낸 값 때문에 실패하는 줄만 감싼다 — 커서가 JSON 이 아니면 JSON.parse 가 던진다.
-  // 더 넓게 감싸면 우리 코드의 실수(빠뜨린 import 같은 것)까지 400 으로 바뀌어 숨는다.
-  try {
-    value = JSON.parse(Buffer.from(cursor, 'base64url').toString());
-  } catch {
-    throw new BadRequestError('INVALID_CURSOR');
-  }
-
-  // 푼 값의 모양은 safeParse 로 검사한다 — 맞지 않아도 던지지 않고 결과로 알려 준다.
-  const result = cursorSchema.safeParse(value);
-
-  if (!result.success) throw new BadRequestError('INVALID_CURSOR');
-
-  return result.data;
 }
 
 // 목록은 «시각이 늦은 순, 같으면 번호가 큰 순» 이다. 그러니 커서 다음 행은
