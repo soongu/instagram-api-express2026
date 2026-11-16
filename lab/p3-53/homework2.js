@@ -2,93 +2,62 @@
 import express from 'express';
 import { z } from 'zod';
 import { users, products, reviews } from './shop-data.js';
+import { encodeCursor, decodeCursor } from '../../utils/cursor.js';
 import { validateQuery } from '../../middlewares/validate.js';
-import { BadRequestError, HttpError } from '../../errors.js';
+import { HttpError } from '../../errors.js';
 
 const app = express();
 
-// 리뷰 목록 주소의 쿼리 문자열 — order 가 없으면 오래된 순이다.
+// 한 사람이 쓴 리뷰 목록의 쿼리 문자열.
 const reviewListQuerySchema = z.object({
-  order: z.enum(['oldest', 'newest']).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional(),
   cursor: z.string().min(1).optional(),
 });
 
-// 커서에 정렬 방향도 담는다 — 다른 방향의 커서가 오면 알아볼 수 있게.
-const cursorSchema = z.object({
-  createdAt: z.iso.datetime(),
-  id: z.int32(),
-  order: z.enum(['oldest', 'newest']),
-});
-
-function encodeCursor({ createdAt, id }, order) {
-  return Buffer.from(JSON.stringify({ createdAt, id, order })).toString('base64url');
-}
-
-function decodeCursor(cursor) {
-  try {
-    return cursorSchema.parse(JSON.parse(Buffer.from(cursor, 'base64url').toString()));
-  } catch {
-    throw new BadRequestError('INVALID_CURSOR');
-  }
-}
-
-// 리뷰 목록에 쓸 필드만 골라 보낸다 — 글쓴이는 번호와 함께 이름도 붙인다.
+// 한 사람의 리뷰는 여러 상품에 걸쳐 있다 — 리뷰마다 상품 이름을 붙여 보낸다.
 function toItem(review) {
-  const author = users.find((user) => user.id === review.authorId);
+  const product = products.find((item) => item.id === review.productId);
 
   return {
     id: review.id,
-    authorId: review.authorId,
+    productId: review.productId,
+    productName: product.name,
     content: review.content,
     createdAt: review.createdAt,
-    username: author.username,
   };
 }
 
-// 오래된 것부터 — 시각이 같으면 번호가 작은 것이 먼저다.
-function byOldest(a, b) {
-  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
-  return a.id - b.id;
-}
-
-// 최신 것부터 — 오래된 순을 그대로 뒤집는다.
+// 최신 것부터 — 시각이 같으면 번호가 큰 것이 먼저다.
 function byNewest(a, b) {
-  return byOldest(b, a);
+  if (a.createdAt !== b.createdAt) return a.createdAt > b.createdAt ? -1 : 1;
+  return b.id - a.id;
 }
 
-// 커서 다음 리뷰 — 오래된 순이면 시각이 더 늦거나 시각이 같고 번호가 더 큰 리뷰이고, 최신순이면 비교가 모두 반대다.
-function afterCursor({ createdAt, id, order }) {
-  if (order === 'newest') {
-    return (review) => review.createdAt <= createdAt && (review.createdAt < createdAt || review.id < id);
-  }
-  return (review) => review.createdAt >= createdAt && (review.createdAt > createdAt || review.id > id);
+// 최신순이라, 커서 다음 리뷰는 시각이 더 이르거나, 시각이 같고 번호가 더 작은 리뷰다 — 게시물 목록과 같은 방향이다.
+function afterCursor({ createdAt, id }) {
+  return (review) => review.createdAt <= createdAt && (review.createdAt < createdAt || review.id < id);
 }
 
-app.get('/api/products/:id/reviews', validateQuery(reviewListQuerySchema), (req, res) => {
-  const { order = 'oldest', limit = 5, cursor } = res.locals.query;
-  const productId = Number(req.params.id);
+// 그 사람이 쓴 리뷰를 상품과 상관없이 모은다 — 리뷰를 쓴 사람의 번호를 주소에 둔다.
+app.get('/api/users/:id/reviews', validateQuery(reviewListQuerySchema), (req, res) => {
+  const { limit = 5, cursor } = res.locals.query;
+  const userId = Number(req.params.id);
 
-  // 상품이 없으면 404 — 아직 리뷰가 없는 상품(빈 목록)과 구별한다.
-  const product = products.find((item) => item.id === productId);
-  if (!product) {
-    res.status(404).json({ message: '그런 상품은 없어요' });
+  // 사람이 없으면 404 — 아직 리뷰를 쓰지 않은 사람(빈 목록)과 구별한다.
+  const user = users.find((item) => item.id === userId);
+  if (!user) {
+    res.status(404).json({ message: '그런 사람은 없어요' });
     return;
   }
 
-  // 숨긴 리뷰는 빼고 그 상품의 리뷰만, 고른 방향으로.
+  // 숨긴 리뷰는 빼고 그 사람의 리뷰만, 최신 것부터.
   let list = reviews
-    .filter((review) => review.productId === productId && !review.hidden)
-    .sort(order === 'newest' ? byNewest : byOldest);
+    .filter((review) => review.authorId === userId && !review.hidden)
+    .sort(byNewest);
 
-  // 커서가 오면 «그 리뷰 다음» 부터다. 다른 방향의 커서면 어디서 이어야 할지 모르니 400 으로 알린다.
+  // 커서가 오면 «그 리뷰 다음» 부터다. 한 방향뿐이라 공용 커서를 그대로 쓴다.
   if (cursor) {
-    const after = decodeCursor(cursor);
-    if (after.order !== order) {
-      res.status(400).json({ message: '커서와 정렬이 맞지 않아요' });
-      return;
-    }
-    list = list.filter(afterCursor(after));
+    list = list.filter(afterCursor(decodeCursor(cursor)));
   }
 
   // 하나 더 꺼낸다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
@@ -99,7 +68,7 @@ app.get('/api/products/:id/reviews', validateQuery(reviewListQuerySchema), (req,
   res.json({
     items: page.map(toItem),
     hasNext,
-    nextCursor: hasNext ? encodeCursor(page[page.length - 1], order) : null,
+    nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
   });
 });
 
