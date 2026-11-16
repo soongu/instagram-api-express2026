@@ -19,6 +19,8 @@
 // 축 ③ Step 5 겪기 판 — 좋아요를 누른 내 게시물을 고치면 응답 liked false · 같은 순간 상세는 true
 // 축 ④ Step 5 고친 판 — 응답 liked true · seoyeon 이 받은 상세는 false · 고치기 전·뒤 응답 차이는 liked 한 줄 · 쿼리 수 그대로 · 만들기·지우기 응답은 그대로
 // 축 ⑤ 학생 파일 차이 — Step 1 은 requests/ 한 파일 · Step 5 는 requests/ 와 services/postService.js
+// 축 ⑥ 교안 블록 대조 — Step 1 · Step 5 의 .http(전문 · 맨 위 · 끝) · postService.js 발췌 셋 = 그 판 파일 · 응답을 옮긴 펜스 = 판정이 받은 응답 ·
+//      «쿼리 6줄» · @postId 를 맨 위에 둔 이유 · 산문의 서버 주장(라우트 다섯 줄 · postUpdateSchema 의 필드 · postFields 에 _count 없음 · 지운 뒤에도 커서가 이어진다)
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,6 +28,7 @@ import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { pathToFileURL } from 'node:url';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
@@ -418,6 +421,8 @@ const rules = async (from, db) => {
     await record('jaehoon 이 9번 지우기', j, 'DELETE', '/api/v2/posts/9');
     await record('jaehoon 이 9번 글을 숫자로', j, 'PATCH', '/api/v2/posts/9', { content: 123 });
     await record('jaehoon 이 9번 사진 바꾸기', j, 'PATCH', '/api/v2/posts/9', { imageUrls: ['https://picsum.photos/seed/x/600/600'] });
+    // 요청을 보낸 사람은 본문이 아니라 로그인 정보다 — 본문에 글쓴이 번호를 실어도 403
+    await record('jaehoon 이 9번에 글쓴이 번호를 실어 고치기', j, 'PATCH', '/api/v2/posts/9', { content: 'jaehoon이 고친 글', authorId: await idOf(db, 'jaehoon') });
     await record('seoyeon 이 14 고치기', s, 'PATCH', `/api/v2/posts/${fourteen}`, { content: '남의 글' });
     await record('seoyeon 이 14 지우기', s, 'DELETE', `/api/v2/posts/${fourteen}`);
     await record('로그인 없이 14 고치기', nobody, 'PATCH', `/api/v2/posts/${fourteen}`, { content: '누구?' });
@@ -438,9 +443,18 @@ const rules = async (from, db) => {
     await record('jaehoon 이 19 지우기(파일이 이미 없다)', j, 'DELETE', `/api/v2/posts/${nineteen}`);
     await record('지운 19', j, 'GET', `/api/v2/posts/${nineteen}`);
     await sleep(200);
+    const log19 = tail().slice(logAt);
+    const files2 = uploadedFiles(dir);
+    // 지운 게시물에 하트 · 다시 지우기 — 다른 탭에 남아 있던 화면이 보내는 요청
+    await record('지운 19 좋아요 누르기', j, 'PUT', `/api/v2/posts/${nineteen}/likes/me`);
+    await record('지운 19 다시 지우기', j, 'DELETE', `/api/v2/posts/${nineteen}`);
+    // 피드 맨 위의 «느린 네트워크» 하나 — 사진 파일이 하나 준다
+    const slowTop = (await onDb(db, "SELECT id FROM posts WHERE content = '느린 네트워크' ORDER BY created_at DESC, id DESC LIMIT 1"))[0].id;
+    const slowFile = await fileOf(slowTop);
+    await record('jaehoon 이 느린 네트워크 하나 지우기', j, 'DELETE', `/api/v2/posts/${slowTop}`);
     return {
-      out, fourteen, nineteen, file14, file19, files0, files1, files2: uploadedFiles(dir), photo14: photo14.status,
-      log19: tail().slice(logAt),
+      out, fourteen, nineteen, file14, file19, files0, files1, files2, files3: uploadedFiles(dir), photo14: photo14.status,
+      log19, slowTop, slowFile,
       uploads: await onDb(db, 'SELECT file_name, post_id FROM uploads ORDER BY id'),
       slow: (await onDb(db, "SELECT id FROM posts WHERE content = '느린 네트워크' ORDER BY id")).map((row) => row.id),
       likes9: (await onDb(db, 'SELECT count(*)::int AS n FROM post_likes WHERE post_id = 9'))[0].n,
@@ -456,12 +470,13 @@ const scrubTimes = (r) => {
 };
 
 describe('축 ② 서버 규칙 — 이미 있는 고치기·지우기 규칙(회귀) · 시작 판과 고친 판이 같다', () => {
-  it('🔴 남의 게시물 403 · 본문 검사가 먼저(숫자 글 400 · 사진 목록은 버려져 403) · 로그인 없이 401 · 없는 번호 404 · 관리자는 지우기 200 · 고치기 403 · 내 게시물 고치기 200 · 지우기 200 뒤 404 · 사진 파일과 업로드 기록이 사라진다 · 파일이 이미 없는 19 도 200', async () => {
+  it('🔴 남의 게시물 403 · 본문 검사가 먼저(숫자 글 400 · 사진 목록 · 글쓴이 번호는 버려져 403) · 로그인 없이 401 · 없는 번호 404 · 관리자는 지우기 200 · 고치기 403 · 내 게시물 고치기 200 · 지우기 200 뒤 404 · 사진 파일과 업로드 기록이 사라진다 · 파일이 이미 없는 19 도 200(요청 줄 하나 · 에러 줄 없음) · 지운 게시물에 하트 404 · 다시 지우기 404', async () => {
     const a = await rules(base(), GATE_DB);
     const b = await rules(fixed(), GATE2_DB);
     const statuses = [
       ['jaehoon 이 9번 글 고치기', 403, 'NOT_POST_AUTHOR'], ['jaehoon 이 9번 지우기', 403, 'NOT_POST_AUTHOR'],
       ['jaehoon 이 9번 글을 숫자로', 400, 'VALIDATION_FAILED'], ['jaehoon 이 9번 사진 바꾸기', 403, 'NOT_POST_AUTHOR'],
+      ['jaehoon 이 9번에 글쓴이 번호를 실어 고치기', 403, 'NOT_POST_AUTHOR'],
       ['seoyeon 이 14 고치기', 403, 'NOT_POST_AUTHOR'], ['seoyeon 이 14 지우기', 403, 'NOT_POST_AUTHOR'],
       ['로그인 없이 14 고치기', 401, 'LOGIN_REQUIRED'], ['로그인 없이 14 지우기', 401, 'LOGIN_REQUIRED'],
       ['없는 번호 고치기', 404, 'POST_NOT_FOUND'], ['없는 번호 지우기', 404, 'POST_NOT_FOUND'],
@@ -469,13 +484,17 @@ describe('축 ② 서버 규칙 — 이미 있는 고치기·지우기 규칙(�
       ['jaehoon 이 14 글 고치기', 200, undefined], ['jaehoon 이 14 사진만 보내기', 200, undefined],
       ['jaehoon 이 14 지우기', 200, undefined], ['지운 14', 404, 'POST_NOT_FOUND'],
       ['jaehoon 이 19 지우기(파일이 이미 없다)', 200, undefined], ['지운 19', 404, 'POST_NOT_FOUND'],
+      ['지운 19 좋아요 누르기', 404, 'POST_OR_USER_NOT_FOUND'], ['지운 19 다시 지우기', 404, 'POST_NOT_FOUND'],
+      ['jaehoon 이 느린 네트워크 하나 지우기', 200, undefined],
     ];
     for (const run of [a, b]) expect(run.out.map((r) => [r.title, r.status, r.body?.error?.code])).toEqual(statuses);
     // 두 판의 응답이 시각 밖으로는 한 글자도 같다 — 이 차례에는 jaehoon 이 좋아요를 누른 게시물을 고치는 일이 없다
     expect(b.out.map(scrubTimes)).toEqual(a.out.map(scrubTimes));
     const at = (title) => b.out.find((r) => r.title === title);
     // 본문 검사가 글쓴이 확인보다 먼저다 — 남의 게시물이어도 글이 숫자면 400 · 모르는 필드(imageUrls)는 검사에서 버려져 403
-    expect(at('jaehoon 이 9번 글을 숫자로').body.error).toMatchObject({ code: 'VALIDATION_FAILED', details: expect.any(Object) });
+    expect(at('jaehoon 이 9번 글을 숫자로').body.error).toMatchObject({ code: 'VALIDATION_FAILED', message: '보낸 내용이 규칙에 안 맞아요', details: expect.any(Object) });
+    expect(at('지운 19 좋아요 누르기').body.error.message).toBe('그런 게시물이나 사용자는 없어요');
+    expect(at('지운 19 다시 지우기').body.error.message).toBe('그런 게시물은 없어요');
     // 내 게시물 — 고친 글 · 사진만 보내면 아무것도 안 바뀐다(사진은 그대로 · 글도 그대로)
     expect(at('jaehoon 이 14 글 고치기').body.data).toMatchObject({ id: b.fourteen, content: '주말에 바다에 다녀왔어요', imageUrls: [`/uploads/${b.file14}`] });
     expect(at('jaehoon 이 14 사진만 보내기').body.data).toMatchObject({ content: '주말에 바다에 다녀왔어요', imageUrls: [`/uploads/${b.file14}`] });
@@ -488,12 +507,19 @@ describe('축 ② 서버 규칙 — 이미 있는 고치기·지우기 규칙(�
     expect(b.photo14).toBe(404);
     expect(b.files0).not.toContain(b.file19);
     expect(b.files2).toEqual(b.files1);
+    // 터미널(창 1)에는 그 요청 줄 하나 — 에러 줄은 없다
     expect(b.log19).not.toMatch(/Error|ENOENT/);
+    expect(b.log19.split('\n').filter((line) => line.startsWith(`DELETE /api/v2/posts/${b.nineteen} 200 `))).toHaveLength(1);
+    // «느린 네트워크» 하나를 지우면 uploads 폴더의 파일이 하나 준다
+    expect(b.files2).toContain(b.slowFile);
+    expect(b.files3).toEqual(b.files2.filter((name) => name !== b.slowFile));
     expect(b.uploads.map((u) => u.file_name)).not.toContain(b.file14);
     expect(b.uploads.map((u) => u.file_name)).not.toContain(b.file19);
-    expect(b.slow).toHaveLength(4);
+    expect(b.uploads.map((u) => u.file_name)).not.toContain(b.slowFile);
+    expect(b.slow).toHaveLength(3);
+    expect(b.slow).not.toContain(b.slowTop);
     expect(b.uploads.map((u) => u.post_id)).toEqual(b.slow);
-    expect(b.files2.filter((name) => UUID_FILE.test(name))).toHaveLength(4);
+    expect(b.files3.filter((name) => UUID_FILE.test(name))).toHaveLength(3);
     seen.rules = b.out.map((r) => ({ title: r.title, status: r.status, body: r.body }));
   }, 90_000);
 
@@ -571,6 +597,25 @@ describe('축 ③ Step 5 겪기 판 — 좋아요를 누른 내 게시물을 고
 // ── 축 ④ Step 5 고친 판 ─────────────────────────────────────────────────────────
 const withQueryLog = (dir) => replaceIn(dir, 'db.js', 'new PrismaClient({ adapter })', "new PrismaClient({ adapter, log: ['query'] })");
 const queryLines = (text) => text.split('\n').filter((line) => line.startsWith('prisma:query'));
+/** 고치기 요청 하나의 Prisma 쿼리 로그 — 겪기 판과 고친 판에 한 번씩(축 ④ · 축 ⑥ 이 같은 실측을 본다). */
+let patchQueryRun;
+const patchQueries = () => (patchQueryRun ??= (async () => {
+  const measure = async (from, db) => {
+    await copyDb(db);
+    const id = await postIdByContent(db, '바다에 다녀왔어요');
+    return withServer(from, db, async ({ base: url, tail }) => {
+      const tab = await loggedIn(url, 'jaehoon');
+      await tab.send('PUT', `/api/v2/posts/${id}/likes/me`);
+      await tab.send('PATCH', `/api/v2/posts/${id}`, { content: '한 번 고쳐 두기' });
+      await sleep(300);
+      const at = tail().length;
+      const res = await tab.send('PATCH', `/api/v2/posts/${id}`, { content: '주말에 바다에 다녀왔어요' });
+      await sleep(300);
+      return { liked: res.body.data.liked, lines: queryLines(tail().slice(at)), raw: tail().slice(at) };
+    }, { edit: withQueryLog });
+  };
+  return { trap: await measure(trap(), GATE_DB), fixed: await measure(fixed(), GATE2_DB) };
+})());
 
 describe('축 ④ Step 5 고친 판 — 고치기 응답도 목록·상세와 같은 기준으로 liked 를 정한다', () => {
   it('🔴 .http 는 겪기 판과 같다 · 고치기 응답 liked true · 같은 순간 jaehoon 의 상세와 한 글자도 같다 · seoyeon 이 받은 상세는 liked false', async () => {
@@ -608,21 +653,7 @@ describe('축 ④ Step 5 고친 판 — 고치기 응답도 목록·상세와 �
   }, 60_000);
 
   it('🔴 쿼리 수 — 고치기 요청 하나에 겪기 판과 고친 판이 같다 · 고친 판은 게시물을 읽는 쿼리에 좋아요를 LEFT JOIN 으로 함께 센다(조건 user_id)', async () => {
-    const measure = async (from, db) => {
-      await copyDb(db);
-      const id = await postIdByContent(db, '바다에 다녀왔어요');
-      return withServer(from, db, async ({ base: url, tail }) => {
-        const tab = await loggedIn(url, 'jaehoon');
-        await tab.send('PUT', `/api/v2/posts/${id}/likes/me`);
-        await tab.send('PATCH', `/api/v2/posts/${id}`, { content: '한 번 고쳐 두기' });
-        await sleep(300);
-        const at = tail().length;
-        const res = await tab.send('PATCH', `/api/v2/posts/${id}`, { content: '주말에 바다에 다녀왔어요' });
-        await sleep(300);
-        return { liked: res.body.data.liked, lines: queryLines(tail().slice(at)), raw: tail().slice(at) };
-      }, { edit: withQueryLog });
-    };
-    const [a, b] = [await measure(trap(), GATE_DB), await measure(fixed(), GATE2_DB)];
+    const { trap: a, fixed: b } = await patchQueries();
     expect([a.liked, b.liked]).toEqual([false, true]);
     expect(b.lines.length).toBe(a.lines.length);
     const withLikes = (lines) => lines.filter((line) => line.includes('post_likes'));
@@ -704,4 +735,293 @@ describe('축 ⑤ 학생 파일 차이 — code/p3-51 에서', () => {
     expect(added.length).toBeGreaterThan(0);
     expect(added.filter((line) => banned.test(line))).toEqual([]);
   });
+});
+
+// ── 축 ⑥ 교안 블록 대조 ─────────────────────────────────────────────────────────
+// 원고는 읽기만 한다(어긋나면 판정이 빨개질 뿐 원고를 고치지 않는다). 경로는 앞 회차 판정처럼 트랙 폴더에서 찾고 `P352_LECTURE` 로 바꿀 수 있다.
+// 🚨 원고가 없으면 건너뛰지 않고 실패한다(읽는 순간 ENOENT).
+const LECTURE_MD = process.env.P352_LECTURE ?? new URL('../../part3/8-fullstack-features/p3-52-edit-delete-post-lecture.md', ROOT).pathname;
+const API_PATH = '// ~/instagram-api/';
+/** 원고의 펜스를 차례대로 — 언어 · 본문(줄들) · 시작 줄 번호 · 그 펜스가 속한 Step(`## Step N`). */
+const fencesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let step = null;
+  read(file).split('\n').forEach((line, i) => {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.body.push(line);
+      return;
+    }
+    if (line.startsWith('```')) {
+      cur = { lang: line.slice(3).trim(), body: [], line: i + 1, step };
+      return;
+    }
+    if (line.startsWith('## ')) step = Number(/^## Step (\d+)/.exec(line)?.[1]) || null;
+  });
+  if (cur) throw new Error(`${file} — 닫히지 않은 펜스(${cur.line}번 줄)`);
+  return out;
+};
+/** 발췌의 «줄임» 줄 — `// ...`. */
+const isElision = (line) => line.trim() === '// ...';
+/** 줄임 줄과 빈 줄을 뺀 줄이 `haystack`(줄들)에 차례대로 있는가 — 없으면 처음 못 찾은 줄을 돌려준다. */
+const firstMissing = (wanted, haystack) => {
+  let at = 0;
+  for (const line of wanted.filter((one) => one.trim() !== '' && !isElision(one))) {
+    const found = haystack.indexOf(line, at);
+    if (found === -1) return line;
+    at = found + 1;
+  }
+  return null;
+};
+/** 교안의 백엔드 학생 파일 블록 — ```http 는 모두 post-author.http · ```js 는 첫 줄이 ~/instagram-api 경로 주석인 것. */
+const studentFences = () => fencesOf(LECTURE_MD).flatMap((fence) => {
+  if (fence.lang === 'http') return [{ ...fence, rel: HTTP_FILE }];
+  if (fence.lang === 'js' && (fence.body[0] ?? '').startsWith(API_PATH)) return [{ ...fence, rel: fence.body[0].slice(API_PATH.length) }];
+  return [];
+});
+/** 각 블록이 무엇을 보여 주는지 — Step · 언어 · 파일 · 대조 방식(전문 · 맨 위 · 끝 · 발췌) · 판. */
+const EXPECTED_FENCES = [
+  [1, 'js', 'services/postService.js', 'excerpt', 'step1'],
+  [1, 'http', HTTP_FILE, 'full', 'step1'],
+  [5, 'http', HTTP_FILE, 'head', 'step5'],
+  [5, 'http', HTTP_FILE, 'tail', 'step5'],
+  [5, 'js', 'services/postService.js', 'excerpt', 'trap'],
+  [5, 'js', 'services/postService.js', 'excerpt', 'fixed'],
+];
+const versionDir = (which) => ({ step1, step5: trap, trap, fixed }[which])();
+/** 응답을 옮긴 언어 없는 펜스의 한 줄 — 제목 · (상태) · 본문 모양. 제목 뒤 두 칸 이상을 띄어 상태와 본문이 온다. */
+const rowsOf = (fence) => fence.body.filter((line) => line.trim() !== '').map((line) => {
+  const m = /^\s*(.+?)\s{2,}(?:(\d{3})\s{2,})?(\{.*\})\s*$/.exec(line);
+  if (!m) throw new Error(`${fence.line}번 펜스의 줄을 못 읽었다: ${line}`);
+  return { title: m[1], status: m[2] ? Number(m[2]) : null, value: m[3] };
+});
+/** 적힌 칸(`"키": 값` — 값이 글자 · 숫자 · 참거짓인 것). */
+const pairsOf = (text) => [...text.matchAll(/"(\w+)": (true|false|-?\d+|"[^"]*")/g)].map(([, key, value]) => [key, JSON.parse(value)]);
+/** 적힌 칸이 모두 같은 객체가 응답 어딘가에 있는가. */
+const holds = (node, pairs) => {
+  if (node === null || typeof node !== 'object') return false;
+  if (!Array.isArray(node) && pairs.every(([key, value]) => node[key] === value)) return true;
+  return Object.values(node).some((child) => holds(child, pairs));
+};
+/** 한 줄이 응답과 맞는가 — 상태(적혀 있으면) · 적힌 칸 · 줄임표(…) 없는 줄은 본문 그대로. */
+const rowMatches = (row, res) => [
+  row.title,
+  row.status === null || row.status === res.status,
+  pairsOf(row.value).length > 0 && holds(res.body, pairsOf(row.value)),
+  row.value.includes('…') || JSON.stringify(JSON.parse(row.value)) === JSON.stringify(res.body),
+];
+/** `.http` 를 블록으로 — 맨 위(첫 ### 앞)와 블록마다의 날 글자. */
+const rawBlocks = (text) => {
+  const [head, ...blocks] = text.split(/^(?=### )/m);
+  return { head, blocks, byTitle: (title) => blocks.find((block) => block.split('\n')[0] === `### ${title}`) };
+};
+
+/**
+ * 교안을 따라가는 한 차례 — 같은 DB 하나에서.
+ * Step 1 판 서버에 post-author.http 다섯 → (Step 4 화면처럼) 14 에 하트 · 글을 «주말에 바다에 다녀왔어요» 로 →
+ * Step 5 겪기 판 서버에 «jaehoon으로 로그인» + 끝의 셋 → 고친 판 서버에 «jaehoon으로 로그인» + «내 게시물의 글 고치기» 다시.
+ */
+let lessonRun;
+const lessonFlow = () => (lessonRun ??= (async () => {
+  await copyDb(GATE_DB);
+  const id = await postIdByContent(GATE_DB, '바다에 다녀왔어요');
+  const { head, byTitle } = rawBlocks(withPostId(read(trap()(HTTP_FILE)), id));
+  const login = byTitle('jaehoon으로 로그인');
+  const tailThree = ['내 게시물 받기', '내 게시물 좋아요 누르기', '내 게시물의 글 고치기'].map(byTitle);
+  const { runs1, step4 } = await withServer(step1(), GATE_DB, async ({ base: url }) => {
+    const out = await httpyac(read(step1()(HTTP_FILE)));
+    // Step 4 의 화면 — 하트를 누르고 «수정» 으로 글만 보낸다(useUpdatePost 의 { content })
+    const tab = await loggedIn(url, 'jaehoon');
+    await tab.send('PUT', `/api/v2/posts/${id}/likes/me`);
+    return { runs1: out, step4: await tab.send('PATCH', `/api/v2/posts/${id}`, { content: '주말에 바다에 다녀왔어요' }) };
+  });
+  const runs5 = await withServer(trap(), GATE_DB, () => httpyac(head + login + tailThree.join('')));
+  const runs5fix = await withServer(fixed(), GATE_DB, () => httpyac(head + login + tailThree[2]));
+  return { id, runs1, step4, runs5, runs5fix };
+})());
+/** httpYac CLI 를 그대로(사람이 보는 출력) — `send.http` 하나에 인자를 붙여. */
+const httpyacText = (source, args, port = PORT) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p352-http-'));
+  dirs.push(dir);
+  writeFileSync(join(dir, 'send.http'), source.replaceAll('http://localhost:3000', `http://localhost:${port}`));
+  try {
+    return execFileSync(P('node_modules/.bin/httpyac'), ['send', 'send.http', ...args], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    return `${error.stdout ?? ''}${error.stderr ?? ''}`;
+  }
+};
+
+describe('축 ⑥ 교안 블록 대조 — 교안이 보여 주는 ~/instagram-api 학생 파일 = 그 판 · 옮긴 응답 = 판정이 받은 응답', () => {
+  it('🔴 대조할 블록 여섯 — Step · 언어 · 파일 · 대조 방식이 이 목록과 같다(빠뜨리거나 새로 생긴 블록이 있으면 먼저 여기서 빨개진다)', () => {
+    expect(studentFences().map((f) => [f.step, f.lang, f.rel])).toEqual(EXPECTED_FENCES.map(([step, lang, rel]) => [step, lang, rel]));
+  });
+
+  it('🔴 .http — Step 1 은 글자까지 같다 · Step 5 의 두 블록은 파일 맨 위와 끝 그대로(Step 1 파일 + 그 둘이 Step 5 파일 전부) · 발췌는 `// ...` 를 뺀 모든 줄이 그 판 파일에 차례대로 있고 다른 판 파일에는 없다', () => {
+    const fences = studentFences();
+    const step1Text = read(step1()(HTTP_FILE));
+    const step5Text = read(trap()(HTTP_FILE));
+    expect(read(fixed()(HTTP_FILE))).toBe(step5Text);
+    const results = fences.map((fence, i) => {
+      const [, , rel, how, which] = EXPECTED_FENCES[i];
+      const own = read(versionDir(which)(rel));
+      const body = fence.body.join('\n');
+      if (how === 'full') return [fence.line, how, `${body}\n` === own];
+      if (how === 'head') return [fence.line, how, own.startsWith(`${body}\n\n`) && !step1Text.includes(body)];
+      if (how === 'tail') return [fence.line, how, own.endsWith(`\n\n${body}\n`) && !step1Text.includes(body)];
+      const other = which === 'trap' ? fixed() : which === 'fixed' ? trap() : null;
+      return [fence.line, how, firstMissing(fence.body, own.split('\n')), other ? firstMissing(fence.body, read(other(rel)).split('\n')) !== null : true];
+    });
+    expect(results).toEqual(fences.map((fence, i) => (EXPECTED_FENCES[i][3] === 'excerpt' ? [fence.line, 'excerpt', null, true] : [fence.line, EXPECTED_FENCES[i][3], true])));
+    // «바뀌는 곳은 두 군데» — Step 1 파일의 앞뒤에 그 두 블록을 붙이면 Step 5 파일이다
+    const [head, tail] = fences.filter((f) => f.step === 5 && f.lang === 'http').map((f) => f.body.join('\n'));
+    expect(`${head}\n\n${step1Text}\n${tail}\n`).toBe(step5Text);
+  });
+
+  it('🔴 Step 1 의 응답 펜스 셋 — 다섯 줄 요약(상태 · 적힌 칸) · 403 실패 봉투(JSON — timestamp 는 모양만 · 고치기와 지우기가 같은 봉투) · 화면이 쓸 두 값(id 2 · role USER · authorId 3)', async () => {
+    const { runs1 } = await lessonFlow();
+    const step1Fences = fencesOf(LECTURE_MD).filter((f) => f.step === 1);
+    const summary = step1Fences.filter((f) => f.lang === '' && f.body.some((line) => line.includes('NOT_POST_AUTHOR')));
+    expect(summary).toHaveLength(1);
+    const rows = rowsOf(summary[0]);
+    expect(rows.map((r) => r.title)).toEqual(runs1.map((r) => r.title));
+    expect(rows.map((r, i) => rowMatches(r, runs1[i]))).toEqual(rows.map((r) => [r.title, true, true, true]));
+    // 403 실패 봉투
+    const json = step1Fences.filter((f) => f.lang === 'json');
+    expect(json).toHaveLength(1);
+    const envelope = JSON.parse(json[0].body.join('\n'));
+    expect(envelope.error.timestamp).toMatch(ISO);
+    const shape = (body) => ({ ...body, error: { ...body.error, timestamp: '<timestamp>' } });
+    for (const i of [3, 4]) expect([runs1[i].title, shape(runs1[i].body)]).toEqual([runs1[i].title, shape(envelope)]);
+    expect(Object.keys(envelope.error)).toEqual(Object.keys(runs1[3].body.error));
+    // 화면이 쓸 두 값 — 제목으로 시작하는 줄과 그 아래 이어지는 줄의 칸
+    const values = step1Fences.filter((f) => f.lang === '' && f.body.some((line) => line.includes('useMe()')));
+    expect(values).toHaveLength(1);
+    const groups = [];
+    for (const line of values[0].body.filter((one) => one.trim() !== '')) {
+      if (/^ \S/.test(line)) groups.push({ title: line.trim().split(/\s{2,}/)[0], pairs: pairsOf(line) });
+      else groups.at(-1).pairs.push(...pairsOf(line));
+    }
+    expect(groups.map((g) => [g.title, g.pairs])).toEqual([['나는 누구', [['id', 2], ['role', 'USER']]], ['9번 게시물 받기', [['authorId', 3]]]]);
+    for (const g of groups) expect([g.title, holds(runs1.find((r) => r.title === g.title).body, g.pairs)]).toEqual([g.title, true]);
+  }, 90_000);
+
+  it('🔴 Step 4 · Step 5 의 응답 펜스 — 화면이 받은 고치기 응답(liked false · likeCount 1) · Step 5 세 줄 요약 · 고친 뒤 다시 보낸 고치기는 liked 와 updatedAt 만 다르다 · postAlt 는 처음 글 그대로', async () => {
+    const { step4, runs5, runs5fix } = await lessonFlow();
+    // Step 4 «하트가 꺼진 이유» — Network 탭의 PATCH 응답 한 줄
+    const step4Fences = fencesOf(LECTURE_MD).filter((f) => f.step === 4 && f.lang === '' && f.body.some((line) => line.includes('"liked"')));
+    expect(step4Fences).toHaveLength(1);
+    const step4Row = step4Fences[0].body.filter((line) => line.trim() !== '');
+    expect(step4Row).toHaveLength(1);
+    expect(pairsOf(step4Row[0])).toEqual([['content', '주말에 바다에 다녀왔어요'], ['likeCount', 1], ['liked', false]]);
+    expect([step4.status, holds(step4.body, pairsOf(step4Row[0]))]).toEqual([200, true]);
+    // Step 5 «응답을 직접 봐요» — 로그인 뒤 끝의 셋
+    expect(runs5.map((r) => [r.title, r.status])).toEqual([['jaehoon으로 로그인', 200], ['내 게시물 받기', 200], ['내 게시물 좋아요 누르기', 200], ['내 게시물의 글 고치기', 200]]);
+    const summary = fencesOf(LECTURE_MD).filter((f) => f.step === 5 && f.lang === '' && f.body.some((line) => line.includes('내 게시물 받기')));
+    expect(summary).toHaveLength(1);
+    const rows = rowsOf(summary[0]);
+    const three = runs5.slice(1);
+    expect(rows.map((r) => r.title)).toEqual(three.map((r) => r.title));
+    expect(rows.map((r, i) => rowMatches(r, three[i]))).toEqual(rows.map((r) => [r.title, true, true, true]));
+    expect(rows.map((r) => pairsOf(r.value))).toEqual([
+      [['content', '주말에 바다에 다녀왔어요'], ['likeCount', 1], ['liked', true]],
+      [['liked', true], ['likeCount', 1]],
+      [['content', '주말에 바다에 다녀왔어요'], ['likeCount', 1], ['liked', false]],
+    ]);
+    // «해 봐요» 1 — 고친 판에서 다시 보낸 고치기: liked true · 그 밖의 본문은 앞의 응답과 같고 updatedAt 만 보낸 시각으로
+    const [before, after] = [three[2].body.data, runs5fix.at(-1).body.data];
+    expect([runs5fix.at(-1).title, runs5fix.at(-1).status]).toEqual(['내 게시물의 글 고치기', 200]);
+    const differ = Object.keys(before).filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+    expect(differ).toEqual(['updatedAt', 'liked']);
+    expect([before.liked, after.liked]).toEqual([false, true]);
+    expect(new Date(after.updatedAt) > new Date(before.updatedAt)).toBe(true);
+    // 화면은 글만 보낸다 — 대체 텍스트는 처음 글 그대로
+    expect([after.content, after.postAlt]).toEqual(['주말에 바다에 다녀왔어요', '바다에 다녀왔어요']);
+    seen.lesson = { step4: step4.text, step5: runs5.map((r) => ({ title: r.title, statusLine: r.statusLine, body: r.rawBody })), step5fix: runs5fix.at(-1).rawBody };
+  }, 90_000);
+
+  it('🔴 «쿼리 6줄» — 교안이 적은 줄 수가 고치기 요청 하나의 쿼리 로그 줄 수와 같다(두 판 모두) · 다른 것은 UPDATE 다음에 고친 게시물을 다시 읽는 쿼리 하나', async () => {
+    const said = /고치기 전과 뒤 모두 (\d+)줄/.exec(read(LECTURE_MD));
+    expect(said).not.toBeNull();
+    const { trap: a, fixed: b } = await patchQueries();
+    expect([a.lines.length, b.lines.length]).toEqual([Number(said[1]), Number(said[1])]);
+    const changedAt = a.lines.findIndex((line, i) => line !== b.lines[i]);
+    expect(a.lines[changedAt - 1]).toMatch(/^prisma:query UPDATE "public"\."posts"/);
+    expect(a.lines[changedAt]).toMatch(/^prisma:query SELECT .* FROM "public"\."posts" WHERE "public"\."posts"\."id" = \$1 LIMIT/);
+    expect(b.lines[changedAt]).toContain('LEFT JOIN (SELECT "public"."post_likes"."post_id"');
+  }, 60_000);
+
+  it('🔴 @postId 를 맨 위에 둔 이유 — 맨 위면 «내 게시물의 글 고치기» 하나만 보내도 번호가 들어간다 · 요청 바로 위로 옮긴 판은 하나만 보내면 «postId is not defined» 로 요청이 안 나가고 위에서부터 차례로 보내면 들어간다(httpYac CLI)', async () => {
+    const text = read(trap()(HTTP_FILE));
+    const id = 14;
+    expect(text).toContain(`@postId = ${id}\n`);
+    // 요청 바로 위(«내 게시물 받기» 블록 안)로 옮긴 판
+    const moved = text.replace(`@postId = ${id}\n`, '').replace('### 내 게시물 받기\n', `### 내 게시물 받기\n@postId = ${id}\n`);
+    expect(moved).not.toBe(text);
+    await copyDb(GATE2_DB);
+    const out = await withServer(fixed(), GATE2_DB, async ({ tail }) => {
+      const one = httpyacText(text, ['--name', '내 게시물의 글 고치기']);
+      await sleep(200);
+      const logOne = tail();
+      const movedOne = httpyacText(moved, ['--name', '내 게시물의 글 고치기']);
+      await sleep(200);
+      const logMoved = tail().slice(logOne.length);
+      const movedAll = await httpyac(moved);
+      return { one, logOne, movedOne, logMoved, movedAll };
+    });
+    // 맨 위 — 하나만 보내도 주소에 번호가 들어가 서버까지 간다(이 CLI 실행에는 로그인 쿠키가 없어 401)
+    expect(out.one).toContain(`PATCH http://localhost:${PORT}/api/v2/posts/${id}`);
+    expect(out.logOne).toContain(`PATCH /api/v2/posts/${id} 401 `);
+    // 옮긴 판 — 하나만 보내면 변수가 비어 요청이 나가지 않는다
+    expect(out.movedOne).toContain('postId is not defined');
+    expect(out.movedOne).toContain('1 requests processed (1 errored)');
+    expect(out.logMoved).not.toMatch(/PATCH \/api\/v2\/posts/);
+    // 옮긴 판도 위에서부터 차례로 보내면 들어간다
+    expect(out.movedAll.slice(5).map((r) => [r.title, r.status])).toEqual([['내 게시물 받기', 200], ['내 게시물 좋아요 누르기', 200], ['내 게시물의 글 고치기', 200]]);
+  }, 60_000);
+
+  it('🔴 산문의 서버 주장 — 라우트 다섯 줄과 인용한 PATCH 줄 · postUpdateSchema 는 content · postAlt 만 안다 · postFields 에는 _count 가 없다 · 커서 주석은 커서 페이지네이션 회차의 것', async () => {
+    const lecture = read(LECTURE_MD);
+    const routes = read(fixed()('routes/posts.js')).split('\n');
+    const routeLines = routes.filter((line) => /^router\.(get|post|patch|delete)\(/.test(line));
+    expect(routeLines.map((line) => /^router\.(\w+)\('([^']*)'/.exec(line).slice(1, 3).join(' '))).toEqual(['get /', 'get /:id', 'post /', 'patch /:id', 'delete /:id']);
+    // 교안이 인라인 코드로 적은 router.… — 줄인 꼴(router.get('/'))은 그 HTTP 메서드 · 주소로 시작하는 줄이, 온전한 꼴은 그 글자가 파일에 있다
+    const cited = [...new Set([...lecture.matchAll(/`(router\.(?:get|post|patch|delete)\([^`]*\))`/g)].map((m) => m[1]))];
+    expect(cited.length).toBeGreaterThanOrEqual(5);
+    for (const code of cited) {
+      const short = /^router\.(\w+)\('([^']*)'\)$/.exec(code);
+      const ok = short ? routeLines.some((line) => line.startsWith(`router.${short[1]}('${short[2]}',`)) : routeLines.some((line) => line.startsWith(code));
+      expect([code, ok]).toEqual([code, true]);
+    }
+    expect(lecture).toContain("`router.patch('/:id', validateBody(postUpdateSchema), postController.update)`");
+    // postUpdateSchema 가 아는 필드
+    const dir = studentDir(fixed());
+    const schema = await import(pathToFileURL(join(dir, 'schemas/postSchema.js')).href);
+    expect(Object.keys(schema.postUpdateSchema.shape).sort()).toEqual(['content', 'postAlt']);
+    // postFields 에는 좋아요를 세는 _count 가 없다
+    const service = read(fixed()('services/postService.js'));
+    const fields = service.slice(service.indexOf('const postFields = {'), service.indexOf('\n};', service.indexOf('const postFields = {')));
+    expect(fields).toContain('likeCount: true');
+    expect(fields).not.toContain('_count');
+    // «커서 페이지네이션을 배울 때 … 주석에 적어 둔» 문장
+    const quote = '커서의 값만 쓰므로 그 게시물이 지워졌어도 이어진다';
+    expect(lecture).toContain(`«${quote}»`);
+    expect(service).toContain(quote);
+    expect(showAt('code/p3-33', 'services/postService.js')).toContain(quote);
+    expect(showAt('code/p3-32', 'services/postService.js')).not.toContain(quote);
+  }, 30_000);
+
+  it('🔴 첫 페이지(2개)를 받은 뒤 그 페이지의 마지막 게시물을 지워도 받은 커서로 다음 페이지가 빠지거나 겹치지 않고 이어진다', async () => {
+    await copyDb(GATE_DB);
+    const out = await withServer(fixed(), GATE_DB, async ({ base: url }) => {
+      const tab = await loggedIn(url, 'jaehoon');
+      const all = (await tab.get('/api/v2/posts?limit=50')).body.data.items.map((p) => p.id);
+      const first = (await tab.get('/api/v2/posts?limit=2')).body.data;
+      const removed = await tab.send('DELETE', `/api/v2/posts/${first.items[1].id}`);
+      const next = (await tab.get(`/api/v2/posts?limit=2&cursor=${first.nextCursor}`)).body.data;
+      return { all, first: first.items.map((p) => p.id), removed: removed.status, next: next.items.map((p) => p.id) };
+    });
+    expect(out.removed).toBe(200);
+    expect(out.first).toEqual(out.all.slice(0, 2));
+    expect(out.next).toEqual(out.all.slice(2, 4));
+  }, 30_000);
 });
