@@ -1,13 +1,19 @@
-### 1번 상품의 리뷰 — 첫 페이지
-# @name first
+### 오래된 순 — 첫 페이지
+# @name oldest
 GET http://localhost:4001/api/products/1/reviews?limit=3
 
-### 둘째 페이지
-# @name second
-GET http://localhost:4001/api/products/1/reviews?limit=3&cursor={{first.nextCursor}}
+### 최신순 — 첫 페이지
+# @name newest
+GET http://localhost:4001/api/products/1/reviews?order=newest&limit=3
 
-### 셋째 페이지
-GET http://localhost:4001/api/products/1/reviews?limit=3&cursor={{second.nextCursor}}
+### 최신순 — 둘째 페이지
+GET http://localhost:4001/api/products/1/reviews?order=newest&limit=3&cursor={{newest.nextCursor}}
 
-### 커서가 아닌 값
-GET http://localhost:4001/api/products/1/reviews?limit=3&cursor=abc
+### 오래된 순 — 둘째 페이지
+GET http://localhost:4001/api/products/1/reviews?limit=3&cursor={{oldest.nextCursor}}
+
+### 최신순에 오래된 순의 커서를 보내면
+GET http://localhost:4001/api/products/1/reviews?order=newest&limit=3&cursor={{oldest.nextCursor}}
+
+### 정렬 값이 틀리면
+GET http://localhost:4001/api/products/1/reviews?order=popular
