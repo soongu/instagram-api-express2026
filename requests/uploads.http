@@ -25,11 +25,23 @@ Content-Type: image/jpeg
 
 < ./photos/beach.jpg
 --photo-boundary
-Content-Disposition: form-data; name="images"; filename="beach.jpg"
+Content-Disposition: form-data; name="images"; filename="forest.jpg"
 Content-Type: image/jpeg
 
 < ./photos/forest.jpg
 --photo-boundary--
+
+### 올린 사진으로 게시물 만들기
+# @name created
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 2,
+  "imageUrls": {{uploaded.imageUrls}},
+  "postAlt": "바다와 숲 사진",
+  "content": "직접 올린 사진이에요"
+}
 
 
 ### 5MB가 넘는 사진
@@ -53,3 +65,23 @@ Content-Type: text/plain
 
 < ./photos/memo.txt
 --photo-boundary--
+
+
+### 사진과 사진이 아닌 파일을 함께 보내기
+POST http://localhost:3000/api/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ./photos/beach.jpg
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="memo.txt"
+Content-Type: text/plain
+
+< ./photos/memo.txt
+--photo-boundary--
+
+### 방금 만든 게시물 지우기
+DELETE http://localhost:3000/api/posts/{{created.id}}

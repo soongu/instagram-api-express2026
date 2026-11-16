@@ -1,4 +1,6 @@
 // ~/instagram-api/services/postService.js
+import { rm } from 'node:fs/promises';
+import path from 'node:path';
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 
@@ -100,16 +102,37 @@ export async function updatePost(id, data) {
   }
 }
 
+
+// 우리 서버에 올린 사진 파일을 지운다. 바깥 주소(https://…)의 사진은 우리 파일이 아니라 건너뛴다.
+async function removeUploadedFiles(imageUrls) {
+  const uploaded = imageUrls.filter((imageUrl) => imageUrl.startsWith('/uploads/'));
+
+  for (const imageUrl of uploaded) {
+    try {
+      // 주소에서 파일 이름만 꺼낸다 — 주소에 ../ 가 섞여 와도 uploads 폴더 밖은 못 건드린다.
+      await rm(path.join('uploads', path.basename(imageUrl)), { force: true });
+    } catch (error) {
+      // 게시물은 이미 지웠다 — 파일 하나를 못 지웠다고 요청을 실패로 돌리지 않고, 기록만 남기고 다음 파일로 간다.
+      console.error(error);
+    }
+  }
+}
+
 export async function removePost(id) {
+  let post;
   try {
-    const post = await prisma.post.delete({
+    post = await prisma.post.delete({
       where: { id },
       select: postFields,
     });
-
-    return flatten(post);
   } catch (error) {
     if (error.code === 'P2025') throw new NotFoundError('그런 게시물은 없어요');
     throw error;
   }
+
+  // 테이블에서 먼저 지우고, 파일은 그다음에 지운다.
+  const deleted = flatten(post);
+  await removeUploadedFiles(deleted.imageUrls);
+
+  return deleted;
 }
