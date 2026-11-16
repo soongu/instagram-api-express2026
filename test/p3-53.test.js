@@ -53,7 +53,6 @@ const PROVIDER_ENV = {
 };
 const env = { CORS_ORIGIN: 'http://localhost:3001', JWT_SECRET: SECRET, ...PROVIDER_ENV };
 const STUDENT_FILES = ['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'strategies', 'docs', 'utils', 'package.json', 'requests', 'seed.js', 'data', 'prisma', 'prisma.config.js', '.env.example', 'lab'];
-const BASE_REF = 'code/p3-52';
 const HTTP_FILE = 'requests/post-comments.http';
 const SQL_FILE = 'lab/p3-53/many-comments.sql';
 const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
@@ -66,7 +65,8 @@ const hasRef = (ref) => {
     return false;
   }
 };
-const LINE = hasRef('refs/heads/code/p3-53') ? 'code/p3-53' : 'main';
+// 🔑 판의 선 — 북마크 code/p3-53 이 있으면 그것, 없으면 지금 체크아웃한 선(HEAD). `P353_LINE` 으로 바꾼다.
+const LINE = process.env.P353_LINE ?? (hasRef('refs/heads/code/p3-53') ? 'code/p3-53' : 'HEAD');
 const WT = process.env.P353_WT ?? null;
 /** «(Step N)» 표식이 붙은 이 회차 커밋들 — 새것부터. */
 const stepCommits = (n) => {
@@ -89,7 +89,12 @@ const refDir = (ref) => {
   return at;
 };
 const worktree = (rel) => P(rel);
-const base = () => refDir(BASE_REF);
+// 🔑 시작 판 — 이 회차 첫 커밋(Step 1 의 강의 자료)의 바로 앞. 북마크 code/p3-52 위에서 지었으면 code/p3-52 이고,
+//    그 뒤 선 위의 정정(p3-33 decodeCursor 의 try 좁히기 — 7ca45d7) 위에서 지었으면 그 커밋이다. `P353_BASE` 로 바꾼다.
+let baseCache;
+const baseRef = () => (baseCache ??= process.env.P353_BASE
+  ?? execFileSync('git', ['rev-parse', `${stepCommits(1).at(-1)}^`], { cwd: P('.'), encoding: 'utf8' }).trim());
+const base = () => refDir(baseRef());
 /** 판의 커밋 — Step 의 커밋 가운데 `index` 번째(오래된 것부터 0) · 작업트리로 읽는 판이면 null. */
 const VERSIONS = {
   '1a': [1, 0], 1: [1, 1], '2a': [2, 0], 2: [2, 1], '3a': [3, 0], 3: [3, 1], 5: [5, 0],
@@ -666,6 +671,19 @@ describe('축 ③ Step 3 — 오래된 순으로 나눠 받기', () => {
     expect(service).toContain("import { encodeCursor, decodeCursor } from '../utils/cursor.js';");
     expect(service).not.toMatch(/function (encodeCursor|decodeCursor)/);
     expect(read(version('3a')('schemas/postSchema.js'))).not.toContain('cursorSchema');
+    // 옮긴 함수와 스키마는 시작 판의 것과 글자 그대로다(export 만 붙었다)
+    const fnText = (text, name) => {
+      const at = text.indexOf(`function ${name}(`);
+      return text.slice(at, text.indexOf('\n}\n', at) + 2);
+    };
+    const startService = read(base()('services/postService.js'));
+    for (const name of ['encodeCursor', 'decodeCursor']) {
+      expect(util).toContain(`export ${fnText(startService, name)}`);
+    }
+    const startSchema = read(base()('schemas/postSchema.js'));
+    const schemaBlock = startSchema.slice(startSchema.indexOf('export const cursorSchema'), startSchema.indexOf('});', startSchema.indexOf('export const cursorSchema')) + 3);
+    expect(util).toContain(schemaBlock.replace('export const', 'const'));
+    seen.movedDecode = fnText(util, 'decodeCursor');
     expect(read(version('3a')('services/commentService.js'))).toBe(read(version(2)('services/commentService.js')));
     const [a, b] = [await postListTour(base(), GATE_DB), await postListTour(version('3a'), GATE2_DB)];
     expect(b).toEqual(a);
@@ -906,10 +924,10 @@ describe('축 ④ Step 5 — 강의 자료 lab/p3-53/many-comments.sql', () => {
 });
 
 // ── 축 ⑤ 학생 파일 차이 ─────────────────────────────────────────────────────────
-describe('축 ⑤ 학생 파일 차이 — code/p3-52 에서 각 판까지', () => {
+describe('축 ⑤ 학생 파일 차이 — 시작 판(code/p3-52 또는 그 위의 정정)에서 각 판까지', () => {
   it('🔴 커밋 수와 차례 — Step 1 둘 · Step 2 둘 · Step 3 둘 · Step 5 하나 · 1 → 2 → 3 → 5', () => {
     expect([1, 2, 3, 5].map((n) => stepCommits(n).length)).toEqual([2, 2, 2, 1]);
-    const order = execFileSync('git', ['log', '--format=%H', `${BASE_REF}..${LINE}`], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').reverse();
+    const order = execFileSync('git', ['log', '--format=%H', `${baseRef()}..${LINE}`], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').reverse();
     const at = ['1a', 1, '2a', 2, '3a', 3, 5].map((label) => order.indexOf(versionRef(label)));
     expect(at.every((n) => n >= 0)).toBe(true);
     expect(at).toEqual(at.slice().sort((a, b) => a - b));
@@ -918,19 +936,19 @@ describe('축 ⑤ 학생 파일 차이 — code/p3-52 에서 각 판까지', () 
 
   it('🔴 판마다 바뀐 학생 파일 — 교안이 «바꿀 파일» 로 말할 목록', () => {
     const r = (label) => versionRef(label);
-    expect(changedStudentFiles(BASE_REF, r('1a'))).toEqual([HTTP_FILE]);
+    expect(changedStudentFiles(baseRef(), r('1a'))).toEqual([HTTP_FILE]);
     expect(changedStudentFiles(r('1a'), r(1))).toEqual(['app.js', 'controllers/commentController.js', 'routes/comments.js', 'services/commentService.js']);
     expect(changedStudentFiles(r(1), r('2a'))).toEqual([HTTP_FILE]);
     expect(changedStudentFiles(r('2a'), r(2))).toEqual(['services/commentService.js']);
     expect(changedStudentFiles(r(2), r('3a'))).toEqual(['schemas/postSchema.js', 'services/postService.js', 'utils/cursor.js']);
     expect(changedStudentFiles(r('3a'), r(3))).toEqual(['controllers/commentController.js', HTTP_FILE, 'routes/comments.js', 'schemas/commentSchema.js', 'services/commentService.js']);
     expect(changedStudentFiles(r(3), r(5))).toEqual([SQL_FILE]);
-    expect(changedStudentFiles(BASE_REF, r(5))).toEqual([
+    expect(changedStudentFiles(baseRef(), r(5))).toEqual([
       'app.js', 'controllers/commentController.js', SQL_FILE, HTTP_FILE, 'routes/comments.js', 'schemas/commentSchema.js', 'schemas/postSchema.js',
       'services/commentService.js', 'services/postService.js', 'utils/cursor.js',
     ]);
     // 새 패키지 · 스키마 · 마이그레이션 없음
-    for (const rel of ['package.json', 'package-lock.json', 'prisma/schema.prisma']) expect([rel, showAt(r(5), rel)]).toEqual([rel, showAt(BASE_REF, rel)]);
+    for (const rel of ['package.json', 'package-lock.json', 'prisma/schema.prisma']) expect([rel, showAt(r(5), rel)]).toEqual([rel, showAt(baseRef(), rel)]);
     expect(readdirSync(version(5)('prisma/migrations'))).toEqual(readdirSync(base()('prisma/migrations')));
     // app.js 는 두 줄을 더했다 — import 하나 · 좋아요 라우터 바로 아래 api.use 하나
     const diff = execFileSync('git', ['diff', '-U0', r('1a'), r(1), '--', 'app.js'], { cwd: P('.'), encoding: 'utf8' });
@@ -946,7 +964,7 @@ describe('축 ⑤ 학생 파일 차이 — code/p3-52 에서 각 판까지', () 
 
   it('🔴 학생 파일에 내부 어휘가 없다 · 첫 줄 경로 주석 · 쓰지 않기로 한 낱말이 없다', () => {
     const to = versionRef(5);
-    for (const rel of changedStudentFiles(BASE_REF, to)) {
+    for (const rel of changedStudentFiles(baseRef(), to)) {
       const text = showAt(to, rel);
       // 첫 줄 경로 주석의 lab/p3-53/ 은 학생 폴더 이름이라 뺀다
       expect([rel, /게이트|판정|TDD|Step \d|p3-\d\d|회차|스냅숏/.test(text.split('\n').slice(1).join('\n'))]).toEqual([rel, false]);
@@ -955,7 +973,7 @@ describe('축 ⑤ 학생 파일 차이 — code/p3-52 에서 각 판까지', () 
     }
     // «돌려준다»(값을 돌려주다 — return)는 이 코드베이스가 늘 쓰는 다른 낱말이라 뺀다
     const banned = /자리|박다|박아|박힌|결[이을로의]|갈래|몸통|판[이을으]|겹|까닭|걸리|걸린|돌리|돌려(?!주|준|줄)|가르|갈리|재다|재서|벗기|되살|짝/;
-    const diff = execFileSync('git', ['diff', BASE_REF, to, '--', ...STUDENT_FILES], { cwd: P('.'), encoding: 'utf8' });
+    const diff = execFileSync('git', ['diff', baseRef(), to, '--', ...STUDENT_FILES], { cwd: P('.'), encoding: 'utf8' });
     const added = diff.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++'));
     expect(added.length).toBeGreaterThan(0);
     expect(added.filter((line) => banned.test(line))).toEqual([]);

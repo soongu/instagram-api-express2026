@@ -33,7 +33,7 @@ const hasRef = (ref) => {
     return false;
   }
 };
-const LINE = hasRef('refs/heads/code/p3-53') ? 'code/p3-53' : 'main';
+const LINE = process.env.P353_LINE ?? (hasRef('refs/heads/code/p3-53') ? 'code/p3-53' : 'HEAD');
 const WT = process.env.P353_LAB_WT === '1';
 /** 제목 끝 표식으로 커밋 하나 — 같은 표식이 여럿이면 가장 뒤 커밋. */
 const commitOf = (mark) => {
