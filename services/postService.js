@@ -50,11 +50,22 @@ function encodeCursor({ createdAt, id }) {
 }
 
 function decodeCursor(cursor) {
+  let value;
+
+  // try 는 보낸 값 때문에 실패하는 줄만 감싼다 — 커서가 JSON 이 아니면 JSON.parse 가 던진다.
+  // 더 넓게 감싸면 우리 코드의 실수(빠뜨린 import 같은 것)까지 400 으로 바뀌어 숨는다.
   try {
-    return cursorSchema.parse(JSON.parse(Buffer.from(cursor, 'base64url').toString()));
+    value = JSON.parse(Buffer.from(cursor, 'base64url').toString());
   } catch {
     throw new BadRequestError('INVALID_CURSOR');
   }
+
+  // 푼 값의 모양은 safeParse 로 검사한다 — 맞지 않아도 던지지 않고 결과로 알려 준다.
+  const result = cursorSchema.safeParse(value);
+
+  if (!result.success) throw new BadRequestError('INVALID_CURSOR');
+
+  return result.data;
 }
 
 // 목록은 «시각이 늦은 순, 같으면 번호가 큰 순» 이다. 그러니 커서 다음 행은

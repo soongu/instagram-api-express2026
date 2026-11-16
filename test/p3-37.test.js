@@ -25,6 +25,7 @@ import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { applyMigrationsAfter } from './helpers/tip-schema.js';
+import { retrofitRoundDir } from './helpers/decode-cursor-retrofit.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -40,6 +41,10 @@ const ROUND = roundDir('code/p3-37');
 const R = (rel) => join(ROUND.dir, rel);
 const BEFORE = roundDir('code/p3-36');
 const B = (rel) => join(BEFORE.dir, rel);
+// 🔀 2026-11-16 소급 정정 — p3-33 이 decodeCursor 의 try 를 좁혔다. 학생 상태는 «북마크 + 정정» 이라
+//    Step 6 의 grep 출력(줄 번호 · 문장을 넘기는 줄 수)도 그 상태로 잰다(test/helpers/decode-cursor-retrofit.js).
+retrofitRoundDir(BEFORE);
+retrofitRoundDir(ROUND, 'services/postService.js', 'INVALID_CURSOR');
 
 const env = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:3001' };
 const STUDENT_FILES = ['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'docs', 'package.json', 'requests', 'lab/p3-37'];
@@ -1018,7 +1023,7 @@ describe('축 ⑪ 학생 낭독 집중 검수 — 지시를 글자 그대로 따
     expect(appLines).toEqual(out);
   });
 
-  it('Step 6 — 고치기 전에 문장을 넘기는 줄을 먼저 찾는다(19줄) · 고친 뒤 같은 명령은 0줄', () => {
+  it('Step 6 — 고치기 전에 문장을 넘기는 줄을 먼저 찾는다(20줄 — 2026-11-16 decodeCursor 정정으로 하나 늘었다) · 고친 뒤 같은 명령은 0줄', () => {
     const all = fences(LECTURE());
     const CMD = 'grep -rnE "Error\\(\'[^A-Z]" services middlewares controllers';
     const first = fenceAfter(all, CMD, 0);
@@ -1031,12 +1036,12 @@ describe('축 ⑪ 학생 낭독 집중 검수 — 지시를 글자 그대로 따
       const up = join(dir, 'controllers/uploadController.js');
       writeFileSync(up, read(up).replace("'NO_IMAGES'", "'올릴 사진을 골라 주세요'"));
       const got = grepLines(dir, ['-rnE', "Error\\('[^A-Z]", 'services', 'middlewares', 'controllers']);
-      expect(got).toHaveLength(19);
+      expect(got).toHaveLength(20);
       expect(got).toEqual(first.body.split('\n').sort());
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-    expect(LECTURE()).toContain('19줄이 찍혀요');
+    expect(LECTURE()).toContain('20줄이 찍혀요');
     expect(grepLines(ROUND.dir, ['-rnE', "Error\\('[^A-Z]", 'services', 'middlewares', 'controllers'])).toEqual([]);
   });
 
