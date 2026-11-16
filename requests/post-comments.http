@@ -9,3 +9,9 @@ Content-Type: application/json
 
 ### 1번 게시물의 댓글
 GET http://localhost:3000/api/v2/posts/1/comments
+
+### 없는 게시물의 댓글
+GET http://localhost:3000/api/v2/posts/99/comments
+
+### 댓글이 없는 게시물의 댓글
+GET http://localhost:3000/api/v2/posts/4/comments
