@@ -3,6 +3,7 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
+import { cursorSchema } from '../schemas/postSchema.js';
 
 
 export async function cursorOf(id) {
