@@ -1,0 +1,32 @@
+### 게시물 올리기에 사진을 담아 보내기
+POST http://localhost:3000/api/posts
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="content"
+
+제주 바다
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ./photos/beach.jpg
+--photo-boundary--
+
+
+### 사진 두 장 올리기
+# @name uploaded
+POST http://localhost:3000/api/uploads
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="beach.jpg"
+Content-Type: image/jpeg
+
+< ./photos/beach.jpg
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="forest.jpg"
+Content-Type: image/jpeg
+
+< ./photos/forest.jpg
+--photo-boundary--

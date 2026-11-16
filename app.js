@@ -4,6 +4,7 @@ import cors from 'cors';
 import postsRouter from './routes/posts.js';
 import authRouter from './routes/auth.js';
 import likesRouter from './routes/likes.js';
+import uploadsRouter from './routes/uploads.js';
 import { HttpError } from './errors.js';
 import cookieParser from 'cookie-parser';
 import { logger } from './middlewares/logger.js';
@@ -33,6 +34,7 @@ app.get('/', (req, res) => {
 app.use('/api/posts', postsRouter);
 app.use('/api/posts/:id/likes', likesRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/uploads', uploadsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ message: '그런 주소는 없어요' });
