@@ -499,8 +499,18 @@ const checksOf = (section) => {
   return out;
 };
 /** 절의 «이렇게 쓰면 | 처음 달라지는 곳» 표 — 머리와 구분 줄을 뺀 행들. */
-const tableOf = (section) => section.lines.filter((line) => line.startsWith('| ') && !line.startsWith('| 이렇게 쓰면') && !/^\|[-|\s]+\|$/.test(line))
-  .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()));
+const tableOf = (section) => {
+  // 절 안의 마크다운 표 가운데 머리가 «이렇게 쓰면 | 처음 달라지는 곳» 인 것 하나 — 절에는 «나눠 드리는 파일» 같은 다른 표도 있다
+  const at = section.lines.findIndex((line) => /^\|\s*이렇게 쓰면\s*\|\s*처음 달라지는 곳\s*\|$/.test(line.trim()));
+  if (at === -1) return [];
+  const rows = [];
+  for (const line of section.lines.slice(at + 1)) {
+    if (!line.startsWith('|')) break;
+    if (/^\|[\s:|-]+\|$/.test(line.trim())) continue;
+    rows.push(line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim()));
+  }
+  return rows;
+};
 const seqOf = (text) => [...text.matchAll(/(\d+(?: · \d+)+)번/g)].map(([, s]) => s.split(' · ').map(Number));
 const statusOf = (text) => [...text.matchAll(/(?<!\d)(200|400|404|500)(?!\d)/g)].map(([, s]) => Number(s));
 const messageOf = (text) => /`message`가 «([^»]+)»/.exec(text)?.[1] ?? null;
@@ -620,6 +630,7 @@ describeLecture(LECTURE_MD ? '축 ⑥ 교안 대조 — 실습 블록 · 확인 
       });
       w.first = circled(checkPractice1(w.runs));
     }
+    expect(tableOf(section)).toHaveLength(3);
     for (const row of tableOf(section)) {
       const key = Object.keys(wrongs).find((k) => row[0].includes(wrongs[k].match));
       if (!key) { problems.push({ where: '직접 해보기 1 표', row, problem: '어느 틀린 판인지 모르는 행' }); continue; }
@@ -650,6 +661,7 @@ describeLecture(LECTURE_MD ? '축 ⑥ 교안 대조 — 실습 블록 · 확인 
       w.runs = await sendHttp('practice2', 'practice2', w.source, httpText, PORTS.wrong);
       w.first = circled(checkPractice2(w.runs));
     }
+    expect(tableOf(section)).toHaveLength(5);
     for (const row of tableOf(section)) {
       const key = Object.keys(wrongs).find((k) => row[0].includes(wrongs[k].match));
       if (!key) { problems.push({ where: '직접 해보기 2 표', row, problem: '어느 틀린 판인지 모르는 행' }); continue; }

@@ -1320,6 +1320,28 @@ const fencesOf = (file) => {
   if (cur) throw new Error(`${file} — 닫히지 않은 펜스(${cur.line}번 줄)`);
   return out;
 };
+/** 원고의 마크다운 표를 차례대로 — 머리 칸 · 행(칸 배열) · 시작 줄 번호 · Step. 펜스 안의 `|` 줄은 표가 아니다. 칸의 백틱은 벗겨 둔 값(plain)도 함께. */
+const tablesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let inFence = false;
+  let step = null;
+  const cellsOf = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+  read(file).split('\n').forEach((line, i) => {
+    if (line.startsWith('```')) inFence = !inFence;
+    if (!inFence && line.startsWith('## ')) step = Number(/^## Step (\d+)/.exec(line)?.[1]) || null;
+    if (!inFence && line.startsWith('|')) {
+      if (!cur) { cur = { header: cellsOf(line), rows: [], line: i + 1, step }; return; }
+      if (/^\|[\s:|-]+\|$/.test(line.trim())) return;
+      cur.rows.push(cellsOf(line));
+      return;
+    }
+    if (cur) { out.push(cur); cur = null; }
+  });
+  if (cur) out.push(cur);
+  return out;
+};
+const plain = (cell) => cell.replace(/`/g, '');
 const isElision = (line) => ['// ...', '...', '{/* ... */}'].includes(line.trim());
 /** 블록이 파일에 어떻게 들어 있나 — full · head · tail · slice(이어진 줄) · excerpt(줄임 표시 · 줄이 차례대로) · null(없음). */
 const howIn = (body, file) => {
@@ -1446,7 +1468,7 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 블록 대조 — 수업 백엔드(
     expect(found).toEqual(EXPECTED_CLASS_FENCES);
   }, 120_000);
 
-  it('🔴 응답을 옮긴 펜스 — Step 1 404 봉투 · 댓글 표(id · parentId · content) · Step 2 의 [] · 1번 셋 · 99번 404 봉투 · Step 3 페이지 표 — 시각은 모양만', async () => {
+  it('🔴 응답을 옮긴 펜스와 표 — Step 1 404 봉투 · 댓글 표(마크다운 · id · parentId · content) · Step 2 의 [] · 1번 셋 · 99번 404 봉투 · Step 3 페이지 표(마크다운) — 시각은 모양만', async () => {
     const f = await lessonFacts();
     const fences = fencesOf(LECTURE_MD).filter((fence) => fence.step !== null && fence.step <= 3);
     const json = fences.filter((fence) => fence.lang === 'json').map((fence) => ({ line: fence.line, value: JSON.parse(fence.body.join('\n')) }));
@@ -1462,27 +1484,33 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 블록 대조 — 수업 백엔드(
     same('Step 2 고친 판의 99번 404', json[3].line, json[3].value, f.step2[2].body);
     // 실패 봉투의 timestamp 는 모양이 맞아야 한다
     for (const one of [json[0], json[3]]) if (!ISO.test(one.value.error.timestamp)) problems.push({ where: `${one.line}번 줄 timestamp 모양`, lecture: one.value.error.timestamp });
-    // Step 1 의 댓글 표
-    const table = fences.find((fence) => fence.lang === '' && /^\s*id\s+parentId\s+content\s*$/.test(fence.body[0]));
-    const rows = table.body.slice(2).filter((line) => line.trim() !== '').map((line) => line.trim().split(/\s{2,}/));
-    const want = f.step1[1].body.data.map((c) => [String(c.id), String(c.parentId), c.content]);
-    if (JSON.stringify(rows) !== JSON.stringify(want)) problems.push({ where: `${table.line}번 줄 Step 1 댓글 표`, lecture: rows, measured: want });
-    // Step 3 의 페이지 표 — 한 페이지의 댓글이 여러 줄로 이어질 수 있다(둘째 칸만 있는 줄은 앞 줄에 이어 붙인다 · 쉼표로 이은 판도 받는다)
-    const pages = fences.find((fence) => fence.lang === '' && /hasNext\s+nextCursor/.test(fence.body[0]));
-    const pageRows = [];
-    for (const line of pages.body.slice(2).filter((one) => one.trim() !== '')) {
-      const cells = line.trim().split(/\s{2,}/);
-      if (cells.length === 1 && pageRows.length > 0) pageRows.at(-1).comments.push(cells[0]);
-      else pageRows.push({ page: cells[0], comments: cells[1].split(', '), hasNext: cells[2], nextCursor: cells[3] });
+    // Step 1 의 댓글 표 — 마크다운 표(머리 `id` | `parentId` | `content`)
+    const tables = tablesOf(LECTURE_MD);
+    const table = tables.find((t) => t.header.map(plain).join('|') === 'id|parentId|content');
+    if (!table) problems.push({ where: 'Step 1 댓글 표', problem: '못 찾음(머리 `id` | `parentId` | `content`)' });
+    else {
+      const rows = table.rows.map((row) => row.map(plain));
+      const want = f.step1[1].body.data.map((c) => [String(c.id), String(c.parentId), c.content]);
+      if (JSON.stringify(rows) !== JSON.stringify(want)) problems.push({ where: `${table.line}번 줄 Step 1 댓글 표`, lecture: rows, measured: want });
     }
-    const [p1, p2] = [f.step3[4].body.data, f.step3[5].body.data];
-    const wantPages = [
-      { page: '첫 페이지', comments: p1.items.map((c) => c.content), hasNext: String(p1.hasNext), nextCursor: p1.nextCursor },
-      { page: '둘째 페이지', comments: p2.items.map((c) => c.content), hasNext: String(p2.hasNext), nextCursor: String(p2.nextCursor) },
-    ];
-    const pageOk = pageRows.length === 2 && pageRows.every((row, i) => row.page === wantPages[i].page && JSON.stringify(row.comments) === JSON.stringify(wantPages[i].comments)
-      && row.hasNext === wantPages[i].hasNext && (row.nextCursor.endsWith('…') ? wantPages[i].nextCursor.startsWith(row.nextCursor.slice(0, -1)) : row.nextCursor === wantPages[i].nextCursor));
-    if (!pageOk) problems.push({ where: `${pages.line}번 줄 Step 3 페이지 표`, lecture: pageRows, measured: wantPages });
+    // Step 3 의 페이지 표 — 마크다운 표(머리 페이지 | 댓글 | `hasNext` | `nextCursor`) · 첫 칸이 빈 행은 앞 페이지의 댓글이 이어진 것
+    const pages = tables.find((t) => t.header.map(plain).join('|') === '페이지|댓글|hasNext|nextCursor');
+    if (!pages) problems.push({ where: 'Step 3 페이지 표', problem: '못 찾음(머리 페이지 | 댓글 | `hasNext` | `nextCursor`)' });
+    else {
+      const pageRows = [];
+      for (const row of pages.rows.map((r) => r.map(plain))) {
+        if (row[0] === '' && pageRows.length > 0) pageRows.at(-1).comments.push(row[1]);
+        else pageRows.push({ page: row[0], comments: [row[1]], hasNext: row[2], nextCursor: row[3] });
+      }
+      const [p1, p2] = [f.step3[4].body.data, f.step3[5].body.data];
+      const wantPages = [
+        { page: '첫 페이지', comments: p1.items.map((c) => c.content), hasNext: String(p1.hasNext), nextCursor: p1.nextCursor },
+        { page: '둘째 페이지', comments: p2.items.map((c) => c.content), hasNext: String(p2.hasNext), nextCursor: String(p2.nextCursor) },
+      ];
+      const pageOk = pageRows.length === 2 && pageRows.every((row, i) => row.page === wantPages[i].page && JSON.stringify(row.comments) === JSON.stringify(wantPages[i].comments)
+        && row.hasNext === wantPages[i].hasNext && (row.nextCursor.endsWith('…') ? wantPages[i].nextCursor.startsWith(row.nextCursor.slice(0, -1)) : row.nextCursor === wantPages[i].nextCursor));
+      if (!pageOk) problems.push({ where: `${pages.line}번 줄 Step 3 페이지 표`, lecture: pageRows, measured: wantPages });
+    }
     lectureProblems.push(...problems);
     seen.lectureResponses = problems;
     expect(problems).toEqual([]);
