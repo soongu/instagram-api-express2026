@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import passport from 'passport';
 import postsRouter from './routes/posts.js';
 import likesRouter from './routes/likes.js';
+import commentsRouter from './routes/comments.js';
 import authRouter from './routes/auth.js';
 import uploadsRouter from './routes/uploads.js';
 import adminRouter from './routes/admin.js';
@@ -69,6 +70,7 @@ api.use('/auth', authRouter);
 api.use(requireLogin);
 api.use('/posts', postsRouter);
 api.use('/posts/:id/likes', likesRouter);
+api.use('/posts/:id/comments', commentsRouter);
 api.use('/uploads', uploadsRouter);
 api.use('/admin', adminRouter);
 
