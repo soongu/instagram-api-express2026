@@ -939,11 +939,14 @@ describe('축 ⑥ 교안 블록 대조 — 교안이 보여 주는 ~/instagram-a
     seen.lesson = { step4: step4.text, step5: runs5.map((r) => ({ title: r.title, statusLine: r.statusLine, body: r.rawBody })), step5fix: runs5fix.at(-1).rawBody };
   }, 90_000);
 
-  it('🔴 «쿼리 6줄» — 교안이 적은 줄 수가 고치기 요청 하나의 쿼리 로그 줄 수와 같다(두 판 모두) · 다른 것은 UPDATE 다음에 고친 게시물을 다시 읽는 쿼리 하나', async () => {
-    const said = /고치기 전과 뒤 모두 (\d+)줄/.exec(read(LECTURE_MD));
+  it('🔴 «쿼리 6줄» — 교안이 적은 줄 수가 고치기 요청 하나의 쿼리 로그 줄 수와 같다(두 판 모두) · 마지막 줄은 COMMIT · 다른 것은 UPDATE 다음에 고친 게시물을 다시 읽는 쿼리 하나', async () => {
+    const said = /바꾸기 전과 바꾼 뒤 모두 (\d+)줄이었어요\(마지막 줄은 트랜잭션을 끝내는 `COMMIT`이에요\)/.exec(read(LECTURE_MD));
     expect(said).not.toBeNull();
     const { trap: a, fixed: b } = await patchQueries();
     expect([a.lines.length, b.lines.length]).toEqual([Number(said[1]), Number(said[1])]);
+    // 마지막 줄은 COMMIT — 트랜잭션을 여는 BEGIN 은 로그에 안 찍힌다
+    expect([a.lines.at(-1), b.lines.at(-1)]).toEqual(['prisma:query COMMIT', 'prisma:query COMMIT']);
+    expect([...a.lines, ...b.lines].filter((line) => /BEGIN/.test(line))).toEqual([]);
     const changedAt = a.lines.findIndex((line, i) => line !== b.lines[i]);
     expect(a.lines[changedAt - 1]).toMatch(/^prisma:query UPDATE "public"\."posts"/);
     expect(a.lines[changedAt]).toMatch(/^prisma:query SELECT .* FROM "public"\."posts" WHERE "public"\."posts"\."id" = \$1 LIMIT/);
