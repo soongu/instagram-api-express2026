@@ -29,7 +29,7 @@ export const upload = multer({
       cb(new BadRequestError('사진 파일만 올릴 수 있어요'));
       return;
     }
-    cb(null, true);
+  cb(null, true);
   },
 });
 

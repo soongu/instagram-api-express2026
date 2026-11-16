@@ -2,6 +2,7 @@
 import express from 'express';
 import { uploadImages } from '../middlewares/upload.js';
 import { BadRequestError } from '../errors.js';
+import { allowOnly } from '../middlewares/methods.js';
 
 const router = express.Router();
 
@@ -15,5 +16,7 @@ router.post('/', uploadImages, (req, res) => {
 
   res.status(201).json({ imageUrls });
 });
+
+router.all('/', allowOnly('POST'));
 
 export default router;

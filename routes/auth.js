@@ -4,7 +4,8 @@ import * as userService from '../services/userService.js';
 import * as sessionService from '../services/sessionService.js';
 import { validateBody, validateQuery } from '../middlewares/validate.js';
 import { loginSchema, signupSchema, checkDuplicateSchema, PHONE } from '../schemas/authSchema.js';
-import { UnauthorizedError, BadRequestError } from '../errors.js';
+import { UnauthorizedError } from '../errors.js';
+import { allowOnly } from '../middlewares/methods.js';
 
 const router = express.Router();
 
@@ -91,5 +92,10 @@ router.post('/logout', (req, res) => {
   res.json({ message: '로그아웃했어요' });
 });
 
+router.all('/signup', allowOnly('POST'));
+router.all('/check-duplicate', allowOnly('GET'));
+router.all('/login', allowOnly('POST'));
+router.all('/me', allowOnly('GET'));
+router.all('/logout', allowOnly('POST'));
 
 export default router;

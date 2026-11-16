@@ -1,0 +1,26 @@
+### 대문자로 적은 주소
+GET http://localhost:3000/API/POSTS/1
+
+### 끝에 빗금을 붙인 주소
+GET http://localhost:3000/api/posts/1/
+
+### 헤더만 받기
+HEAD http://localhost:3000/api/posts/1
+
+### 좋아요를 POST로 누르기
+POST http://localhost:3000/api/posts/1/likes/2
+
+### 게시물 올리기 — Location 보기
+# @name created
+POST http://localhost:3000/api/posts
+Content-Type: application/json
+
+{
+  "authorId": 3,
+  "imageUrls": ["/images/post-8.jpg"],
+  "postAlt": "주소 규칙을 정리한 노트",
+  "content": "오늘은 API 설계를 배웠어요"
+}
+
+### 새 게시물 주소로 받기
+GET http://localhost:3000{{createdResponse.headers.location}}
