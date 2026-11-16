@@ -1,0 +1,22 @@
+### JSON으로 보내기
+POST http://localhost:4009/peek
+Content-Type: application/json
+
+{
+  "content": "제주 바다"
+}
+
+### 파일을 담아 보내기
+POST http://localhost:4009/peek
+Content-Type: multipart/form-data; boundary=photo-boundary
+
+--photo-boundary
+Content-Disposition: form-data; name="content"
+
+제주 바다
+--photo-boundary
+Content-Disposition: form-data; name="images"; filename="hello.txt"
+Content-Type: text/plain
+
+< ./hello.txt
+--photo-boundary--
