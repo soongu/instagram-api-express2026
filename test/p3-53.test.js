@@ -21,6 +21,9 @@
 //      같은 시각 · 잘못된 커서 400 · limit 400 · 기본 20) · 게시물 목록 회귀(첫·둘째 페이지 · 옛 숫자 커서 · 지운 커서)
 // 축 ④ Step 5 SQL — 판정 DB 에서 실행 뒤 원댓글 29 · comment_count 29 · 첫 페이지 20 + 둘째 9 · 두 번 실행하면 54
 // 축 ⑤ 학생 파일 차이 — code/p3-52 에서 각 Step 의 커밋마다 바뀐 파일 · 내부 어휘 · 경로 주석 · 쓰지 않기로 한 낱말
+// 축 ⑥ Step 2 🤔 재료 — 쿼리로 거른 목록이 비면 200 빈 목록 · 경로의 대상이 없으면 404
+// 축 ⑦ Step 3 겪기 — 댓글 서비스가 postService.js 에서 커서 함수를 불러오면(pty 로 npm run dev · 반례 스냅숏 step3-import-trap) · export 를 붙이는 다른 길
+// 축 ⑧ 교안 블록 대조 — `P353_LECTURE=<원고>` 를 줄 때만(없으면 «건너뜀» 으로 찍고 넘어간다) · `P353_LECTURE_REPORT=<파일>` 이면 고칠 곳을 JSON 으로 남긴다
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync, openSync, closeSync, realpathSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -1291,3 +1294,226 @@ async function portIsFreeLocal(port) {
   const { portIsFree } = await import('./helpers/boot.js');
   return portIsFree(port);
 }
+
+// ── 축 ⑧ 교안 블록 대조(수업 백엔드) ─────────────────────────────────────────────────
+// 원고는 읽기만 한다 — 어긋나면 판정이 빨개질 뿐 원고를 고치지 않는다. 원고가 계속 바뀌는 중이라 경로는 `P353_LECTURE` 로만 받는다.
+// 실습 블록(lab/p3-53/)은 test/p3-53.lab.test.js 의 교안 축이 본다.
+const LECTURE_MD = process.env.P353_LECTURE ?? null;
+if (!LECTURE_MD) console.log('\n🚨🚨🚨 축 ⑧ 교안 블록 대조 — 건너뜀 (P353_LECTURE 가 없다) 🚨🚨🚨\n');
+const describeLecture = LECTURE_MD ? describe : describe.skip;
+/** 원고의 펜스를 차례대로 — 언어 · 본문(줄들) · 시작 줄 번호 · 그 펜스가 속한 Step · <details> 안인가. */
+const fencesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let step = null;
+  let details = false;
+  read(file).split('\n').forEach((line, i) => {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.body.push(line);
+      return;
+    }
+    if (line.startsWith('```')) { cur = { lang: line.slice(3).trim(), body: [], line: i + 1, step, details }; return; }
+    if (line.startsWith('## ')) step = Number(/^## Step (\d+)/.exec(line)?.[1]) || null;
+    if (line.startsWith('<details>')) details = true;
+    if (line.startsWith('</details>')) details = false;
+  });
+  if (cur) throw new Error(`${file} — 닫히지 않은 펜스(${cur.line}번 줄)`);
+  return out;
+};
+const isElision = (line) => ['// ...', '...', '{/* ... */}'].includes(line.trim());
+/** 블록이 파일에 어떻게 들어 있나 — full · head · tail · slice(이어진 줄) · excerpt(줄임 표시 · 줄이 차례대로) · null(없음). */
+const howIn = (body, file) => {
+  const text = body.join('\n');
+  if (text + '\n' === file || text === file) return 'full';
+  if (body.some(isElision)) {
+    let at = 0;
+    const lines = file.split('\n');
+    for (const line of body.filter((one) => one.trim() !== '' && !isElision(one))) {
+      const found = lines.indexOf(line, at);
+      if (found === -1) return null;
+      at = found + 1;
+    }
+    return 'excerpt';
+  }
+  if (file.startsWith(text + '\n')) return 'head';
+  if (file.endsWith('\n' + text + '\n')) return 'tail';
+  if (file.includes('\n' + text + '\n')) return 'slice';
+  // 경로 주석은 «어느 파일인가» 를 적은 이름표다 — 그 뒤 줄들이 파일에 이어져 있으면 조각(줄임 표시 없이 파일 중간)
+  if (body[0]?.startsWith('// ~/') && body[0] === file.split('\n')[0] && file.includes('\n' + body.slice(1).join('\n') + '\n')) return 'slice';
+  return null;
+};
+const API_PATH = '// ~/instagram-api/';
+/** 교안의 수업 백엔드 블록 — ```javascript 첫 줄이 ~/instagram-api 경로 주석(lab/ 밖) · ```http 전부 · ```bash 가운데 창 1 에러 화면. */
+const classFences = () => fencesOf(LECTURE_MD).flatMap((fence) => {
+  const first = fence.body[0] ?? '';
+  if (fence.lang === 'http') return [{ ...fence, rel: HTTP_FILE }];
+  if (fence.lang === 'javascript' && first.startsWith(API_PATH) && !first.startsWith(`${API_PATH}lab/`)) return [{ ...fence, rel: first.slice(API_PATH.length) }];
+  if (fence.lang === 'bash' && fence.body.some((line) => line.startsWith('file:///Users/hong/instagram-api/'))) return [{ ...fence, rel: '(창 1)' }];
+  return [];
+});
+const EXPECTED_CLASS_FENCES = [
+  [1, 'http', HTTP_FILE, 'full', '1a'],
+  [1, 'javascript', 'routes/comments.js', 'full', '1'],
+  [1, 'javascript', 'controllers/commentController.js', 'full', '1'],
+  [1, 'javascript', 'services/commentService.js', 'full', '1'],
+  [1, 'javascript', 'app.js', 'excerpt', '1'],
+  [2, 'http', HTTP_FILE, 'tail', '2a'],
+  [2, 'javascript', 'services/commentService.js', 'full', '2'],
+  [3, 'javascript', 'services/postService.js', 'excerpt', '2'],
+  [3, 'javascript', 'services/commentService.js', 'head', 'importTrap'],
+  [3, 'bash', '(창 1)', 'excerpt', 'screen'],
+  [3, 'javascript', 'utils/cursor.js', 'full', '3a'],
+  [3, 'javascript', 'services/postService.js', 'slice', '3a'],
+  [3, 'javascript', 'schemas/commentSchema.js', 'full', '3'],
+  [3, 'javascript', 'routes/comments.js', 'full', '3'],
+  [3, 'javascript', 'controllers/commentController.js', 'full', '3'],
+  [3, 'javascript', 'services/commentService.js', 'excerpt', '3'],
+  [3, 'http', HTTP_FILE, 'tail', '3'],
+];
+/** 창 1 화면 — 축 ⑦ 과 같은 방법(반례 판으로 npm run dev · 학생 쪽 모양)으로 한 번 잰다. */
+let screenRun;
+const importTrapScreen = () => (screenRun ??= (async () => {
+  await copyDb(GATE2_DB);
+  const dir = studentDir(version(2), (d) => writeFileSync(join(d, 'services/commentService.js'), COMMENT_SERVICE_HEAD + read(P(IMPORT_TRAP_FILE))));
+  return withDev(dir, GATE2_DB, async ({ text, waitFor }) => {
+    await waitFor(/Failed running 'app\.js'/);
+    await sleep(300);
+    return studentShape(text(), dir);
+  });
+})());
+/** 블록이 대조할 글자 — 판 이름 · 반례 · 창 1 화면. */
+const sourceOf = async (which, rel) => {
+  if (which === 'importTrap') return COMMENT_SERVICE_HEAD + read(P(IMPORT_TRAP_FILE));
+  if (which === 'screen') return importTrapScreen();
+  return read(version(which)(rel));
+};
+/** 응답을 옮긴 펜스와 산문이 기대는 실측 — 같은 판정 DB 사본 하나에서 판마다 서버를 띄워 잰다. */
+let lessonRun;
+const lessonFacts = () => (lessonRun ??= (async () => {
+  const out = {};
+  await copyDb(GATE_DB);
+  out.step1a = await withServer(version('1a'), GATE_DB, () => httpyac(read(version('1a')(HTTP_FILE))));
+  Object.assign(out, await withServer(version(1), GATE_DB, async ({ base: url }) => {
+    const tab = await loggedIn(url, 'jaehoon');
+    const post = await tab.send('POST', '/api/v2/posts/1/comments', { content: '댓글' });
+    return { step1: await httpyac(read(version(1)(HTTP_FILE))), post: { status: post.status, allow: post.headers.get('allow') } };
+  }));
+  out.step2a = await withServer(version('2a'), GATE_DB, () => httpyac(read(version('2a')(HTTP_FILE))));
+  Object.assign(out, await withServer(version(2), GATE_DB, async ({ base: url }) => {
+    const tab = await loggedIn(url, 'jaehoon');
+    return { step2: await httpyac(read(version(2)(HTTP_FILE))), post99: (await tab.get('/api/v2/posts/99')).body };
+  }));
+  Object.assign(out, await withServer(version(3), GATE_DB, async ({ base: url }) => {
+    const tab = await loggedIn(url, 'jaehoon');
+    return { step3: await httpyac(read(version(3)(HTTP_FILE))), nobody: (await tab.get('/api/v2/posts?username=nobody')).body, plain1: (await tab.get('/api/v2/posts/1/comments')).body };
+  }));
+  out.roots2 = (await onDb(GATE_DB, 'SELECT count(*)::int AS n FROM comments WHERE post_id = 2 AND parent_id IS NULL'))[0].n;
+  out.count1 = (await onDb(GATE_DB, 'SELECT comment_count FROM posts WHERE id = 1'))[0].comment_count;
+  // Step 5 — SQL 을 한 번 실행한 뒤 첫 · 둘째 페이지(화면처럼 limit=20) · 다른 사본에서 두 번
+  out.sql = (await runSql(GATE_DB, read(version(5)(SQL_FILE))))[2].rows[0];
+  Object.assign(out, await withServer(version(5), GATE_DB, async ({ base: url }) => {
+    const tab = await loggedIn(url, 'jaehoon');
+    const first = (await tab.get('/api/v2/posts/2/comments?limit=20')).body.data;
+    return { sqlFirst: first, sqlSecond: (await tab.get(`/api/v2/posts/2/comments?limit=20&cursor=${first.nextCursor}`)).body.data };
+  }));
+  await copyDb(GATE2_DB);
+  await runSql(GATE2_DB, read(version(5)(SQL_FILE)));
+  out.sqlTwice = (await runSql(GATE2_DB, read(version(5)(SQL_FILE))))[2].rows[0];
+  return out;
+})());
+const ISO_TIME = '<시각>';
+/** 실행마다 다른 값(timestamp · createdAt)을 모양만 보고 지운다. */
+const scrubTimesDeep = (value) => JSON.parse(JSON.stringify(value), (key, v) => ((key === 'timestamp' || key === 'createdAt') && typeof v === 'string' && ISO.test(v) ? ISO_TIME : v));
+/** 고칠 곳 목록 — 판정이 빨개지기 전에 전부 모은다(P353_LECTURE_REPORT 로 파일에 남긴다). */
+const lectureProblems = [];
+afterAll(() => {
+  if (process.env.P353_LECTURE_REPORT) writeFileSync(process.env.P353_LECTURE_REPORT, JSON.stringify(lectureProblems, null, 2));
+});
+
+describeLecture(LECTURE_MD ? '축 ⑧ 교안 블록 대조 — 수업 백엔드(Step 1~3 · 5)' : '🚨 건너뜀(P353_LECTURE 없음) — 축 ⑧ 교안 블록 대조', () => {
+  it('🔴 블록 목록 — Step · 언어 · 파일 · 대조 방식 · 판이 기대와 같고, 블록마다 그 판 글자와 맞는다(완성본은 글자까지 · 줄임은 차례대로)', async () => {
+    const found = [];
+    for (const fence of classFences()) {
+      const expected = EXPECTED_CLASS_FENCES[found.length];
+      const which = expected && expected[2] === fence.rel && expected[0] === fence.step ? expected[4] : null;
+      const how = which ? howIn(fence.body, await sourceOf(which, fence.rel)) : null;
+      found.push([fence.step, fence.lang, fence.rel, how, which]);
+      if (!which || how !== expected[3]) {
+        lectureProblems.push({ where: `${fence.line}번 줄 ${fence.lang} ${fence.rel}`, expected: expected ?? '(목록에 없는 블록)', got: [fence.step, fence.lang, fence.rel, how, which] });
+      }
+    }
+    seen.lectureFences = found;
+    expect(found).toEqual(EXPECTED_CLASS_FENCES);
+  }, 120_000);
+
+  it('🔴 응답을 옮긴 펜스 — Step 1 404 봉투 · 댓글 표(id · parentId · content) · Step 2 의 [] · 1번 셋 · 99번 404 봉투 · Step 3 페이지 표 — 시각은 모양만', async () => {
+    const f = await lessonFacts();
+    const fences = fencesOf(LECTURE_MD).filter((fence) => fence.step !== null && fence.step <= 3);
+    const json = fences.filter((fence) => fence.lang === 'json').map((fence) => ({ line: fence.line, value: JSON.parse(fence.body.join('\n')) }));
+    const problems = [];
+    const same = (name, line, got, want) => {
+      if (JSON.stringify(scrubTimesDeep(got)) !== JSON.stringify(scrubTimesDeep(want))) problems.push({ where: `${line}번 줄 ${name}`, lecture: got, measured: want });
+    };
+    expect(json).toHaveLength(4);
+    same('Step 1 강의 자료 판의 404', json[0].line, json[0].value, f.step1a[1].body);
+    same('Step 2 겪기 판의 99번 · 4번', json[1].line, json[1].value, f.step2a[2].body);
+    same('Step 2 겪기 판의 99번 · 4번', json[1].line, json[1].value, f.step2a[3].body);
+    same('Step 2 고친 판의 1번', json[2].line, json[2].value, f.step2[1].body);
+    same('Step 2 고친 판의 99번 404', json[3].line, json[3].value, f.step2[2].body);
+    // 실패 봉투의 timestamp 는 모양이 맞아야 한다
+    for (const one of [json[0], json[3]]) if (!ISO.test(one.value.error.timestamp)) problems.push({ where: `${one.line}번 줄 timestamp 모양`, lecture: one.value.error.timestamp });
+    // Step 1 의 댓글 표
+    const table = fences.find((fence) => fence.lang === '' && /^\s*id\s+parentId\s+content\s*$/.test(fence.body[0]));
+    const rows = table.body.slice(2).filter((line) => line.trim() !== '').map((line) => line.trim().split(/\s{2,}/));
+    const want = f.step1[1].body.data.map((c) => [String(c.id), String(c.parentId), c.content]);
+    if (JSON.stringify(rows) !== JSON.stringify(want)) problems.push({ where: `${table.line}번 줄 Step 1 댓글 표`, lecture: rows, measured: want });
+    // Step 3 의 페이지 표
+    const pages = fences.find((fence) => fence.lang === '' && /hasNext\s+nextCursor/.test(fence.body[0]));
+    const pageRows = pages.body.slice(2).filter((line) => line.trim() !== '').map((line) => line.trim().split(/\s{2,}/));
+    const [p1, p2] = [f.step3[4].body.data, f.step3[5].body.data];
+    const wantPages = [
+      ['첫 페이지', p1.items.map((c) => c.content).join(', '), String(p1.hasNext), p1.nextCursor],
+      ['둘째 페이지', p2.items.map((c) => c.content).join(', '), String(p2.hasNext), String(p2.nextCursor)],
+    ];
+    const pageOk = pageRows.length === 2 && pageRows.every((row, i) => row[0] === wantPages[i][0] && row[1] === wantPages[i][1] && row[2] === wantPages[i][2]
+      && (row[3].endsWith('…') ? wantPages[i][3].startsWith(row[3].slice(0, -1)) : row[3] === wantPages[i][3]));
+    if (!pageOk) problems.push({ where: `${pages.line}번 줄 Step 3 페이지 표`, lecture: pageRows, measured: wantPages });
+    lectureProblems.push(...problems);
+    seen.lectureResponses = problems;
+    expect(problems).toEqual([]);
+  }, 180_000);
+
+  it('🔴 산문의 서버 주장 — 판정이 잰 값과 맞대기(405 · Allow · 다섯 중 10 · 11 이 답글 · «댓글 3개» · 99번 상세 404 · 원댓글 넷 · 기본 20 · 둘째 페이지 끝 · ?username=nobody · SQL 29 · 20번째 · 마지막 줄 · 두 번 실행)', async () => {
+    const f = await lessonFacts();
+    const text = read(LECTURE_MD);
+    const claims = [
+      ['지금 `POST`로 보내면 405와 `Allow: GET` 헤더가 와요', f.post.status === 405 && f.post.allow === 'GET'],
+      ['**응답에는 댓글이 5개이고, 그 가운데 10번과 11번은 `parentId`가 1이에요.**', f.step1[1].body.data.length === 5 && f.step1[1].body.data.filter((c) => c.parentId === 1).map((c) => c.id).join() === '10,11'],
+      ['피드에서 1번 게시물 카드를 보면 «댓글 3개 보기»라고 적혀 있어요', f.count1 === 3],
+      ['같은 99번을 `GET /api/v2/posts/99`로 물으면 404 «그런 게시물은 없어요»가 오는데', f.post99.error?.code === 'POST_NOT_FOUND' && f.post99.error.message === '그런 게시물은 없어요'],
+      ['4번은 그대로 `{ "data": [] }`예요.', JSON.stringify(f.step2[3].body) === '{"data":[]}'],
+      ['2번 게시물은 원댓글이 4개예요.', f.roots2 === 4],
+      ['`limit`이 없으면 서비스가 20개를 줘요', /limit = 20/.test(read(version(3)('services/commentService.js')))],
+      ['`hasNext`가 `false`이고 `nextCursor`가 `null`이에요', f.step3[5].body.data.hasNext === false && f.step3[5].body.data.nextCursor === null],
+      ['지금 서버에 보내 보면 200이고 본문은 `{ "data": { "items": [], "hasNext": false, "nextCursor": null } }`이에요.', JSON.stringify(f.nobody) === '{"data":{"items":[],"hasNext":false,"nextCursor":null}}'],
+      ['마지막 `SELECT`의 결과는 두 숫자가 모두 29예요.', f.sql.comment_count === 29 && f.sql.root_comments === '29'],
+      ['20번째 «하나만 먹고 끝낼 수 없겠어요»에서 끝나요', f.sqlFirst.items.length === 20 && f.sqlFirst.items[19].content === '하나만 먹고 끝낼 수 없겠어요'],
+      ['아홉 줄이 붙어 29개가 되고, 마지막 줄은 «아침으로 딱이네요»예요', f.sqlSecond.items.length === 9 && f.sqlSecond.items[8].content === '아침으로 딱이네요' && f.sqlSecond.hasNext === false],
+      ['두 번 실행하면 댓글이 50개 더해지고 숫자도 50 올라가요', f.sqlTwice.comment_count === 54 && f.sqlTwice.root_comments === '54'],
+      ['응답에는 `hasNext: true`와 `nextCursor`가 와 있는데', f.sqlFirst.hasNext === true && typeof f.sqlFirst.nextCursor === 'string'],
+    ];
+    const problems = claims.filter(([sentence, ok]) => !text.includes(sentence) || !ok).map(([sentence, ok]) => ({ where: '산문', sentence, inLecture: text.includes(sentence), measuredHolds: ok }));
+    lectureProblems.push(...problems);
+    seen.lectureClaims = problems;
+    expect(problems).toEqual([]);
+  }, 180_000);
+
+  it('🔴 커서 회차를 옮긴 인용 둘 — 커서 페이지네이션 교안에 글자 그대로 있다', () => {
+    const p333 = read(join(LECTURE_MD, '..', '..', '6-api-design', 'p3-33-cursor-pagination-lecture.md'));
+    const quotes = read(LECTURE_MD).split('\n').filter((line) => line.startsWith('> ') && /비교의 방향|그대로 옮기면/.test(line)).map((line) => line.slice(2));
+    expect(quotes).toHaveLength(2);
+    const problems = quotes.filter((quote) => !p333.includes(quote)).map((quote) => ({ where: '인용', quote }));
+    lectureProblems.push(...problems);
+    expect(problems).toEqual([]);
+  });
+});

@@ -13,6 +13,7 @@
 // 축 ③ 직접 해보기 2 — 리뷰 목록에 두 방향 · 정답 판 · 틀린 판(방향 확인 없음 · 최신순 조건을 안 뒤집음 · 최신순에서 번호 비교 빠짐 · 커서에 방향을 안 붙임 · 정렬을 안 뒤집음) × practice2.http
 // 축 ④ 과제 [응용] — 한 사람이 쓴 리뷰 · 정답 판 둘(사람 아래 주소 · ?authorId= 필터) · 틀린 판 다섯 × homework2.http
 // 축 ⑤ 학생 파일 차이 — 실습 커밋은 lab/p3-53/ 만 · 경로 주석 · 쓰지 않기로 한 낱말
+// 축 ⑥ 교안 대조 — `P353_LECTURE=<원고>` 를 줄 때만 · 실습 블록 넷 · 확인 목록(과제 [응용] 은 정답 판 둘 다) · «처음 달라지는 곳» 표 · `P353_LAB_LECTURE_REPORT=<파일>`
 import { describe, it, expect, afterAll } from 'vitest';
 import { readFileSync, mkdtempSync, rmSync, symlinkSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -187,13 +188,13 @@ const P1_HTTP = [
 ];
 const blocksOf = (text) => text.split(/^### /m).slice(1).map((block) => [block.split('\n')[0], block.split('\n').find((line) => /^(GET|POST|PUT|PATCH|DELETE) /.test(line))]);
 /** 직접 해보기 1 의 «확인» — 교안이 적을 문장 그대로의 순서. 처음 어긋난 곳을 돌려준다(다 맞으면 null). */
+// 교안의 «확인» 번호와 같은 번호(① ~ ④)를 앞에 붙인다 — 교안의 «처음 달라지는 곳» 표와 맞대려고.
 const checkPractice1 = (runs) => {
   const [one, three, missing] = runs;
-  if (one.status !== 200) return '1번 상품 — 상태';
-  if (JSON.stringify(ids(one.body)) !== JSON.stringify([1, 2, 4, 5, 7, 8, 11, 12])) return '1번 상품 — 리뷰 여덟이 1 · 2 · 4 · 5 · 7 · 8 · 11 · 12 차례';
-  if (!one.body.every((r) => typeof r.username === 'string')) return '1번 상품 — 줄마다 username';
-  if (three.status !== 200 || JSON.stringify(three.body) !== '[]') return '3번 상품 — 200 []';
-  if (missing.status !== 404 || JSON.stringify(missing.body) !== JSON.stringify({ message: '그런 상품은 없어요' })) return '99번 상품 — 404 «그런 상품은 없어요»';
+  if (one.status !== 200 || JSON.stringify(ids(one.body)) !== JSON.stringify([1, 2, 4, 5, 7, 8, 11, 12])) return '① 1번 상품 — 200 · 리뷰 여덟이 1 · 2 · 4 · 5 · 7 · 8 · 11 · 12 차례';
+  if (!one.body.every((r) => typeof r.username === 'string') || one.body[0].username !== 'yuna') return '② 줄마다 username · 첫 리뷰는 yuna';
+  if (three.status !== 200 || JSON.stringify(three.body) !== '[]') return '③ 3번 상품 — 200 []';
+  if (missing.status !== 404 || JSON.stringify(missing.body) !== JSON.stringify({ message: '그런 상품은 없어요' })) return '④ 99번 상품 — 404 «그런 상품은 없어요»';
   return null;
 };
 
@@ -221,11 +222,11 @@ describe('축 ② 직접 해보기 1 — 숨긴 리뷰 빼기 · 글쓴이 이�
       const runs = await sendHttp('practice1', 'practice1', source, httpText, PORTS.wrong);
       out[name] = { first: checkPractice1(runs), one: ids(runs[0].body), missing: [runs[2].status, runs[2].rawBody] };
     }
-    expect(out.hiddenKept.first).toBe('1번 상품 — 리뷰 여덟이 1 · 2 · 4 · 5 · 7 · 8 · 11 · 12 차례');
+    expect(out.hiddenKept.first).toBe('① 1번 상품 — 200 · 리뷰 여덟이 1 · 2 · 4 · 5 · 7 · 8 · 11 · 12 차례');
     expect(out.hiddenKept.one).toEqual([1, 2, 3, 4, 5, 7, 8, 9, 11, 12]);
-    expect(out.emptyForMissing.first).toBe('99번 상품 — 404 «그런 상품은 없어요»');
+    expect(out.emptyForMissing.first).toBe('④ 99번 상품 — 404 «그런 상품은 없어요»');
     expect(out.emptyForMissing.missing).toEqual([200, '[]']);
-    expect(out.noName.first).toBe('1번 상품 — 줄마다 username');
+    expect(out.noName.first).toBe('② 줄마다 username · 첫 리뷰는 yuna');
     // 빈칸을 비운 채로 띄우면 서버는 뜨고 요청은 500(____ 이 정의되지 않았다)
     const start = read(P('snapshots/p3-53/practice1-start.js'));
     const blank = await withLab('practice1', 'practice1', start, async ({ base, tail }) => {
@@ -252,7 +253,7 @@ const P2_HTTP = [
 const checkPractice2 = (runs) => {
   const page = (r) => (r.status === 200 ? JSON.stringify(ids(r.body)) : `status ${r.status}`);
   const [oldest, newest, newest2, oldest2, mixed, wrongOrder] = runs;
-  if (page(oldest) !== '[1,2,4]' || oldest.body.hasNext !== true) return '① 오래된 순 첫 페이지 — 1 · 2 · 4 · hasNext true';
+  if (page(oldest) !== '[1,2,4]' || oldest.body.hasNext !== true || !String(oldest.body.nextCursor).startsWith('oldest.')) return '① 오래된 순 첫 페이지 — 1 · 2 · 4 · hasNext true · nextCursor 가 oldest. 로 시작';
   if (page(newest) !== '[12,11,8]' || newest.body.hasNext !== true) return '② 최신순 첫 페이지 — 12 · 11 · 8 · hasNext true';
   if (page(newest2) !== '[7,5,4]') return '③ 최신순 둘째 페이지 — 7 · 5 · 4';
   if (page(oldest2) !== '[5,7,8]') return '④ 오래된 순 둘째 페이지 — 5 · 7 · 8';
@@ -325,7 +326,8 @@ describe('축 ③ 직접 해보기 2 — 리뷰 목록에 두 방향(오래된 �
     expect(out.notFlipped.first).toBe('③ 최신순 둘째 페이지 — 7 · 5 · 4');
     expect(out.newestTimeOnly.first).toBe('③ 최신순 둘째 페이지 — 7 · 5 · 4');
     expect(out.newestTimeOnly.pages[2]).toEqual([5, 4, 2]);
-    expect(out.noPrefix.first).toBe('③ 최신순 둘째 페이지 — 7 · 5 · 4');
+    // 확인 1 이 «nextCursor 가 oldest. 로 시작» 을 보므로 방향을 안 붙인 판은 확인 1 에서 먼저 어긋난다(확인 3 은 400)
+    expect(out.noPrefix.first).toBe('① 오래된 순 첫 페이지 — 1 · 2 · 4 · hasNext true · nextCursor 가 oldest. 로 시작');
     expect(out.noPrefix.pages[2]).toBe(JSON.stringify({ message: '커서 값이 올바르지 않아요' }));
     expect(out.sortNotFlipped.first).toBe('② 최신순 첫 페이지 — 12 · 11 · 8 · hasNext true');
     seen.practice2Wrong = out;
@@ -441,4 +443,231 @@ describe('축 ⑤ 실습 커밋 — lab/p3-53/ 만 · 차례 · 경로 주석 ·
     }
     expect(read(P('snapshots/p3-53/homework2-filter.js')).split('\n')[0]).toBe(`// ~/instagram-api/${LAB}/homework2.js`);
   });
+});
+
+// ── 축 ⑥ 교안 대조(실습) ─────────────────────────────────────────────────────────
+// 원고는 읽기만 한다. 경로는 `P353_LECTURE` 로만 받는다(원고가 계속 바뀌는 중) — 없으면 건너뛰고 크게 찍는다.
+const LECTURE_MD = process.env.P353_LECTURE ?? null;
+if (!LECTURE_MD) console.log('\n🚨🚨🚨 실습 축 ⑥ 교안 대조 — 건너뜀 (P353_LECTURE 가 없다) 🚨🚨🚨\n');
+const describeLecture = LECTURE_MD ? describe : describe.skip;
+const lectureLines = () => read(LECTURE_MD).split('\n');
+const fencesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let details = false;
+  read(file).split('\n').forEach((line, i) => {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.body.push(line);
+      return;
+    }
+    if (line.startsWith('```')) { cur = { lang: line.slice(3).trim(), body: [], line: i + 1, details }; return; }
+    if (line.startsWith('<details>')) details = true;
+    if (line.startsWith('</details>')) details = false;
+  });
+  return out;
+};
+const isElision = (line) => ['// ...', '...'].includes(line.trim());
+const howIn = (body, file) => {
+  const text = body.join('\n');
+  if (text + '\n' === file || text === file) return 'full';
+  if (!body.some(isElision)) return null;
+  let at = 0;
+  const lines = file.split('\n');
+  for (const line of body.filter((one) => one.trim() !== '' && !isElision(one))) {
+    const found = lines.indexOf(line, at);
+    if (found === -1) return null;
+    at = found + 1;
+  }
+  return 'excerpt';
+};
+/** 실습 절 하나 — 머리 줄부터 다음 «### » 머리 앞까지. */
+const sectionOf = (heading) => {
+  const lines = lectureLines();
+  const start = lines.findIndex((line) => line.startsWith('### ') && line.includes(heading));
+  if (start === -1) throw new Error(`교안에 «${heading}» 절이 없다`);
+  const end = lines.findIndex((line, i) => i > start && /^#{2,3} /.test(line) && !line.includes('💡'));
+  return { start: start + 1, lines: lines.slice(start, end === -1 ? undefined : end) };
+};
+/** 절의 «확인» 목록 — 번호 붙은 줄들. */
+const checksOf = (section) => {
+  const at = section.lines.indexOf('**확인**');
+  const out = [];
+  for (const line of section.lines.slice(at + 1)) {
+    if (/^\d+\. /.test(line)) out.push(line);
+    else if (out.length > 0) break;
+  }
+  return out;
+};
+/** 절의 «이렇게 쓰면 | 처음 달라지는 곳» 표 — 머리와 구분 줄을 뺀 행들. */
+const tableOf = (section) => section.lines.filter((line) => line.startsWith('| ') && !line.startsWith('| 이렇게 쓰면') && !/^\|[-|\s]+\|$/.test(line))
+  .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()));
+const seqOf = (text) => [...text.matchAll(/(\d+(?: · \d+)+)번/g)].map(([, s]) => s.split(' · ').map(Number));
+const statusOf = (text) => [...text.matchAll(/(?<!\d)(200|400|404|500)(?!\d)/g)].map(([, s]) => Number(s));
+const messageOf = (text) => /`message`가 «([^»]+)»/.exec(text)?.[1] ?? null;
+/** 확인 한 줄을 응답 하나와 맞댄다 — 적힌 값(번호 차례 · 상태 · message · hasNext · nextCursor · 개수 · 첫 이름)만 본다. 어긋난 것을 돌려준다. */
+const facetLog = new Map();
+const itemProblems = (item, res, extra = {}) => {
+  const out = [];
+  const facets = [];
+  facetLog.set(item, facets);
+
+  const body = res.body;
+  const list = res.status === 200 ? (Array.isArray(body) ? body : body.items) : null;
+  const seqs = seqOf(item);
+  if (seqs.length > 0 && JSON.stringify(seqs[0]) !== JSON.stringify(list ? list.map((r) => r.id) : null)) out.push(['번호 차례', seqs[0], list && list.map((r) => r.id)]);
+  const statuses = statusOf(item);
+  if (statuses.length > 0 && statuses[0] !== res.status) out.push(['상태', statuses[0], res.status]);
+  const message = messageOf(item);
+  if (message !== null && body?.message !== message) out.push(['message', message, body?.message]);
+  if (item.includes('`hasNext`가 `true`') && body?.hasNext !== true) out.push(['hasNext true', true, body?.hasNext]);
+  if (item.includes('`hasNext`가 `false`') && body?.hasNext !== false) out.push(['hasNext false', false, body?.hasNext]);
+  if (item.includes('`nextCursor`가 `null`') && body?.nextCursor !== null) out.push(['nextCursor null', null, body?.nextCursor]);
+  const prefix = /`nextCursor`가 `([a-z]+\.)`로 시작/.exec(item)?.[1];
+  if (prefix && !String(body?.nextCursor).startsWith(prefix)) out.push(['nextCursor 앞', prefix, body?.nextCursor]);
+  const count = /리뷰 (\d+)개/.exec(item)?.[1];
+  if (count && Number(count) !== list?.length) out.push(['개수', Number(count), list?.length]);
+  const firstName = /첫 리뷰는 `"(\w+)"`/.exec(item)?.[1];
+  if (firstName && list?.[0]?.username !== firstName) out.push(['첫 이름', firstName, list?.[0]?.username]);
+  if (item.includes('본문이 `[]`') && JSON.stringify(body) !== '[]') out.push(['본문 []', '[]', JSON.stringify(body)]);
+  const json = /`(\{ "items": .*?\})`/.exec(item)?.[1];
+  if (json && JSON.stringify(JSON.parse(json)) !== JSON.stringify(body)) out.push(['본문', json, JSON.stringify(body)]);
+  if (seqs.length > 0) facets.push('번호 차례');
+  if (statuses.length > 0) facets.push('상태');
+  if (message !== null) facets.push('message');
+  for (const [mark, name] of [['`hasNext`가 `true`', 'hasNext'], ['`hasNext`가 `false`', 'hasNext'], ['`nextCursor`가 `null`', 'nextCursor'], ['본문이 `[]`', '본문']]) if (item.includes(mark)) facets.push(name);
+  if (prefix) facets.push('nextCursor 앞');
+  if (count) facets.push('개수');
+  if (firstName) facets.push('첫 이름');
+  if (json) facets.push('본문');
+  if (extra.names) {
+    const names = [...item.matchAll(/«([^»]+)»/g)].map(([, n]) => n).filter((n) => extra.names.includes(n) || !/[ —]/.test(n));
+    const got = list?.map((r) => r.productName);
+    if (names.length > 0 && JSON.stringify(names) !== JSON.stringify(got)) out.push(['상품 이름', names, got]);
+    if (names.length > 0) facets.push('상품 이름');
+  }
+  return out;
+};
+/** 확인 줄마다 적어도 하나는 맞대 봤는가 — 맞댄 것이 없으면 «통과» 가 거짓이다. */
+const unchecked = (items) => items.filter((item) => (facetLog.get(item) ?? []).length === 0);
+/** 표 한 행을 그 틀린 판의 실측과 맞댄다 — «확인 N» · 그 확인의 번호 차례 · 개수 · 셋째 · 상태 · message · ReferenceError. */
+const rowProblems = (cell, wrong, firstOf) => {
+  const out = [];
+  const n = Number(/확인 (\d+)/.exec(cell)?.[1]);
+  if (n !== firstOf) out.push(['처음 달라지는 확인', n, firstOf]);
+  const res = wrong.runs[n - 1];
+  if (!res) return out;
+  const list = res.status === 200 ? (Array.isArray(res.body) ? res.body : res.body.items) : null;
+  const seqs = seqOf(cell);
+  if (seqs.length > 0 && JSON.stringify(seqs.at(-1)) !== JSON.stringify(list?.map((r) => r.id) ?? null)) out.push(['번호 차례', seqs.at(-1), list?.map((r) => r.id)]);
+  const count = /(\d+)개\)/.exec(cell)?.[1];
+  if (count && Number(count) !== list?.length) out.push(['개수', Number(count), list?.length]);
+  const third = /셋째가 (\d+)번/.exec(cell)?.[1];
+  if (third && Number(third) !== list?.[2]?.id) out.push(['셋째', Number(third), list?.[2]?.id]);
+  const statuses = statusOf(cell);
+  if (statuses.length > 0 && statuses[0] !== res.status) out.push(['상태', statuses[0], res.status]);
+  if (cell.includes('`[]`') && JSON.stringify(res.body) !== '[]') out.push(['본문 []', '[]', res.rawBody]);
+  const message = /«([^»]+)»/.exec(cell)?.[1];
+  if (message && res.status !== 200 && res.body?.message !== message) out.push(['message', message, res.body?.message]);
+  if (cell.includes('ReferenceError: ____ is not defined') && !wrong.log?.includes('ReferenceError: ____ is not defined')) out.push(['터미널', 'ReferenceError: ____ is not defined', '(없음)']);
+  return out;
+};
+const circled = (label) => '①②③④⑤⑥'.indexOf(label?.[0]) + 1;
+const labProblems = [];
+afterAll(() => {
+  if (process.env.P353_LAB_LECTURE_REPORT) writeFileSync(process.env.P353_LAB_LECTURE_REPORT, JSON.stringify(labProblems, null, 2));
+});
+
+describeLecture(LECTURE_MD ? '축 ⑥ 교안 대조 — 실습 블록 · 확인 목록 · «처음 달라지는 곳» 표' : '🚨 건너뜀(P353_LECTURE 없음) — 실습 축 ⑥ 교안 대조', () => {
+  it('🔴 실습 블록 넷 — 직접 해보기 1 빈칸 판 전문 · 해설 발췌 · 직접 해보기 2 빈칸 판 발췌 · 해설 발췌', () => {
+    const blocks = fencesOf(LECTURE_MD).filter((fence) => fence.lang === 'javascript' && (fence.body[0] ?? '').startsWith(`// ~/instagram-api/${LAB}/`));
+    const found = blocks.map((fence) => {
+      const name = fence.body[0].slice(`// ~/instagram-api/${LAB}/`.length).replace('.js', '');
+      const source = fence.details ? fileAt(name, `${LAB}/${name}.js`) : read(P(`snapshots/p3-53/${name}-start.js`));
+      const how = howIn(fence.body, source);
+      if (!how) labProblems.push({ where: `${fence.line}번 줄 ${name} ${fence.details ? '해설' : '빈칸 판'}`, problem: '판 파일과 안 맞는다' });
+      return [name, fence.details ? 'solution' : 'start', how];
+    });
+    expect(found).toEqual([['practice1', 'start', 'full'], ['practice1', 'solution', 'excerpt'], ['practice2', 'start', 'excerpt'], ['practice2', 'solution', 'excerpt']]);
+  });
+
+  it('🔴 직접 해보기 1 — 확인 넷이 정답 판 응답과 글자대로 · 표 세 행이 틀린 판의 처음 달라지는 곳과 같다', async () => {
+    const section = sectionOf('직접 해보기 — 상품 리뷰 목록');
+    const items = checksOf(section);
+    expect(items).toHaveLength(4);
+    const httpText = fileAt('practice1', `${LAB}/practice1.http`);
+    const answer = fileAt('practice1', `${LAB}/practice1.js`);
+    const runs = await sendHttp('practice1', 'practice1', answer, httpText);
+    const map = [0, 0, 1, 2];
+    const problems = items.flatMap((item, i) => itemProblems(item, runs[map[i]]).map((p) => ({ where: `직접 해보기 1 확인 ${i + 1}`, item, problem: p })));
+    expect(unchecked(items)).toEqual([]);
+    const wrongs = {
+      hiddenKept: { match: '`!review.hidden`', source: variant(answer, 'review.productId === productId && !review.hidden', 'review.productId === productId') },
+      emptyForMissing: { match: '`if`를 통째로', source: variant(answer, '  if (!product) {\n', '  if (false) {\n') },
+      blank: { match: '빈칸을 하나라도', source: read(P('snapshots/p3-53/practice1-start.js')) },
+    };
+    for (const [name, w] of Object.entries(wrongs)) {
+      w.runs = await withLab('practice1', 'practice1', w.source, async ({ tail }) => {
+        const out = await httpyac(httpText, PORTS.practice1);
+        await sleep(200);
+        w.log = tail();
+        return out;
+      });
+      w.first = circled(checkPractice1(w.runs));
+    }
+    for (const row of tableOf(section)) {
+      const key = Object.keys(wrongs).find((k) => row[0].includes(wrongs[k].match));
+      if (!key) { problems.push({ where: '직접 해보기 1 표', row, problem: '어느 틀린 판인지 모르는 행' }); continue; }
+      problems.push(...rowProblems(row[1], wrongs[key], wrongs[key].first).map((p) => ({ where: `직접 해보기 1 표 «${row[0]}»`, cell: row[1], problem: p })));
+    }
+    labProblems.push(...problems);
+    expect(problems).toEqual([]);
+  }, 90_000);
+
+  it('🔴 직접 해보기 2 — 확인 여섯이 정답 판 응답과 글자대로 · 표 다섯 행이 틀린 판의 처음 달라지는 곳과 같다', async () => {
+    const section = sectionOf('직접 해보기 — 리뷰 목록에 두 방향');
+    const items = checksOf(section);
+    expect(items).toHaveLength(6);
+    const httpText = fileAt('practice2', `${LAB}/practice2.http`);
+    const answer = fileAt('practice2', `${LAB}/practice2.js`);
+    const runs = await sendHttp('practice2', 'practice2', answer, httpText);
+    const problems = items.flatMap((item, i) => itemProblems(item, runs[i]).map((p) => ({ where: `직접 해보기 2 확인 ${i + 1}`, item, problem: p })));
+    expect(unchecked(items)).toEqual([]);
+    const NEWEST_AFTER = 'return (review) => review.createdAt <= createdAt && (review.createdAt < createdAt || review.id < id);';
+    const wrongs = {
+      noOrderCheck: { match: '방향을 확인하는 `if`', source: variant(answer, '    if (cursorOrder !== order) {\n', '    if (false) {\n') },
+      notFlipped: { match: '오래된 순 조건 그대로', source: variant(answer, NEWEST_AFTER, 'return (review) => review.createdAt >= createdAt && (review.createdAt > createdAt || review.id > id);') },
+      newestTimeOnly: { match: '번호 비교를 빼요', source: variant(answer, NEWEST_AFTER, 'return (review) => review.createdAt < createdAt;') },
+      noPrefix: { match: '방향을 안 붙여요', source: variant(answer, 'return `${order}.${encodeCursor(review)}`;', 'return encodeCursor(review);') },
+      sortNotFlipped: { match: '`byNewest`가', source: variant(answer, '  return byOldest(b, a);\n', '  return byOldest(a, b);\n') },
+    };
+    for (const w of Object.values(wrongs)) {
+      w.runs = await sendHttp('practice2', 'practice2', w.source, httpText, PORTS.wrong);
+      w.first = circled(checkPractice2(w.runs));
+    }
+    for (const row of tableOf(section)) {
+      const key = Object.keys(wrongs).find((k) => row[0].includes(wrongs[k].match));
+      if (!key) { problems.push({ where: '직접 해보기 2 표', row, problem: '어느 틀린 판인지 모르는 행' }); continue; }
+      problems.push(...rowProblems(row[1], wrongs[key], wrongs[key].first).map((p) => ({ where: `직접 해보기 2 표 «${row[0]}»`, cell: row[1], problem: p })));
+    }
+    labProblems.push(...problems);
+    expect(problems).toEqual([]);
+  }, 120_000);
+
+  it('🔴 과제 [응용] — 확인 다섯이 정답 판(사람 아래 주소)과 다른 정답 판(?authorId=) 둘 다에서 글자대로', async () => {
+    const section = sectionOf('[응용] 한 사람이 쓴 리뷰 모아 보기');
+    const items = checksOf(section);
+    expect(items).toHaveLength(5);
+    const answers = {
+      '/api/users/:id/reviews': [fileAt('homework2', `${LAB}/homework2.js`), fileAt('homework2', `${LAB}/homework2.http`)],
+      '/api/reviews?authorId=': [read(P('snapshots/p3-53/homework2-filter.js')), read(P('snapshots/p3-53/homework2-filter.http'))],
+    };
+    const problems = [];
+    for (const [label, [source, httpText]] of Object.entries(answers)) {
+      const runs = await sendHttp('homework2', 'homework2', source, httpText);
+      items.forEach((item, i) => problems.push(...itemProblems(item, runs[i], { names: ['무선 이어폰', '텀블러'] }).map((p) => ({ where: `과제 [응용] 확인 ${i + 1} (${label})`, item, problem: p }))));
+    }
+    expect(unchecked(items)).toEqual([]);
+    labProblems.push(...problems);
+    expect(problems).toEqual([]);
+  }, 60_000);
 });
