@@ -287,7 +287,9 @@ describe('축 ⑦ — Step 7: 잘못된 입력', () => {
   });
 
   it('🔴 정정 — main 의 수업 파일(INVALID_CURSOR) · 직접 해보기 3 · 과제 [응용] 이 같은 decodeCursor', () => {
-    expect(read(P('services/postService.js'))).toContain(NEW_DECODE('INVALID_CURSOR'));
+    // p3-53 Step 3 이 커서 함수를 utils/cursor.js 로 옮겼다(게시물 목록과 댓글 목록이 함께 쓴다) — 그 뒤로는 그 파일에 같은 글자가 있다.
+    const owner = existsSync(P('utils/cursor.js')) ? 'utils/cursor.js' : 'services/postService.js';
+    expect(read(P(owner))).toContain(NEW_DECODE('INVALID_CURSOR'));
     expect(LAB_FILE('practice3.js')).toContain(NEW_DECODE(CURSOR_MESSAGE));
     expect(LAB_FILE('homework2.js')).toContain(NEW_DECODE(CURSOR_MESSAGE));
   });
