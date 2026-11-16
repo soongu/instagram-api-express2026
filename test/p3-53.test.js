@@ -1003,3 +1003,69 @@ describe('축 ⑤ 학생 파일 차이 — 시작 판(code/p3-52 또는 그 위�
     expect(added.filter((line) => banned.test(line))).toEqual([]);
   });
 });
+
+const QUERY_VS_PATH_HTTP = `### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 없는 사람으로 거른 게시물
+GET http://localhost:3000/api/v2/posts?username=nobody
+
+### dahye로 거른 게시물
+GET http://localhost:3000/api/v2/posts?username=dahye
+
+### 사람을 경로로 묻기
+GET http://localhost:3000/api/v2/users/nobody
+`;
+// ── 축 ⑥ Step 2 🤔 재료 — 경로의 대상이 없으면 404 · 쿼리 조건에 맞는 것이 없으면 빈 목록 ─────────────
+describe('축 ⑥ Step 2 🤔 재료 — 게시물 목록을 사람으로 거르기(쿼리) ↔ 사람을 경로로 묻기', () => {
+  it('🔎 끝 판 — ?username=nobody 는 200 빈 목록 · ?username=dahye 는 dahye 의 게시물 · 사람을 경로로 «묻는»(GET) 주소는 없다(/users/nobody 는 ROUTE_NOT_FOUND) · 경로에 사람이 드는 주소는 관리자 역할 바꾸기 하나 — 없는 번호면 404 USER_NOT_FOUND', async () => {
+    await copyDb(GATE_DB);
+    const before = await onDb(GATE_DB, 'SELECT id, role FROM users ORDER BY id');
+    const out = await withServer(version(5), GATE_DB, async ({ base: url }) => {
+      const tab = await loggedIn(url, 'jaehoon');
+      const admin = await loggedIn(url, 'admin.hong');
+      const raw = async (t, method, path, body) => {
+        const res = await t.send(method, path, body);
+        return { status: res.status, body: res.body, text: res.text };
+      };
+      return {
+        nobody: await raw(tab, 'GET', '/api/v2/posts?username=nobody'),
+        dahye: await raw(tab, 'GET', '/api/v2/posts?username=dahye'),
+        minji: await raw(tab, 'GET', '/api/v2/posts?username=minji'),
+        usersPath: await raw(tab, 'GET', '/api/v2/users/nobody'),
+        usersPosts: await raw(tab, 'GET', '/api/v2/users/nobody/posts'),
+        adminMissing: await raw(admin, 'PATCH', '/api/v2/admin/users/99999/role', { role: 'USER' }),
+        adminNotNumber: await raw(admin, 'PATCH', '/api/v2/admin/users/nobody/role', { role: 'USER' }),
+        postMissing: await raw(tab, 'GET', '/api/v2/posts/99'),
+        // 학생이 보는 상태 줄 — 같은 요청을 httpYac 으로
+        http: await httpyac(QUERY_VS_PATH_HTTP),
+      };
+    });
+    const dahyeId = await idOf(GATE_DB, 'dahye');
+    expect([out.nobody.status, out.nobody.body]).toEqual([200, { data: { items: [], hasNext: false, nextCursor: null } }]);
+    expect(out.dahye.status).toBe(200);
+    expect(out.dahye.body.data.items.map((p) => [p.id, p.authorId, p.username, p.content])).toEqual([[5, dahyeId, 'dahye', '동네 한 바퀴']]);
+    expect([out.dahye.body.data.hasNext, out.dahye.body.data.nextCursor]).toEqual([false, null]);
+    expect(out.minji.body.data.items.map((p) => p.id)).toEqual([9, 2, 4]);
+    expect([out.usersPath.status, out.usersPath.body]).toEqual([404, v2Error('ROUTE_NOT_FOUND', '그런 주소는 없어요', '/api/v2/users/nobody')]);
+    expect([out.usersPosts.status, out.usersPosts.body.error.code]).toEqual([404, 'ROUTE_NOT_FOUND']);
+    expect([out.adminMissing.status, out.adminMissing.body]).toEqual([404, v2Error('USER_NOT_FOUND', '그런 사용자는 없어요', '/api/v2/admin/users/99999/role')]);
+    expect([out.adminNotNumber.status, out.adminNotNumber.body.error.code]).toEqual([404, 'USER_NOT_FOUND']);
+    expect([out.postMissing.status, out.postMissing.body.error.code]).toEqual([404, 'POST_NOT_FOUND']);
+    // 아무것도 안 바뀌었다
+    expect(await onDb(GATE_DB, 'SELECT id, role FROM users ORDER BY id')).toEqual(before);
+    expect(out.http.map((r) => [r.title, r.statusLine])).toEqual([
+      ['jaehoon으로 로그인', 'HTTP/1.1 200 OK'], ['없는 사람으로 거른 게시물', 'HTTP/1.1 200 OK'],
+      ['dahye로 거른 게시물', 'HTTP/1.1 200 OK'], ['사람을 경로로 묻기', 'HTTP/1.1 404 Not Found'],
+    ]);
+    expect(out.http[1].body).toEqual(out.nobody.body);
+    seen.queryVsPath = Object.fromEntries(Object.entries(out).filter(([k]) => k !== 'http').map(([k, v]) => [k, { status: v.status, text: v.text }]));
+    seen.queryVsPathHttp = { file: QUERY_VS_PATH_HTTP, runs: out.http.map(keep) };
+  }, 60_000);
+});
