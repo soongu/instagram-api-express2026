@@ -38,3 +38,10 @@ lab/generated-p2-34/
 lab/generated-p2-35/
 .p2-37-run/
 .p2-37-before/
+
+
+# 사용자가 올린 사진 — 코드가 아니라 데이터다
+uploads/
+# 실습 서버가 받은 파일(lab/p3-31 아래에 생기는 폴더들)
+
+lab/p3-31/*/

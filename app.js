@@ -23,6 +23,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// 올린 사진 파일을 주소로 내보낸다 — /uploads/파일 이름 은 uploads 폴더의 그 파일이다.
+app.use('/uploads', express.static('uploads'));
+
 
 app.use(cookieParser());
 
@@ -30,6 +33,7 @@ app.use(cookieParser());
 app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
 });
+
 
 app.use('/api/posts', postsRouter);
 app.use('/api/posts/:id/likes', likesRouter);
