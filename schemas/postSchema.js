@@ -18,3 +18,16 @@ export const postCreateSchema = z.object({
 export const postUpdateSchema = z
   .object({ ...postFields, likeCount: z.number().int().nonnegative() })
   .partial();
+
+// 커서는 우리가 만들어 준 문자열이지만 돌아올 때는 밖에서 오는 값이다 — 푼 값도 검사한다.
+export const cursorSchema = z.object({
+  createdAt: z.iso.datetime(),
+  id: z.int32(),
+});
+
+// 목록 주소의 쿼리 문자열. 주소에서 오는 값은 전부 문자열이라 숫자로 바꿔서 검사한다.
+// 상한이 없으면 주소 한 줄로 테이블 전체를 달라고 할 수 있다.
+export const postListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+  cursor: z.string().min(1).optional(),
+});
