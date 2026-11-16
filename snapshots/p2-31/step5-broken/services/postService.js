@@ -1,6 +1,7 @@
 // ~/instagram-api/services/postService.js
 import { prisma } from '../db.js';
 
+
 export function getPosts({ username, limit }) {
   return prisma.post.findMany({
     where: { username },

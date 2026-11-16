@@ -4,7 +4,17 @@ import path from 'node:path';
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 
-// ~/instagram-api/services/postService.js
+
+export async function cursorOf(id) {
+  const post = await prisma.post.findUnique({
+    where: { id },
+    select: { createdAt: true, id: true },
+  });
+
+
+  return post === null ? null : encodeCursor(post);
+}
+
 // 커서는 «마지막으로 내준 게시물의 시각과 번호» 를 문자열 하나로 인코딩한 것이다.
 // 받는 쪽은 뜻을 몰라도 된다 — 받아 두었다가 다음 요청에 그대로 돌려주기만 한다.
 function encodeCursor({ createdAt, id }) {
