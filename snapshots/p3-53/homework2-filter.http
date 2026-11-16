@@ -1,0 +1,15 @@
+### yuna가 쓴 리뷰 — 첫 페이지
+# @name first
+GET http://localhost:4001/api/reviews?authorId=1&limit=2
+
+### 둘째 페이지
+GET http://localhost:4001/api/reviews?authorId=1&limit=2&cursor={{first.nextCursor}}
+
+### 숨긴 리뷰가 있는 사람
+GET http://localhost:4001/api/reviews?authorId=3
+
+### 리뷰를 쓰지 않은 사람
+GET http://localhost:4001/api/reviews?authorId=5
+
+### 없는 사람
+GET http://localhost:4001/api/reviews?authorId=99

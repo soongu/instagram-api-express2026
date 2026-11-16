@@ -8,8 +8,9 @@ import { HttpError } from '../../errors.js';
 
 const app = express();
 
-// 리뷰 목록 주소의 쿼리 문자열 — 수업의 댓글 목록과 같은 규칙이다.
+// 리뷰 목록 주소의 쿼리 문자열 — order 가 없으면 오래된 순이다.
 const reviewListQuerySchema = z.object({
+  order: z.enum(['oldest', 'newest']).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional(),
   cursor: z.string().min(1).optional(),
 });
@@ -33,13 +34,27 @@ function byOldest(a, b) {
   return a.id - b.id;
 }
 
-// 오래된 순이라, 커서 다음 리뷰는 시각이 더 늦거나, 시각이 같고 번호가 더 큰 리뷰다.
-function afterCursor({ createdAt, id }) {
-  return (review) => ____;
+// 최신 것부터 — 오래된 순을 그대로 뒤집는다.
+function byNewest(a, b) {
+  return ____;
+}
+
+// 커서 다음 리뷰 — 오래된 순이면 시각이 더 늦거나 시각이 같고 번호가 더 큰 리뷰이고, 최신순이면 비교가 모두 반대다.
+function afterCursor({ createdAt, id }, order) {
+  if (order === 'newest') {
+    return (review) => ____;
+  }
+  return (review) => review.createdAt >= createdAt && (review.createdAt > createdAt || review.id > id);
+}
+
+// 공용 커서는 시각과 번호만 담는다 — 정렬 방향은 그 앞에 «방향.» 으로 붙인다(예: newest.eyJ…).
+// base64url 글자에는 '.' 이 없어서, '.' 앞이 방향이고 뒤가 공용 커서다.
+function encodeOrderCursor(review, order) {
+  return ____;
 }
 
 app.get('/api/products/:id/reviews', validateQuery(reviewListQuerySchema), (req, res) => {
-  const { limit = 5, cursor } = res.locals.query;
+  const { order = 'oldest', limit = 5, cursor } = res.locals.query;
   const productId = Number(req.params.id);
 
   // 상품이 없으면 404 — 아직 리뷰가 없는 상품(빈 목록)과 구별한다.
@@ -49,18 +64,28 @@ app.get('/api/products/:id/reviews', validateQuery(reviewListQuerySchema), (req,
     return;
   }
 
-  // 숨긴 리뷰는 빼고 그 상품의 리뷰만, 오래된 것부터.
+  // 숨긴 리뷰는 빼고 그 상품의 리뷰만, 고른 방향으로.
   let list = reviews
     .filter((review) => review.productId === productId && !review.hidden)
-    .sort(byOldest);
+    .sort(order === 'newest' ? byNewest : byOldest);
 
   // 커서가 오면 «그 리뷰 다음» 부터다.
   if (cursor) {
-    list = list.filter(afterCursor(decodeCursor(cursor)));
+    // '.' 이 없는 값이면 뒤가 비어서, 공용 커서를 풀 때 400 «커서 값이 올바르지 않아요» 가 된다.
+    const [cursorOrder, rest] = cursor.split('.');
+    const after = decodeCursor(rest);
+
+    // 다른 방향의 커서면 어디서 이어야 할지 모르니 400 으로 알린다.
+    if (____) {
+      res.status(400).json({ message: '커서와 정렬이 맞지 않아요' });
+      return;
+    }
+
+    list = list.filter(afterCursor(after, order));
   }
 
   // 하나 더 꺼낸다 — 더 있는지 없는지를 «세지 않고» 알아내는 방법이다.
-  const rows = list.slice(0, ____);
+  const rows = list.slice(0, limit + 1);
   const hasNext = rows.length > limit;
   const page = rows.slice(0, limit);
 
@@ -68,7 +93,7 @@ app.get('/api/products/:id/reviews', validateQuery(reviewListQuerySchema), (req,
     items: page.map(toItem),
     hasNext,
     // 다음 페이지가 있을 때만 커서를 만든다 — 마지막 페이지의 null 은 «여기가 끝» 이라는 뜻이다.
-    nextCursor: hasNext ? ____ : null,
+    nextCursor: hasNext ? encodeOrderCursor(page[page.length - 1], order) : null,
   });
 });
 
