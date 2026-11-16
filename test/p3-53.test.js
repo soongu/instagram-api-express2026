@@ -1467,16 +1467,21 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 블록 대조 — 수업 백엔드(
     const rows = table.body.slice(2).filter((line) => line.trim() !== '').map((line) => line.trim().split(/\s{2,}/));
     const want = f.step1[1].body.data.map((c) => [String(c.id), String(c.parentId), c.content]);
     if (JSON.stringify(rows) !== JSON.stringify(want)) problems.push({ where: `${table.line}번 줄 Step 1 댓글 표`, lecture: rows, measured: want });
-    // Step 3 의 페이지 표
+    // Step 3 의 페이지 표 — 한 페이지의 댓글이 여러 줄로 이어질 수 있다(둘째 칸만 있는 줄은 앞 줄에 이어 붙인다 · 쉼표로 이은 판도 받는다)
     const pages = fences.find((fence) => fence.lang === '' && /hasNext\s+nextCursor/.test(fence.body[0]));
-    const pageRows = pages.body.slice(2).filter((line) => line.trim() !== '').map((line) => line.trim().split(/\s{2,}/));
+    const pageRows = [];
+    for (const line of pages.body.slice(2).filter((one) => one.trim() !== '')) {
+      const cells = line.trim().split(/\s{2,}/);
+      if (cells.length === 1 && pageRows.length > 0) pageRows.at(-1).comments.push(cells[0]);
+      else pageRows.push({ page: cells[0], comments: cells[1].split(', '), hasNext: cells[2], nextCursor: cells[3] });
+    }
     const [p1, p2] = [f.step3[4].body.data, f.step3[5].body.data];
     const wantPages = [
-      ['첫 페이지', p1.items.map((c) => c.content).join(', '), String(p1.hasNext), p1.nextCursor],
-      ['둘째 페이지', p2.items.map((c) => c.content).join(', '), String(p2.hasNext), String(p2.nextCursor)],
+      { page: '첫 페이지', comments: p1.items.map((c) => c.content), hasNext: String(p1.hasNext), nextCursor: p1.nextCursor },
+      { page: '둘째 페이지', comments: p2.items.map((c) => c.content), hasNext: String(p2.hasNext), nextCursor: String(p2.nextCursor) },
     ];
-    const pageOk = pageRows.length === 2 && pageRows.every((row, i) => row[0] === wantPages[i][0] && row[1] === wantPages[i][1] && row[2] === wantPages[i][2]
-      && (row[3].endsWith('…') ? wantPages[i][3].startsWith(row[3].slice(0, -1)) : row[3] === wantPages[i][3]));
+    const pageOk = pageRows.length === 2 && pageRows.every((row, i) => row.page === wantPages[i].page && JSON.stringify(row.comments) === JSON.stringify(wantPages[i].comments)
+      && row.hasNext === wantPages[i].hasNext && (row.nextCursor.endsWith('…') ? wantPages[i].nextCursor.startsWith(row.nextCursor.slice(0, -1)) : row.nextCursor === wantPages[i].nextCursor));
     if (!pageOk) problems.push({ where: `${pages.line}번 줄 Step 3 페이지 표`, lecture: pageRows, measured: wantPages });
     lectureProblems.push(...problems);
     seen.lectureResponses = problems;
@@ -1486,23 +1491,32 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 블록 대조 — 수업 백엔드(
   it('🔴 산문의 서버 주장 — 판정이 잰 값과 맞대기(405 · Allow · 다섯 중 10 · 11 이 답글 · «댓글 3개» · 99번 상세 404 · 원댓글 넷 · 기본 20 · 둘째 페이지 끝 · ?username=nobody · SQL 29 · 20번째 · 마지막 줄 · 두 번 실행)', async () => {
     const f = await lessonFacts();
     const text = read(LECTURE_MD);
+    // 주장은 문장 그대로가 아니라 꼴로 찾는다(원고가 계속 다듬어진다) — 찾은 값(숫자 · 글)을 판정이 잰 값과 맞댄다.
+    // 꼴로 못 찾으면 «못 찾음» 으로 따로 모은다 — 문장이 바뀐 것이면 판정의 꼴을 맞추고, 주장이 사라졌으면 그대로 둔다.
+    const twiceAdded = f.sqlTwice.comment_count - 4;
     const claims = [
-      ['지금 `POST`로 보내면 405와 `Allow: GET` 헤더가 와요', f.post.status === 405 && f.post.allow === 'GET'],
-      ['**응답에는 댓글이 5개이고, 그 가운데 10번과 11번은 `parentId`가 1이에요.**', f.step1[1].body.data.length === 5 && f.step1[1].body.data.filter((c) => c.parentId === 1).map((c) => c.id).join() === '10,11'],
-      ['피드에서 1번 게시물 카드를 보면 «댓글 3개 보기»라고 적혀 있어요', f.count1 === 3],
-      ['같은 99번을 `GET /api/v2/posts/99`로 물으면 404 «그런 게시물은 없어요»가 오는데', f.post99.error?.code === 'POST_NOT_FOUND' && f.post99.error.message === '그런 게시물은 없어요'],
-      ['4번은 그대로 `{ "data": [] }`예요.', JSON.stringify(f.step2[3].body) === '{"data":[]}'],
-      ['2번 게시물은 원댓글이 4개예요.', f.roots2 === 4],
-      ['`limit`이 없으면 서비스가 20개를 줘요', /limit = 20/.test(read(version(3)('services/commentService.js')))],
-      ['`hasNext`가 `false`이고 `nextCursor`가 `null`이에요', f.step3[5].body.data.hasNext === false && f.step3[5].body.data.nextCursor === null],
-      ['지금 서버에 보내 보면 200이고 본문은 `{ "data": { "items": [], "hasNext": false, "nextCursor": null } }`이에요.', JSON.stringify(f.nobody) === '{"data":{"items":[],"hasNext":false,"nextCursor":null}}'],
-      ['마지막 `SELECT`의 결과는 두 숫자가 모두 29예요.', f.sql.comment_count === 29 && f.sql.root_comments === '29'],
-      ['20번째 «하나만 먹고 끝낼 수 없겠어요»에서 끝나요', f.sqlFirst.items.length === 20 && f.sqlFirst.items[19].content === '하나만 먹고 끝낼 수 없겠어요'],
-      ['아홉 줄이 붙어 29개가 되고, 마지막 줄은 «아침으로 딱이네요»예요', f.sqlSecond.items.length === 9 && f.sqlSecond.items[8].content === '아침으로 딱이네요' && f.sqlSecond.hasNext === false],
-      ['두 번 실행하면 댓글이 50개 더해지고 숫자도 50 올라가요', f.sqlTwice.comment_count === 54 && f.sqlTwice.root_comments === '54'],
-      ['응답에는 `hasNext: true`와 `nextCursor`가 와 있는데', f.sqlFirst.hasNext === true && typeof f.sqlFirst.nextCursor === 'string'],
+      ['POST 405 · Allow', /`POST`로 보내면 (\d{3})와 `Allow: (\w+)`/, (m) => Number(m[1]) === f.post.status && m[2] === f.post.allow],
+      ['Step 1 다섯 · 답글 둘', /응답에는 댓글이 (\d+)개이고, 그 가운데 (\d+)번과 (\d+)번은 `parentId`가 (\d+)/,
+        (m) => Number(m[1]) === f.step1[1].body.data.length && f.step1[1].body.data.filter((c) => c.parentId === Number(m[4])).map((c) => c.id).join() === `${m[2]},${m[3]}`],
+      ['1번 카드의 «댓글 N개 보기»', /1번 게시물 카드를 보면 «댓글 (\d+)개 보기»/, (m) => Number(m[1]) === f.count1],
+      ['게시물 99번 상세', /`GET \/api\/v2\/posts\/99`로 물으면 (\d{3}) «([^»]+)»/, (m) => Number(m[1]) === 404 && f.post99.error?.message === m[2]],
+      ['Step 2 고친 판의 4번', /4번은 그대로 `(\{ "data": \[\] \})`/, (m) => JSON.stringify(JSON.parse(m[1])) === JSON.stringify(f.step2[3].body)],
+      ['2번 게시물의 원댓글 수', /2번 게시물은 원댓글이 (\d+)개/, (m) => Number(m[1]) === f.roots2],
+      ['기본 limit', /`limit`이 없으면 서비스가 (\d+)개/, (m) => new RegExp(`limit = ${m[1]}`).test(read(version(3)('services/commentService.js')))],
+      ['Step 3 둘째 페이지의 끝', /`hasNext`가 `false`이고 `nextCursor`가 `null`이에요/, () => f.step3[5].body.data.hasNext === false && f.step3[5].body.data.nextCursor === null],
+      ['?username=nobody', /지금 서버에 보내 보면 (\d{3})이고 본문은 `(\{ "data": \{.*?\} \})`/, (m) => Number(m[1]) === 200 && JSON.stringify(JSON.parse(m[2])) === JSON.stringify(f.nobody)],
+      ['SQL 확인 SELECT', /마지막 `SELECT`[^.\n]*?(\d+)예요/, (m) => Number(m[1]) === f.sql.comment_count && String(m[1]) === f.sql.root_comments],
+      ['20번째 댓글', /(\d+)번째 «([^»]+)»에서 끝나요/, (m) => Number(m[1]) === f.sqlFirst.items.length && f.sqlFirst.items.at(-1).content === m[2]],
+      ['둘째 페이지 뒤 마지막 줄', /붙어 (\d+)개가 되고, 마지막 줄은 «([^»]+)»/, (m) => Number(m[1]) === f.sqlFirst.items.length + f.sqlSecond.items.length && f.sqlSecond.items.at(-1).content === m[2] && f.sqlSecond.hasNext === false],
+      ['SQL 두 번', /두 번 실행하면 댓글이 (\d+)개 더해지고 숫자도 (\d+) 올라가요/, (m) => Number(m[1]) === twiceAdded && Number(m[2]) === twiceAdded && f.sqlTwice.root_comments === String(f.sqlTwice.comment_count)],
+      ['첫 페이지의 hasNext · nextCursor', /응답에는 `hasNext: true`와 `nextCursor`가 와 있는데/, () => f.sqlFirst.hasNext === true && typeof f.sqlFirst.nextCursor === 'string'],
     ];
-    const problems = claims.filter(([sentence, ok]) => !text.includes(sentence) || !ok).map(([sentence, ok]) => ({ where: '산문', sentence, inLecture: text.includes(sentence), measuredHolds: ok }));
+    const problems = [];
+    for (const [label, re, holds] of claims) {
+      const m = re.exec(text);
+      if (!m) problems.push({ where: '산문', claim: label, problem: '못 찾음(문장이 바뀌었거나 주장이 빠졌다)' });
+      else if (!holds(m)) problems.push({ where: '산문', claim: label, sentence: m[0], problem: '실측과 다르다' });
+    }
     lectureProblems.push(...problems);
     seen.lectureClaims = problems;
     expect(problems).toEqual([]);

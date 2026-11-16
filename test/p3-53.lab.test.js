@@ -549,26 +549,32 @@ const itemProblems = (item, res, extra = {}) => {
 };
 /** 확인 줄마다 적어도 하나는 맞대 봤는가 — 맞댄 것이 없으면 «통과» 가 거짓이다. */
 const unchecked = (items) => items.filter((item) => (facetLog.get(item) ?? []).length === 0);
-/** 표 한 행을 그 틀린 판의 실측과 맞댄다 — «확인 N» · 그 확인의 번호 차례 · 개수 · 셋째 · 상태 · message · ReferenceError. */
-const rowProblems = (cell, wrong, firstOf) => {
+/** 표 한 행을 그 틀린 판의 실측과 맞댄다 — 첫 «확인 N» 이 처음 달라지는 확인이고, 칸 안의 «확인 N» 마다 그 뒤 글(번호 차례 · 개수 · 셋째 · 상태 · message · 커서 앞 · ReferenceError)을 그 확인의 응답과 맞댄다. */
+const rowProblems = (cell, wrong, firstOf, requestOf = (n) => n - 1) => {
   const out = [];
-  const n = Number(/확인 (\d+)/.exec(cell)?.[1]);
-  if (n !== firstOf) out.push(['처음 달라지는 확인', n, firstOf]);
-  const res = wrong.runs[n - 1];
-  if (!res) return out;
-  const list = res.status === 200 ? (Array.isArray(res.body) ? res.body : res.body.items) : null;
-  const seqs = seqOf(cell);
-  if (seqs.length > 0 && JSON.stringify(seqs.at(-1)) !== JSON.stringify(list?.map((r) => r.id) ?? null)) out.push(['번호 차례', seqs.at(-1), list?.map((r) => r.id)]);
-  const count = /(\d+)개\)/.exec(cell)?.[1];
-  if (count && Number(count) !== list?.length) out.push(['개수', Number(count), list?.length]);
-  const third = /셋째가 (\d+)번/.exec(cell)?.[1];
-  if (third && Number(third) !== list?.[2]?.id) out.push(['셋째', Number(third), list?.[2]?.id]);
-  const statuses = statusOf(cell);
-  if (statuses.length > 0 && statuses[0] !== res.status) out.push(['상태', statuses[0], res.status]);
-  if (cell.includes('`[]`') && JSON.stringify(res.body) !== '[]') out.push(['본문 []', '[]', res.rawBody]);
-  const message = /«([^»]+)»/.exec(cell)?.[1];
-  if (message && res.status !== 200 && res.body?.message !== message) out.push(['message', message, res.body?.message]);
-  if (cell.includes('ReferenceError: ____ is not defined') && !wrong.log?.includes('ReferenceError: ____ is not defined')) out.push(['터미널', 'ReferenceError: ____ is not defined', '(없음)']);
+  const marks = [...cell.matchAll(/확인 (\d+)/g)];
+  if (Number(marks[0]?.[1]) !== firstOf) out.push(['처음 달라지는 확인', Number(marks[0]?.[1]), firstOf]);
+  marks.forEach((mark, k) => {
+    const segment = cell.slice(mark.index, marks[k + 1]?.index ?? cell.length);
+    const n = Number(mark[1]);
+    const res = wrong.runs[requestOf(n)];
+    if (!res) { out.push([`확인 ${n}`, '응답 없음', null]); return; }
+    const list = res.status === 200 ? (Array.isArray(res.body) ? res.body : res.body.items) : null;
+    const seqs = seqOf(segment);
+    if (seqs.length > 0 && JSON.stringify(seqs.at(-1)) !== JSON.stringify(list?.map((r) => r.id) ?? null)) out.push([`확인 ${n} 번호 차례`, seqs.at(-1), list?.map((r) => r.id)]);
+    const count = /(\d+)개\)/.exec(segment)?.[1];
+    if (count && Number(count) !== list?.length) out.push([`확인 ${n} 개수`, Number(count), list?.length]);
+    const third = /셋째가 (\d+)번/.exec(segment)?.[1];
+    if (third && Number(third) !== list?.[2]?.id) out.push([`확인 ${n} 셋째`, Number(third), list?.[2]?.id]);
+    const statuses = statusOf(segment);
+    if (statuses.length > 0 && statuses[0] !== res.status) out.push([`확인 ${n} 상태`, statuses[0], res.status]);
+    if (segment.includes('`[]`') && JSON.stringify(res.body) !== '[]') out.push([`확인 ${n} 본문 []`, '[]', res.rawBody]);
+    const message = /«([^»]+)»/.exec(segment)?.[1];
+    if (message && res.status !== 200 && res.body?.message !== message) out.push([`확인 ${n} message`, message, res.body?.message]);
+    const starts = /`([A-Za-z]+\.?)`로 시작/.exec(segment)?.[1];
+    if (starts && !String(res.body?.nextCursor).startsWith(starts)) out.push([`확인 ${n} 커서 앞`, starts, res.body?.nextCursor]);
+    if (segment.includes('ReferenceError: ____ is not defined') && !wrong.log?.includes('ReferenceError: ____ is not defined')) out.push(['터미널', 'ReferenceError: ____ is not defined', '(없음)']);
+  });
   return out;
 };
 const circled = (label) => '①②③④⑤⑥'.indexOf(label?.[0]) + 1;
@@ -617,7 +623,7 @@ describeLecture(LECTURE_MD ? '축 ⑥ 교안 대조 — 실습 블록 · 확인 
     for (const row of tableOf(section)) {
       const key = Object.keys(wrongs).find((k) => row[0].includes(wrongs[k].match));
       if (!key) { problems.push({ where: '직접 해보기 1 표', row, problem: '어느 틀린 판인지 모르는 행' }); continue; }
-      problems.push(...rowProblems(row[1], wrongs[key], wrongs[key].first).map((p) => ({ where: `직접 해보기 1 표 «${row[0]}»`, cell: row[1], problem: p })));
+      problems.push(...rowProblems(row[1], wrongs[key], wrongs[key].first, (n) => map[n - 1]).map((p) => ({ where: `직접 해보기 1 표 «${row[0]}»`, cell: row[1], problem: p })));
     }
     labProblems.push(...problems);
     expect(problems).toEqual([]);
