@@ -1535,7 +1535,10 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 블록 대조 — 수업 백엔드(
       ['?username=nobody', /지금 서버에 보내 보면 (\d{3})이고 본문은 `(\{ "data": \{.*?\} \})`/, (m) => Number(m[1]) === 200 && JSON.stringify(JSON.parse(m[2])) === JSON.stringify(f.nobody)],
       ['SQL 확인 SELECT', /마지막 `SELECT`[^.\n]*?(\d+)예요/, (m) => Number(m[1]) === f.sql.comment_count && String(m[1]) === f.sql.root_comments],
       ['20번째 댓글', /(\d+)번째 «([^»]+)»에서 끝나요/, (m) => Number(m[1]) === f.sqlFirst.items.length && f.sqlFirst.items.at(-1).content === m[2]],
-      ['둘째 페이지 뒤 마지막 줄', /붙어 (\d+)개가 되고, 마지막 줄은 «([^»]+)»/, (m) => Number(m[1]) === f.sqlFirst.items.length + f.sqlSecond.items.length && f.sqlSecond.items.at(-1).content === m[2] && f.sqlSecond.hasNext === false],
+      // «아홉 줄이 붙어 29개가 되고, 마지막 줄은 «…»» · «댓글 9개가 붙어 29개가 되고, 마지막 댓글은 «…»» 둘 다 — 숫자로 적은 붙는 개수는 둘째 페이지 개수와
+      ['둘째 페이지 뒤 마지막 댓글', /(?:댓글 (\d+)개가|\S+ 줄이) 붙어 (\d+)개가 되고, 마지막 (?:줄|댓글)은 «([^»]+)»/,
+        (m) => (m[1] === undefined || Number(m[1]) === f.sqlSecond.items.length) && Number(m[2]) === f.sqlFirst.items.length + f.sqlSecond.items.length
+          && f.sqlSecond.items.at(-1).content === m[3] && f.sqlSecond.hasNext === false],
       ['SQL 두 번', /두 번 실행하면 댓글이 (\d+)개 더해지고 숫자도 (\d+) 올라가요/, (m) => Number(m[1]) === twiceAdded && Number(m[2]) === twiceAdded && f.sqlTwice.root_comments === String(f.sqlTwice.comment_count)],
       ['첫 페이지의 hasNext · nextCursor', /응답에는 `hasNext: true`와 `nextCursor`가 와 있는데/, () => f.sqlFirst.hasNext === true && typeof f.sqlFirst.nextCursor === 'string'],
     ];
