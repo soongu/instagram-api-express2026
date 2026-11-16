@@ -22,7 +22,7 @@
 // 축 ④ Step 5 SQL — 판정 DB 에서 실행 뒤 원댓글 29 · comment_count 29 · 첫 페이지 20 + 둘째 9 · 두 번 실행하면 54
 // 축 ⑤ 학생 파일 차이 — code/p3-52 에서 각 Step 의 커밋마다 바뀐 파일 · 내부 어휘 · 경로 주석 · 쓰지 않기로 한 낱말
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readdirSync, writeFileSync, openSync, closeSync, realpathSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
@@ -1069,3 +1069,225 @@ describe('축 ⑥ Step 2 🤔 재료 — 게시물 목록을 사람으로 거르
     seen.queryVsPathHttp = { file: QUERY_VS_PATH_HTTP, runs: out.http.map(keep) };
   }, 60_000);
 });
+
+// ── 축 ⑦ Step 3 겪기 — 댓글 서비스가 게시물 서비스의 커서 함수를 불러오면 ─────────────────
+// 학생 화면(창 1 · `npm run dev`)을 그대로 보려고 pty 로 띄운다. pty 안의 자식은 새 세션이라, 끌 때는 그 프로세스 묶음을 통째로 끈다(남의 서버는 안 건드린다).
+const PTY_RUN = `
+import os, pty, signal, sys
+log = open(sys.argv[1], 'wb', buffering=0)
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(sys.argv[2], sys.argv[2:])
+def stop(*_):
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+signal.signal(signal.SIGTERM, stop)
+while True:
+    try:
+        data = os.read(fd, 4096)
+    except OSError:
+        break
+    if not data:
+        break
+    log.write(data)
+os.waitpid(pid, 0)
+`;
+const IMPORT_TRAP_FILE = 'snapshots/p3-53.step3-import-trap.commentService.js';
+const COMMENT_SERVICE_HEAD = '// ~/instagram-api/services/commentService.js\n';
+const ANSI = /\x1b\[[0-9;?]*[A-Za-z]|\x1bc/g;
+/** 학생 폴더 사본에 .env 를 두고(학생처럼 PORT 는 적지 않는다) pty 로 `npm run dev` — 끝나면 묶음째 끈다. */
+const withDev = async (dir, db, fn) => {
+  writeFileSync(join(dir, '.env'), Object.entries({ ...env, DATABASE_URL: dbUrl(db) }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n');
+  const logFile = join(dir, 'pty.log');
+  writeFileSync(logFile, '');
+  const childEnv = { ...process.env, PORT: String(PORT), PATH: `${join(process.execPath, '..')}:${process.env.PATH}` };
+  delete childEnv.NODE_ENV;
+  delete childEnv.VITEST;
+  const child = spawn('/usr/bin/python3', ['-c', PTY_RUN, logFile, join(process.execPath, '..', 'npm'), 'run', 'dev'], { cwd: dir, env: childEnv, stdio: 'ignore' });
+  const raw = () => read(logFile);
+  const text = () => raw().replace(ANSI, '').replaceAll('\r\n', '\n');
+  const waitFor = async (re, from = 0, ms = 15_000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      if (re.test(text().slice(from))) return;
+      await sleep(100);
+    }
+    throw new Error(`${ms}ms 안에 ${re} 가 안 찍혔다:\n${text()}`);
+  };
+  try {
+    return await fn({ raw, text, waitFor, base: `http://localhost:${PORT}` });
+  } finally {
+    await new Promise((resolve) => {
+      child.once('exit', resolve);
+      child.kill('SIGTERM');
+    });
+    await sleep(300);
+  }
+};
+/** 학생 쪽 모양으로 — 판정 사본 경로를 /Users/hong/instagram-api 로, 판정 포트를 3000 으로(앞 회차 교안의 에러 인용 꼴). */
+const studentShape = (out, dir) => out.replaceAll(realpathSync(dir), '/Users/hong/instagram-api').replaceAll(dir, '/Users/hong/instagram-api').replaceAll(`${PORT}번 포트`, '3000번 포트');
+/** 서버가 꺼진 동안 보내는 요청 — httpYac CLI 의 JSON 과 터미널 글자(stderr) · fetch 의 에러 원인. */
+const sendWhileDown = async (text, url) => {
+  const dir = mkdtempSync(join(tmpdir(), 'p353-down-'));
+  dirs.push(dir);
+  writeFileSync(join(dir, 'send.http'), text.replaceAll('http://localhost:3000', url));
+  const out = openSync(join(dir, 'out.json'), 'w');
+  const err = openSync(join(dir, 'err.txt'), 'w');
+  const code = await new Promise((resolve, reject) => {
+    const c = spawn(P('node_modules/.bin/httpyac'), ['send', 'send.http', '--all', '--json'], { cwd: dir, stdio: ['ignore', out, err] });
+    c.on('error', reject);
+    c.on('exit', resolve);
+  });
+  closeSync(out);
+  closeSync(err);
+  let fetchError = null;
+  try { await fetch(`${url}/api/v2/posts/1/comments`); } catch (e) { fetchError = { message: e.message, cause: e.cause?.code ?? e.cause?.message, errors: e.cause?.errors?.map((x) => `${x.code} ${x.address}:${x.port}`) }; }
+  return { code, json: read(join(dir, 'out.json')), stderr: read(join(dir, 'err.txt')), fetchError };
+};
+
+describe('축 ⑦ Step 3 겪기 — 댓글 서비스가 게시물 서비스의 커서 함수를 불러오면(모든 학생에게 같은 장면)', () => {
+  it('🔴 반례 스냅숏 — Step 2 끝 판의 commentService.js 에 import 한 줄(4번 줄)만 더한 판', () => {
+    const trap = read(P(IMPORT_TRAP_FILE));
+    expect(trap.split('\n')[0]).not.toMatch(/^\/\/ ~\//);
+    const lines = read(version(2)('services/commentService.js')).split('\n');
+    lines.splice(3, 0, "import { encodeCursor, decodeCursor } from './postService.js';");
+    expect(COMMENT_SERVICE_HEAD + trap).toBe(lines.join('\n'));
+  });
+
+  it('🔴 그 판으로 npm run dev — 서버가 안 뜬다 · SyntaxError(내보내지 않은 이름) · «Failed running» 뒤 기다린다 · 그동안 요청은 연결 거부 · 커서를 쓰는 코드까지 넣어도 같은 줄에서 같은 에러', async () => {
+    await copyDb(GATE_DB);
+    const run = async (source) => {
+      const dir = studentDir(version(2), (d) => writeFileSync(join(d, 'services/commentService.js'), source));
+      return withDev(dir, GATE_DB, async ({ text, raw, waitFor, base: url }) => {
+        await waitFor(/Failed running 'app\.js'\. Waiting for file changes before restarting\.\.\./);
+        await sleep(500);
+        const down = await sendWhileDown(read(version(2)(HTTP_FILE)), url);
+        return { dir, text: text(), raw: raw(), down, listening: !(await portIsFreeLocal(PORT)) };
+      });
+    };
+    const oneLine = await run(COMMENT_SERVICE_HEAD + read(P(IMPORT_TRAP_FILE)));
+    const t = oneLine.text;
+    expect(t).not.toMatch(/번 포트에서 기다리고 있어요/);
+    expect(t).toContain("SyntaxError: The requested module './postService.js' does not provide an export named 'decodeCursor'");
+    expect(t).toMatch(/services\/commentService\.js:4\n/);
+    expect(t).toContain("import { encodeCursor, decodeCursor } from './postService.js';");
+    expect(t).toContain('Node.js v24.19.0');
+    expect(t.trimEnd().endsWith("Failed running 'app.js'. Waiting for file changes before restarting...")).toBe(true);
+    expect(oneLine.listening).toBe(false);
+    // 커서를 쓰는 코드까지 미리 넣은 판(Step 3 끝 판에서 import 줄만 postService 로) — 같은 줄 · 같은 에러
+    const full = await run(read(version(3)('services/commentService.js')).replace("from '../utils/cursor.js';", "from './postService.js';"));
+    const errOf = (x) => x.slice(x.indexOf('file:///'), x.indexOf('Node.js v'));
+    expect(errOf(studentShape(full.text, full.dir))).toBe(errOf(studentShape(oneLine.text, oneLine.dir)));
+    seen.importTrap = {
+      screen: studentShape(oneLine.text, oneLine.dir),
+      rawEscapes: [...new Set(oneLine.raw.match(ANSI) ?? [])],
+      down: { ...oneLine.down, json: oneLine.down.json.slice(0, 4000) },
+    };
+  }, 90_000);
+
+  it('🔴 이미 떠 있던 서버에서 그 줄을 더해 저장하면 — 다시 띄우다 같은 에러로 멈춘다 · 요청은 연결 거부 · 그 줄을 지우고 저장하면 다시 뜨고 200', async () => {
+    await copyDb(GATE_DB);
+    const dir = studentDir(version(2));
+    const out = await withDev(dir, GATE_DB, async ({ text, raw, waitFor, base: url }) => {
+      await waitFor(/번 포트에서 기다리고 있어요/);
+      const at = text().length;
+      writeFileSync(join(dir, 'services/commentService.js'), COMMENT_SERVICE_HEAD + read(P(IMPORT_TRAP_FILE)));
+      await waitFor(/Failed running 'app\.js'/, at);
+      await sleep(500);
+      const broken = text().slice(at);
+      const down = await sendWhileDown(read(version(2)(HTTP_FILE)), url);
+      const at2 = text().length;
+      writeFileSync(join(dir, 'services/commentService.js'), read(version(2)('services/commentService.js')));
+      await waitFor(/번 포트에서 기다리고 있어요/, at2);
+      const back = await (await loggedIn(url, 'jaehoon')).get('/api/v2/posts/1/comments');
+      return { first: text().slice(0, at), broken, down, restored: text().slice(at2), back, rawEscapes: [...new Set(raw().match(ANSI) ?? [])], raw: raw() };
+    });
+    // 바뀐 파일 이름 줄 — 판정 사본은 node_modules 를 저장소의 것과 링크로 함께 써서, 그쪽 파일 사건이 먼저 오면 그 이름이 찍힌다(학생 폴더는 아니다)
+    expect(out.broken).toMatch(/^Change detected in '[^']+'\nRestarting 'app\.js'\n/m);
+    expect(out.broken).toContain("Restarting 'app.js'");
+    expect(out.broken).toContain("SyntaxError: The requested module './postService.js' does not provide an export named 'decodeCursor'");
+    expect(out.down.fetchError.message).toBe('fetch failed');
+    expect(out.restored).toMatch(/Restarting 'app\.js'[\s\S]*번 포트에서 기다리고 있어요/);
+    expect([out.back.status, out.back.body.data.map((c) => c.id)]).toEqual([200, [1, 2, 3]]);
+    seen.importTrapWatch = { first: studentShape(out.first, dir), broken: studentShape(out.broken, dir), restored: studentShape(out.restored, dir), rawEscapes: out.rawEscapes, raw: studentShape(out.raw, dir), down: { code: out.down.code, stderr: out.down.stderr, fetchError: out.down.fetchError } };
+  }, 90_000);
+
+  it('🔎 다른 길 — postService.js 의 두 함수에 export 만 붙여 불러오는 판도 돈다(댓글 페이지 · 게시물 목록 모두 끝 판과 같다) · 순환 import 없음 · 댓글 서비스가 게시물 서비스를 불러 db · userService · uploadService 까지 함께 읽는다', async () => {
+    const edit = (d) => {
+      const startService = read(version(2)('services/postService.js'));
+      const exported = startService.replace('\nfunction encodeCursor(', '\nexport function encodeCursor(').replace('\nfunction decodeCursor(', '\nexport function decodeCursor(');
+      expect(exported.match(/^export function (encodeCursor|decodeCursor)\(/gm)).toHaveLength(2);
+      writeFileSync(join(d, 'services/postService.js'), exported);
+      writeFileSync(join(d, 'schemas/postSchema.js'), read(version(2)('schemas/postSchema.js')));
+      rmSync(join(d, 'utils'), { recursive: true, force: true });
+      writeFileSync(join(d, 'services/commentService.js'), read(version(3)('services/commentService.js')).replace("from '../utils/cursor.js';", "from './postService.js';"));
+    };
+    // 댓글 — Step 3 의 .http 를 그대로
+    await copyDb(GATE_DB);
+    const runs = await withServer(version(3), GATE_DB, () => httpyac(read(version(3)(HTTP_FILE))), { edit });
+    await copyDb(GATE2_DB);
+    const fixedRuns = await withServer(version(3), GATE2_DB, () => httpyac(read(version(3)(HTTP_FILE))));
+    const scrub = (r) => JSON.parse(r.rawBody.replace(/"timestamp":"[^"]+"/g, '"timestamp":"<t>"'));
+    expect(runs.slice(1).map(scrub)).toEqual(fixedRuns.slice(1).map(scrub));
+    // 게시물 목록 — 시작 판과 같다
+    const [a, b] = [await postListTour(base(), GATE_DB), await postListTour(version(3), GATE2_DB)];
+    const c = await (async () => {
+      await copyDb(GATE_DB);
+      const dir = studentDir(version(3), edit);
+      return { dir };
+    })();
+    expect(b).toEqual(a);
+    // 정적 import 그래프 — 학생 파일(app.js · routes · controllers · services · middlewares · schemas · utils · errors · responses · db)에 순환이 없다
+    const graph = {};
+    const walk = (rel) => {
+      if (graph[rel]) return;
+      const text = read(join(c.dir, rel));
+      graph[rel] = [...text.matchAll(/^import [^;]*? from '(\.{1,2}\/[^']+)';$/gm)].map(([, to]) => join(rel, '..', to).replace(/^\.\//, ''));
+      for (const to of graph[rel]) walk(to);
+    };
+    walk('app.js');
+    const cycles = [];
+    const visit = (node, stack) => {
+      if (stack.includes(node)) { cycles.push([...stack.slice(stack.indexOf(node)), node]); return; }
+      for (const to of graph[node] ?? []) visit(to, [...stack, node]);
+    };
+    visit('app.js', []);
+    expect(cycles).toEqual([]);
+    expect(graph['services/commentService.js']).toEqual(['db.js', 'errors.js', 'services/postService.js']);
+    expect(graph['services/postService.js']).toEqual(['db.js', 'services/userService.js', 'services/uploadService.js', 'errors.js', 'schemas/postSchema.js']);
+    expect(Object.keys(graph).filter((rel) => (graph[rel] ?? []).includes('services/commentService.js'))).toEqual(['controllers/commentController.js']);
+    seen.exportPath = { commentService: graph['services/commentService.js'], postService: graph['services/postService.js'], importersOfCommentService: ['controllers/commentController.js'] };
+  }, 180_000);
+
+  it('🔎 다른 길의 곁 사실 — 실습 서버가 커서 함수를 ../../services/postService.js 에서 부르면 .env 없이 `node lab/p3-53/practice2.js` 로도 뜨는가(Prisma · bcrypt 를 함께 읽는다)', async () => {
+    const dir = studentDir(version(3));
+    const lab = read(P('lab/p3-53/practice2.js')).replace("from '../../utils/cursor.js';", "from '../../services/postService.js';").replaceAll('4001', String(PORT));
+    mkdirSync(join(dir, 'lab/p3-53'), { recursive: true });
+    writeFileSync(join(dir, 'lab/p3-53/practice2.js'), lab);
+    for (const rel of ['shop-data.js']) writeFileSync(join(dir, 'lab/p3-53', rel), read(P(`lab/p3-53/${rel}`)));
+    const exported = read(version(2)('services/postService.js')).replace('\nfunction encodeCursor(', '\nexport function encodeCursor(').replace('\nfunction decodeCursor(', '\nexport function decodeCursor(');
+    writeFileSync(join(dir, 'services/postService.js'), exported);
+    writeFileSync(join(dir, 'schemas/postSchema.js'), read(version(2)('schemas/postSchema.js')));
+    const childEnv = { ...process.env };
+    for (const k of ['NODE_ENV', 'VITEST', 'DATABASE_URL']) delete childEnv[k];
+    let result;
+    try {
+      const srv = await boot('lab/p3-53/practice2.js', { port: PORT, cwd: dir, env: { DATABASE_URL: '' }, ready: `${PORT}번 포트에서`, timeoutMs: 8000 });
+      const res = await fetch(`http://localhost:${PORT}/api/products/1/reviews?limit=3`);
+      result = { started: true, status: res.status, body: await res.json(), log: srv.tail() };
+      await stop(srv);
+    } catch (e) {
+      result = { started: false, error: e.message.slice(0, 2000) };
+    }
+    seen.exportPathLab = result;
+    expect(typeof result.started).toBe('boolean');
+  }, 30_000);
+});
+
+/** 그 포트에 아무도 없는가(boot 의 확인과 같은 방법). */
+async function portIsFreeLocal(port) {
+  const { portIsFree } = await import('./helpers/boot.js');
+  return portIsFree(port);
+}
