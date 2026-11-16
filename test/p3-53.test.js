@@ -695,6 +695,30 @@ describe('축 ③ Step 3 — 오래된 순으로 나눠 받기', () => {
     expect(a.afterDeleted.body.data.items.map((post) => post.id)).toEqual([1, 2]);
   }, 120_000);
 
+  it('🔴 겪기 — 커서를 푸는 함수가 몇 벌인가 · 학생 폴더(node_modules 제외)에서 맥 기본 grep 으로 · 시작 판(Step 2 끝)은 수업 파일 하나 + p3-33 실습 둘 · 끝 판은 utils/cursor.js 하나 + 그 실습 둘(실습 파일은 학생 것이라 그대로)', () => {
+    // 학생이 치는 명령 그대로 — grep -rn "function decodeCursor" --include="*.js" --exclude-dir=node_modules .
+    const grepIn = (label) => {
+      const dir = studentDir(version(label));
+      return execFileSync('/usr/bin/grep', ['-rn', 'function decodeCursor', '--include=*.js', '--exclude-dir=node_modules', '.'], { cwd: dir, encoding: 'utf8' });
+    };
+    const files = (out) => out.trim().split('\n').map((line) => line.split(':')[0]).sort();
+    const start = grepIn(2);
+    const moved = grepIn('3a');
+    const end = grepIn(3);
+    expect(files(start)).toEqual(['./lab/p3-33/homework2.js', './lab/p3-33/practice3.js', './services/postService.js']);
+    expect(files(moved)).toEqual(['./lab/p3-33/homework2.js', './lab/p3-33/practice3.js', './utils/cursor.js']);
+    expect(files(end)).toEqual(files(moved));
+    // 줄 모양 — 파일:줄 번호:그 줄
+    expect(start.trim().split('\n').every((line) => /^\.\/[\w/.-]+:\d+:(export )?function decodeCursor\(cursor\) \{$/.test(line))).toBe(true);
+    expect(end).toMatch(/^\.\/utils\/cursor\.js:\d+:export function decodeCursor\(cursor\) \{$/m);
+    // 실습 둘 가운데 practice3 은 수업 판과 같은 글자(시각과 번호) · homework2 는 좋아요 수와 번호로 푸는 다른 함수다
+    const lab = (rel) => read(version(3)(rel));
+    const fnText = (text) => text.slice(text.indexOf('function decodeCursor('), text.indexOf('\n}\n', text.indexOf('function decodeCursor(')) + 2);
+    expect(fnText(lab('lab/p3-33/practice3.js')).replaceAll("'커서 값이 올바르지 않아요'", "'INVALID_CURSOR'")).toBe(fnText(lab('utils/cursor.js')));
+    expect(lab('lab/p3-33/homework2.js')).toContain('likeCount: z.int32()');
+    seen.decodeCopies = { start, moved, end };
+  }, 30_000);
+
   it('🔴 반례 스냅숏 — 고친 판과 다른 곳은 afterCursor 하나 · 그 함수와 위 주석은 postService.js 의 것 그대로(최신순의 lte · lt)', () => {
     const trap = read(P(TRAP_FILE));
     const fixed = read(version(3)('services/commentService.js'));
