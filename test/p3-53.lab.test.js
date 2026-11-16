@@ -67,6 +67,8 @@ const studentCopy = (which) => {
   } else {
     const tar = execFileSync('git', ['archive', '--format=tar', commitOf(COMMITS[which])], { cwd: P('.'), maxBuffer: 1 << 28 });
     execFileSync('tar', ['-x', '-C', dir], { input: tar });
+    // 나눠 주는 데이터는 직접 해보기 1 에서 한 번 받는다 — 뒤 실습의 커밋이 그보다 앞서 찍혔어도 학생 폴더에는 마지막 판이 있다
+    writeFileSync(join(dir, LAB, 'shop-data.js'), execFileSync('git', ['show', `${commitOf(COMMITS.practice1)}:${LAB}/shop-data.js`], { cwd: P('.'), encoding: 'utf8' }));
   }
   symlinkSync(P('node_modules'), join(dir, 'node_modules'));
   return dir;
@@ -133,21 +135,24 @@ const blanksOf = (start, answer) => {
 
 // ── 축 ① 나눠 주는 파일 ─────────────────────────────────────────────────────────
 describe('축 ① 나눠 주는 파일 — shop-data.js · 빈칸 판', () => {
-  it('🔴 shop-data.js — 사람 다섯(5번 jisoo 는 리뷰가 없다) · 상품 셋(3번은 리뷰 0) · 리뷰 열둘(1번 상품 열 · 2번 상품 둘) · 숨긴 리뷰 둘(3 · 9) · 같은 시각 두 쌍(4 · 5 와 7 · 8) · 번호 차례가 시각 차례다', async () => {
+  it('🔴 shop-data.js — 사람 다섯(5번 jisoo 는 리뷰가 없다) · 상품 셋(3번은 리뷰 0) · 리뷰 열둘(1번 상품 열 · 2번 상품 둘) · 숨긴 리뷰 둘(3 · 9) · 같은 시각 세 쌍(4 · 5 · 7 · 8 · 10 · 12) · 배열에는 5번이 4번보다 먼저(정렬을 빼먹으면 드러나게)', async () => {
     const dir = studentCopy('practice1');
     const data = await import(join(dir, LAB, 'shop-data.js'));
     expect(data.users.map((u) => u.username)).toEqual(['yuna', 'minho', 'sujin', 'taeyang', 'jisoo']);
     expect(data.reviews.filter((r) => r.authorId === 5)).toEqual([]);
     expect(data.products.map((p) => [p.id, p.name])).toEqual([[1, '무선 이어폰'], [2, '텀블러'], [3, '노트북 거치대']]);
     expect(data.reviews).toHaveLength(12);
-    expect(data.reviews.map((r) => r.id)).toEqual(Array.from({ length: 12 }, (_, i) => i + 1));
+    expect(data.reviews.map((r) => r.id)).toEqual([1, 2, 3, 5, 4, 6, 7, 8, 9, 10, 11, 12]);
     expect([1, 2, 3].map((id) => data.reviews.filter((r) => r.productId === id).length)).toEqual([10, 2, 0]);
     expect(data.reviews.filter((r) => r.hidden).map((r) => r.id)).toEqual([3, 9]);
     expect(data.reviews.every((r) => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.000Z$/.test(r.createdAt) && typeof r.hidden === 'boolean')).toBe(true);
-    expect([data.reviews[3].createdAt === data.reviews[4].createdAt, data.reviews[6].createdAt === data.reviews[7].createdAt]).toEqual([true, true]);
-    const times = data.reviews.map((r) => r.createdAt);
-    expect(times).toEqual(times.slice().sort());
-    expect(new Set(times).size).toBe(10);
+    const at = (id) => data.reviews.find((r) => r.id === id).createdAt;
+    expect([at(4) === at(5), at(7) === at(8), at(10) === at(12)]).toEqual([true, true, true]);
+    expect(at(12)).toBe('2026-11-10T12:45:00.000Z');
+    expect(new Set(data.reviews.map((r) => r.createdAt)).size).toBe(9);
+    // 시각 차례로 늘어놓은 것과 배열 차례가 다르다 — 정렬을 빼먹으면 1번 상품이 1 · 2 · 5 · 4 … 로 온다
+    const visible1 = data.reviews.filter((r) => r.productId === 1 && !r.hidden).map((r) => r.id);
+    expect(visible1).toEqual([1, 2, 5, 4, 7, 8, 11, 12]);
     expect(read(join(dir, LAB, 'shop-data.js')).split('\n')[0]).toBe('// ~/instagram-api/lab/p3-53/shop-data.js');
   });
 
@@ -209,13 +214,15 @@ describe('축 ② 직접 해보기 1 — 숨긴 리뷰 빼기 · 글쓴이 이�
     seen.practice1 = { http: httpText, runs: runs.map((r) => ({ title: r.title, status: r.status, body: r.rawBody })) };
   }, 30_000);
 
-  it('🔴 틀린 판마다 확인 절차가 처음 어긋나는 곳이 다르다 — 숨긴 리뷰를 안 뺌 · 404 대신 [] · 이름을 안 붙임 · 빈칸 그대로', async () => {
+  it('🔴 틀린 판마다 확인 절차가 처음 어긋나는 곳이 다르다 — 숨긴 리뷰를 안 뺌 · 404 대신 [] · 이름을 안 붙임 · 정렬 줄을 뺌 · .sort() 만 · 빈칸 그대로', async () => {
     const answer = fileAt('practice1', `${LAB}/practice1.js`);
     const httpText = fileAt('practice1', `${LAB}/practice1.http`);
     const wrongs = {
       hiddenKept: variant(answer, 'review.productId === productId && !review.hidden', 'review.productId === productId'),
       emptyForMissing: variant(answer, '  if (!product) {\n', '  if (false) {\n'),
       noName: variant(answer, '    username: author.username,\n', ''),
+      noSort: variant(answer, '    .sort(byOldest)\n', ''),
+      sortNoComparator: variant(answer, '    .sort(byOldest)\n', '    .sort()\n'),
     };
     const out = {};
     for (const [name, source] of Object.entries(wrongs)) {
@@ -227,6 +234,10 @@ describe('축 ② 직접 해보기 1 — 숨긴 리뷰 빼기 · 글쓴이 이�
     expect(out.emptyForMissing.first).toBe('④ 99번 상품 — 404 «그런 상품은 없어요»');
     expect(out.emptyForMissing.missing).toEqual([200, '[]']);
     expect(out.noName.first).toBe('② 줄마다 username · 첫 리뷰는 yuna');
+    // 정렬을 빼먹거나 비교 함수 없이 부르면 배열 차례 그대로 — 5번이 4번보다 먼저 온다
+    expect([out.noSort.first, out.noSort.one]).toEqual(['① 1번 상품 — 200 · 리뷰 여덟이 1 · 2 · 4 · 5 · 7 · 8 · 11 · 12 차례', [1, 2, 5, 4, 7, 8, 11, 12]]);
+    expect([out.sortNoComparator.first, out.sortNoComparator.one]).toEqual(['① 1번 상품 — 200 · 리뷰 여덟이 1 · 2 · 4 · 5 · 7 · 8 · 11 · 12 차례', [1, 2, 5, 4, 7, 8, 11, 12]]);
+    seen.practice1Sort = { noSort: out.noSort, sortNoComparator: out.sortNoComparator };
     // 빈칸을 비운 채로 띄우면 서버는 뜨고 요청은 500(____ 이 정의되지 않았다)
     const start = read(P('snapshots/p3-53/practice1-start.js'));
     const blank = await withLab('practice1', 'practice1', start, async ({ base, tail }) => {
@@ -341,22 +352,26 @@ const H2_HTTP = [
   ['숨긴 리뷰가 있는 사람', 'GET http://localhost:4001/api/users/3/reviews'],
   ['리뷰를 쓰지 않은 사람', 'GET http://localhost:4001/api/users/5/reviews'],
   ['없는 사람', 'GET http://localhost:4001/api/users/99/reviews'],
+  ['yuna가 쓴 리뷰 — 한 개씩 첫 페이지', 'GET http://localhost:4001/api/users/1/reviews?limit=1'],
+  ['한 개씩 둘째 페이지', 'GET http://localhost:4001/api/users/1/reviews?limit=1&cursor={{single.nextCursor}}'],
 ];
 /** 과제 [응용] 의 «확인» — 주소와 상관없이 다섯 요청의 응답 차례로 본다(사람 아래 주소든 ?authorId= 필터든). */
 const checkHomework2 = (runs) => {
   const page = (r) => (r.status === 200 ? JSON.stringify(ids(r.body)) : `status ${r.status}`);
-  const [first, second, hidden, none, missing] = runs;
+  const [first, second, hidden, none, missing, single, singleNext] = runs;
   if (page(first) !== '[12,10]' || first.body.hasNext !== true) return '① yuna 첫 페이지 — 12 · 10 · hasNext true';
   if (JSON.stringify(first.body.items.map((r) => r.productName)) !== JSON.stringify(['무선 이어폰', '텀블러'])) return '① 리뷰마다 상품 이름 — 무선 이어폰 · 텀블러';
   if (page(second) !== '[5,1]' || second.body.hasNext !== false || second.body.nextCursor !== null) return '② 둘째 페이지 — 5 · 1 · hasNext false · nextCursor null';
   if (page(hidden) !== '[11,7]') return '③ sujin — 11 · 7(숨긴 3 없음)';
   if (none.status !== 200 || JSON.stringify(none.body) !== JSON.stringify({ items: [], hasNext: false, nextCursor: null })) return '④ 리뷰를 쓰지 않은 사람 — 빈 목록';
   if (missing.status !== 404 || JSON.stringify(missing.body) !== JSON.stringify({ message: '그런 사람은 없어요' })) return '⑤ 없는 사람 — 404 «그런 사람은 없어요»';
+  // 10번과 12번은 같은 시각 — 한 개씩 받으면 그 사이가 페이지 경계다
+  if (page(single) !== '[12]' || page(singleNext) !== '[10]') return '⑥ 한 개씩 — 첫 페이지 12 · 다음 페이지 10';
   return null;
 };
 
 describe('축 ④ 과제 [응용] — 한 사람이 쓴 리뷰 모아 보기(최신순 커서 · 상품 이름 · 숨긴 리뷰 빼기)', () => {
-  it('🔴 정답 판 — homework2.http 다섯 · yuna 12 · 10 → 5 · 1 · sujin 11 · 7 · jisoo 빈 목록 · 없는 사람 404 · 줄의 필드는 id · productId · productName · content · createdAt', async () => {
+  it('🔴 정답 판 — homework2.http 일곱 · yuna 12 · 10 → 5 · 1 · sujin 11 · 7 · jisoo 빈 목록 · 없는 사람 404 · 한 개씩 12 → 10(같은 시각) · 줄의 필드는 id · productId · productName · content · createdAt', async () => {
     const httpText = fileAt('homework2', `${LAB}/homework2.http`);
     expect(blocksOf(httpText)).toEqual(H2_HTTP);
     const source = fileAt('homework2', `${LAB}/homework2.js`);
@@ -365,7 +380,7 @@ describe('축 ④ 과제 [응용] — 한 사람이 쓴 리뷰 모아 보기(최
     expect(checkHomework2(runs)).toBe(null);
     expect(Object.keys(runs[0].body.items[0])).toEqual(['id', 'productId', 'productName', 'content', 'createdAt']);
     // 커서는 공용 커서 그대로 — 최신순 한 방향뿐이라 방향을 담지 않는다
-    expect(JSON.parse(Buffer.from(runs[0].body.nextCursor, 'base64url').toString())).toEqual({ createdAt: '2026-11-08T15:10:00.000Z', id: 10 });
+    expect(JSON.parse(Buffer.from(runs[0].body.nextCursor, 'base64url').toString())).toEqual({ createdAt: '2026-11-10T12:45:00.000Z', id: 10 });
     const more = await withLab('homework2', 'homework2', source, async ({ base }) => {
       const get = async (path) => { const r = await fetch(`${base}${path}`); return [r.status, await r.json()]; };
       return { all: await get('/api/users/1/reviews'), taeyang: await get('/api/users/4/reviews'), bad: await get('/api/users/1/reviews?cursor=abc'), notNumber: await get('/api/users/abc/reviews') };
@@ -391,7 +406,7 @@ describe('축 ④ 과제 [응용] — 한 사람이 쓴 리뷰 모아 보기(최
     seen.homework2Filter = { http: httpText, runs: runs.map((r) => ({ title: r.title, status: r.status, body: r.rawBody })), noAuthor };
   }, 60_000);
 
-  it('🔴 틀린 판마다 확인 절차가 처음 어긋나는 곳이 다르다 — 오래된 순으로 둠 · 커서 다음을 오래된 순 조건으로 · 상품 이름 없음 · 숨긴 리뷰를 안 뺌 · 없는 사람에 빈 목록', async () => {
+  it('🔴 틀린 판마다 확인 절차가 처음 어긋나는 곳이 다르다 — 오래된 순으로 둠 · 커서 다음을 오래된 순 조건으로 · 상품 이름 없음 · 숨긴 리뷰를 안 뺌 · 없는 사람에 빈 목록 · 같은 시각에서 번호 비교 빠짐', async () => {
     const answer = fileAt('homework2', `${LAB}/homework2.js`);
     const httpText = fileAt('homework2', `${LAB}/homework2.http`);
     const wrongs = {
@@ -400,6 +415,7 @@ describe('축 ④ 과제 [응용] — 한 사람이 쓴 리뷰 모아 보기(최
       noProductName: variant(answer, '    productName: product.name,\n', ''),
       hiddenKept: variant(answer, 'review.authorId === userId && !review.hidden', 'review.authorId === userId'),
       emptyForMissing: variant(answer, '  if (!user) {\n', '  if (false) {\n'),
+      timeOnly: variant(answer, 'return (review) => review.createdAt <= createdAt && (review.createdAt < createdAt || review.id < id);', 'return (review) => review.createdAt < createdAt;'),
     };
     const out = {};
     for (const [name, source] of Object.entries(wrongs)) {
@@ -415,20 +431,25 @@ describe('축 ④ 과제 [응용] — 한 사람이 쓴 리뷰 모아 보기(최
     expect(out.hiddenKept.pages[2]).toEqual([11, 7, 3]);
     expect(out.emptyForMissing.first).toBe('⑤ 없는 사람 — 404 «그런 사람은 없어요»');
     expect(out.emptyForMissing.pages[4]).toEqual([]);
+    // 같은 시각에서 번호 비교를 빼면 확인 1 ~ 5 는 그대로 지나고, 한 개씩 받을 때 10번이 빠진다
+    expect(out.timeOnly.first).toBe('⑥ 한 개씩 — 첫 페이지 12 · 다음 페이지 10');
+    expect([out.timeOnly.pages[5], out.timeOnly.pages[6]]).toEqual([[12], [5]]);
     seen.homework2Wrong = out;
   }, 90_000);
 });
 
 // ── 축 ⑤ 학생 파일 차이 ─────────────────────────────────────────────────────────
 describe('축 ⑤ 실습 커밋 — lab/p3-53/ 만 · 차례 · 경로 주석 · 쓰지 않기로 한 낱말', () => {
-  it('🔴 실습 커밋(제목 끝 표식이 같으면 가장 뒤)은 lab/p3-53/ 만 고친다 · 1 → 2 → 과제 차례 · 끝의 lab/p3-53/ 은 파일 여덟', () => {
+  it('🔴 실습 커밋(제목 끝 표식이 같으면 가장 뒤)은 lab/p3-53/ 만 고친다 · 모두 Step 5 뒤 · 끝의 lab/p3-53/ 은 파일 여덟', () => {
     const step5 = execFileSync('git', ['log', '-n', '400', '--format=%H %s', LINE], { cwd: P('.'), encoding: 'utf8' }).split('\n').find((l) => / feat\(p3-53\): /.test(l) && l.endsWith('(Step 5)')).split(' ')[0];
     const own = (c) => execFileSync('git', ['diff', '--name-only', `${c}^`, c], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n');
     const [c1, c2, h2] = ['practice1', 'practice2', 'homework2'].map((w) => commitOf(COMMITS[w]));
     for (const c of [c1, c2, h2]) expect(own(c).every((n) => n.startsWith(`${LAB}/`))).toBe(true);
-    const order = execFileSync('git', ['log', '--format=%H', `${step5}..${LINE}`], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n').reverse();
-    expect([order.indexOf(c1) < order.indexOf(c2), order.indexOf(c2) < order.indexOf(h2)]).toEqual([true, true]);
-    const files = execFileSync('git', ['ls-tree', '--name-only', `${h2}:${LAB}`], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n');
+    // 실습 커밋은 Step 5 뒤에 있다(데이터를 고친 직접 해보기 1 새 커밋은 직접 해보기 2 · 과제보다 뒤일 수 있다 — 가장 뒤 커밋이 그 판)
+    const order = execFileSync('git', ['log', '--format=%H', `${step5}..${LINE}`], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n');
+    expect([c1, c2, h2].every((c) => order.includes(c))).toBe(true);
+    const latest = order.find((c) => [c1, c2, h2].includes(c));
+    const files = execFileSync('git', ['ls-tree', '--name-only', `${latest}:${LAB}`], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n');
     expect(files).toEqual(['homework2.http', 'homework2.js', 'many-comments.sql', 'practice1.http', 'practice1.js', 'practice2.http', 'practice2.js', 'shop-data.js']);
     const banned = /자리|박다|박아|박힌|결[이을로의]|갈래|몸통|판[이을으]|겹|까닭|걸리|걸린|돌리|돌려(?!주|준|줄)|가르|갈리|재다|재서|벗기|되살|짝/;
     for (const rel of ['shop-data.js', 'practice1.js', 'practice2.js', 'homework2.js']) {
@@ -557,6 +578,18 @@ const itemProblems = (item, res, extra = {}) => {
   }
   return out;
 };
+/** 과제 [응용] 확인 6 — «첫 페이지는 N번 … 다음 페이지를 받으면 M번» 을 요청 둘의 응답과. */
+const singleProblems = (item, first, next) => {
+  const out = [];
+  const facets = [];
+  facetLog.set(item, facets);
+  const a = /첫 페이지[은는]?\s*(\d+)번/.exec(item)?.[1];
+  const b = /다음 페이지[^0-9]*?(\d+)번/.exec(item)?.[1];
+  if (a) { facets.push('첫 페이지'); if (JSON.stringify([Number(a)]) !== JSON.stringify(ids(first.body))) out.push(['첫 페이지', [Number(a)], ids(first.body)]); }
+  if (b) { facets.push('다음 페이지'); if (JSON.stringify([Number(b)]) !== JSON.stringify(ids(next.body))) out.push(['다음 페이지', [Number(b)], ids(next.body)]); }
+  if (!/`limit=1`/.test(item)) out.push(['limit=1', '문장에 없다', null]);
+  return out;
+};
 /** 확인 줄마다 적어도 하나는 맞대 봤는가 — 맞댄 것이 없으면 «통과» 가 거짓이다. */
 const unchecked = (items) => items.filter((item) => (facetLog.get(item) ?? []).length === 0);
 /** 표 한 행을 그 틀린 판의 실측과 맞댄다 — 첫 «확인 N» 이 처음 달라지는 확인이고, 칸 안의 «확인 N» 마다 그 뒤 글(번호 차례 · 개수 · 셋째 · 상태 · message · 커서 앞 · ReferenceError)을 그 확인의 응답과 맞댄다. */
@@ -620,6 +653,8 @@ describeLecture(LECTURE_MD ? '축 ⑥ 교안 대조 — 실습 블록 · 확인 
       hiddenKept: { match: '`!review.hidden`', source: variant(answer, 'review.productId === productId && !review.hidden', 'review.productId === productId') },
       emptyForMissing: { match: '`if`를 통째로', source: variant(answer, '  if (!product) {\n', '  if (false) {\n') },
       blank: { match: '빈칸을 하나라도', source: read(P('snapshots/p3-53/practice1-start.js')) },
+      noSort: { match: '`.sort(byOldest)` 줄을', source: variant(answer, '    .sort(byOldest)\n', '') },
+      sortNoComparator: { match: '비교 함수 없이', source: variant(answer, '    .sort(byOldest)\n', '    .sort()\n') },
     };
     for (const [name, w] of Object.entries(wrongs)) {
       w.runs = await withLab('practice1', 'practice1', w.source, async ({ tail }) => {
@@ -630,7 +665,7 @@ describeLecture(LECTURE_MD ? '축 ⑥ 교안 대조 — 실습 블록 · 확인 
       });
       w.first = circled(checkPractice1(w.runs));
     }
-    expect(tableOf(section)).toHaveLength(3);
+    expect([3, 4, 5]).toContain(tableOf(section).length);
     for (const row of tableOf(section)) {
       const key = Object.keys(wrongs).find((k) => row[0].includes(wrongs[k].match));
       if (!key) { problems.push({ where: '직접 해보기 1 표', row, problem: '어느 틀린 판인지 모르는 행' }); continue; }
@@ -674,7 +709,7 @@ describeLecture(LECTURE_MD ? '축 ⑥ 교안 대조 — 실습 블록 · 확인 
   it('🔴 과제 [응용] — 확인 다섯이 정답 판(사람 아래 주소)과 다른 정답 판(?authorId=) 둘 다에서 글자대로', async () => {
     const section = sectionOf('[응용] 한 사람이 쓴 리뷰 모아 보기');
     const items = checksOf(section);
-    expect(items).toHaveLength(5);
+    expect([5, 6]).toContain(items.length);
     const answers = {
       '/api/users/:id/reviews': [fileAt('homework2', `${LAB}/homework2.js`), fileAt('homework2', `${LAB}/homework2.http`)],
       '/api/reviews?authorId=': [read(P('snapshots/p3-53/homework2-filter.js')), read(P('snapshots/p3-53/homework2-filter.http'))],
@@ -682,7 +717,11 @@ describeLecture(LECTURE_MD ? '축 ⑥ 교안 대조 — 실습 블록 · 확인 
     const problems = [];
     for (const [label, [source, httpText]] of Object.entries(answers)) {
       const runs = await sendHttp('homework2', 'homework2', source, httpText);
-      items.forEach((item, i) => problems.push(...itemProblems(item, runs[i], { names: ['무선 이어폰', '텀블러'] }).map((p) => ({ where: `과제 [응용] 확인 ${i + 1} (${label})`, item, problem: p }))));
+      items.forEach((item, i) => {
+        // 확인 6(한 개씩) — 요청 둘(첫 페이지 · 그 커서로 다음 페이지)을 한 문장이 말한다
+        const found = i === 5 ? singleProblems(item, runs[5], runs[6]) : itemProblems(item, runs[i], { names: ['무선 이어폰', '텀블러'] });
+        problems.push(...found.map((p) => ({ where: `과제 [응용] 확인 ${i + 1} (${label})`, item, problem: p })));
+      });
     }
     expect(unchecked(items)).toEqual([]);
     labProblems.push(...problems);
