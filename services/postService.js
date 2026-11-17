@@ -75,7 +75,7 @@ const postFields = {
 
 export async function getPosts({ username, userId, limit = 5, cursor }) {
   // 확인용 — 목록을 만들 때마다 터미널에 찍는다(Step 2 에서 지운다).
-  console.log('게시물 목록을 만들었어요');
+  // console.log('게시물 목록을 만들었어요');
 
   // 누가 보는지 알 때만 그 사람이 누른 좋아요를 센다.
   // userId 가 undefined 면 `where` 가 «조건 없음» 이 되어 누가 누른 좋아요든 다 센다.

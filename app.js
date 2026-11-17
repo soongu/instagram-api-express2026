@@ -8,6 +8,7 @@ import uploadsRouter from './routes/uploads.js';
 import { HttpError } from './errors.js';
 import cookieParser from 'cookie-parser';
 import { logger } from './middlewares/logger.js';
+import { privateNoCache } from './middlewares/cache.js';
 import { openapi } from './docs/openapi.js';
 import swaggerUi from 'swagger-ui-express';
 
@@ -26,7 +27,8 @@ app.use(cors({
 app.use(express.json());
 
 // 올린 사진 파일을 주소로 내보낸다 — /uploads/파일 이름 은 uploads 폴더의 그 파일이다.
-app.use('/uploads', express.static('uploads'));
+// 파일 이름이 UUID 라 같은 주소의 내용이 바뀌지 않는다 — 1년 동안 서버에 확인하지 않고 쓰게 한다.
+app.use('/uploads', express.static('uploads', { maxAge: '1y', immutable: true }));
 
 
 app.use(cookieParser());
@@ -36,6 +38,8 @@ app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
 });
 
+// API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.
+app.use('/api', privateNoCache);
 
 app.use('/api/posts', postsRouter);
 app.use('/api/posts/:id/likes', likesRouter);
