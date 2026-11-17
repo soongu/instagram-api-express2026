@@ -17,7 +17,8 @@ export async function likePost(postId, userId) {
       return changeLikeCount(tx, postId, count, true);
     });
   } catch (error) {
-    if (error.code === 'P2003') throw new NotFoundError('그런 게시물이나 사용자는 없어요');
+    if (error.code === 'P2003')
+      throw new NotFoundError('POST_OR_USER_NOT_FOUND');
     throw error;
   }
 }
@@ -42,7 +43,7 @@ async function changeLikeCount(tx, postId, amount, liked) {
     UPDATE posts SET like_count = like_count + ${amount} WHERE id = ${postId}`;
 
   const post = await tx.post.findUnique({ where: { id: postId } });
-  if (!post) throw new NotFoundError('그런 게시물은 없어요');
+  if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
   return { liked, likeCount: post.likeCount };
 }

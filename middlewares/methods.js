@@ -8,6 +8,6 @@ export function allowOnly(...methods) {
 
   return (req, res, next) => {
     res.set('Allow', allow);
-    next(new MethodNotAllowedError('이 주소는 그 HTTP 메서드를 받지 않아요'));
+    next(new MethodNotAllowedError('METHOD_NOT_ALLOWED'));
   };
 }

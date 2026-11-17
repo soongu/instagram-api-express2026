@@ -38,7 +38,7 @@ export async function checkDuplicate(req, res) {
 
   sendData(res, {
     available: !taken,
-    message: taken ? TAKEN[type] : '쓸 수 있어요',
+    message: taken ? MESSAGES[TAKEN[type]] : '쓸 수 있어요',
   });
 }
 

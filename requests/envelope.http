@@ -1,4 +1,4 @@
-@api = http://localhost:3000/api/v2
+@api = http://localhost:3000/api
 
 ### 게시물 하나
 GET {{api}}/posts/1

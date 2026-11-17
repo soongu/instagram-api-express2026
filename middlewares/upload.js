@@ -19,35 +19,33 @@ const storage = multer.diskStorage({
   },
 });
 
-
-
-export const upload = multer({
+const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!EXTENSIONS[file.mimetype]) {
-      cb(new BadRequestError('사진 파일만 올릴 수 있어요'));
+      cb(new BadRequestError('NOT_AN_IMAGE'));
       return;
     }
-  cb(null, true);
+    cb(null, true);
   },
 });
 
 const receiveImages = upload.array('images', 10);
 
 // multer 가 만드는 에러에는 상태 코드가 없다 — 보낸 쪽이 고칠 일이라 400 으로 바꿔 넘긴다.
-const messages = {
-  LIMIT_FILE_SIZE: '사진 한 장은 5MB까지 올릴 수 있어요',
-  LIMIT_UNEXPECTED_FILE: '사진은 images 이름으로 10장까지 보낼 수 있어요',
+// multer 의 에러 코드를 우리 에러 코드로 옮긴다.
+const CODES = {
+  LIMIT_FILE_SIZE: 'IMAGE_TOO_LARGE',
+  LIMIT_UNEXPECTED_FILE: 'UNEXPECTED_FILE',
 };
 
 export function uploadImages(req, res, next) {
   receiveImages(req, res, (err) => {
     if (err instanceof multer.MulterError) {
-      next(new BadRequestError(messages[err.code] ?? '사진을 받지 못했어요'));
+      next(new BadRequestError(CODES[err.code] ?? 'UPLOAD_FAILED'));
       return;
     }
     next(err);
   });
 }
-
