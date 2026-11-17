@@ -77,18 +77,18 @@ app.use((err, req, res, next) => {
   }
 
   if (err instanceof HttpError) {
-    sendError(res, err);
+    sendError(req, res, err);
     return;
   }
 
   // express.json() 이 본문을 읽지 못했다 — 상태 코드(400 · 413 …)는 그 에러에 들어 있다.
   if (err.status) {
-    sendError(res, new HttpError(err.status, 'INVALID_BODY'));
+    sendError(req, res, new HttpError(err.status, 'INVALID_BODY'));
     return;
   }
 
   console.error(err);
-  sendError(res, new HttpError(500, 'INTERNAL_ERROR'));
+  sendError(req, res, new HttpError(500, 'INTERNAL_ERROR'));
 });
 
 
