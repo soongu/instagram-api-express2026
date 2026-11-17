@@ -2,6 +2,7 @@
 import * as authService from '../services/authService.js';
 import * as userService from '../services/userService.js';
 import { sendData } from '../responses.js';
+import { MESSAGES } from '../errors.js';
 
 // 로그인 쿠키를 남겨 둘 기간 — 7일(밀리초)
 const SEVEN_DAYS = 1000 * 60 * 60 * 24 * 7;
