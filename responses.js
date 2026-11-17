@@ -12,3 +12,18 @@ export function sendData(res, data) {
 
   res.json(data);
 }
+
+// 실패 — 새 주소는 { error: { code, message, details } }, 옛 주소는 { message, details }
+export function sendError(res, error) {
+  const { status, code, message, details } = error;
+
+  res.status(status);
+
+  if (res.locals.apiVersion === 2) {
+    // details 가 없으면(undefined) JSON 에 아예 실리지 않는다.
+    res.json({ error: { code, message, details } });
+    return;
+  }
+
+  res.json({ message, details });
+}

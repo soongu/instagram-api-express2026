@@ -4,7 +4,6 @@ import path from 'node:path';
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 import { cursorSchema } from '../schemas/postSchema.js';
-import { MESSAGES } from '../errors.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
 // 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
@@ -47,7 +46,7 @@ function decodeCursor(cursor) {
       JSON.parse(Buffer.from(cursor, 'base64url').toString()),
     );
   } catch {
-    throw new BadRequestError(MESSAGES.INVALID_CURSOR);
+    throw new BadRequestError('INVALID_CURSOR');
   }
 }
 
@@ -107,7 +106,7 @@ export async function getPost(id) {
     select: postFields,
   });
 
-  if (!post) throw new NotFoundError(MESSAGES.POST_NOT_FOUND);
+  if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
   return flatten(post);
 }
@@ -131,7 +130,7 @@ export async function createPost({ imageUrls, ...data }) {
 
     return flatten(post);
   } catch (error) {
-    if (error.code === 'P2003') throw new BadRequestError(MESSAGES.USER_NOT_FOUND);
+    if (error.code === 'P2003') throw new BadRequestError('USER_NOT_FOUND');
     throw error;
   }
 }
@@ -146,8 +145,8 @@ export async function updatePost(id, data) {
 
     return flatten(post);
   } catch (error) {
-    if (error.code === 'P2025') throw new NotFoundError(MESSAGES.POST_NOT_FOUND);
-    if (error.code === 'P2003') throw new BadRequestError(MESSAGES.USER_NOT_FOUND);
+    if (error.code === 'P2025') throw new NotFoundError('POST_NOT_FOUND');
+    if (error.code === 'P2003') throw new BadRequestError('USER_NOT_FOUND');
     throw error;
   }
 }
@@ -177,7 +176,7 @@ export async function removePost(id) {
       select: postFields,
     });
   } catch (error) {
-    if (error.code === 'P2025') throw new NotFoundError(MESSAGES.POST_NOT_FOUND);
+    if (error.code === 'P2025') throw new NotFoundError('POST_NOT_FOUND');
     throw error;
   }
 

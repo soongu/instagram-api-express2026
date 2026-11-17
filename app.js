@@ -12,6 +12,7 @@ import { privateNoCache } from './middlewares/cache.js';
 import { openapi } from './docs/openapi.js';
 import swaggerUi from 'swagger-ui-express';
 import { apiVersion } from './middlewares/version.js';
+import { sendError } from './responses.js';
 
 const app = express();
 
@@ -59,26 +60,33 @@ app.get('/api/openapi.json', (req, res) => {
 
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
-app.use((req, res) => {
-  res.status(404).json({ message: '그런 주소는 없어요' });
+
+// 어느 라우트도 답하지 않은 요청 — 에러 미들웨어에 넘겨 다른 실패와 같은 형식으로 답한다.
+app.use((req, res, next) => {
+  next(new NotFoundError('ROUTE_NOT_FOUND'));
 });
 
 app.use((err, req, res, next) => {
-  if (err instanceof HttpError) {
-    const body = { message: err.message };
-    if (err.details) body.details = err.details;
-    res.status(err.status).json(body);
+  if (res.headersSent) {
+    next(err);
     return;
   }
 
+  if (err instanceof HttpError) {
+    sendError(res, err);
+    return;
+  }
+
+  // express.json() 이 본문을 읽지 못했다 — 상태 코드(400 · 413 …)는 그 에러에 들어 있다.
   if (err.status) {
-    res.status(err.status).json({ message: '보낸 내용을 읽을 수 없어요' });
+    sendError(res, new HttpError(err.status, 'INVALID_BODY'));
     return;
   }
 
   console.error(err);
-  res.status(500).json({ message: '서버에서 문제가 생겼어요' });
+  sendError(res, new HttpError(500, 'INTERNAL_ERROR'));
 });
+
 
 const PORT = process.env.PORT ?? 3000;
 
