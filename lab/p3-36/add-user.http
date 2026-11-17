@@ -1,0 +1,13 @@
+### 그 번호로 중복 확인
+GET http://localhost:3000/api/auth/check-duplicate?type=phone&value=010-5555-1234
+
+### 그 번호로 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "010-5555-1234",
+  "name": "김지호",
+  "username": "jiho.kim",
+  "password": "jiho1234"
+}
