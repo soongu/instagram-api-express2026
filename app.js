@@ -11,6 +11,7 @@ import { logger } from './middlewares/logger.js';
 import { privateNoCache } from './middlewares/cache.js';
 import { openapi } from './docs/openapi.js';
 import swaggerUi from 'swagger-ui-express';
+import { apiVersion } from './middlewares/version.js';
 
 const app = express();
 
@@ -38,13 +39,19 @@ app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
 });
 
+// API 라우터 넷을 라우터 하나로 모은다 — 같은 API 를 두 주소에 붙이려고.
+const api = express.Router();
+api.use('/posts', postsRouter);
+api.use('/posts/:id/likes', likesRouter);
+api.use('/auth', authRouter);
+api.use('/uploads', uploadsRouter);
+
 // API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.
 app.use('/api', privateNoCache);
-
-app.use('/api/posts', postsRouter);
-app.use('/api/posts/:id/likes', likesRouter);
-app.use('/api/auth', authRouter);
-app.use('/api/uploads', uploadsRouter);
+// 새 주소 — 버전 2 라고 적어 두고 같은 API 로 보낸다.
+app.use('/api/v2', apiVersion(2), api);
+// 옛 주소 — 이미 나간 화면들이 쓰는 주소라 그대로 둔다.
+app.use('/api', api);
 
 app.get('/api/openapi.json', (req, res) => {
   res.json(openapi);
