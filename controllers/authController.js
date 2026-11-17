@@ -39,3 +39,29 @@ export async function checkDuplicate(req, res) {
     message: taken ? TAKEN[type] : '쓸 수 있어요',
   });
 }
+
+export async function login(req, res) {
+  const { user, sessionId } = await authService.login(req.body.username);
+
+  // 쿠키에는 그 세션 ID만 담아 준다.
+  res.cookie('sessionId', sessionId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: SEVEN_DAYS,
+  });
+
+  res.json(user);
+}
+
+export async function me(req, res) {
+  const user = await authService.whoAmI(readSessionId(req));
+
+  res.json(user);
+}
+
+export function logout(req, res) {
+  authService.logout(readSessionId(req));
+
+  res.clearCookie('sessionId');
+  res.json({ message: '로그아웃했어요' });
+}
