@@ -26,6 +26,10 @@ app.use(cors({
   origin: allowedOrigins,
   // credentials: true,
 }));
+
+// 새 주소로 온 요청이라는 것을 본문을 읽기 전에 적어 둔다 — 본문을 못 읽은 실패도 새 형식으로 답하려고.
+app.use('/api/v2', apiVersion(2));
+
 app.use(express.json());
 
 // 올린 사진 파일을 주소로 내보낸다 — /uploads/파일 이름 은 uploads 폴더의 그 파일이다.
@@ -50,7 +54,7 @@ api.use('/uploads', uploadsRouter);
 // API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.
 app.use('/api', privateNoCache);
 // 새 주소 — 버전 2 라고 적어 두고 같은 API 로 보낸다.
-app.use('/api/v2', apiVersion(2), api);
+app.use('/api/v2', api);
 // 옛 주소 — 이미 나간 화면들이 쓰는 주소라 그대로 둔다.
 app.use('/api', api);
 
