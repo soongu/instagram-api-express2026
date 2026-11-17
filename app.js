@@ -8,6 +8,8 @@ import uploadsRouter from './routes/uploads.js';
 import { HttpError } from './errors.js';
 import cookieParser from 'cookie-parser';
 import { logger } from './middlewares/logger.js';
+import { openapi } from './docs/openapi.js';
+import swaggerUi from 'swagger-ui-express';
 
 const app = express();
 
@@ -39,6 +41,12 @@ app.use('/api/posts', postsRouter);
 app.use('/api/posts/:id/likes', likesRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/uploads', uploadsRouter);
+
+app.get('/api/openapi.json', (req, res) => {
+  res.json(openapi);
+});
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
 app.use((req, res) => {
   res.status(404).json({ message: '그런 주소는 없어요' });

@@ -28,6 +28,13 @@ export const cursorSchema = z.object({
 // 목록 주소의 쿼리 문자열. 주소에서 오는 값은 전부 문자열이라 숫자로 바꿔서 검사한다.
 // 상한이 없으면 주소 한 줄로 테이블 전체를 달라고 할 수 있다.
 export const postListQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(50).optional(),
-  cursor: z.string().min(1).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .optional()
+    .describe('한 페이지의 게시물 수 — 없으면 5'),
+  cursor: z.string().min(1).optional().describe('앞 응답의 nextCursor 그대로'),
+  username: z.string().optional().describe('이 사람이 올린 게시물만'),
 });
