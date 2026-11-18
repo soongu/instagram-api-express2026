@@ -12,6 +12,7 @@ model User {
   email        String?   @unique @db.VarChar(255)
   phone        String?   @unique @db.VarChar(20)
   name         String?   @db.VarChar(50)
+  passwordHash String?   @map("password_hash")
   profileImage String?   @map("profile_image")
   deactivatedAt DateTime? @map("deactivated_at")
   posts        Post[]

@@ -73,3 +73,25 @@ GET http://localhost:3000/api/auth/check-duplicate?type=username&value=sora
 
 ### 휴대폰 번호 중복 확인
 GET http://localhost:3000/api/auth/check-duplicate?type=phone&value=010-1234-5677
+
+### 해시로 저장되는지 볼 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "seoyeon@example.com",
+  "name": "박서연",
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### 같은 비밀번호로 한 사람 더 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "doyun@example.com",
+  "name": "최도윤",
+  "username": "doyun",
+  "password": "instagram1234"
+}

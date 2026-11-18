@@ -5,13 +5,11 @@ import { UnauthorizedError } from '../errors.js';
 import { PHONE } from '../schemas/authSchema.js';
 
 // 가입 — 연락처가 휴대폰 번호 모양이면 phone 에, 아니면 email 에 넣는다.
-// 비밀번호는 아직 저장하지 않는다 — 안전하게 저장하는 법은 이번 구간에서 배운다.
-export function signup({ emailOrPhone, name, username }) {
-  const contact = PHONE.test(emailOrPhone)
-    ? { phone: emailOrPhone }
-    : { email: emailOrPhone };
+// 비밀번호는 넘기기만 한다 — 해시로 바꿔 저장하는 일은 userService 가 맡는다.
+export function signup({ emailOrPhone, name, username, password }) {
+  const contact = PHONE.test(emailOrPhone) ? { phone: emailOrPhone } : { email: emailOrPhone };
 
-  return userService.createUser({ username, name, ...contact });
+  return userService.createUser({ username, name, ...contact, password });
 }
 
 // 로그인 — 이름으로 사람을 찾고, 세션을 만들어 그 ID 를 사람과 함께 돌려준다.

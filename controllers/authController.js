@@ -26,8 +26,13 @@ function readSessionId(req) {
 }
 
 export async function signup(req, res) {
-  const { emailOrPhone, name, username } = req.body;
-  const user = await authService.signup({ emailOrPhone, name, username });
+  const { emailOrPhone, name, username, password } = req.body;
+  const user = await authService.signup({
+    emailOrPhone,
+    name,
+    username,
+    password,
+  });
 
   res.status(201);
   sendData(res, { message: '가입했어요', username: user.username });
