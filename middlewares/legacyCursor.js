@@ -1,6 +1,7 @@
 // ~/instagram-api/middlewares/legacyCursor.js
 import { sendData } from '../responses.js';
 import * as postService from '../services/postService.js';
+import { setDeprecation } from './deprecation.js';
 
 // 커서가 «게시물 번호» 이던 때의 화면은 cursor=2 처럼 숫자만 보낸다.
 // 지금 커서는 base64url 문자열이라, 숫자로만 된 커서는 옛 화면이 보낸 것이다.
@@ -19,8 +20,7 @@ export async function legacyCursor(req, res, next) {
   }
 
   // 옛 커서로 온 요청에만 알린다 — 이 방식은 곧 사라지니 새 커서로 옮기라고.
-  res.set('Deprecation', `@${DEPRECATED_AT.getTime() / 1000}`);
-  res.set('Sunset', SUNSET_AT.toUTCString());
+  setDeprecation(res);
 
   const newCursor = await postService.cursorOf(Number(cursor));
 
