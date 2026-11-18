@@ -95,3 +95,60 @@ Content-Type: application/json
   "username": "doyun",
   "password": "instagram1234"
 }
+
+### 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 없는 이름으로 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "hana",
+  "password": "hana1234"
+}
+
+### 비밀번호를 저장한 사람으로 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### 틀린 비밀번호로 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1235"
+}
+
+
+### 긴 비밀번호로 가입
+POST http://localhost:3000/api/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "jiwon@example.com",
+  "name": "김지원",
+  "username": "jiwon",
+  "password": "우리집첫째강아지이름은초코이고둘째강아지이름은보리예요"
+}
+
+### 앞 24자만 같은 비밀번호로 로그인
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "jiwon",
+  "password": "우리집첫째강아지이름은초코이고둘째강아지이름은보람이에요"
+}

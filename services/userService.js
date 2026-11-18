@@ -2,9 +2,14 @@
 import { prisma } from '../db.js';
 import { ConflictError } from '../errors.js';
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'node:crypto';
 
 // 비밀번호를 해시할 때의 cost — 하나 올리면 해시 한 번에 걸리는 시간이 두 배가 된다.
 const PASSWORD_COST = 12;
+
+// 비교할 해시가 없을 때 대신 비교할 가짜 해시 — 서버가 뜰 때 한 번만 만든다.
+// 원래 글자는 아무도 모르는 무작위 값이라, 이 해시와 맞는 비밀번호는 없다고 봐도 된다.
+const DUMMY_HASH = await bcrypt.hash(randomUUID(), PASSWORD_COST);
 
 // 응답에 실어 보낼 컬럼만 고른다.
 const userFields = { id: true, username: true, profileImage: true };
@@ -19,12 +24,35 @@ const TAKEN_BY_INDEX = {
 // 휴대폰 번호는 하이픈을 빼고 숫자만 다룬다 — 010-1234-5678 과 01012345678 은 같은 번호다.
 const digitsOnly = (phone) => phone.replaceAll('-', '');
 
-export function findUserByUsername(username) {
-  return prisma.user.findUnique({ where: { username }, select: userFields });
-}
 
 export function findUserById(id) {
   return prisma.user.findUnique({ where: { id }, select: userFields });
+}
+
+// 로그인 — 사용자 이름과 비밀번호가 맞으면 그 사람을, 아니면 null 을 돌려준다.
+// 해시는 이 함수 안에서만 꺼내 쓰고, 돌려줄 때는 응답에 실을 컬럼만 남긴다.
+export async function checkPassword(username, password) {
+  const user = await prisma.user.findUnique({
+    where: { username },
+    select: { ...userFields, passwordHash: true },
+  });
+
+  const matched = await bcrypt.compare(
+    password,
+    user?.passwordHash ?? DUMMY_HASH,
+  );
+
+  // 가짜 해시와 비교했으면 결과와 상관없이 실패다.
+  if (!user || user.passwordHash === null || !matched) return null;
+
+  const { passwordHash, ...found } = user;
+
+  // 지금보다 낮은 cost 로 만든 해시면, 맞는 비밀번호를 받은 김에 지금 cost 로 다시 만들어 둔다.
+  if (bcrypt.getRounds(passwordHash) < PASSWORD_COST) {
+    await setPassword(username, password);
+  }
+
+  return found;
 }
 
 export async function createUser({ password, ...data }) {
@@ -65,4 +93,17 @@ export async function isTaken(type, value) {
   });
 
   return user !== null;
+}
+
+// 이미 있는 사람의 비밀번호를 새로 정한다 — 관리자 스크립트가 부른다.
+export async function setPassword(username, password) {
+  const passwordHash = await bcrypt.hash(password, PASSWORD_COST);
+
+  try {
+    return await prisma.user.update({ where: { username }, data: { passwordHash }, select: userFields });
+  } catch (error) {
+    // 그 사용자 이름의 사람이 없으면 바꿀 행이 없다.
+    if (error.code === 'P2025') throw new NotFoundError('USER_NOT_FOUND');
+    throw error;
+  }
 }
