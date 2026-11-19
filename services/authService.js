@@ -18,7 +18,7 @@ export async function login(username, password) {
 
   if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 
-  const sessionId = sessionService.createSession(user.id);
+  const sessionId = await sessionService.createSession(user.id);
 
   return { user, sessionId };
 }
@@ -26,7 +26,7 @@ export async function login(username, password) {
 // 나는 누구 — 세션에서 사람의 번호를 찾고, 그 사람을 돌려준다.
 export async function whoAmI(sessionId) {
   // 서버가 기억해 둔 세션에서 사람의 번호를 찾는다 — 모르는 세션 ID면 undefined.
-  const userId = sessionService.getUserId(sessionId);
+  const userId = await sessionService.getUserId(sessionId);
 
   if (!userId) throw new UnauthorizedError('LOGIN_REQUIRED');
 
@@ -38,6 +38,6 @@ export async function whoAmI(sessionId) {
 }
 
 // 로그아웃 — 서버가 세션을 지운다. 누가 이 세션 ID를 복사해 뒀어도 이제는 통하지 않는다.
-export function logout(sessionId) {
-  sessionService.deleteSession(sessionId);
+export async function logout(sessionId) {
+  await sessionService.deleteSession(sessionId);
 }
