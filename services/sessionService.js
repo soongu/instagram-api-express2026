@@ -40,3 +40,13 @@ export async function deleteSession(sessionId) {
 
   await prisma.session.deleteMany({ where: { id: sessionId } });
 }
+
+// 한 사람의 세션을 모두 지운다 — 그 사람이 로그인해 둔 기기가 몇 개든 한 번에.
+export async function deleteUserSessions(userId) {
+  // 사람 번호가 없으면 여기서 끝낸다 — undefined 를 넘기면 조건이 사라져 모든 사람의 세션을 지운다.
+  if (userId === undefined) return 0;
+
+  const { count } = await prisma.session.deleteMany({ where: { userId } });
+
+  return count;
+}

@@ -14,6 +14,7 @@ import swaggerUi from 'swagger-ui-express';
 import { apiVersion } from './middlewares/version.js';
 import { oldApiNotice } from './middlewares/deprecation.js';
 import { sendError } from './responses.js';
+import { requireLogin } from './middlewares/auth.js';
 
 const app = express();
 
@@ -56,9 +57,12 @@ app.get('/', (req, res) => {
 
 // API 라우터 넷을 라우터 하나로 모은다 — 같은 API 를 두 주소에 붙이려고.
 const api = express.Router();
+api.use('/auth', authRouter);
+
+// 여기부터는 로그인한 사람만 지나간다.
+api.use(requireLogin);
 api.use('/posts', postsRouter);
 api.use('/posts/:id/likes', likesRouter);
-api.use('/auth', authRouter);
 api.use('/uploads', uploadsRouter);
 
 // API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.

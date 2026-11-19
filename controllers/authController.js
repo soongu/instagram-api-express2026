@@ -4,6 +4,7 @@ import * as userService from '../services/userService.js';
 import { sendData } from '../responses.js';
 import { MESSAGES } from '../errors.js';
 import { SESSION_LIFETIME } from '../services/sessionService.js';
+import { readSessionId } from '../middlewares/auth.js';
 
 
 // 이미 쓰고 있을 때 보여 줄 문장 — 무엇을 찾았는지에 따라 다르다.
@@ -13,16 +14,6 @@ const TAKEN = {
   username: 'USERNAME_TAKEN',
 };
 
-// 요청에 실려 온 세션 ID — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
-function readSessionId(req) {
-  const header = req.headers.authorization;
-
-  if (header && header.startsWith('Bearer ')) {
-    return header.slice('Bearer '.length);
-  }
-
-  return req.cookies.sessionId;
-}
 
 export async function signup(req, res) {
   const { emailOrPhone, name, username, password } = req.body;
@@ -74,3 +65,11 @@ export async function logout(req, res) {
   res.clearCookie('sessionId');
   sendData(res, { message: '로그아웃했어요' });
 }
+
+export async function logoutAll(req, res) {
+  await authService.logoutAll(res.locals.userId);
+
+  res.clearCookie('sessionId');
+  sendData(res, { message: '모든 기기에서 로그아웃했어요' });
+}
+

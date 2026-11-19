@@ -9,7 +9,7 @@ export async function list(req, res) {
   const page = await postService.getPosts({
     username,
     // 서버가 로그인 정보를 쓰기 전까지는 «누가 보는지» 를 주소에 실어 받는다.
-    userId: Number(req.query.userId) || undefined,
+    userId: res.locals.userId,
     limit,
     cursor,
   });
