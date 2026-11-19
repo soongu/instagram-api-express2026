@@ -2,8 +2,19 @@
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '../db.js';
-import { BadRequestError, NotFoundError } from '../errors.js';
+import { BadRequestError, NotFoundError, ForbiddenError } from '../errors.js';
 import { cursorSchema } from '../schemas/postSchema.js';
+
+// 쓴 사람만 고치고 지울 수 있다 — 게시물이 없으면 404, 있는데 쓴 사람이 아니면 403.
+async function checkAuthor(id, userId) {
+  const post = await prisma.post.findUnique({
+    where: { id },
+    select: { authorId: true },
+  });
+
+  if (!post) throw new NotFoundError('POST_NOT_FOUND');
+  if (post.authorId !== userId) throw new ForbiddenError('NOT_POST_AUTHOR');
+}
 
 // 저장하는 모양과 내보내는 모양은 다르다.
 // 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
@@ -135,7 +146,9 @@ export async function createPost({ imageUrls, ...data }) {
   }
 }
 
-export async function updatePost(id, data) {
+export async function updatePost(id, userId, data) {
+  await checkAuthor(id, userId);
+
   try {
     const post = await prisma.post.update({
       where: { id },
@@ -168,7 +181,9 @@ async function removeUploadedFiles(imageUrls) {
   }
 }
 
-export async function removePost(id) {
+export async function removePost(id, userId) {
+  await checkAuthor(id, userId);
+
   let post;
   try {
     post = await prisma.post.delete({

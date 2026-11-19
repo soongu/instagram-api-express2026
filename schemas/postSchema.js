@@ -2,7 +2,6 @@
 import { z } from 'zod';
 
 const postFields = {
-  authorId: z.number().int().positive(),
   postAlt: z.string().optional(),
   content: z.string().optional(),
 };
@@ -15,9 +14,8 @@ export const postCreateSchema = z.object({
 });
 
 // 사진을 바꿔 끼우는 것은 줄을 지우고 넣는 일이라 고치기와 결이 다르다 — 여기서는 안 받는다.
-export const postUpdateSchema = z
-  .object({ ...postFields, likeCount: z.number().int().nonnegative() })
-  .partial();
+// 좋아요 수는 좋아요를 누르고 취소할 때만 바뀐다 — 고치기로는 안 받는다.
+export const postUpdateSchema = z.object(postFields).partial();
 
 // 커서는 우리가 만들어 준 문자열이지만 돌아올 때는 밖에서 오는 값이다 — 푼 값도 검사한다.
 export const cursorSchema = z.object({
