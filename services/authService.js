@@ -1,6 +1,7 @@
 // ~/instagram-api/services/authService.js
 import * as userService from './userService.js';
 import * as sessionService from './sessionService.js';
+import * as tokenService from './tokenService.js';
 import { UnauthorizedError } from '../errors.js';
 import { PHONE } from '../schemas/authSchema.js';
 
@@ -12,15 +13,16 @@ export function signup({ emailOrPhone, name, username, password }) {
   return userService.createUser({ username, name, ...contact, password });
 }
 
-// 로그인 — 사용자 이름과 비밀번호를 확인하고, 세션을 만들어 그 ID 를 사람과 함께 돌려준다.
+// 로그인 — 사용자 이름과 비밀번호를 확인하고, 세션을 만들고 그 세션을 담은 토큰도 만든다.
 export async function login(username, password) {
   const user = await userService.checkPassword(username, password);
 
   if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 
   const sessionId = await sessionService.createSession(user.id);
+  const accessToken = tokenService.createAccessToken(user.id, sessionId);
 
-  return { user, sessionId };
+  return { user, sessionId, accessToken };
 }
 
 // 나는 누구 — 세션에서 사람의 번호를 찾고, 그 사람을 돌려준다.
