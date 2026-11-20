@@ -1,0 +1,29 @@
+### 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 게시물 목록
+GET http://localhost:3000/api/v2/posts?limit=1
+
+### 기한이 지난 토큰으로 게시물 목록
+# 터미널에서 node --env-file=.env lab/p3-44/expired-token.js 로 만든 토큰으로 EXPIRED_TOKEN 을 바꾼다
+# @no-cookie-jar
+GET http://localhost:3000/api/v2/posts?limit=1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiVVNFUiIsImlhdCI6MTc5NTEzODk5NSwiZXhwIjoxNzk1MTM4OTM1LCJzdWIiOiIyIn0.n8feWNZWpuDtkDt_mWAOc0UVPXXdQwMJs5mXFLP8DhQ
+
+### 새 토큰 받기
+POST http://localhost:3000/api/v2/auth/reissue
+
+### jaehoon이 사람 목록
+GET http://localhost:3000/api/v2/admin/users
+
+### 복사해 둔 Refresh 토큰으로 새 토큰 받기
+# 로그인 응답의 set-cookie 에서 refreshToken= 뒤의 값(; 앞까지)으로 COPIED_REFRESH 를 바꾼다
+# @no-cookie-jar
+POST http://localhost:3000/api/v2/auth/reissue
+Cookie: refreshToken=adebd9f0-419d-44aa-8589-16560a77307c.ozdxb5_2Cavg9Lg9Uez7Skucby5yWqmyamun4L6_hqc

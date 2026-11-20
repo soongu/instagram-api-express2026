@@ -13,15 +13,17 @@ export function signup({ emailOrPhone, name, username, password }) {
   return userService.createUser({ username, name, ...contact, password });
 }
 
-// 로그인 — 사용자 이름과 비밀번호를 확인하고, 로그인 기록(세션)을 남긴 뒤 그 기록을 담은 토큰을 돌려준다.
+// 로그인 — 사용자 이름과 비밀번호를 확인하고, 로그인 기록(세션)을 남긴 뒤 토큰 둘을 돌려준다.
+// Access 토큰에는 그 기록(sid)을 담고, Refresh 토큰은 그 기록에서 새 Access 토큰을 받을 때 쓴다.
 export async function login(username, password) {
   const user = await userService.checkPassword(username, password);
 
   if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 
-  const sessionId = await sessionService.createSession(user.id);
+  const { sessionId, refreshToken } = await sessionService.createSession(user.id);
   const accessToken = tokenService.createAccessToken(user, sessionId);
-  return { user, accessToken };
+
+  return { user, accessToken, refreshToken };
 }
 
 // 나는 누구 — 토큰에서 꺼낸 번호로 그 사람을 찾는다. 토큰은 살아 있어도 그 사람이 지워졌으면 401.
@@ -42,4 +44,18 @@ export async function logout(token) {
 // 모든 기기에서 로그아웃 — 그 사람의 세션을 테이블에서 모두 지운다. 지운 세션 수를 돌려준다.
 export function logoutAll(userId) {
   return sessionService.deleteUserSessions(userId);
+}
+
+
+// 새 토큰 받기 — Refresh 토큰을 새것으로 바꾸고, 그 사람을 다시 찾아 «지금» 역할로 Access 토큰을 만든다.
+// 사람을 지우면 그 사람의 기록도 함께 지워지니(Cascade), 기록이 있으면 사람도 있다.
+export async function reissue(refreshToken) {
+  const rotated = await sessionService.rotateRefreshToken(refreshToken);
+
+  if (!rotated) throw new UnauthorizedError('LOGIN_REQUIRED');
+
+  const user = await userService.findUserById(rotated.session.userId);
+  const accessToken = tokenService.createAccessToken(user, rotated.session.id);
+
+  return { accessToken, refreshToken: rotated.refreshToken };
 }

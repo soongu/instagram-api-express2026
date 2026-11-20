@@ -4,8 +4,8 @@ import * as userService from '../services/userService.js';
 import { sendData } from '../responses.js';
 import { MESSAGES } from '../errors.js';
 import { TOKEN_LIFETIME } from '../services/tokenService.js';
+import { SESSION_LIFETIME } from '../services/sessionService.js';
 import { readToken } from '../middlewares/auth.js';
-
 
 // 이미 쓰고 있을 때 보여 줄 문장 — 무엇을 찾았는지에 따라 다르다.
 const TAKEN = {
@@ -14,6 +14,21 @@ const TAKEN = {
   username: 'USERNAME_TAKEN',
 };
 
+// 토큰 둘을 쿠키에 담는다 — 둘 다 스크립트가 못 읽게 httpOnly.
+// Access 토큰은 토큰이 끝나는 15분 뒤에 쿠키도 사라지게, Refresh 토큰은 로그인 기록이 남는 7일 동안 /api/v2/auth 로 시작하는 인증 주소에만.
+function setTokenCookies(res, { accessToken, refreshToken }) {
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: TOKEN_LIFETIME,
+  });
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/api/v2/auth',
+    maxAge: SESSION_LIFETIME,
+  });
+}
 
 export async function signup(req, res) {
   const { emailOrPhone, name, username, password } = req.body;
@@ -40,14 +55,12 @@ export async function checkDuplicate(req, res) {
 
 export async function login(req, res) {
   const { username, password } = req.body;
-  const { user, accessToken } = await authService.login(username, password);
+  const { user, accessToken, refreshToken } = await authService.login(
+    username,
+    password,
+  );
 
-  // 토큰을 쿠키에 담는다 — 스크립트가 못 읽게 httpOnly, 토큰이 끝나는 1시간 뒤에 쿠키도 사라지게.
-  res.cookie('accessToken', accessToken, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: TOKEN_LIFETIME,
-  });
+  setTokenCookies(res, { accessToken, refreshToken });
 
   sendData(res, user);
 }
@@ -72,3 +85,9 @@ export async function logoutAll(req, res) {
   sendData(res, { message: '모든 기기에서 로그아웃했어요' });
 }
 
+export async function reissue(req, res) {
+  const tokens = await authService.reissue(req.cookies.refreshToken);
+
+  setTokenCookies(res, tokens);
+  sendData(res, { message: '새 토큰을 받았어요' });
+}
