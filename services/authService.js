@@ -20,8 +20,7 @@ export async function login(username, password) {
   if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 
   const sessionId = await sessionService.createSession(user.id);
-  const accessToken = tokenService.createAccessToken(user.id, sessionId);
-
+  const accessToken = tokenService.createAccessToken(user, sessionId);
   return { user, accessToken };
 }
 
