@@ -7,16 +7,11 @@ import { cursorSchema } from '../schemas/postSchema.js';
 
 
 // 쓴 사람만 고치고 지울 수 있다 — 게시물이 없으면 404, 있는데 쓴 사람이 아니면 403.
-async function checkAuthor(id, userId, role) {
-  const post = await prisma.post.findUnique({
-    where: { id },
-    select: { authorId: true },
-  });
+async function checkAuthor(id, userId) {
+  const post = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
 
   if (!post) throw new NotFoundError('POST_NOT_FOUND');
-  // 쓴 사람이거나 관리자면 통과한다.
-  if (post.authorId !== userId && role !== 'ADMIN')
-    throw new ForbiddenError('NOT_POST_AUTHOR');
+  if (post.authorId !== userId) throw new ForbiddenError('NOT_POST_AUTHOR');
 }
 
 // 저장하는 모양과 내보내는 모양은 다르다.
@@ -149,8 +144,8 @@ export async function createPost({ imageUrls, ...data }) {
   }
 }
 
-export async function updatePost(id, userId, data, role) {
-  await checkAuthor(id, userId,role);
+export async function updatePost(id, userId, data) {
+  await checkAuthor(id, userId);
 
   try {
     const post = await prisma.post.update({
@@ -185,7 +180,10 @@ async function removeUploadedFiles(imageUrls) {
 }
 
 export async function removePost(id, userId, role) {
-  await checkAuthor(id, userId, role);
+  // 관리자는 남의 게시물도 지울 수 있다 — 신고된 게시물을 내리는 일이라, 고치기는 열지 않고 지우기에만 연다.
+  // 토큰이 관리자라고 하면 데이터베이스에서 지금 역할을 한 번 더 본다.
+  const admin = role === 'ADMIN' && (await userService.isAdmin(userId));
+  if (!admin) await checkAuthor(id, userId);
 
   let post;
   try {

@@ -39,7 +39,6 @@ export async function update(req, res) {
     req.postId,
     res.locals.userId,
     req.body,
-    res.locals.role,
   );
 
   sendData(res, post);

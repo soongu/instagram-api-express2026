@@ -2,10 +2,12 @@
 import { NotFoundError } from '../errors.js';
 
 export function parseId(req, res, next) {
+
+
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
-    next(new NotFoundError('POST_NOT_FOUND'));
+    next(new NotFoundError('그런 게시물은 없어요'));
     return;
   }
 

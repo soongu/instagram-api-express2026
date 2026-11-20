@@ -5,6 +5,7 @@ import postsRouter from './routes/posts.js';
 import authRouter from './routes/auth.js';
 import likesRouter from './routes/likes.js';
 import uploadsRouter from './routes/uploads.js';
+import adminRouter from './routes/admin.js';
 import { HttpError } from './errors.js';
 import cookieParser from 'cookie-parser';
 import { logger } from './middlewares/logger.js';
@@ -64,6 +65,7 @@ api.use(requireLogin);
 api.use('/posts', postsRouter);
 api.use('/posts/:id/likes', likesRouter);
 api.use('/uploads', uploadsRouter);
+api.use('/admin', adminRouter);
 
 // API 응답은 받아 둬도 되지만, 쓸 때마다 서버에 확인하게 한다.
 app.use('/api', privateNoCache);

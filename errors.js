@@ -13,6 +13,7 @@ export const MESSAGES = {
   LOGIN_FAILED: '사용자 이름이나 비밀번호가 맞지 않아요',
   LOGIN_REQUIRED: '로그인이 필요해요',
   NOT_POST_AUTHOR: '내가 쓴 게시물만 고치거나 지울 수 있어요',
+  ADMIN_ONLY: '관리자만 할 수 있어요',
   POST_NOT_FOUND: '그런 게시물은 없어요',
   USER_NOT_FOUND: '그런 사용자는 없어요',
   POST_OR_USER_NOT_FOUND: '그런 게시물이나 사용자는 없어요',
