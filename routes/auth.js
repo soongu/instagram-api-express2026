@@ -19,7 +19,7 @@ router.get(
   authController.checkDuplicate,
 );
 router.post('/login', validateBody(loginSchema), authController.login);
-router.get('/me', authController.me);
+router.get('/me', requireLogin, authController.me);
 router.post('/logout', authController.logout);
 // 이 라우터는 로그인 확인보다 위에 붙어 있다 — 로그인이 필요한 라우트에는 직접 끼운다.
 router.post('/logout-all', requireLogin, authController.logoutAll);

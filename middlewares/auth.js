@@ -1,27 +1,28 @@
 // ~/instagram-api/middlewares/auth.js
-import * as sessionService from '../services/sessionService.js';
+import * as tokenService from '../services/tokenService.js';
 import { UnauthorizedError } from '../errors.js';
 
-// 요청에 실려 온 세션 ID — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
-export function readSessionId(req) {
+// 요청에 실려 온 토큰 — 헤더에 적어 보냈으면 그것을, 아니면 쿠키를 본다.
+export function readToken(req) {
   const header = req.headers.authorization;
 
   if (header && header.startsWith('Bearer ')) {
     return header.slice('Bearer '.length);
   }
 
-  return req.cookies.sessionId;
+  return req.cookies.accessToken;
 }
 
-// 로그인한 사람만 다음으로 보낸다 — 찾은 사람의 번호는 res.locals.userId 에 담아 둔다.
-export async function requireLogin(req, res, next) {
-  const userId = await sessionService.getUserId(readSessionId(req));
+// 로그인한 사람만 다음으로 보낸다 — 토큰의 서명과 기한만 확인하고, 데이터베이스는 찾아보지 않는다.
+export function requireLogin(req, res, next) {
+  const payload = tokenService.readAccessToken(readToken(req));
 
-  if (!userId) {
+  if (!payload) {
     next(new UnauthorizedError('LOGIN_REQUIRED'));
     return;
   }
 
-  res.locals.userId = userId;
+  // 토큰의 sub 는 글자라 숫자로 바꿔 담는다 — 서비스들은 사람 번호를 숫자로 받는다.
+  res.locals.userId = Number(payload.sub);
   next();
 }
