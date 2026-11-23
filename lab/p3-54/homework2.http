@@ -1,0 +1,62 @@
+### jaehoon으로 로그인 — 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 내가 파는 상품의 리뷰 숨기기
+PATCH http://localhost:4001/api/products/2/reviews/10
+Content-Type: application/json
+
+{
+  "hidden": true
+}
+
+### 같은 리뷰를 한 번 더 숨기기
+PATCH http://localhost:4001/api/products/2/reviews/10
+Content-Type: application/json
+
+{
+  "hidden": true
+}
+
+### 숨긴 리뷰를 다시 보이기
+PATCH http://localhost:4001/api/products/2/reviews/10
+Content-Type: application/json
+
+{
+  "hidden": false
+}
+
+### 보이는 리뷰를 다시 보이기
+PATCH http://localhost:4001/api/products/2/reviews/6
+Content-Type: application/json
+
+{
+  "hidden": false
+}
+
+### 남이 파는 상품의 리뷰 숨기기
+PATCH http://localhost:4001/api/products/1/reviews/1
+Content-Type: application/json
+
+{
+  "hidden": true
+}
+
+### 다른 상품 주소로 리뷰 숨기기
+PATCH http://localhost:4001/api/products/2/reviews/1
+Content-Type: application/json
+
+{
+  "hidden": true
+}
+
+### hidden 없이 보내기
+PATCH http://localhost:4001/api/products/2/reviews/6
+Content-Type: application/json
+
+{}
