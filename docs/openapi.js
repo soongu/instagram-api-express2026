@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js';
 import { signupSchema } from '../schemas/authSchema.js';
+import { commentCreateSchema, commentListQuerySchema } from '../schemas/commentSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -65,6 +66,13 @@ function queryParameters(schema) {
 // 게시물 목록의 쿼리 — 두 버전이 같다. 보는 사람은 로그인 정보로 정해서 쿼리에 없다.
 const listParameters = queryParameters(postListQuerySchema);
 
+// 주소 안의 번호다. /posts/{id} 의 id 처럼 경로에 들어가는 값이다.
+function pathParameter(name, description) {
+  return { name, in: 'path', required: true, description, schema: { type: 'integer' } };
+}
+
+const postIdParameter = pathParameter('id', '게시물 번호');
+
 export const openapi = {
   openapi: '3.2.0',
   info: {
@@ -90,6 +98,41 @@ export const openapi = {
           201: { description: '만든 게시물 — Location 헤더에 그 게시물의 주소', content: json(data(ref('Post'))) },
           400: { description: '보낸 내용이 규칙에 안 맞거나, 넣을 수 없는 사진 주소가 섞여 있음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'IMAGE_NOT_AVAILABLE')) },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/posts/{id}/comments': {
+      parameters: [postIdParameter],
+      get: {
+        summary: '댓글 목록 — 원댓글만, 오래된 순',
+        parameters: queryParameters(commentListQuerySchema),
+        responses: {
+          200: { description: '댓글 한 페이지', content: json(data(ref('CommentPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 게시물이 없음 — 댓글이 없는 게시물은 빈 목록', content: json(errorOf('POST_NOT_FOUND')) },
+        },
+      },
+      post: {
+        summary: '댓글 달기 — 글쓴이는 로그인한 사람',
+        requestBody: { required: true, content: json(toSchema(commentCreateSchema)) },
+        responses: {
+          201: { description: '단 댓글과 바뀐 댓글 수 — 댓글 하나를 받는 주소가 없어 Location 헤더는 없다', content: json(data(ref('CommentChange'))) },
+          400: { description: '보낸 내용이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 게시물이 없음', content: json(errorOf('POST_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/posts/{id}/comments/{commentId}': {
+      parameters: [postIdParameter, pathParameter('commentId', '댓글 번호')],
+      delete: {
+        summary: '댓글 지우기 — 댓글을 쓴 사람이나 그 게시물을 쓴 사람만',
+        responses: {
+          200: { description: '지운 댓글과 바뀐 댓글 수 — 원댓글을 지우면 딸린 답글도 함께 지워진다', content: json(data(ref('CommentChange'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          403: { description: '내 댓글도 아니고 내 게시물에 달린 댓글도 아님', content: json(errorOf('CANNOT_REMOVE_COMMENT')) },
+          404: { description: '그 게시물에 그런 댓글이 없음', content: json(errorOf('COMMENT_NOT_FOUND', 'POST_NOT_FOUND')) },
         },
       },
     },
@@ -157,6 +200,33 @@ export const openapi = {
           items: { type: 'array', items: { $ref: '#/components/schemas/Post' } },
           hasNext: { type: 'boolean' },
           nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+        },
+      },
+      Comment: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          authorId: { type: 'integer' },
+          content: { type: 'string' },
+          likeCount: { type: 'integer' },
+          createdAt: { type: 'string', format: 'date-time' },
+          username: { type: 'string' },
+          profileImage: { type: ['string', 'null'] },
+        },
+      },
+      CommentPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: { $ref: '#/components/schemas/Comment' } },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+        },
+      },
+      CommentChange: {
+        type: 'object',
+        properties: {
+          comment: { $ref: '#/components/schemas/Comment' },
+          commentCount: { type: 'integer', description: '바뀐 뒤 게시물의 댓글 수 — 원댓글만 센다' },
         },
       },
       Error: {
