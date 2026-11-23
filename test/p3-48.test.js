@@ -62,6 +62,9 @@ const NAVER_ENV = { NAVER_CLIENT_ID: 'test-naver', NAVER_CLIENT_SECRET: 'test-na
 const env = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:3001', JWT_SECRET: SECRET, ...GOOGLE_ENV, ...KAKAO_ENV, ...NAVER_ENV };
 const STUDENT_FILES = ['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'strategies', 'docs', 'package.json', 'requests', 'seed.js', 'data', 'prisma', 'prisma.config.js', '.env.example'];
 const PROVIDERS = ['google', 'kakao', 'naver'];
+// 연결하러 떠날 때 인가 주소에 싣는 OpenID Connect 의 prompt — 어느 계정을 이을지 사람이 고르게 하는 값이 제공자마다 다르다.
+// 구글은 계정 선택 화면(select_account) · 카카오와 네이버는 로그인 화면을 다시(login — 카카오의 select_account 는 «간편로그인 정보 저장» 을 한 브라우저에서만 고르는 화면이 나온다).
+const ACCOUNT_PROMPT = { google: 'select_account', kakao: 'login', naver: 'login' };
 
 // 학생 파일 속 진짜 제공자 주소(셋씩) — 판정은 이 글자만 가짜 제공자 주소로 바꾼다.
 const REAL = {
@@ -670,8 +673,11 @@ const trySql = async (sql, params) => {
 describe('축 ④ Step 4 — 다른 사람에게 이어진 계정 · 같은 제공자의 둘째 계정은 잇지 않는다', () => {
   const src = (rel) => read(stepDir(4)(rel));
 
-  it('🔴 바뀐 학생 파일 — errors.js · prisma(스키마 + 마이그레이션 하나) · services 둘', () => {
-    expect(changedStudentFiles(stepRef(3), stepRef(4)).filter((name) => !name.startsWith('prisma/migrations/'))).toEqual(['errors.js', 'prisma/schema.prisma', 'services/authService.js', 'services/userService.js']);
+  it('🔴 바뀐 학생 파일 — errors.js · prisma(스키마 + 마이그레이션 하나) · services 둘 · 연결할 계정 고르기(routes/auth.js · strategies 넷)', () => {
+    expect(changedStudentFiles(stepRef(3), stepRef(4)).filter((name) => !name.startsWith('prisma/migrations/'))).toEqual([
+      'errors.js', 'prisma/schema.prisma', 'routes/auth.js', 'services/authService.js', 'services/userService.js',
+      'strategies/createSocialStrategy.js', 'strategies/google.js', 'strategies/kakao.js', 'strategies/naver.js',
+    ]);
     expect(newMigrations(stepDir(4))).toHaveLength(1);
     const [name] = newMigrations(stepDir(4));
     expect(name).toMatch(/^\d{14}_one_account_per_provider$/);
@@ -680,6 +686,51 @@ describe('축 ④ Step 4 — 다른 사람에게 이어진 계정 · 같은 제�
     expect(src('errors.js')).toContain("  SOCIAL_ACCOUNT_TAKEN: '이미 다른 계정에 연결된 소셜 계정이에요',\n  PROVIDER_ALREADY_LINKED: '같은 제공자의 계정이 이미 연결돼 있어요',\n");
     seen.step4Migration = { name, sql: src(`prisma/migrations/${name}/migration.sql`) };
   });
+
+  it('🔎 Step 3 판 — 연결 시작 주소에도 prompt 가 없다(제공자에 로그인해 있는 브라우저는 계정을 고르는 화면 없이 돌아온다)', async () => {
+    await freshGate(stepDir(3));
+    await withServer(stepDir(3), async ({ base }) => {
+      const tab = await asGoogleUser(base);
+      for (const provider of PROVIDERS) {
+        const link = new URL((await begin(tab, provider, { next: '/', link: true })).location);
+        expect([provider, link.searchParams.has('prompt')]).toEqual([provider, false]);
+      }
+    });
+  }, 30_000);
+
+  it('🔴 연결 시작 주소만 인가 주소에 prompt 를 싣는다 — google select_account · kakao login · naver login · 로그인 시작 주소에는 없다 · 나머지 쿼리 이름은 로그인과 같다', async () => {
+    await freshGate(stepDir(4));
+    await withServer(stepDir(4), async ({ base }) => {
+      const tab = await asGoogleUser(base);
+      const names = (url) => [...url.searchParams.keys()].filter((key) => key !== 'prompt').sort();
+      seen.step4PromptLocation = {};
+      for (const provider of PROVIDERS) {
+        const link = new URL((await begin(tab, provider, { next: '/', link: true })).location);
+        const login = new URL((await begin(browser(base), provider)).location);
+        expect([provider, link.searchParams.get('prompt')]).toEqual([provider, ACCOUNT_PROMPT[provider]]);
+        expect([provider, login.searchParams.has('prompt')]).toEqual([provider, false]);
+        expect([provider, names(link)]).toEqual([provider, names(login)]);
+        seen.step4PromptLocation[provider] = [...link.searchParams.keys()];
+      }
+      expect(src('strategies/createSocialStrategy.js')).toContain('  strategy.authorizationParams = (options) => (options.chooseAccount ? { prompt: accountPrompt } : {});\n');
+      for (const provider of PROVIDERS) {
+        expect(src(`strategies/${provider}.js`)).toContain(`  accountPrompt: '${ACCOUNT_PROMPT[provider]}',\n`);
+        expect(src('routes/auth.js')).toContain(`  passport.authenticate('${provider}', { session: false, chooseAccount: true }),\n`);
+      }
+    });
+  }, 30_000);
+
+  it('🔴 prompt 를 실어도 연결은 그대로 — 카카오를 지운 DB 에서 구글 사람이 카카오를 이으면 /?linked=kakao · 가짜 카카오가 받은 prompt 는 login', async () => {
+    await freshGate(stepDir(4));
+    await gate('DELETE FROM users WHERE id = $1', [await userIdOf(K.username)]);
+    await withServer(stepDir(4), async ({ base }) => {
+      const tab = await asGoogleUser(base);
+      const { callback } = await social(tab, 'kakao', { next: '/', link: true });
+      expect([callback.status, callback.location]).toEqual([302, '/?linked=kakao']);
+      expect(fakes.kakao.state.log.authorize.at(-1).prompt).toBe('login');
+      expect(await socialOf(await userIdOf(G.username))).toEqual([`google:${G.providerUserId}`, `kakao:${K.providerUserId}`]);
+    });
+  }, 30_000);
 
   it('🔴 구글 사람이 네이버로 가입한 사람의 네이버를 이으면 302 /?error=SOCIAL_ACCOUNT_TAKEN · 행 그대로 · 터미널 조용', async () => {
     await freshGate(stepDir(4));
@@ -1077,6 +1128,7 @@ describe('축 ⑧ 학생 파일 차이 — code/p3-47 에서 Step 마다', () =>
     expect(changed[7]).toEqual([
       'controllers/authController.js', 'errors.js', 'middlewares/auth.js', `prisma/migrations/${newMigrations(stepDir(7))[0]}/migration.sql`, 'prisma/schema.prisma',
       'requests/social-accounts.http', 'routes/auth.js', 'services/authService.js', 'services/userService.js', 'strategies/createSocialStrategy.js',
+      'strategies/google.js', 'strategies/kakao.js', 'strategies/naver.js',
     ]);
     for (const n of [2, 3, 4, 5, 6, 7]) {
       expect(showAt(stepRef(n), 'package.json')).toBe(showAt('code/p3-47', 'package.json'));
