@@ -76,11 +76,22 @@ export async function createComment(postId, userId, content) {
       select: commentFields,
     });
 
-    await tx.post.update({
-      where: { id: postId },
-      data: { commentCount: { increment: 1 } },
-    });
+    const commentCount = await changeCommentCount(tx, postId, 1);
 
-    return flatten(comment);
+    // 화면이 카드의 «댓글 N개» 를 다시 받지 않고 고칠 수 있게 바뀐 숫자도 함께 보낸다.
+    return { comment: flatten(comment), commentCount };
   });
+}
+
+// 게시물의 댓글 수는 따로 적어둔 컬럼이라서 원댓글이 늘고 준 만큼 우리가 맞춰준다.
+// SQL 로 직접 고쳐서 updated_at 은 그대로 둔다. 댓글이 달린 것은 게시물을 고친 게 아니다.
+// 트랜잭션 안에서 부르는 함수라 prisma 가 아니라 넘겨받은 tx 로 쓴다.
+async function changeCommentCount(tx, postId, amount) {
+  await tx.$executeRaw`
+    UPDATE posts SET comment_count = comment_count + ${amount} WHERE id = ${postId}`;
+
+  const post = await tx.post.findUnique({ where: { id: postId }, select: { commentCount: true } });
+  if (!post) throw new NotFoundError('POST_NOT_FOUND');
+
+  return post.commentCount;
 }
