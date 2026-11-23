@@ -17,3 +17,9 @@ export async function create(req, res) {
   res.status(201);
   sendData(res, comment);
 }
+
+export async function remove(req, res) {
+  const result = await commentService.removeComment(req.postId, req.commentId, res.locals.userId);
+
+  sendData(res, result);
+}

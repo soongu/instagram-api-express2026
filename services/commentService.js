@@ -1,6 +1,6 @@
 // ~/instagram-api/services/commentService.js
 import { prisma } from '../db.js';
-import { NotFoundError } from '../errors.js';
+import { ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
 
 // 댓글 목록에 쓸 필드만 골라서 받는다 — 글쓴이는 번호와 함께 이름과 프로필 사진도 받는다.
@@ -94,4 +94,28 @@ async function changeCommentCount(tx, postId, amount) {
   if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
   return post.commentCount;
+}
+
+// 댓글을 지운다. 댓글을 쓴 사람이나 그 댓글이 달린 게시물을 쓴 사람만 지울 수 있다.
+export async function removeComment(postId, commentId, userId) {
+  // 누가 지울 수 있는지 보려면 댓글을 쓴 사람과 게시물을 쓴 사람이 필요해서 댓글을 찾을 때 함께 받는다.
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: { authorId: true, parentId: true, post: { select: { authorId: true } } },
+  });
+  if (!comment) throw new NotFoundError('COMMENT_NOT_FOUND');
+
+  if (comment.authorId !== userId && comment.post.authorId !== userId) {
+    throw new ForbiddenError('CANNOT_REMOVE_COMMENT');
+  }
+
+  // 지우는 일과 숫자를 내리는 일도 한 묶음이다.
+  return prisma.$transaction(async (tx) => {
+    const deleted = await tx.comment.delete({ where: { id: commentId }, select: commentFields });
+
+    // 답글은 세지 않는 숫자라서 답글을 지울 때는 0 만큼 고친다. 숫자는 그대로 두고 지금 값만 읽는다.
+    const commentCount = await changeCommentCount(tx, postId, comment.parentId === null ? -1 : 0);
+
+    return { comment: flatten(deleted), commentCount };
+  });
 }
