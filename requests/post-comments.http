@@ -30,3 +30,6 @@ Content-Type: application/json
 {
   "content": "한 입만 나눠 주세요"
 }
+
+### 2번 게시물
+GET http://localhost:3000/api/v2/posts/2
