@@ -515,6 +515,42 @@ describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 
     }, 240_000);
   }
 
+  it('🔴 과제 [응용] 리뷰 숨기기 — 확인 문장 일곱(상태 · review.hidden · reviewCount · 문장)과 요구사항의 에러 문장 셋(상태 · 문장)이 정답 판 실행과 같다 · review 에 hidden 이 실린다', async () => {
+    const before = lectureProblems.length;
+    const lines = lectureLines();
+    const start = lines.findIndex((line) => line.startsWith('### [응용] 리뷰 숨기기'));
+    expect(start).toBeGreaterThan(-1);
+    let end = lines.findIndex((line, i) => i > start && (line === '---' || /^##{1,2} /.test(line)));
+    if (end === -1) end = lines.length;
+    const sec = lines.slice(start, end).map((text, i) => [start + i + 1, text]);
+    const at = (label) => sec.findIndex(([, text]) => text.trim() === label);
+    const reqs = sec.slice(at('**요구사항**'), at('**확인**')).filter(([, text]) => /^\d+\. /.test(text));
+    const checks = sec.slice(at('**확인**')).filter(([, text]) => /^\d+\. «/.test(text));
+    const right = (await runsOf('homework2', 'right')).runs;
+    expect([reqs.length, checks.length, right.length - 1]).toEqual([5, 7, 7]);
+    // 확인 일곱
+    for (const [line, text] of checks) {
+      const c = parseCheck(text);
+      const run = right.find((r) => r.title === c.title);
+      if (!run) { problem(line, text, '그런 제목의 요청이 homework2.http 에 없다'); continue; }
+      const hidden = /`review\.hidden`이 `(true|false)`/.exec(text)?.[1];
+      const said = [Number.isNaN(c.status) ? run.status : c.status, c.reviewCount === undefined ? run.body.reviewCount : Number(c.reviewCount), c.message ?? run.body.message, hidden === undefined ? run.body.review?.hidden : hidden === 'true'];
+      const got = [run.status, run.body.reviewCount, run.body.message, run.body.review?.hidden];
+      if (JSON.stringify(said) !== JSON.stringify(got)) problem(line, text, `${run.status} · reviewCount ${run.body.reviewCount ?? ''} · ${run.body.message ?? ''} · hidden ${run.body.review?.hidden ?? ''}`);
+    }
+    // 요구사항의 에러 문장 셋 — 상태 코드와 «문장» 이 그 상태로 답한 요청의 실제 문장과 같다
+    const errors = reqs.map(([line, text]) => [line, text, /(\d{3}) «(.+?)»/.exec(text)]).filter(([, , m]) => m);
+    expect(errors.length).toBe(3);
+    for (const [line, text, m] of errors) {
+      const run = right.find((r) => r.status === Number(m[1]));
+      if (!run || run.body.message !== m[2]) problem(line, text, run ? `${run.status} «${run.body.message}»` : `${m[1]} 으로 답한 요청이 없다`);
+    }
+    // 요구사항 5 — 200 과 { review, reviewCount } · review 에 hidden
+    const ok = right.filter((r) => r.status === 200 && r.body.review);
+    if (!ok.every((r) => Object.keys(r.body).join(',') === 'review,reviewCount' && typeof r.body.review.hidden === 'boolean')) problem(reqs[4][0], reqs[4][1], JSON.stringify(ok.map((r) => Object.keys(r.body))));
+    expect(lectureProblems.slice(before)).toEqual([]);
+  }, 60_000);
+
   it('🔴 산문 — 나눠 주는 데이터 · jaehoon 의 리뷰 · 다시 띄우지 않고 한 번 더 보내면 reviewCount 2', async () => {
     const before = lectureProblems.length;
     const data = await import(join(studentCopy('practice1'), LAB, 'shop-data.js'));
