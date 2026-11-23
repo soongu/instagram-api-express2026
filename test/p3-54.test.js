@@ -1309,7 +1309,8 @@ const problem = (line, lecture, measured) => lectureProblems.push({ line, lectur
 afterAll(() => {
   if (process.env.P354_LECTURE_REPORT) writeFileSync(process.env.P354_LECTURE_REPORT, JSON.stringify(lectureProblems, null, 2));
 });
-const lectureLines = () => read(LECTURE_MD).split('\n');
+// 산문 꼴 찾기는 굵게 표시(**)를 떼고 본다 — 표시는 글자 주장이 아니다.
+const lectureLines = () => read(LECTURE_MD).split('\n').map((line) => line.replaceAll('**', ''));
 /** 산문 한 줄을 꼴로 찾는다 — 없으면 null. */
 const findLine = (re) => {
   const lines = lectureLines();
@@ -1458,9 +1459,11 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 대조 — 수업 백엔드(Step 1~
       [/세 판 모두 응답은 (\d{3})/, (m) => [m[1], seen.rollback ? [...new Set(Object.values(seen.rollback).map((r) => r.status))].join(',') : '실측 없음']],
       [/3번 댓글은 (\w+)이 1번 게시물에 단 «(.+?)»예요\. 1번 게시물은 (\w+)의 게시물/, (m) => [`${m[1]} «${m[2]}» · ${m[3]}`, `${flow.comments[3].username} «${flow.comments[3].content}» · ${flow.postAuthors[1]}`]],
       [/1번 게시물은 원댓글이 하나 줄었는데 그대로 (\d+)이고, 2번 게시물은 아무것도 안 지워졌는데 (\d+)에서 (\d+)(?:으)?로/, (m) => [`${m[1]} · ${m[2]}→${m[3]}`, `${facts.step3b.byTitle[POST1][0].body.data.commentCount} · ${countBefore3b}→${facts.step3b.byTitle[D_WRONG][0].body.data.commentCount}`]],
-      [/요청이 (아홉) 개예요/, (m) => [m[1], ['', '', '', '', '', '', '', '', '', '아홉'][blocksOf(read(version('3a')(HTTP_FILE))).blocks.length - blocksOf(read(version(2)(HTTP_FILE))).blocks.length]]],
+      [/요청이 (아홉 ?|\d+)개예요/, (m) => [`${{ '아홉 ': 9, 아홉: 9 }[m[1]] ?? Number(m[1])}`, `${blocksOf(read(version('3a')(HTTP_FILE))).blocks.length - blocksOf(read(version(2)(HTTP_FILE))).blocks.length}`]],
+      // 403 에러를 던지려면 ForbiddenError 를 import 해야 한다 — 겪기 판 커밋이 import 줄에 그것을 더했다
+      [/403 에러를 던지려고 파일 맨 위 `import` 줄에 `(\w+)`를 더했어요/, (m) => [m[1], execFileSync('git', ['diff', '-U0', versionRef('3a'), versionRef('3b'), '--', 'services/commentService.js'], { cwd: P('.'), encoding: 'utf8' }).split('\n').filter((line) => /^[+-]import /.test(line)).map((line) => line.replace(/^\+import \{ (\w+), NotFoundError \} from '\.\.\/errors\.js';$/, '$1')).filter((x) => !x.startsWith('-')).join('')]],
       [/6번 댓글은 (\w+)가 (\w+)의 게시물에 단 «(.+?)»/, (m) => [`${m[1]} · ${m[2]} · «${m[3]}»`, `${flow.comments[6].username} · ${flow.postAuthors[2]} · «${flow.comments[6].content}»`]],
-      [/다섯 번 모두 둘 다 (\d{3})이었어요\. 1번 게시물의 숫자는 (\d+)에서 (\d+)로 두 번 내려갔고, 남은 원댓글은 (\d+)개/, (m) => [`${m[1]} · ${m[2]}→${m[3]} · ${m[4]}`, seen.concurrentDelete ? `${[...new Set(seen.concurrentDelete.before.flatMap((r) => r.statuses))].join(',')} · 3→${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.count))].join(',')} · ${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.roots))].join(',')}` : '실측 없음']],
+      [/다섯 번 모두 둘 다 (\d{3})이었(?:어요\.|고) 1번 게시물의 숫자는 (\d+)에서 (\d+)로 두 번 내려갔(?:고,|지만) 남은 원댓글은 (\d+)개/, (m) => [`${m[1]} · ${m[2]}→${m[3]} · ${m[4]}`, seen.concurrentDelete ? `${[...new Set(seen.concurrentDelete.before.flatMap((r) => r.statuses))].join(',')} · 3→${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.count))].join(',')} · ${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.roots))].join(',')}` : '실측 없음']],
       [/다섯 번 모두 (\d{3}) 하나와 (\d{3}) 하나였고 숫자도 한 번만/, (m) => [`${m[1]} · ${m[2]}`, seen.concurrentDelete ? [...new Set(seen.concurrentDelete.after.map((r) => r.statuses.join(' · ')))].join(' / ') : '실측 없음']],
       // 문서에 댓글 주소의 HTTP 메서드 셋 — 목록 주소의 get · post 와 댓글 하나 주소의 delete
       [/댓글 주소 셋\(((?:`[A-Z]+`·?)+)\)이 보여요/, (m) => [m[1].replace(/`/g, ''), seen.docs ? [...Object.keys(seen.docs.comments), ...Object.keys(seen.docs.remove)].filter((k) => k !== 'parameters').map((k) => k.toUpperCase()).join('·') : '실측 없음']],

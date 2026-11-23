@@ -389,7 +389,8 @@ const problem = (line, lecture, measured) => lectureProblems.push({ line, lectur
 afterAll(() => {
   if (process.env.P354_LAB_LECTURE_REPORT) writeFileSync(process.env.P354_LAB_LECTURE_REPORT, JSON.stringify(lectureProblems, null, 2));
 });
-const lectureLines = () => read(LECTURE_MD).split('\n');
+// 굵게 표시(**)는 떼고 읽는다 — 표시는 글자 주장이 아니다.
+const lectureLines = () => read(LECTURE_MD).split('\n').map((line) => line.replaceAll('**', ''));
 /** «### 직접 해보기 — …» 절 하나의 줄 범위(다음 ### 🤔 · ## · --- 앞까지). */
 const labSection = (title) => {
   const lines = lectureLines();
@@ -523,9 +524,9 @@ describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 
     let end = lines.findIndex((line, i) => i > start && (line === '---' || /^##{1,2} /.test(line)));
     if (end === -1) end = lines.length;
     const sec = lines.slice(start, end).map((text, i) => [start + i + 1, text]);
-    const at = (label) => sec.findIndex(([, text]) => text.trim() === label);
-    const reqs = sec.slice(at('**요구사항**'), at('**확인**')).filter(([, text]) => /^\d+\. /.test(text));
-    const checks = sec.slice(at('**확인**')).filter(([, text]) => /^\d+\. «/.test(text));
+    const at = (label) => sec.findIndex(([, text]) => text.trim() === label);  // 굵게 표시는 lectureLines 가 이미 뗐다
+    const reqs = sec.slice(at('요구사항'), at('확인')).filter(([, text]) => /^\d+\. /.test(text));
+    const checks = sec.slice(at('확인')).filter(([, text]) => /^\d+\. «/.test(text));
     const right = (await runsOf('homework2', 'right')).runs;
     expect([reqs.length, checks.length, right.length - 1]).toEqual([5, 7, 7]);
     // 확인 일곱
@@ -537,6 +538,26 @@ describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 
       const said = [Number.isNaN(c.status) ? run.status : c.status, c.reviewCount === undefined ? run.body.reviewCount : Number(c.reviewCount), c.message ?? run.body.message, hidden === undefined ? run.body.review?.hidden : hidden === 'true'];
       const got = [run.status, run.body.reviewCount, run.body.message, run.body.review?.hidden];
       if (JSON.stringify(said) !== JSON.stringify(got)) problem(line, text, `${run.status} · reviewCount ${run.body.reviewCount ?? ''} · ${run.body.message ?? ''} · hidden ${run.body.review?.hidden ?? ''}`);
+    }
+    // 확인 문장 안의 덧붙인 요청 — «본문을 `{ "hidden": "yes" }`로 바꿔 한 번 더 보내도 400» 꼴이면 실제로 보낸다
+    for (const [line, text] of checks) {
+      const extra = /본문을 `(\{.+?\})`로 바꿔 한 번 더 보내도 (\d{3})/.exec(text);
+      if (!extra) continue;
+      const c = parseCheck(text);
+      const dir = studentCopy('homework2');
+      onPort(dir, 'homework2', LAB_PORT);
+      const http = read(join(dir, LAB, 'homework2.http'));
+      const blocks = http.split(/^### /m).slice(1).map((b) => `### ${b.trimEnd()}\n`);
+      const target = blocks.find((b) => b.startsWith(`### ${c.title}\n`));
+      const changed = target.slice(0, target.indexOf('{')) + `${extra[1]}\n`;
+      const lab = await boot(join(dir, LAB, 'homework2.js'), { port: LAB_PORT, cwd: dir, env: ENV, ready: `${LAB_PORT}번 포트에서` });
+      try {
+        const runs = await httpyac([blocks[0], changed].join('\n'));
+        if (runs[1].status !== Number(extra[2])) problem(line, text, `${extra[1]} → ${runs[1].status} ${JSON.stringify(runs[1].body)}`);
+        seen.homeworkExtra = { body: extra[1], status: runs[1].status, response: runs[1].body };
+      } finally {
+        await Promise.race([lab.stop(), sleep(500)]);
+      }
     }
     // 요구사항의 에러 문장 셋 — 상태 코드와 «문장» 이 그 상태로 답한 요청의 실제 문장과 같다
     const errors = reqs.map(([line, text]) => [line, text, /(\d{3}) «(.+?)»/.exec(text)]).filter(([, , m]) => m);
