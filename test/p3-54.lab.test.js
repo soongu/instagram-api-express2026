@@ -337,7 +337,7 @@ describe('축 ④ 과제 [응용] — 리뷰 숨기기', () => {
 
 // ── 축 ⑤ 학생 파일 차이 · 로그인 ─────────────────────────────────────────────────────
 describe('축 ⑤ 학생 파일 차이 · 로그인', () => {
-  it('🔴 실습 커밋은 lab/p3-54/ · snapshots/p3-54/ 만 · 첫 줄 경로 주석 · 내부 어휘 · 쓰지 않기로 한 낱말이 없다', () => {
+  it('🔴 실습 커밋은 lab/p3-54/ · snapshots/p3-54/ 만 · 첫 줄 경로 주석 · 내부 어휘 · 쓰지 않기로 한 낱말 · 주석의 줄표와 연결어미 뒤 쉼표가 없다', () => {
     const banned = /자리|박다|박아|박힌|결[이을로의]|갈래|몸통|판[이을으]|겹|까닭|걸리|걸린|돌리|돌려(?!주|준|줄)|가르|갈리|재다|재서|벗기|되살|짝/;
     const files = {
       practice1: ['lab/p3-54/practice1.http', 'lab/p3-54/practice1.js', 'lab/p3-54/shop-data.js', 'snapshots/p3-54/practice1-start.js'],
@@ -352,6 +352,8 @@ describe('축 ⑤ 학생 파일 차이 · 로그인', () => {
         expect([rel, text.split('\n')[0]]).toEqual([rel, `// ~/instagram-api/${rel.replace('snapshots/p3-54/', 'lab/p3-54/').replace('-start', '')}`]);
         expect([rel, /게이트|판정|TDD|Step \d|p3-\d\d|회차|스냅숏/.test(text.split('\n').slice(1).join('\n'))]).toEqual([rel, false]);
         expect([rel, text.split('\n').filter((line) => banned.test(line))]).toEqual([rel, []]);
+        // 주석에 문장 안 줄표(—)와 연결어미 뒤 쉼표가 없다
+        expect([rel, text.split('\n').slice(1).filter((line) => /^\s*\/\//.test(line) && /—|(서|고|라|면|는데|지만|니까|으니|므로|어|아),/.test(line))]).toEqual([rel, []]);
       }
     }
   });
