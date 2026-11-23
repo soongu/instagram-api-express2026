@@ -61,3 +61,17 @@ export async function getComments(postId, { limit = 20, cursor }) {
     nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
   };
 }
+
+// 댓글을 단다. 이 주소로 다는 댓글은 모두 원댓글이다.
+export async function createComment(postId, userId, content) {
+  // 게시물이 없으면 404 로 답한다. 목록과 같은 확인이다.
+  const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
+  if (!post) throw new NotFoundError('POST_NOT_FOUND');
+
+  const comment = await prisma.comment.create({
+    data: { postId, authorId: userId, content },
+    select: commentFields,
+  });
+
+  return flatten(comment);
+}

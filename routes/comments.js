@@ -1,10 +1,10 @@
 // ~/instagram-api/routes/comments.js
 import express from 'express';
 import * as commentController from '../controllers/commentController.js';
-import { validateQuery } from '../middlewares/validate.js';
+import { validateBody, validateQuery } from '../middlewares/validate.js';
 import { parseId } from '../middlewares/params.js';
 import { allowOnly } from '../middlewares/methods.js';
-import { commentListQuerySchema } from '../schemas/commentSchema.js';
+import { commentCreateSchema, commentListQuerySchema } from '../schemas/commentSchema.js';
 
 // app.js 가 붙인 주소(/api/posts/:id/comments)의 :id 까지 req.params 로 받는다.
 const router = express.Router({ mergeParams: true });
@@ -13,7 +13,8 @@ const router = express.Router({ mergeParams: true });
 router.use(parseId);
 
 router.get('/', validateQuery(commentListQuerySchema), commentController.list);
+router.post('/', validateBody(commentCreateSchema), commentController.create);
 
-router.all('/', allowOnly('GET'));
+router.all('/', allowOnly('GET', 'POST'));
 
 export default router;
