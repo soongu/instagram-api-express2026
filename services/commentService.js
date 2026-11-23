@@ -68,10 +68,19 @@ export async function createComment(postId, userId, content) {
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
   if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
-  const comment = await prisma.comment.create({
-    data: { postId, authorId: userId, content },
-    select: commentFields,
-  });
+  // 댓글을 넣는 일과 게시물의 댓글 수를 올리는 일은 함께 끝나야 한다.
+  // 이 주소로 다는 댓글은 모두 원댓글이라 숫자를 늘 1 올린다.
+  return prisma.$transaction(async (tx) => {
+    const comment = await tx.comment.create({
+      data: { postId, authorId: userId, content },
+      select: commentFields,
+    });
 
-  return flatten(comment);
+    await tx.post.update({
+      where: { id: postId },
+      data: { commentCount: { increment: 1 } },
+    });
+
+    return flatten(comment);
+  });
 }
