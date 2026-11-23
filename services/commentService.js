@@ -98,9 +98,10 @@ async function changeCommentCount(tx, postId, amount) {
 
 // 댓글을 지운다. 댓글을 쓴 사람이나 그 댓글이 달린 게시물을 쓴 사람만 지울 수 있다.
 export async function removeComment(postId, commentId, userId) {
+  // 주소의 게시물에 달린 댓글만 찾는다. 번호만으로 찾으면 다른 게시물의 댓글도 찾아져서 숫자를 엉뚱한 게시물에서 내린다.
   // 누가 지울 수 있는지 보려면 댓글을 쓴 사람과 게시물을 쓴 사람이 필요해서 댓글을 찾을 때 함께 받는다.
   const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
+    where: { id: commentId, postId },
     select: { authorId: true, parentId: true, post: { select: { authorId: true } } },
   });
   if (!comment) throw new NotFoundError('COMMENT_NOT_FOUND');
