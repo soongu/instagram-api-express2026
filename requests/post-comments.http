@@ -33,3 +33,36 @@ Content-Type: application/json
 
 ### 2번 게시물
 GET http://localhost:3000/api/v2/posts/2
+
+### 2번 게시물 주소로 1번 게시물의 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/3
+
+### 1번 게시물
+GET http://localhost:3000/api/v2/posts/1
+
+### 2번 게시물 주소로 1번 게시물의 다른 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/2
+
+### 1번 게시물 주소로 같은 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/1/comments/2
+
+### 지울 댓글 달기
+# @name mine
+POST http://localhost:3000/api/v2/posts/2/comments
+Content-Type: application/json
+
+{
+  "content": "앗, 다른 사진에 달려던 댓글이에요"
+}
+
+### 내가 단 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/{{mine.data.comment.id}}
+
+### 같은 댓글을 한 번 더 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/{{mine.data.comment.id}}
+
+### 남의 게시물에 남이 단 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/6
+
+### 없는 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/999
