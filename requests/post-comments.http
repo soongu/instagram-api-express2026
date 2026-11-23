@@ -22,3 +22,11 @@ GET http://localhost:3000/api/v2/posts/2/comments?limit=2
 
 ### 둘째 페이지 — 받은 커서를 그대로 돌려준다
 GET http://localhost:3000/api/v2/posts/2/comments?limit=2&cursor={{first.data.nextCursor}}
+
+### 2번 게시물에 댓글 달기
+POST http://localhost:3000/api/v2/posts/2/comments
+Content-Type: application/json
+
+{
+  "content": "한 입만 나눠 주세요"
+}
