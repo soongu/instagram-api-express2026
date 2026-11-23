@@ -1074,25 +1074,33 @@ describe('축 ⑤ 학생 파일 차이 — 시작 판(code/p3-53 의 학생 파�
 });
 
 // ── 축 ⑥ 학생 한 사람의 흐름 ─────────────────────────────────────────────────────
+/** Step 2 에서 «달기» 를 보낼 때 교안이 바꿔 쓰게 하는 글 — Step 1 은 강의 자료 그대로. */
+const FLOW_TEXTS = { step2b: '어느 빵집 크루아상이에요?', step2: '결이 정말 살아 있네요' };
 describe('축 ⑥ 학생 한 사람의 흐름 — 한 DB 에서 판을 차례로 갈아 끼우며 .http 를 교안 차례로 누른다', () => {
   it('🔎 Step 1 달기 → Step 2 강의 자료로 보기 → increment 판 달기 → 고친 판 달기 → Step 3 겪기 판 → 고친 판 — 어디서 숫자가 어긋나고 무엇이 다시 맞추는가', async () => {
     await copyDb(GATE_DB);
     const text = read(version(3)(HTTP_FILE));
-    const send = async (label, titles) => {
-      const runs = await withServer(version(label), GATE_DB, () => httpyac(compose(text, [LOGIN, ...titles])));
+    // 교안은 Step 2 에서 «달기» 블록의 글을 바꿔서 보내게 한다 — 같은 글이 세 번 달려 화면에 같은 줄이 셋 보이지 않게.
+    const ADD_LINE = `"content": "${ADDED_TEXT}"`;
+    const send = async (label, titles, content = ADDED_TEXT) => {
+      const source = compose(text, [LOGIN, ...titles]);
+      if (source.split(ADD_LINE).length - 1 !== titles.filter((t) => t === ADD).length) throw new Error('달기 블록의 글 줄을 못 찾았다');
+      const runs = await withServer(version(label), GATE_DB, () => httpyac(source.replaceAll(ADD_LINE, `"content": "${content}"`)));
       return { runs: runs.slice(1).map((r) => ({ title: r.title, status: r.status, body: r.body })), drift: await drift(GATE_DB) };
     };
     const flow = {};
     flow.step1 = await send(1, [ADD]);
     flow.step2a = await send('2a', [POST2]);
-    flow.step2b = await send('2b', [ADD, POST2]);
-    flow.step2 = await send(2, [ADD, POST2]);
+    flow.step2b = await send('2b', [ADD, POST2], FLOW_TEXTS.step2b);
+    flow.step2 = await send(2, [ADD, POST2], FLOW_TEXTS.step2);
     flow.step3b = await send('3b', [D_WRONG, POST1, POST2]);
     flow.step3 = await send(3, [D_WRONG2, D_RIGHT, D_ADD, D_MINE, D_AGAIN, D_OTHERS, D_NONE, POST1, POST2]);
     const end = await counts(GATE_DB);
     seen.flow = { ...flow, end };
     expect(flow.step1.drift).toEqual([{ id: 2, count: 29, roots: 30, rows: 31 }]);
     expect(flow.step2.runs[0].body.data.commentCount).toBe(31);
+    expect([flow.step1.runs[0].body.data.content, flow.step2b.runs[0].body.data.content, flow.step2.runs[0].body.data.comment.content])
+      .toEqual([ADDED_TEXT, FLOW_TEXTS.step2b, FLOW_TEXTS.step2]);
     expect(flow.step3b.drift).toEqual([{ id: 1, count: 3, roots: 2, rows: 4 }, { id: 2, count: 30, roots: 32, rows: 33 }]);
     expect(flow.step3.drift).toEqual([{ id: 1, count: 2, roots: 1, rows: 3 }, { id: 2, count: 30, roots: 32, rows: 33 }]);
     // Step 3 끝 — 강의 자료 fix-comment-count.sql 을 실행한다(확인 SELECT 는 파일 끝의 그것)
@@ -1124,6 +1132,9 @@ describe('축 ⑥ 학생 한 사람의 흐름 — 한 DB 에서 판을 차례로
     const [p2] = await onDb(GATE_DB, 'SELECT updated_at, created_at FROM posts WHERE id = 2');
     expect(p2.updated_at.getTime()).toBeGreaterThan(p2.created_at.getTime());
     seen.flowEnd = await onDb(GATE_DB, `SELECT c.id, c.post_id, c.parent_id, u.username, c.content FROM comments c JOIN users u ON u.id = c.author_id WHERE c.id > 37 OR c.id <= 12 ORDER BY c.id`);
+    expect(seen.flowEnd.filter((c) => c.id > 37).map((c) => [c.post_id, c.parent_id, c.username, c.content])).toEqual([
+      [2, null, 'jaehoon', ADDED_TEXT], [2, null, 'jaehoon', FLOW_TEXTS.step2b], [2, null, 'jaehoon', FLOW_TEXTS.step2],
+    ]);
   }, 180_000);
 });
 
