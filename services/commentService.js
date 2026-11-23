@@ -100,9 +100,10 @@ async function changeCommentCount(tx, postId, amount) {
 export async function removeComment(postId, commentId, userId) {
   // 주소의 게시물에 달린 댓글만 찾는다. 번호만으로 찾으면 다른 게시물의 댓글도 찾아져서 숫자를 엉뚱한 게시물에서 내린다.
   // 누가 지울 수 있는지 보려면 댓글을 쓴 사람과 게시물을 쓴 사람이 필요해서 댓글을 찾을 때 함께 받는다.
+  // 지운 뒤에는 읽을 행이 없으니 응답에 보낼 필드도 여기서 받아 둔다.
   const comment = await prisma.comment.findUnique({
     where: { id: commentId, postId },
-    select: { authorId: true, parentId: true, post: { select: { authorId: true } } },
+    select: { ...commentFields, parentId: true, post: { select: { authorId: true } } },
   });
   if (!comment) throw new NotFoundError('COMMENT_NOT_FOUND');
 
@@ -112,11 +113,16 @@ export async function removeComment(postId, commentId, userId) {
 
   // 지우는 일과 숫자를 내리는 일도 한 묶음이다.
   return prisma.$transaction(async (tx) => {
-    const deleted = await tx.comment.delete({ where: { id: commentId }, select: commentFields });
+    // 찾은 뒤 지우기 전에 같은 댓글을 지우는 요청이 한 번 더 와서 먼저 끝났을 수 있다(버튼을 두 번 누른 경우).
+    // 지운 행 수로 확인해서 하나도 못 지웠으면 숫자도 고치지 않고 404 로 답한다.
+    const { count } = await tx.comment.deleteMany({ where: { id: commentId } });
+    if (count === 0) throw new NotFoundError('COMMENT_NOT_FOUND');
 
     // 답글은 세지 않는 숫자라서 답글을 지울 때는 0 만큼 고친다. 숫자는 그대로 두고 지금 값만 읽는다.
     const commentCount = await changeCommentCount(tx, postId, comment.parentId === null ? -1 : 0);
 
+    // 응답에는 목록과 같은 필드만 보낸다. 원댓글인지와 게시물 주인은 확인에만 썼다.
+    const { parentId, post, ...deleted } = comment;
     return { comment: flatten(deleted), commentCount };
   });
 }
