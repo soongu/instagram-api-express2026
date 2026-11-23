@@ -378,3 +378,174 @@ describe('축 ⑤ 학생 파일 차이 · 로그인', () => {
     });
   }, 60_000);
 });
+
+// ── 축 ⑥ 교안 대조(실습 둘) ─────────────────────────────────────────────────────────
+// 원고는 읽기만 한다. 경로는 `P354_LECTURE` 로만 받는다(없으면 «건너뜀»). 고칠 곳은 `P354_LAB_LECTURE_REPORT=<파일>` 에 { line, lecture, measured }.
+const LECTURE_MD = process.env.P354_LECTURE ?? null;
+if (!LECTURE_MD) console.log('\n🚨🚨🚨 실습 축 ⑥ 교안 대조 — 건너뜀 (P354_LECTURE 가 없다) 🚨🚨🚨\n');
+const describeLecture = LECTURE_MD ? describe : describe.skip;
+const lectureProblems = [];
+const problem = (line, lecture, measured) => lectureProblems.push({ line, lecture, measured });
+afterAll(() => {
+  if (process.env.P354_LAB_LECTURE_REPORT) writeFileSync(process.env.P354_LAB_LECTURE_REPORT, JSON.stringify(lectureProblems, null, 2));
+});
+const lectureLines = () => read(LECTURE_MD).split('\n');
+/** «### 직접 해보기 — …» 절 하나의 줄 범위(다음 ### 🤔 · ## · --- 앞까지). */
+const labSection = (title) => {
+  const lines = lectureLines();
+  const start = lines.findIndex((line) => line.startsWith(`### 직접 해보기 — ${title}`));
+  if (start === -1) throw new Error(`«직접 해보기 — ${title}» 절이 없다`);
+  let end = lines.findIndex((line, i) => i > start && (/^### 🤔/.test(line) || /^## /.test(line) || line === '---'));
+  if (end === -1) end = lines.length;
+  return { start, end, lines: lines.slice(start, end) };
+};
+const fencesIn = ({ start, lines }) => {
+  const out = [];
+  let cur = null;
+  lines.forEach((line, i) => {
+    if (cur) { if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.body.push(line); return; }
+    if (line.startsWith('```')) cur = { lang: line.slice(3).trim(), body: [], line: start + i + 1 };
+  });
+  return out;
+};
+const tablesIn = ({ start, lines }) => {
+  const out = [];
+  let cur = null;
+  let inFence = false;
+  const cellsOf = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+  lines.forEach((line, i) => {
+    if (line.startsWith('```')) inFence = !inFence;
+    if (!inFence && line.startsWith('|')) {
+      if (!cur) { cur = { header: cellsOf(line), rows: [], lines: [] }; return; }
+      if (/^\|[\s:|-]+\|$/.test(line.trim())) return;
+      cur.rows.push(cellsOf(line));
+      cur.lines.push(start + i + 1);
+      return;
+    }
+    if (cur) { out.push(cur); cur = null; }
+  });
+  if (cur) out.push(cur);
+  return out;
+};
+const isElision = (line) => ['// ...', '...'].includes(line.trim());
+const inOrder = (body, file) => {
+  let at = 0;
+  const lines = file.split('\n');
+  for (const line of body.filter((one) => one.trim() !== '' && !isElision(one))) {
+    const found = lines.indexOf(line, at);
+    if (found === -1) return false;
+    at = found + 1;
+  }
+  return true;
+};
+/** 정답 판 · 틀린 판의 실행 — 앞 축이 잰 것을 쓰고, 없으면 여기서 잰다. */
+const runsCache = {};
+const runsOf = async (which, name, edit) => (runsCache[`${which}:${name}`] ??= await runLab(which, edit));
+const WRONGS = {
+  practice1: ['bodyAuthor', 'noCount', 'noCountInBody', 'status200', 'blank'],
+  practice2: ['idOnly', 'hiddenToo', 'noChange', 'noPermission', 'sellerToo'],
+};
+const editOf = (which, name) => {
+  if (name === 'blank') return () => read(P('snapshots/p3-54/practice1-start.js'));
+  return (which === 'practice1' ? P1_WRONG : P2_WRONG)[name];
+};
+/** 확인 목록 한 줄 — «제목» · 상태 코드 · reviewCount · message(«…» 둘째) · username. */
+const parseCheck = (text) => ({
+  title: /«(.+?)»/.exec(text)?.[1],
+  status: Number(/(\d{3})/.exec(text.replace(/\(.*?\)/g, ''))?.[1]),
+  reviewCount: /`reviewCount`가 (\d+)/.exec(text)?.[1],
+  message: [...text.matchAll(/«(.+?)»/g)].map((m) => m[1]).find((one, i) => i > 0),
+  username: /`review\.username`이 `"(\w+)"`/.exec(text)?.[1],
+});
+
+describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 1 · 2' : '🚨 건너뜀(P354_LECTURE 없음) — 실습 축 ⑥ 교안 대조', () => {
+  for (const [which, title, startFile] of [['practice1', '리뷰 달기', 'practice1-start.js'], ['practice2', '리뷰 지우기', 'practice2-start.js']]) {
+    it(`🔴 ${title} — 나눠 주는 빈칸 판은 글자까지 · 해설 발췌는 정답 판에 같은 차례로 있다`, () => {
+      const before = lectureProblems.length;
+      const fences = fencesIn(labSection(title)).filter((f) => f.lang === 'javascript');
+      const [given, answer] = fences;
+      if (!given || `${given.body.join('\n')}\n` !== read(P(`snapshots/p3-54/${startFile}`))) problem(given?.line ?? null, `${which} 빈칸 판 블록`, `snapshots/p3-54/${startFile} 와 글자가 다르다`);
+      if (!answer || !inOrder(answer.body, showAt(commitOf(COMMITS[which]), `${LAB}/${which}.js`))) problem(answer?.line ?? null, `${which} 해설 발췌`, '정답 판에 같은 차례로 없다');
+      expect(fences.length).toBe(2);
+      expect(lectureProblems.slice(before)).toEqual([]);
+    });
+
+    it(`🔴 ${title} — 확인 문장(상태 · reviewCount · 문장 · 글쓴이)이 정답 판 실행과 같다`, async () => {
+      const before = lectureProblems.length;
+      const sec = labSection(title);
+      const right = (await runsOf(which, 'right')).runs;
+      const checkLines = sec.lines.map((line, i) => [sec.start + i + 1, line]).filter(([, line]) => /^\d+\. «/.test(line));
+      expect(checkLines.length).toBe(right.length - 1);
+      for (const [line, text] of checkLines) {
+        const c = parseCheck(text);
+        const run = right.find((r) => r.title === c.title);
+        if (!run) { problem(line, text, '그런 제목의 요청이 .http 에 없다'); continue; }
+        const got = [run.status, run.body.reviewCount, run.body.message, run.body.review?.username];
+        const said = [c.status, c.reviewCount === undefined ? run.body.reviewCount : Number(c.reviewCount), c.message ?? run.body.message, c.username ?? run.body.review?.username];
+        if (JSON.stringify(said) !== JSON.stringify(got)) problem(line, text, `${run.status} · reviewCount ${run.body.reviewCount} · ${run.body.message ?? ''} · ${run.body.review?.username ?? ''}`);
+      }
+      expect(lectureProblems.slice(before)).toEqual([]);
+    }, 60_000);
+
+    it(`🔴 ${title} — 해설 표 «처음 달라지는 곳» 이 틀린 판마다 실측과 같다`, async () => {
+      const before = lectureProblems.length;
+      const sec = labSection(title);
+      const right = (await runsOf(which, 'right')).runs;
+      const checkTitles = sec.lines.filter((line) => /^\d+\. «/.test(line)).map((line) => /«(.+?)»/.exec(line)[1]);
+      const table = tablesIn(sec).find((t) => t.header[0] === '이렇게 쓰면');
+      expect(table.rows.length).toBe(WRONGS[which].length);
+      for (const [i, name] of WRONGS[which].entries()) {
+        const wrongRun = await runsOf(which, name, editOf(which, name));
+        const d = firstDiff(right, wrongRun.runs);
+        const text = table.rows[i][1];
+        const pairs = [...text.matchAll(/확인 (\d)[^·]*?(\d{3})/g)].map((m) => [Number(m[1]), Number(m[2])]);
+        const firstNo = Number(/확인 (\d)/.exec(text)?.[1]);
+        const okTitle = checkTitles[firstNo - 1] === d?.title;
+        const okPairs = pairs.every(([no, status]) => wrongRun.runs[no]?.status === status);
+        const rc = /`reviewCount`가 (?:\d+에서 )?(\d+)/.exec(text)?.[1];
+        const okCount = rc === undefined || Number(rc) === d?.wrong.body.reviewCount;
+        const okMissing = !/`reviewCount`가 없어요/.test(text) || (d && !('reviewCount' in d.wrong.body));
+        const okLog = !/ReferenceError/.test(text) || /ReferenceError: ____ is not defined/.test(wrongRun.log);
+        const okMessage = !/«서버에서 문제가 생겼어요»/.test(text) || d?.wrong.body.message === '서버에서 문제가 생겼어요';
+        if (!(okTitle && okPairs && okCount && okMissing && okLog && okMessage)) {
+          problem(table.lines[i], `${table.rows[i][0]} → ${text}`, `처음 달라지는 곳 «${d?.title}»(확인 ${checkTitles.indexOf(d?.title) + 1}) · ${d?.wrong.status} · reviewCount ${d?.wrong.body.reviewCount} · 전체 상태 ${wrongRun.runs.slice(1).map((r) => r.status).join(' ')}`);
+        }
+      }
+      expect(lectureProblems.slice(before)).toEqual([]);
+    }, 240_000);
+  }
+
+  it('🔴 산문 — 나눠 주는 데이터 · jaehoon 의 리뷰 · 다시 띄우지 않고 한 번 더 보내면 reviewCount 2', async () => {
+    const before = lectureProblems.length;
+    const data = await import(join(studentCopy('practice1'), LAB, 'shop-data.js'));
+    const lines = lectureLines();
+    const find = (re) => {
+      const at = lines.findIndex((line) => re.test(line));
+      return at === -1 ? null : { line: at + 1, text: lines[at], m: re.exec(lines[at]) };
+    };
+    const claims = [
+      [/사람 (\d+)명 · 상품 (\d+)개 · 리뷰 (\d+)개 — 2번 사람이 (\w+)이고, \w+은 텀블러\((\d)번 상품\)를 팔아요/, (m) => [`${m[1]} · ${m[2]} · ${m[3]} · ${m[4]} · ${m[5]}`, `${data.users.length} · ${data.products.length} · ${data.reviews.length} · ${data.users.find((u) => u.id === 2).username} · ${data.products.find((p) => p.sellerId === 2).id}`]],
+      [/jaehoon이 쓴 리뷰는 무선 이어폰\(1번 상품\)의 (\d+)번과 숨긴 (\d+)번이고, jaehoon이 파는 상품은 텀블러\((\d)번 상품\)/, (m) => [`${m[1]} · 숨김 ${m[2]} · ${m[3]}`, `${data.reviews.filter((r) => r.authorId === 2 && !r.hidden).map((r) => r.id).join(',')} · 숨김 ${data.reviews.filter((r) => r.authorId === 2 && r.hidden).map((r) => r.id).join(',')} · ${data.products.find((p) => p.sellerId === 2).id}`]],
+      [/서버를 다시 띄우지 않고 확인 1을 한 번 더 보내면 `reviewCount`가 (\d+)가 돼요/, async (m) => {
+        const dir = studentCopy('practice1');
+        onPort(dir, 'practice1', LAB_PORT);
+        const http = read(join(dir, LAB, 'practice1.http'));
+        const blocks = http.split(/^### /m).slice(1).map((b) => `### ${b.trimEnd()}\n`);
+        const lab = await boot(join(dir, LAB, 'practice1.js'), { port: LAB_PORT, cwd: dir, env: ENV, ready: `${LAB_PORT}번 포트에서` });
+        try {
+          const runs = await httpyac([blocks[0], blocks[1], blocks[1]].join('\n'));
+          return [m[1], `${runs[2].body.reviewCount}`];
+        } finally {
+          await Promise.race([lab.stop(), sleep(500)]);
+        }
+      }],
+    ];
+    for (const [re, measure] of claims) {
+      const hit = find(re);
+      if (!hit) { problem(null, `꼴 ${re}`, '교안에서 못 찾았다'); continue; }
+      const [said, got] = await measure(hit.m);
+      if (said !== got) problem(hit.line, hit.text.trim(), got);
+    }
+    expect(lectureProblems.slice(before)).toEqual([]);
+  }, 60_000);
+});

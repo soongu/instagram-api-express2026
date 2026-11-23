@@ -1162,3 +1162,317 @@ describe('축 ⑦ Step 3 강의 자료 — lab/p3-54/fix-comment-count.sql', () 
     seen.fixSqlOnTpl = out[1].rows;
   }, 30_000);
 });
+
+// ── 축 ⑧ 교안 대조(수업 백엔드 · Step 1~3) ────────────────────────────────────────────
+// 원고는 읽기만 한다 — 어긋나면 판정이 빨개질 뿐 원고를 고치지 않는다. 경로는 `P354_LECTURE` 로만 받는다(없으면 «건너뜀»).
+// 고칠 곳은 `P354_LECTURE_REPORT=<파일>` 에 { line, lecture, measured } 로 남긴다. 실습 블록(lab/p3-54/)은 test/p3-54.lab.test.js 의 교안 축이 본다.
+// 🔑 «응답 펜스 · 표 · 산문» 은 교안 차례대로 흐름(lessonFlow — 축 ⑥ 과 같은 차례 + Step 1 강의 자료 판의 405)의 실측과 맞댄다.
+//    되돌아가기 셋 · 같이 지우기 · 본문 authorId 는 축 ② · ③ · ① 이 잰 값(seen)을 쓴다 — 이 축만 따로 돌리면 그 값이 없어 «실측 없음» 으로 남는다.
+const LECTURE_MD = process.env.P354_LECTURE ?? null;
+if (!LECTURE_MD) console.log('\n🚨🚨🚨 축 ⑧ 교안 대조 — 건너뜀 (P354_LECTURE 가 없다) 🚨🚨🚨\n');
+const describeLecture = LECTURE_MD ? describe : describe.skip;
+/** 원고의 펜스 — 언어 · 본문 · 시작 줄 번호 · Step · <details> 안인가. */
+const fencesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let step = null;
+  let details = false;
+  read(file).split('\n').forEach((line, i) => {
+    if (cur) {
+      if (line.startsWith('```')) { out.push(cur); cur = null; } else cur.body.push(line);
+      return;
+    }
+    if (line.startsWith('```')) { cur = { lang: line.slice(3).trim(), body: [], line: i + 1, step, details }; return; }
+    if (line.startsWith('## ')) step = Number(/^## Step (\d+)/.exec(line)?.[1]) || null;
+    if (line.startsWith('<details>')) details = true;
+    if (line.startsWith('</details>')) details = false;
+  });
+  if (cur) throw new Error(`${file} — 닫히지 않은 펜스(${cur.line}번 줄)`);
+  return out;
+};
+/** 원고의 마크다운 표 — 머리 칸 · 행 · 행마다 줄 번호 · Step. 펜스 안의 `|` 줄은 표가 아니다. */
+const tablesOf = (file) => {
+  const out = [];
+  let cur = null;
+  let inFence = false;
+  let step = null;
+  const cellsOf = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+  read(file).split('\n').forEach((line, i) => {
+    if (line.startsWith('```')) inFence = !inFence;
+    if (!inFence && line.startsWith('## ')) step = Number(/^## Step (\d+)/.exec(line)?.[1]) || null;
+    if (!inFence && line.startsWith('|')) {
+      if (!cur) { cur = { header: cellsOf(line), rows: [], lines: [], line: i + 1, step }; return; }
+      if (/^\|[\s:|-]+\|$/.test(line.trim())) return;
+      cur.rows.push(cellsOf(line));
+      cur.lines.push(i + 1);
+      return;
+    }
+    if (cur) { out.push(cur); cur = null; }
+  });
+  if (cur) out.push(cur);
+  return out;
+};
+const plainCell = (cell) => cell.replace(/`/g, '');
+const isElision = (line) => ['// ...', '...', '-- ...'].includes(line.trim());
+/** 블록이 파일에 어떻게 들어 있나 — full · tail · excerpt(줄임 표시 · 줄이 차례대로) · null. */
+const howIn = (body, file) => {
+  const text = body.join('\n');
+  if (text + '\n' === file || text === file) return 'full';
+  if (body.some(isElision)) {
+    let at = 0;
+    const lines = file.split('\n');
+    for (const line of body.filter((one) => one.trim() !== '' && !isElision(one))) {
+      const found = lines.indexOf(line, at);
+      if (found === -1) return null;
+      at = found + 1;
+    }
+    return 'excerpt';
+  }
+  if (file.endsWith('\n' + text + '\n')) return 'tail';
+  if (file.includes('\n' + text + '\n')) return 'slice';
+  return null;
+};
+const API_JS = '// ~/instagram-api/';
+const API_SQL = '-- ~/instagram-api/';
+/** 교안의 수업 백엔드 블록 — ```http 전부 · ```javascript/```sql 첫 줄이 ~/instagram-api 경로 주석(lab/p3-54/ 의 실습 서버 .js 는 빼고 SQL 은 넣는다). */
+const classFences = () => fencesOf(LECTURE_MD).flatMap((fence) => {
+  const first = fence.body[0] ?? '';
+  if (fence.lang === 'http') return [{ ...fence, rel: HTTP_FILE }];
+  if (fence.lang === 'javascript' && first.startsWith(API_JS) && !first.startsWith(`${API_JS}lab/`)) return [{ ...fence, rel: first.slice(API_JS.length) }];
+  if (fence.lang === 'sql' && first.startsWith(API_SQL)) return [{ ...fence, rel: first.slice(API_SQL.length) }];
+  return [];
+});
+const EXPECTED_CLASS_FENCES = [
+  [1, 'http', HTTP_FILE, 'tail', '1a'],
+  [1, 'javascript', 'schemas/commentSchema.js', 'full', 1],
+  [1, 'javascript', 'routes/comments.js', 'full', 1],
+  [1, 'javascript', 'controllers/commentController.js', 'full', 1],
+  [1, 'javascript', 'services/commentService.js', 'excerpt', 1],
+  [2, 'http', HTTP_FILE, 'tail', '2a'],
+  [2, 'javascript', 'services/commentService.js', 'excerpt', '2b'],
+  [2, 'javascript', 'services/commentService.js', 'excerpt', 2],
+  [3, 'http', HTTP_FILE, 'tail', '3a'],
+  [3, 'javascript', 'middlewares/params.js', 'excerpt', '3b'],
+  [3, 'javascript', 'errors.js', 'excerpt', '3b'],
+  [3, 'javascript', 'routes/comments.js', 'full', '3b'],
+  [3, 'javascript', 'controllers/commentController.js', 'excerpt', '3b'],
+  [3, 'javascript', 'services/commentService.js', 'excerpt', '3b'],
+  [3, 'javascript', 'services/commentService.js', 'excerpt', '3c'],
+  [3, 'javascript', 'services/commentService.js', 'excerpt', 3],
+  [3, 'sql', FIX_SQL, 'full', 3],
+];
+/** 교안 차례대로 흐름 — 판정 DB 사본 하나에서 판을 갈아 끼우며 교안이 보내게 하는 요청을 보낸다(Step 2 의 달기 두 번은 글을 바꿔서). */
+let lessonRun;
+const lessonFlow = () => (lessonRun ??= (async () => {
+  await copyDb(GATE2_DB);
+  const text = read(version(3)(HTTP_FILE));
+  const ADD_LINE = `"content": "${ADDED_TEXT}"`;
+  const send = async (label, titles, content = ADDED_TEXT) => {
+    const source = compose(text, [LOGIN, ...titles]).replaceAll(ADD_LINE, `"content": "${content}"`);
+    const runs = await withServer(version(label), GATE2_DB, () => httpyac(source));
+    const byTitle = {};
+    for (const r of runs.slice(1)) (byTitle[r.title] ??= []).push(r);
+    return { runs: runs.slice(1), byTitle, counts: await counts(GATE2_DB) };
+  };
+  const out = {};
+  // 흐름 앞의 시드 댓글과 게시물 주인 — 지우기 전에 읽어 둔다
+  out.comments = Object.fromEntries((await onDb(GATE2_DB, 'SELECT c.id, c.post_id, u.username, c.content FROM comments c JOIN users u ON u.id = c.author_id WHERE c.id <= 12')).map((c) => [c.id, c]));
+  out.postAuthors = Object.fromEntries((await onDb(GATE2_DB, 'SELECT p.id, u.username FROM posts p JOIN users u ON u.id = p.author_id')).map((p) => [p.id, p.username]));
+  out.step1a = await send('1a', [ADD]);
+  out.step1 = await send(1, [ADD, POST2]);
+  out.step2a = await send('2a', [POST2]);
+  out.step2b = await send('2b', [ADD, POST2], FLOW_TEXTS.step2b);
+  out.step2 = await send(2, [ADD, POST2], FLOW_TEXTS.step2);
+  out.step3b = await send('3b', [D_WRONG, POST1, POST2]);
+  out.step3 = await send(3, [D_WRONG2, D_RIGHT, D_ADD, D_MINE, D_AGAIN, D_OTHERS, D_NONE, POST1, POST2]);
+  const sql = read(version(3)(FIX_SQL));
+  out.sqlBefore = await onDb(GATE2_DB, sql.slice(sql.lastIndexOf('SELECT posts.id')));
+  out.sqlAfter = (await runSql(GATE2_DB, sql))[1].rows;
+  return out;
+})());
+/** 답글 🙋 표의 실측 — 새 사본에서 원댓글 1 하나 · 다른 사본에서 답글 11 하나. */
+let replyRun;
+const replyFacts = () => (replyRun ??= (async () => {
+  const one = async (path) => {
+    await copyDb(GATE_DB);
+    const before = await countOf(GATE_DB, 1);
+    const { out } = await sendSteps(version(3), GATE_DB, [['DELETE', path]]);
+    return { status: out[0].status, before, after: await countOf(GATE_DB, 1) };
+  };
+  return { root: await one('/api/v2/posts/1/comments/1'), reply: await one('/api/v2/posts/1/comments/11') };
+})());
+const ISO_TIME = '<시각>';
+const scrubTimesDeep = (value) => JSON.parse(JSON.stringify(value), (key, v) => ((key === 'timestamp' || key === 'createdAt') && typeof v === 'string' && ISO.test(v) ? ISO_TIME : v));
+/** 고칠 곳 — { line, lecture, measured }. */
+const lectureProblems = [];
+const problem = (line, lecture, measured) => lectureProblems.push({ line, lecture, measured });
+afterAll(() => {
+  if (process.env.P354_LECTURE_REPORT) writeFileSync(process.env.P354_LECTURE_REPORT, JSON.stringify(lectureProblems, null, 2));
+});
+const lectureLines = () => read(LECTURE_MD).split('\n');
+/** 산문 한 줄을 꼴로 찾는다 — 없으면 null. */
+const findLine = (re) => {
+  const lines = lectureLines();
+  const at = lines.findIndex((line) => re.test(line));
+  return at === -1 ? null : { line: at + 1, text: lines[at], match: re.exec(lines[at]) };
+};
+const countLabel = (n) => `${n}`;
+
+describeLecture(LECTURE_MD ? '축 ⑧ 교안 대조 — 수업 백엔드(Step 1~3)' : '🚨 건너뜀(P354_LECTURE 없음) — 축 ⑧ 교안 대조', () => {
+  it('🔴 코드 블록 — Step · 언어 · 파일 · 대조 방식 · 판이 목록과 같고, 블록마다 그 판 글자와 맞는다(완성본은 글자까지 · 줄임은 줄이 같은 차례로)', () => {
+    const found = [];
+    const before = lectureProblems.length;
+    for (const fence of classFences()) {
+      const expected = EXPECTED_CLASS_FENCES[found.length];
+      const which = expected && expected[2] === fence.rel && expected[0] === fence.step ? expected[4] : null;
+      const how = which !== null ? howIn(fence.body, read(version(which)(fence.rel))) : null;
+      found.push([fence.step, fence.lang, fence.rel, how, which]);
+      if (which === null || how !== expected[3]) {
+        problem(fence.line, `${fence.lang} 블록 ${fence.rel}`, `기대 ${JSON.stringify(expected ?? '(목록에 없는 블록)')} · 실제 대조 ${how ?? '맞는 판 없음'}`);
+      }
+    }
+    seen.lectureFences = found;
+    expect(lectureProblems.slice(before)).toEqual([]);
+    expect(found).toEqual(EXPECTED_CLASS_FENCES);
+  });
+
+  it('🔴 응답 펜스 셋 — Step 1 강의 자료 판 405 · Step 1 세 층 판 201 · Step 2 고친 판 201 이 교안 차례대로 흐름의 실제 응답과 같다(시각은 꼴만)', async () => {
+    const flow = await lessonFlow();
+    const before = lectureProblems.length;
+    const jsonFences = fencesOf(LECTURE_MD).filter((f) => f.lang === 'json' && (f.step === 1 || f.step === 2));
+    const actual = [
+      ['405', flow.step1a.byTitle[ADD][0]],
+      ['Step 1 201', flow.step1.byTitle[ADD][0]],
+      ['Step 2 201', flow.step2.byTitle[ADD][0]],
+    ];
+    expect(jsonFences.length).toBe(3);
+    jsonFences.forEach((fence, i) => {
+      const [label, run] = actual[i];
+      const want = scrubTimesDeep(JSON.parse(fence.body.join('\n')));
+      const got = scrubTimesDeep(run.body);
+      if (JSON.stringify(want) !== JSON.stringify(got)) problem(fence.line, `${label} 응답 펜스 ${JSON.stringify(want)}`, `${run.status} ${JSON.stringify(got)}`);
+      // 시각은 꼴이 같아야 한다(ISO 8601 UTC 밀리초)
+      for (const key of ['timestamp', 'createdAt']) {
+        const text = fence.body.join('\n');
+        const m = new RegExp(`"${key}": "([^"]+)"`).exec(text);
+        if (m && !ISO.test(m[1])) problem(fence.line, `${label} 의 ${key} ${m[1]}`, 'ISO 8601 UTC 밀리초 꼴이 아니다');
+      }
+    });
+    expect([flow.step1a.byTitle[ADD][0].status, flow.step1a.byTitle[ADD][0].headers.allow]).toEqual([405, 'GET']);
+    seen.lessonResponses = actual.map(([label, run]) => ({ label, status: run.status, body: run.rawBody }));
+    expect(lectureProblems.slice(before)).toEqual([]);
+  }, 240_000);
+
+  it('🔴 마크다운 표 — Step 2 달기 전·뒤 · 🙋 세 판 · Step 3 겪기 · 결과 · 🙋 답글 · 맞추는 SQL 의 숫자가 실측과 같다', async () => {
+    const flow = await lessonFlow();
+    const replies = await replyFacts();
+    const before = lectureProblems.length;
+    const tables = tablesOf(LECTURE_MD);
+    const byHeader = (first) => tables.filter((t) => plainCell(t.header[0]) === first);
+    const cell = (t, r, c) => plainCell(t.rows[r]?.[c] ?? '');
+    const check = (t, r, c, want, what) => {
+      if (cell(t, r, c) !== want) problem(t.lines[r], `${what} «${t.rows[r]?.[c]}»`, want);
+    };
+    // Step 2 — 달기 전(강의 자료 판) · 단 뒤(increment 판)
+    const [beforeAfter] = byHeader('«2번 게시물»');
+    const p2Before = flow.step2a.byTitle[POST2][0].body.data;
+    const p2After = flow.step2b.byTitle[POST2][0].body.data;
+    const added2b = flow.step2b.byTitle[ADD][0].body.data;
+    check(beforeAfter, 0, 1, countLabel(p2Before.commentCount), '달기 전 commentCount');
+    check(beforeAfter, 1, 1, countLabel(p2After.commentCount), '단 뒤 commentCount');
+    if (cell(beforeAfter, 0, 2) !== '시드를 넣은 시각' || p2Before.updatedAt !== p2Before.createdAt) problem(beforeAfter.lines[0], `달기 전 updatedAt «${cell(beforeAfter, 0, 2)}»`, `updatedAt ${p2Before.updatedAt} · createdAt ${p2Before.createdAt}`);
+    if (cell(beforeAfter, 1, 2) !== '방금 댓글을 단 시각' || Math.abs(Date.parse(p2After.updatedAt) - Date.parse(added2b.createdAt)) > 1000) problem(beforeAfter.lines[1], `단 뒤 updatedAt «${cell(beforeAfter, 1, 2)}»`, `updatedAt ${p2After.updatedAt} · 단 댓글 createdAt ${added2b.createdAt}`);
+    // 🙋 세 판 — 축 ② 가 잰 값(2번 게시물 시작 29/29)
+    const [three] = byHeader('판');
+    const rb = seen.rollback;
+    const delta = (n, base) => (n === base ? '그대로' : `${n - base} ${n > base ? '올랐어요' : '내려갔어요'}`);
+    if (!rb) problem(three.line, '🙋 세 판 표', '실측 없음 — 축 ② 를 함께 돌려야 한다');
+    else {
+      const rows = [rb.rolled, rb.outside, rb.noTx];
+      rows.forEach((r, i) => {
+        const countWord = r.post2.count === 29 ? '그대로' : `${r.post2.count - 29} 올랐어요`;
+        const rootWord = r.post2.roots === 29 ? '그대로' : `${r.post2.roots - 29} 늘었어요`;
+        check(three, i, 2, countWord, `세 판 ${i + 1}행 comment_count`);
+        check(three, i, 3, rootWord, `세 판 ${i + 1}행 원댓글`);
+      });
+      expect(delta(1, 1)).toBe('그대로');
+    }
+    // Step 3 겪기 — 번호로만 찾는 판
+    const [trapTable, resultTable] = tables.filter((t) => plainCell(t.header[0]) === '요청');
+    const wrong = flow.step3b.byTitle[D_WRONG][0];
+    const post1 = flow.step3b.byTitle[POST1][0];
+    if (!new RegExp(`^${wrong.status} · 3번 댓글이 지워졌어요$`).test(cell(trapTable, 0, 1)) || wrong.body.data.comment.id !== 3) problem(trapTable.lines[0], `겪기 1행 응답 «${cell(trapTable, 0, 1)}»`, `${wrong.status} · 지운 댓글 ${wrong.body.data?.comment?.id}`);
+    check(trapTable, 0, 2, `응답의 commentCount ${wrong.body.data.commentCount}`, '겪기 1행 숫자');
+    check(trapTable, 1, 1, `${post1.status}`, '겪기 2행 응답');
+    check(trapTable, 1, 2, `commentCount ${post1.body.data.commentCount}`, '겪기 2행 숫자');
+    // Step 3 결과 — 고친 판의 일곱 요청
+    resultTable.rows.forEach((row, i) => {
+      const title = /«(.+)»/.exec(row[0])?.[1];
+      const run = flow.step3.byTitle[title]?.[0];
+      if (!run) { problem(resultTable.lines[i], `결과 표 «${title}»`, '그런 요청이 흐름에 없다'); return; }
+      const message = run.body.error?.message;
+      const wantResponse = message ? `${run.status} «${message}»` : `${run.status}`;
+      check(resultTable, i, 1, wantResponse, `결과 표 «${title}» 응답`);
+      check(resultTable, i, 2, run.body.data?.commentCount === undefined ? '' : `${run.body.data.commentCount}`, `결과 표 «${title}» commentCount`);
+    });
+    // 🙋 답글 — 원댓글 1 · 답글 11
+    const [replyTable] = byHeader('jaehoon이 지운 댓글');
+    [replies.root, replies.reply].forEach((r, i) => {
+      check(replyTable, i, 1, `${r.before.rows}에서 ${r.after.rows}`, `답글 표 ${i + 1}행 댓글 행`);
+      check(replyTable, i, 2, r.after.count === r.before.count ? `${r.before.count} 그대로` : `${r.before.count}에서 ${r.after.count}`, `답글 표 ${i + 1}행 comment_count`);
+    });
+    // 맞추는 SQL — 실행 전 · 뒤
+    const [sqlTable] = byHeader('id');
+    flow.sqlBefore.forEach((b, i) => {
+      const a = flow.sqlAfter[i];
+      const want = [`${b.id}`, `${b.comment_count}`, `${b.root_comments}`, `${a.comment_count}`, `${a.root_comments}`];
+      if (JSON.stringify(sqlTable.rows[i]?.map(plainCell)) !== JSON.stringify(want)) problem(sqlTable.lines[i] ?? sqlTable.line, `SQL 표 ${i + 1}행 ${JSON.stringify(sqlTable.rows[i])}`, want.join(' | '));
+    });
+    if (sqlTable.rows.length !== flow.sqlBefore.length) problem(sqlTable.line, `SQL 표 ${sqlTable.rows.length}행`, `게시물 ${flow.sqlBefore.length}개`);
+    seen.lessonFlow = { counts: Object.fromEntries(Object.entries(flow).filter(([, v]) => v?.counts).map(([k, v]) => [k, v.counts])), sqlBefore: flow.sqlBefore, sqlAfter: flow.sqlAfter, replies };
+    expect(lectureProblems.slice(before)).toEqual([]);
+  }, 240_000);
+
+  it('🔴 산문의 서버 주장 — 꼴로 찾아 실측과 맞댄다(못 찾으면 그것도 고칠 곳)', async () => {
+    const flow = await lessonFlow();
+    const before = lectureProblems.length;
+    const facts = {
+      add405: flow.step1a.byTitle[ADD][0],
+      step1Count: flow.step1.byTitle[POST2][0].body.data.commentCount,
+      step2a: flow.step2a,
+      step2b: flow.step2b,
+      step2: flow.step2,
+      step3b: flow.step3b,
+    };
+    const rootsOf = (state, id) => state.counts.find((p) => p.id === id).roots;
+    const countBefore3b = flow.step2.counts.find((p) => p.id === 2).count;
+    const claims = [
+      [/404가 아니라 (\d{3})가 와요/, (m) => [m[1], `${facts.add405.status}`]],
+      [/`Allow: (\w+)`이 이 주소가/, (m) => [m[1], facts.add405.headers.allow]],
+      [/`\.trim\(\)`이 앞뒤 공백을 먼저 떼니 공백만 보낸 글도 빈 글처럼 (\d{3})/, (m) => [m[1], seen.step1Extra ? `${JSON.parse(seen.step1Extra.spaces).error ? 400 : 201}` : '실측 없음']],
+      [/본문에 `"authorId": (\d+)`을 더해 보내도 결과는 같아요/, (m) => [`authorId ${m[1]} → 글쓴이 2 jaehoon`, seen.step1Extra ? `authorId ${m[1]} → 글쓴이 ${JSON.parse(seen.step1Extra.withAuthor).data.authorId} ${JSON.parse(seen.step1Extra.withAuthor).data.username}` : '실측 없음']],
+      [/그대로 «댓글 (\d+)개 보기»예요/, (m) => [m[1], `${facts.step1Count}`]],
+      [/`commentCount`가 (\d+)예요\. 2번 게시물의 원댓글은 이제 (\d+)개/, (m) => [`${m[1]} / ${m[2]}`, `${facts.step2a.byTitle[POST2][0].body.data.commentCount} / ${rootsOf(facts.step2a, 2)}`]],
+      [/원댓글 (\d+)개와는 여전히 (\d+) 차이/, (m) => [`${m[1]} · ${m[2]}`, `${rootsOf(facts.step2b, 2)} · ${rootsOf(facts.step2b, 2) - facts.step2b.counts.find((p) => p.id === 2).count}`]],
+      [/응답의 `commentCount`가 (\d+)이에요\. «2번 게시물»을 다시 보내면 `commentCount`는 (\d+)이고, `updatedAt`은 바로 앞에서 본 값 그대로/, (m) => [`${m[1]} / ${m[2]} / 그대로`, `${facts.step2.byTitle[ADD][0].body.data.commentCount} / ${facts.step2.byTitle[POST2][0].body.data.commentCount} / ${facts.step2.byTitle[POST2][0].body.data.updatedAt === facts.step2b.byTitle[POST2][0].body.data.updatedAt ? '그대로' : '바뀜'}`]],
+      [/세 판 모두 응답은 (\d{3})/, (m) => [m[1], seen.rollback ? [...new Set(Object.values(seen.rollback).map((r) => r.status))].join(',') : '실측 없음']],
+      [/3번 댓글은 (\w+)이 1번 게시물에 단 «(.+?)»예요\. 1번 게시물은 (\w+)의 게시물/, (m) => [`${m[1]} «${m[2]}» · ${m[3]}`, `${flow.comments[3].username} «${flow.comments[3].content}» · ${flow.postAuthors[1]}`]],
+      [/1번 게시물은 원댓글이 하나 줄었는데 그대로 (\d+)이고, 2번 게시물은 아무것도 안 지워졌는데 (\d+)에서 (\d+)(?:으)?로/, (m) => [`${m[1]} · ${m[2]}→${m[3]}`, `${facts.step3b.byTitle[POST1][0].body.data.commentCount} · ${countBefore3b}→${facts.step3b.byTitle[D_WRONG][0].body.data.commentCount}`]],
+      [/요청이 (아홉) 개예요/, (m) => [m[1], ['', '', '', '', '', '', '', '', '', '아홉'][blocksOf(read(version('3a')(HTTP_FILE))).blocks.length - blocksOf(read(version(2)(HTTP_FILE))).blocks.length]]],
+      [/6번 댓글은 (\w+)가 (\w+)의 게시물에 단 «(.+?)»/, (m) => [`${m[1]} · ${m[2]} · «${m[3]}»`, `${flow.comments[6].username} · ${flow.postAuthors[2]} · «${flow.comments[6].content}»`]],
+      [/다섯 번 모두 둘 다 (\d{3})이었어요\. 1번 게시물의 숫자는 (\d+)에서 (\d+)로 두 번 내려갔고, 남은 원댓글은 (\d+)개/, (m) => [`${m[1]} · ${m[2]}→${m[3]} · ${m[4]}`, seen.concurrentDelete ? `${[...new Set(seen.concurrentDelete.before.flatMap((r) => r.statuses))].join(',')} · 3→${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.count))].join(',')} · ${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.roots))].join(',')}` : '실측 없음']],
+      [/다섯 번 모두 (\d{3}) 하나와 (\d{3}) 하나였고 숫자도 한 번만/, (m) => [`${m[1]} · ${m[2]}`, seen.concurrentDelete ? [...new Set(seen.concurrentDelete.after.map((r) => r.statuses.join(' · ')))].join(' / ') : '실측 없음']],
+      [/«(댓글 목록)» · «(댓글 달기)» · «(댓글 지우기)» 세 주소가 보여요/, (m) => [`«${m[1]}» · «${m[2]}» · «${m[3]}»`, seen.docs ? `«${seen.docs.comments.get.summary}» · «${seen.docs.comments.post.summary}» · «${seen.docs.remove.delete.summary}»` : '실측 없음']],
+    ];
+    const results = [];
+    for (const [re, measure] of claims) {
+      const hit = findLine(re);
+      if (!hit) { problem(null, `꼴 ${re}`, '교안에서 못 찾았다'); results.push([String(re), null]); continue; }
+      const [said, got] = measure(hit.match);
+      results.push([hit.line, said, got]);
+      if (said !== got) problem(hit.line, hit.text.trim(), got);
+    }
+    seen.lessonClaims = results;
+    expect(lectureProblems.slice(before)).toEqual([]);
+  }, 240_000);
+});
