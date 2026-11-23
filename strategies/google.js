@@ -9,6 +9,8 @@ export const googleStrategy = createSocialStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   scope: ['email', 'profile'],
+  // 계정 선택 화면을 띄우는 값 — 구글에 로그인한 계정이 하나뿐이어도 «다른 계정 사용» 을 고를 수 있다.
+  accountPrompt: 'select_account',
   userInfoURL: 'https://openidconnect.googleapis.com/v1/userinfo',
   // 구글이 준 사용자 정보를 우리가 정한 이름으로 맞춘다 — id 는 구글이 그 계정에 매긴, 바뀌지 않는 값(sub)이다.
   toProfile: (info) => ({

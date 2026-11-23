@@ -30,7 +30,8 @@ router.get(
   requireLogin,
   authController.rememberNext('google'),
   authController.rememberLink('google'),
-  passport.authenticate('google', { session: false }),
+  // 어느 구글 계정을 이을지 사람이 고르게 한다 — 전략이 인가 주소에 prompt 를 싣는다.
+  passport.authenticate('google', { session: false, chooseAccount: true }),
 );
 // 위 세 주소에서 난 에러는 여기서 받는다 — 앱의 에러 미들웨어까지 가면 JSON 으로 답하게 된다.
 router.use('/google', authController.socialFailed);
@@ -47,7 +48,7 @@ router.get(
   requireLogin,
   authController.rememberNext('kakao'),
   authController.rememberLink('kakao'),
-  passport.authenticate('kakao', { session: false }),
+  passport.authenticate('kakao', { session: false, chooseAccount: true }),
 );
 router.use('/kakao', authController.socialFailed);
 // 네이버 로그인 — 구글, 카카오와 같은 주소 둘이다. 전략의 이름만 다르다.
@@ -63,7 +64,7 @@ router.get(
   requireLogin,
   authController.rememberNext('naver'),
   authController.rememberLink('naver'),
-  passport.authenticate('naver', { session: false }),
+  passport.authenticate('naver', { session: false, chooseAccount: true }),
 );
 router.use('/naver', authController.socialFailed);
 

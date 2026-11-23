@@ -9,6 +9,8 @@ export const kakaoStrategy = createSocialStrategy({
   clientID: process.env.KAKAO_CLIENT_ID,
   clientSecret: process.env.KAKAO_CLIENT_SECRET,
   scope: ['profile_nickname', 'account_email'],
+  // 카카오계정 로그인 화면을 다시 띄우는 값 — 카카오에 로그인해 있어도 다른 계정으로 로그인할 수 있다.
+  accountPrompt: 'login',
   userInfoURL: 'https://kapi.kakao.com/v2/user/me',
   // 카카오는 같은 뜻의 값을 다른 이름, 다른 위치에 준다 — id 는 카카오가 이 앱에서 그 계정에 매긴 회원번호(숫자)다.
   // 이메일은 이메일 제공에 동의한 사람에게만 kakao_account 안에 온다.

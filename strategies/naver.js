@@ -9,6 +9,8 @@ export const naverStrategy = createSocialStrategy({
   clientID: process.env.NAVER_CLIENT_ID,
   clientSecret: process.env.NAVER_CLIENT_SECRET,
   scope: ['openid'],
+  // 네이버 로그인 화면을 다시 띄우는 값 — 네이버에 로그인해 있어도 다른 아이디로 로그인할 수 있다.
+  accountPrompt: 'login',
   userInfoURL: 'https://openapi.naver.com/v1/nid/me',
   // 네이버는 사용자 정보를 response 라는 키 안에 담아 준다 — id 는 네이버가 이 애플리케이션에서 그 계정에 매긴 값이다.
   // 네이버는 이메일을 확인했는지 알려 주는 값을 주지 않는다 — 확인되지 않은 이메일로 다룬다.
