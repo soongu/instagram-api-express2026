@@ -1462,7 +1462,8 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 대조 — 수업 백엔드(Step 1~
       [/6번 댓글은 (\w+)가 (\w+)의 게시물에 단 «(.+?)»/, (m) => [`${m[1]} · ${m[2]} · «${m[3]}»`, `${flow.comments[6].username} · ${flow.postAuthors[2]} · «${flow.comments[6].content}»`]],
       [/다섯 번 모두 둘 다 (\d{3})이었어요\. 1번 게시물의 숫자는 (\d+)에서 (\d+)로 두 번 내려갔고, 남은 원댓글은 (\d+)개/, (m) => [`${m[1]} · ${m[2]}→${m[3]} · ${m[4]}`, seen.concurrentDelete ? `${[...new Set(seen.concurrentDelete.before.flatMap((r) => r.statuses))].join(',')} · 3→${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.count))].join(',')} · ${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.roots))].join(',')}` : '실측 없음']],
       [/다섯 번 모두 (\d{3}) 하나와 (\d{3}) 하나였고 숫자도 한 번만/, (m) => [`${m[1]} · ${m[2]}`, seen.concurrentDelete ? [...new Set(seen.concurrentDelete.after.map((r) => r.statuses.join(' · ')))].join(' / ') : '실측 없음']],
-      [/«(댓글 목록)» · «(댓글 달기)» · «(댓글 지우기)» 세 주소가 보여요/, (m) => [`«${m[1]}» · «${m[2]}» · «${m[3]}»`, seen.docs ? `«${seen.docs.comments.get.summary}» · «${seen.docs.comments.post.summary}» · «${seen.docs.remove.delete.summary}»` : '실측 없음']],
+      // 문서에 댓글 주소의 HTTP 메서드 셋 — 목록 주소의 get · post 와 댓글 하나 주소의 delete
+      [/댓글 주소 셋\(((?:`[A-Z]+`·?)+)\)이 보여요/, (m) => [m[1].replace(/`/g, ''), seen.docs ? [...Object.keys(seen.docs.comments), ...Object.keys(seen.docs.remove)].filter((k) => k !== 'parameters').map((k) => k.toUpperCase()).join('·') : '실측 없음']],
     ];
     const results = [];
     for (const [re, measure] of claims) {

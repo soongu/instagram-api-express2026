@@ -525,7 +525,8 @@ describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 
     };
     const claims = [
       [/사람 (\d+)명 · 상품 (\d+)개 · 리뷰 (\d+)개 — 2번 사람이 (\w+)이고, \w+은 텀블러\((\d)번 상품\)를 팔아요/, (m) => [`${m[1]} · ${m[2]} · ${m[3]} · ${m[4]} · ${m[5]}`, `${data.users.length} · ${data.products.length} · ${data.reviews.length} · ${data.users.find((u) => u.id === 2).username} · ${data.products.find((p) => p.sellerId === 2).id}`]],
-      [/jaehoon이 쓴 리뷰는 무선 이어폰\(1번 상품\)의 (\d+)번과 숨긴 (\d+)번이고, jaehoon이 파는 상품은 텀블러\((\d)번 상품\)/, (m) => [`${m[1]} · 숨김 ${m[2]} · ${m[3]}`, `${data.reviews.filter((r) => r.authorId === 2 && !r.hidden).map((r) => r.id).join(',')} · 숨김 ${data.reviews.filter((r) => r.authorId === 2 && r.hidden).map((r) => r.id).join(',')} · ${data.products.find((p) => p.sellerId === 2).id}`]],
+      // 번호 목록(«2번 · 8번» 처럼 « · » 나 «과» 로 이은 것) + 숨긴 N번
+      [/jaehoon이 쓴 리뷰는 무선 이어폰\(1번 상품\)의 ((?:\d+번(?: · |, )?)+)과 숨긴 (\d+)번이고, jaehoon이 파는 상품은 텀블러\((\d)번 상품\)/, (m) => [`${[...m[1].matchAll(/(\d+)번/g)].map((n) => n[1]).join(',')} · 숨김 ${m[2]} · ${m[3]}`, `${data.reviews.filter((r) => r.authorId === 2 && !r.hidden).map((r) => r.id).join(',')} · 숨김 ${data.reviews.filter((r) => r.authorId === 2 && r.hidden).map((r) => r.id).join(',')} · ${data.products.find((p) => p.sellerId === 2).id}`]],
       [/서버를 다시 띄우지 않고 확인 1을 한 번 더 보내면 `reviewCount`가 (\d+)가 돼요/, async (m) => {
         const dir = studentCopy('practice1');
         onPort(dir, 'practice1', LAB_PORT);
