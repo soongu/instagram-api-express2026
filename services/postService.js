@@ -114,6 +114,32 @@ async function addHashtags(tx, postId, names) {
   }
 }
 
+// 게시물에서 해시태그를 뗀다 — 짝을 지우고 그 태그가 붙은 게시물 수를 1 내린다.
+async function removeHashtags(tx, postId, hashtagIds) {
+  if (hashtagIds.length === 0) return;
+
+  await tx.postHashtag.deleteMany({ where: { postId, hashtagId: { in: hashtagIds } } });
+  await tx.hashtag.updateMany({
+    where: { id: { in: hashtagIds } },
+    data: { postCount: { decrement: 1 } },
+  });
+}
+
+// 고친 글의 해시태그에 맞춘다 — 빠진 태그는 떼고, 새로 생긴 태그는 붙인다. 그대로인 태그는 건드리지 않는다.
+async function syncHashtags(tx, postId, names) {
+  const links = await tx.postHashtag.findMany({
+    where: { postId },
+    select: { hashtag: { select: { id: true, name: true } } },
+  });
+  const before = links.map((link) => link.hashtag);
+
+  const removed = before.filter((hashtag) => !names.includes(hashtag.name));
+  const added = names.filter((name) => !before.some((hashtag) => hashtag.name === name));
+
+  await removeHashtags(tx, postId, removed.map((hashtag) => hashtag.id));
+  await addHashtags(tx, postId, added);
+}
+
 export async function createPost({ imageUrls, ...data }) {
   // 해시태그는 아무것도 쓰기 전에 뽑는다 — 규칙에 안 맞으면 여기서 400 이 나고 게시물도 안 생긴다.
   const names = extractHashtags(data.content);
@@ -168,14 +194,22 @@ async function checkAuthor(id, userId) {
 export async function updatePost(id, userId, data) {
   await checkAuthor(id, userId);
 
-  try {
-    const post = await prisma.post.update({
-      where: { id },
-      data,
-      select: fieldsFor(userId),
-    });
+  // 글을 고칠 때만 해시태그를 다시 뽑는다 — 사진 설명만 고치면 태그는 그대로다.
+  const names = data.content === undefined ? undefined : extractHashtags(data.content);
 
-    return flatten(post);
+  try {
+    // 글을 고치는 일과 해시태그를 맞추는 일을 한 트랜잭션으로 묶는다.
+    return await prisma.$transaction(async (tx) => {
+      const post = await tx.post.update({
+        where: { id },
+        data,
+        select: fieldsFor(userId),
+      });
+
+      if (names !== undefined) await syncHashtags(tx, id, names);
+
+      return flatten(post);
+    });
   } catch (error) {
     if (error.code === 'P2025') throw new NotFoundError('POST_NOT_FOUND');
     throw error;
@@ -194,6 +228,9 @@ export async function removePost(id, userId, role) {
     // 게시물을 지우면 그 게시물에 쓴 사진의 기록도 함께 지워진다(onDelete: Cascade) — 지우기 전에 파일 이름을 읽어 둔다.
     [fileNames, post] = await prisma.$transaction(async (tx) => {
       const uploads = await tx.upload.findMany({ where: { postId: id }, select: { fileName: true } });
+      // 짝은 게시물과 함께 지워지지만(onDelete: Cascade) 태그의 게시물 수는 우리가 내려야 한다.
+      const links = await tx.postHashtag.findMany({ where: { postId: id }, select: { hashtagId: true } });
+      await removeHashtags(tx, id, links.map((link) => link.hashtagId));
       const deleted = await tx.post.delete({ where: { id }, select: postFields });
       return [uploads.map((upload) => upload.fileName), deleted];
     });
