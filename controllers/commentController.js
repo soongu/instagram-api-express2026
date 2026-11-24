@@ -9,6 +9,13 @@ export async function list(req, res) {
   sendData(res, page);
 }
 
+export async function listReplies(req, res) {
+  const { limit, cursor } = res.locals.query;
+  const page = await commentService.getReplies(req.postId, req.commentId, { limit, cursor });
+
+  sendData(res, page);
+}
+
 export async function create(req, res) {
   // 글쓴이는 게시물 만들기처럼 본문이 아니라 로그인 정보로 정한다.
   const comment = await commentService.createComment(req.postId, res.locals.userId, req.body.content);

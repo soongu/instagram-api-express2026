@@ -4,7 +4,7 @@ import * as commentController from '../controllers/commentController.js';
 import { validateBody, validateQuery } from '../middlewares/validate.js';
 import { parseCommentId, parseId } from '../middlewares/params.js';
 import { allowOnly } from '../middlewares/methods.js';
-import { commentCreateSchema, commentListQuerySchema } from '../schemas/commentSchema.js';
+import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 
 // app.js 가 붙인 주소(/api/posts/:id/comments)의 :id 까지 req.params 로 받는다.
 const router = express.Router({ mergeParams: true });
@@ -18,8 +18,10 @@ router.param('commentId', parseCommentId);
 router.get('/', validateQuery(commentListQuerySchema), commentController.list);
 router.post('/', validateBody(commentCreateSchema), commentController.create);
 router.delete('/:commentId', commentController.remove);
+router.get('/:commentId/replies', validateQuery(replyListQuerySchema), commentController.listReplies);
 
 router.all('/', allowOnly('GET', 'POST'));
 router.all('/:commentId', allowOnly('DELETE'));
+router.all('/:commentId/replies', allowOnly('GET'));
 
 export default router;

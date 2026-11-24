@@ -62,6 +62,30 @@ export async function getComments(postId, { limit = 20, cursor }) {
   };
 }
 
+// 원댓글 하나에 달린 답글을 받는다. 답글도 오래된 것부터 보여 준다.
+// 답글은 parentId 에 원댓글 번호가 들어 있는 댓글이다.
+export async function getReplies(postId, commentId, { limit = 3, cursor }) {
+  const replies = await prisma.comment.findMany({
+    where: {
+      parentId: commentId,
+      // 커서는 원댓글 목록과 같은 꼴이라서 «그 답글 다음» 도 같은 조건으로 찾는다.
+      ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
+    },
+    select: commentFields,
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: limit + 1,
+  });
+
+  const hasNext = replies.length > limit;
+  const page = replies.slice(0, limit);
+
+  return {
+    items: page.map(flatten),
+    hasNext,
+    nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
+  };
+}
+
 // 댓글을 단다. 이 주소로 다는 댓글은 모두 원댓글이다.
 export async function createComment(postId, userId, content) {
   // 게시물이 없으면 404 로 답한다. 목록과 같은 확인이다.
