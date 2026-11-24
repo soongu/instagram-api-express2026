@@ -804,15 +804,17 @@ describe('축 ② Step 2 — 원댓글 목록에 답글을 실을까, 개수만 
 
 // ── 축 ③ Step 3 ────────────────────────────────────────────────────────────────
 const C_ADD = '1번 댓글에 답글 달기';
+const C_UNDO = '고치기 전 서버에서 원댓글로 달린 그 댓글 지우기';
 const C_REPLY = '답글에 답글 달기';
 const C_OTHER = '2번 게시물 주소로 1번 댓글에 답글 달기';
 const C_CLEAN = '잘못 달린 답글 지우기';
 const C_NONE = '없는 댓글에 답글 달기';
-const C_WORD = 'parentId 를 글자로 보낸 답글';
+const C_WORD = 'parentId를 글자로 보낸 답글';
 const ADD_TEXT = '@minji 저녁에 가면 노을도 보여요';
 const OTHER_TEXT = '@minji 저도 가 보고 싶어요';
 const STEP3_NEW = [
   [C_ADD, 'POST http://localhost:3000/api/v2/posts/1/comments'],
+  [C_UNDO, 'DELETE http://localhost:3000/api/v2/posts/1/comments/{{firstReply.data.comment.id}}'],
   [C_REPLY, 'POST http://localhost:3000/api/v2/posts/1/comments'],
   [C_OTHER, 'POST http://localhost:3000/api/v2/posts/2/comments'],
   [C_CLEAN, 'DELETE http://localhost:3000/api/v2/posts/2/comments/{{misplaced.data.comment.id}}'],
@@ -825,7 +827,7 @@ const send3 = async (label, titles, db = GATE_DB) => {
 };
 
 describe('축 ③ Step 3 — 답글 달기 API', () => {
-  it('🔴 강의 자료 판 — .http 끝에 요청 여섯(본문 parentId · misplaced 에 # @name) · 앞 블록은 Step 2 그대로 · 이 판은 parentId 를 버린다 — 1번 댓글에 단 답글이 원댓글로 달리고 숫자가 4 → 5', async () => {
+  it('🔴 강의 자료 판 — .http 끝에 요청 일곱(본문 parentId · firstReply · misplaced 에 # @name) · 앞 블록은 Step 2 그대로 · 이 판은 parentId 를 버린다 — 1번 댓글에 단 답글이 원댓글로 달리고 숫자가 4 → 5 · 그 댓글 지우기 200 으로 4', async () => {
     const text = read(version('3a')(HTTP_FILE));
     const before = read(version(2)(HTTP_FILE));
     expect(text.startsWith(before)).toBe(true);
@@ -835,19 +837,27 @@ describe('축 ③ Step 3 — 답글 달기 API', () => {
       const block = blockTexts(text).find((b) => b.title === title).text;
       return block.includes('{\n') ? JSON.parse(block.slice(block.indexOf('{\n'), block.lastIndexOf('}') + 1)) : null;
     };
-    expect([C_ADD, C_REPLY, C_OTHER, C_CLEAN, C_NONE, C_WORD].map(bodyOf)).toEqual([
-      { content: ADD_TEXT, parentId: 1 }, { content: '@dahye 다음엔 셋이 가요', parentId: 11 }, { content: OTHER_TEXT, parentId: 1 }, null,
+    expect([C_ADD, C_UNDO, C_REPLY, C_OTHER, C_CLEAN, C_NONE, C_WORD].map(bodyOf)).toEqual([
+      { content: ADD_TEXT, parentId: 1 }, null, { content: '@dahye 다음엔 셋이 가요', parentId: 11 }, { content: OTHER_TEXT, parentId: 1 }, null,
       { content: '이 댓글에도 답글을 달아요', parentId: 999 }, { content: '번호를 글자로 보내요', parentId: '1' },
     ]);
     expect(text).toContain(`### ${C_OTHER}\n# @name misplaced\nPOST `);
+    expect(text).toContain(`### ${C_ADD}\n# @name firstReply\nPOST `);
     await copyDb(GATE_DB);
-    const runs = await send3('3a', [C_ADD, POST1, R_LIST]);
-    expect(runs.map((r) => r.status)).toEqual([201, 200, 200]);
+    const runs = await send3('3a', [C_ADD, POST1, R_LIST, C_UNDO, POST1]);
+    expect(runs.map((r) => r.status)).toEqual([201, 200, 200, 200, 200]);
     expect(Object.keys(runs[0].body.data.comment)).toEqual([...FIELDS]);
     expect(runs[0].body.data.commentCount).toBe(5);
     expect(runs[1].body.data.commentCount).toBe(5);
     expect(ids(runs[2].body.data.items)).toEqual([10, 11]);
-    expect(await onDb(GATE_DB, 'SELECT post_id, parent_id FROM comments WHERE id = $1', [runs[0].body.data.comment.id])).toEqual([{ post_id: 1, parent_id: null }]);
+    // 지우기 — jaehoon 이 단 댓글이라 200 · 원댓글이었으니 숫자가 5 → 4
+    expect(runs[3].body.data).toMatchObject({ comment: { id: runs[0].body.data.comment.id, content: ADD_TEXT }, commentCount: 4 });
+    expect(runs[4].body.data.commentCount).toBe(4);
+    expect(await onDb(GATE_DB, 'SELECT count(*)::int AS n FROM comments WHERE id = $1', [runs[0].body.data.comment.id])).toEqual([{ n: 0 }]);
+    expect(await countOf(GATE_DB, 1)).toEqual({ id: 1, count: 4, roots: 4, rows: 6 });
+    // 지우기 전에는 원댓글이었다 — 같은 요청을 지우지 않고 보내 DB 를 본다
+    const kept = await send3('3a', [C_ADD]);
+    expect(await onDb(GATE_DB, 'SELECT post_id, parent_id FROM comments WHERE id = $1', [kept[0].body.data.comment.id])).toEqual([{ post_id: 1, parent_id: null }]);
     expect(await countOf(GATE_DB, 1)).toEqual({ id: 1, count: 5, roots: 5, rows: 7 });
     // 글자로 보낸 parentId 도 버려져 원댓글로 달린다
     const word = await send3('3a', [C_WORD]);
@@ -992,7 +1002,7 @@ describe('축 ③ Step 3 — 답글 달기 API', () => {
     seen.fullHttp = runs.map((r) => [r.title, r.status]);
     expect(runs.slice(17).map((r) => [r.title, r.status ?? null])).toEqual([
       [R_LIST, 200], [R_FIRST, 200], [R_SECOND, 200], [R_NONE, 404], [R_OTHER, 404], [R_REPLY, 400], [LIST20, 200],
-      [C_ADD, 201], [C_REPLY, 400], [C_OTHER, 404], [C_CLEAN, null], [C_NONE, 404], [C_WORD, 400],
+      [C_ADD, 201], [C_UNDO, 200], [C_REPLY, 400], [C_OTHER, 404], [C_CLEAN, null], [C_NONE, 404], [C_WORD, 400],
     ]);
     expect(await drift(GATE_DB)).toEqual([]);
   }, 90_000);
@@ -1144,7 +1154,7 @@ describe('축 ⑥ 학생 한 사람의 흐름 — 한 DB 에서 판을 차례로
     flow.sql = (await runSql(GATE_DB, read(version(3)(SQL_FILE))))[1].rows;
     flow.step2b = await send('2b', [LIST20]);
     flow.step2 = await send(2, [LIST20]);
-    flow.step3a = await send('3a', [C_ADD, POST1, R_LIST]);
+    flow.step3a = await send('3a', [C_ADD, POST1, R_LIST, C_UNDO]);
     flow.step3b = await send('3b', [C_ADD, R_LIST, C_REPLY, C_OTHER, R_LIST, C_CLEAN, C_NONE, C_WORD]);
     flow.step3 = await send(3, [C_OTHER, C_NONE, C_REPLY, C_WORD, R_LIST, POST1]);
     const end = await counts(GATE_DB);
@@ -1154,12 +1164,13 @@ describe('축 ⑥ 학생 한 사람의 흐름 — 한 DB 에서 판을 차례로
     expect(flow.sql).toEqual([{ replies: '301', comment_count: 39, root_comments: '39' }]);
     expect(flow.step2b.bodies[0].data.items[0].replies).toHaveLength(301);
     expect(flow.step2.bodies[0].data.items[0].replyCount).toBe(301);
-    expect(flow.step3a.runs.map((r) => r.status)).toEqual([201, 200, 200]);
+    expect(flow.step3a.runs.map((r) => r.status)).toEqual([201, 200, 200, 200]);
+    expect([flow.step3a.bodies[0].data.commentCount, flow.step3a.bodies[3].data.commentCount]).toEqual([5, 4]);
     expect(flow.step3b.runs.map((r) => r.status)).toEqual([201, 200, 400, 201, 200, 200, 404, 400]);
     expect(flow.step3.runs.map((r) => r.status)).toEqual([404, 404, 400, 400, 200, 200]);
     for (const step of Object.values(flow)) if (step.drift) expect(step.drift).toEqual([]);
     expect(end.filter((p) => p.id <= 3)).toEqual([
-      { id: 1, count: 5, roots: 5, rows: 8 },
+      { id: 1, count: 4, roots: 4, rows: 7 },
       { id: 2, count: 39, roots: 39, rows: 340 },
       { id: 3, count: 2, roots: 2, rows: 2 },
     ]);
@@ -1167,9 +1178,9 @@ describe('축 ⑥ 학생 한 사람의 흐름 — 한 DB 에서 판을 차례로
       { id: 10, post_id: 1, username: 'jaehoon', content: '다음엔 같이 가요' }, { id: 11, post_id: 1, username: 'dahye', content: '저도 껴주세요' },
       expect.objectContaining({ post_id: 1, username: 'jaehoon', content: ADD_TEXT }),
     ]);
-    // Step 3 강의 자료 판에서 1번 댓글에 단 «답글» 은 원댓글로 남는다(1번 게시물의 원댓글 다섯째)
-    expect((await onDb(GATE_DB, 'SELECT content, parent_id FROM comments WHERE post_id = 1 AND parent_id IS NULL ORDER BY created_at DESC, id DESC LIMIT 1'))[0])
-      .toEqual({ content: ADD_TEXT, parent_id: null });
+    // Step 3 강의 자료 판에서 원댓글로 달린 것은 학생이 지웠다 — 같은 글은 답글 하나만 남는다
+    expect(await onDb(GATE_DB, 'SELECT post_id, parent_id FROM comments WHERE content = $1', [ADD_TEXT])).toEqual([{ post_id: 1, parent_id: 1 }]);
+    expect(await onDb(GATE_DB, 'SELECT id FROM comments WHERE post_id = 1 AND parent_id IS NULL ORDER BY id')).toEqual([{ id: 1 }, { id: 42 }, { id: 43 }, { id: 44 }]);
     seen.flow = { ...Object.fromEntries(Object.entries(flow).map(([k, v]) => [k, v.runs ?? v])), end };
     seen.flowEnd = await onDb(GATE_DB, `SELECT c.id, c.post_id, c.parent_id, u.username, c.content FROM comments c JOIN users u ON u.id = c.author_id
       WHERE c.post_id = 1 OR (c.post_id = 2 AND c.parent_id IS NULL) ORDER BY c.post_id, c.created_at, c.id`);
