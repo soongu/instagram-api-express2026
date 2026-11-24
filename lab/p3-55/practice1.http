@@ -1,0 +1,18 @@
+### 1번 리뷰에 달린 답변 — 첫 페이지
+# @name first
+GET http://localhost:4001/api/products/1/reviews/1/replies
+
+### 1번 리뷰에 달린 답변 — 둘째 페이지
+GET http://localhost:4001/api/products/1/reviews/1/replies?cursor={{first.nextCursor}}
+
+### 답변이 없는 리뷰
+GET http://localhost:4001/api/products/1/reviews/2/replies
+
+### 다른 상품 주소로 1번 리뷰의 답변
+GET http://localhost:4001/api/products/2/reviews/1/replies
+
+### 답변 번호로 물으면
+GET http://localhost:4001/api/products/1/reviews/13/replies
+
+### 없는 리뷰의 답변
+GET http://localhost:4001/api/products/1/reviews/99/replies
