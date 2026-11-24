@@ -37,6 +37,25 @@ export function findUserById(id) {
   return prisma.user.findUnique({ where: { id }, select: userFields });
 }
 
+// 프로필 헤더에 실을 것 - 게시물 수는 컬럼이 없어서 요청마다 센다.
+const profileFields = {
+  id: true,
+  username: true,
+  name: true,
+  profileImage: true,
+  _count: { select: { posts: true } },
+};
+
+// 사용자 이름으로 프로필 헤더를 돌려준다. 그런 사람이 없으면 404 다.
+export async function getProfile(username) {
+  const user = await prisma.user.findUnique({ where: { username }, select: profileFields });
+
+  if (!user) throw new NotFoundError('USER_NOT_FOUND');
+
+  const { _count, ...profile } = user;
+  return { ...profile, postCount: _count.posts };
+}
+
 // 로그인 — 사용자 이름과 비밀번호가 맞으면 그 사람을, 아니면 null 을 돌려준다.
 // 해시는 이 함수 안에서만 꺼내 쓰고, 돌려줄 때는 응답에 실을 컬럼만 남긴다.
 export async function checkPassword(username, password) {

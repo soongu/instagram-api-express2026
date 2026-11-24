@@ -163,6 +163,17 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/profiles/{username}': {
+      parameters: [pathParameter('username', '사용자 이름')],
+      get: {
+        summary: '프로필 헤더 - 이름 · 사진 · 게시물 수',
+        responses: {
+          200: { description: '그 사람의 프로필', content: json(data(ref('Profile'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
     '/api/v2/auth/signup': {
       post: {
         summary: '가입',
@@ -253,6 +264,16 @@ export const openapi = {
           items: { type: 'array', items: { $ref: '#/components/schemas/RootComment' } },
           hasNext: { type: 'boolean' },
           nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+        },
+      },
+      Profile: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          name: { type: ['string', 'null'], description: '이름 - 적지 않은 사람은 null' },
+          profileImage: { type: ['string', 'null'], description: '프로필 사진 주소 - 없으면 null' },
+          postCount: { type: 'integer', description: '그 사람이 올린 게시물 수' },
         },
       },
       GridItem: {
