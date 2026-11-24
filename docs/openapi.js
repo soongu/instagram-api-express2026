@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js';
 import { signupSchema } from '../schemas/authSchema.js';
-import { commentCreateSchema, commentListQuerySchema } from '../schemas/commentSchema.js';
+import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -114,13 +114,13 @@ export const openapi = {
         },
       },
       post: {
-        summary: '댓글 달기 — 글쓴이는 로그인한 사람',
+        summary: '댓글 달기 — 글쓴이는 로그인한 사람 · parentId 가 있으면 그 원댓글에 다는 답글',
         requestBody: { required: true, content: json(toSchema(commentCreateSchema)) },
         responses: {
-          201: { description: '단 댓글과 바뀐 댓글 수 — 댓글 하나를 받는 주소가 없어 Location 헤더는 없다', content: json(data(ref('CommentChange'))) },
-          400: { description: '보낸 내용이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY')) },
+          201: { description: '단 댓글과 바뀐 댓글 수 — 답글은 댓글 수에 세지 않는다 · 댓글 하나를 받는 주소가 없어 Location 헤더는 없다', content: json(data(ref('CommentChange'))) },
+          400: { description: '보낸 내용이 규칙에 안 맞거나, 답글에 답글을 달려고 함', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'CANNOT_REPLY_TO_REPLY')) },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
-          404: { description: '그런 게시물이 없음', content: json(errorOf('POST_NOT_FOUND')) },
+          404: { description: '그런 게시물이 없거나, 그 게시물에 parentId 의 댓글이 없음', content: json(errorOf('POST_NOT_FOUND', 'COMMENT_NOT_FOUND')) },
         },
       },
     },
@@ -133,6 +133,19 @@ export const openapi = {
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
           403: { description: '내 댓글도 아니고 내 게시물에 달린 댓글도 아님', content: json(errorOf('CANNOT_REMOVE_COMMENT')) },
           404: { description: '그 게시물에 그런 댓글이 없음', content: json(errorOf('COMMENT_NOT_FOUND', 'POST_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/posts/{id}/comments/{commentId}/replies': {
+      parameters: [postIdParameter, pathParameter('commentId', '원댓글 번호')],
+      get: {
+        summary: '답글 목록 — 원댓글 하나에 달린 답글, 오래된 순',
+        parameters: queryParameters(replyListQuerySchema),
+        responses: {
+          200: { description: '답글 한 페이지 — 답글이 없는 원댓글은 빈 목록', content: json(data(ref('ReplyPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞거나, 답글 번호로 물음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR', 'REPLY_HAS_NO_REPLIES')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그 게시물에 그런 댓글이 없음', content: json(errorOf('COMMENT_NOT_FOUND')) },
         },
       },
     },
@@ -214,7 +227,21 @@ export const openapi = {
           profileImage: { type: ['string', 'null'] },
         },
       },
+      RootComment: {
+        allOf: [
+          { $ref: '#/components/schemas/Comment' },
+          { type: 'object', properties: { replyCount: { type: 'integer', description: '이 원댓글에 달린 답글 수' } } },
+        ],
+      },
       CommentPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: { $ref: '#/components/schemas/RootComment' } },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+        },
+      },
+      ReplyPage: {
         type: 'object',
         properties: {
           items: { type: 'array', items: { $ref: '#/components/schemas/Comment' } },
@@ -225,7 +252,7 @@ export const openapi = {
       CommentChange: {
         type: 'object',
         properties: {
-          comment: { $ref: '#/components/schemas/Comment' },
+          comment: { $ref: '#/components/schemas/Comment', description: '원댓글을 달면 replyCount: 0 이 함께 온다' },
           commentCount: { type: 'integer', description: '바뀐 뒤 게시물의 댓글 수 — 원댓글만 센다' },
         },
       },
