@@ -573,7 +573,7 @@ const itemProblems = (item, res, extra = {}) => {
   if (prefix && !String(body?.nextCursor).startsWith(prefix)) out.push(['nextCursor 앞', prefix, body?.nextCursor]);
   const count = /리뷰 (\d+)개/.exec(item)?.[1];
   if (count && Number(count) !== list?.length) out.push(['개수', Number(count), list?.length]);
-  const firstName = /첫 리뷰는 `"(\w+)"`/.exec(item)?.[1];
+  const firstName = /첫 리뷰(?:의 `username`)?[은는] `"(\w+)"`/.exec(item)?.[1];
   if (firstName && list?.[0]?.username !== firstName) out.push(['첫 이름', firstName, list?.[0]?.username]);
   if (item.includes('본문이 `[]`') && JSON.stringify(body) !== '[]') out.push(['본문 []', '[]', JSON.stringify(body)]);
   const json = /`(\{ "items": .*?\})`/.exec(item)?.[1];
