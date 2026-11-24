@@ -1,0 +1,17 @@
+### 추천 - 접두사 없이
+GET http://localhost:4001/api/hashtags/suggestions
+
+### «노»로 시작하는 태그
+GET http://localhost:4001/api/hashtags/suggestions?prefix=노
+
+### #노로 시작하는 태그
+GET http://localhost:4001/api/hashtags/suggestions?prefix=%23노
+
+### s로 시작하는 태그
+GET http://localhost:4001/api/hashtags/suggestions?prefix=s
+
+### 둘만
+GET http://localhost:4001/api/hashtags/suggestions?limit=2
+
+### 개수가 규칙에 안 맞음
+GET http://localhost:4001/api/hashtags/suggestions?limit=20
