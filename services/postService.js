@@ -99,10 +99,24 @@ export async function getPost(id, userId) {
   return flatten(post);
 }
 
+// 게시물에 해시태그를 붙인다 — 처음 보는 이름이면 태그를 만들고, 있으면 그 태그를 쓴다.
+// 어느 쪽이든 그 태그가 붙은 게시물 수를 1 올리고, 게시물과 태그의 짝을 하나 넣는다.
+// 트랜잭션 안에서 부르는 함수라 prisma 가 아니라 넘겨받은 tx 로 쓴다.
+async function addHashtags(tx, postId, names) {
+  for (const name of names) {
+    const hashtag = await tx.hashtag.upsert({
+      where: { name },
+      create: { name, postCount: 1 },
+      update: { postCount: { increment: 1 } },
+      select: { id: true },
+    });
+    await tx.postHashtag.create({ data: { postId, hashtagId: hashtag.id } });
+  }
+}
+
 export async function createPost({ imageUrls, ...data }) {
   // 해시태그는 아무것도 쓰기 전에 뽑는다 — 규칙에 안 맞으면 여기서 400 이 나고 게시물도 안 생긴다.
   const names = extractHashtags(data.content);
-  console.log('뽑은 해시태그:', names);
 
   // 우리 서버에 올린 사진(/uploads/…)만 기록에서 찾는다. 바깥 주소(https://…)는 우리 파일이 아니라 그대로 넣는다.
   const fileNames = imageUrls
@@ -131,6 +145,9 @@ export async function createPost({ imageUrls, ...data }) {
         data: { postId: post.id },
       });
       if (count !== fileNames.length) throw new BadRequestError('IMAGE_NOT_AVAILABLE');
+
+      // 게시물이 만들어진 같은 트랜잭션에서 해시태그를 붙인다 — 태그를 못 붙이면 게시물도 없던 일이 된다.
+      await addHashtags(tx, post.id, names);
 
       return flatten(post);
     });
