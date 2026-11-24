@@ -3,16 +3,16 @@
 //
 // 소재는 상품 리뷰(p3-55 실습 이어서) — 메모리 배열(lab/p3-56/shop-data.js)로 답하는 Express 실습 서버다(데이터베이스를 안 쓴다).
 // 리뷰 글의 #태그 · 태그 목록(tags · reviewCount) · 리뷰와 태그를 잇는 표(reviewTags) — 수업의 hashtags · post_hashtags 를 다른 규칙(5개 · 10자)으로 다시 해 본다.
-// 직접 해보기 1 은 서버가 아니라 터미널에서 도는 스크립트(extractTags 와 일곱 문장)라 서버를 안 띄운다.
+// 직접 해보기 1 은 서버가 아니라 터미널에서 도는 스크립트(extractTags 와 여덟 문장)라 서버를 안 띄운다.
 // 직접 해보기 2(고치기 PATCH)와 과제 [응용](달기 · 지우기 · 인기 태그)은 p3-55 처럼 수업 백엔드의 requireLogin 을 불러 쓴다.
 // 판정은 수업 백엔드를 3962 에, 실습 서버를 3963 에 띄운다 — 실습 사본은 포트 두 곳(app.listen 의 수 · 기다린다는 문장)만 바꾼다.
 // 판정 DB 는 `p356_lab_api` 하나(`test/fixtures/p3-55-end.sql` — 로그인에 jaehoon 의 비밀번호만 있으면 된다).
-// 커밋 — 제목 끝이 «(직접 해보기 1)» · «(직접 해보기 2)» · «(과제 [응용])» 인 feat(p3-56) 커밋. «(Step N)» 은 붙이지 않는다(회차 판정이 Step 커밋을 그 표식으로 찾는다).
+// 커밋 — 제목 끝이 «(직접 해보기 1)» · «(직접 해보기 1 고침)» · «(직접 해보기 2)» · «(과제 [응용])» 인 feat(p3-56) 커밋. «(Step N)» 은 붙이지 않는다(회차 판정이 Step 커밋을 그 표식으로 찾는다).
 // 🔑 짓는 동안 `P356_LAB_WT=1` 을 주면 실습 파일을 커밋 대신 작업트리(lab/p3-56)에서 읽는다.
 // 빈칸 판(직접 해보기 1)은 정답 판의 네 줄을 ____ 로 비운 것이다 — 이 판정이 같은 규칙으로 만들어 본다.
 //
 // 축 ① 나눠 주는 데이터 — shop-data.js(p3-55 판에서 글에 #태그만 더했다 · 태그 일곱 · reviewCount = 연결 줄 수 · 답변과 숨긴 리뷰는 태그 없음)
-// 축 ② 직접 해보기 1 — 정답 판 출력 · 빈칸 판 node --check · 틀린 판(g 빠짐 · # 안 뗌 · 소문자 빠짐 · Set 빠짐 · null 처리 빠짐 · 넓은 정규식 · 길이 · 개수)이 처음 달라지는 문장
+// 축 ② 직접 해보기 1 — 정답 판 출력 · 빈칸 판 node --check · 틀린 판(g 빠짐 · # 안 뗌 · 소문자 빠짐 · Set 빠짐 · null 처리 빠짐 · 넓은 정규식 · 길이 >= · 길이 검사 빠짐 · 개수)이 처음 달라지는 문장
 // 축 ③ 직접 해보기 2 — 정답 판 · 틀린 판(숫자 안 내림 · 연결 안 지움 · 소문자 빠짐 · 새 태그 숫자 · 전부 다시 · 쓴 사람 확인 · 길이 · 개수 · 답변 고치기) × practice2.http · 로그인 없이 401
 // 축 ③-2 직접 해보기 2 나눠 주는 판 — 정답 판에서 syncTags 와 editReview 의 몸통만 한 줄 «  // 여기를 채워요» 로 비운 판(파일로 커밋하지 않고 이 판정이 만들어 본다) · node --check · 고치기 전 태그 목록은 정답 판과 같다 · 2번 리뷰 고치기는 몸통이 비어 정답이 아니다 · 차이는 두 몸통뿐
 // 축 ④ 과제 [응용] — 정답 판 · 틀린 판(숫자 안 올림 · 안 내림 · 동점 · 오름차순 · 다섯 · 쓴 사람 확인 · Set) × homework2.http · 로그인 없이 401
@@ -60,7 +60,9 @@ const commitOf = (mark) => {
   if (!hit) throw new Error(`(${mark}) 커밋이 없다`);
   return hit.split(' ')[0];
 };
-const COMMITS = { practice1: '직접 해보기 1', practice2: '직접 해보기 2', homework2: '과제 [응용]' };
+// practice1 은 «고침» 커밋(정확히 10자인 예문을 더한 것)이 끝 판이다. 첫 커밋은 FIRST1 로 따로 본다.
+const FIRST1 = '직접 해보기 1';
+const COMMITS = { practice1: '직접 해보기 1 고침', practice2: '직접 해보기 2', homework2: '과제 [응용]' };
 const showAt = (ref, rel) => execFileSync('git', ['show', `${ref}:${rel}`], { cwd: P('.'), encoding: 'utf8' });
 /** 실습 파일 하나의 글 — 짓는 동안은 작업트리 · 아니면 그 실습 커밋. */
 const labText = (which, file) => (WT ? read(P(`${LAB}/${file}`)) : showAt(commitOf(COMMITS[which]), `${LAB}/${file}`));
@@ -213,6 +215,7 @@ const SAMPLES = [
   '케이스는 #Black 이 예뻐요 #BLACK',
   '운동할 때 좋아요, #운동, #러닝!',
   '태그가 없는 리뷰예요',
+  '딱 열 글자인 #가나다라마바사아자차 태그',
   '이름이 너무 긴 #가나다라마바사아자차카 태그',
   '#하나 #둘 #셋 #넷 #다섯 #여섯 다 쓰면',
 ];
@@ -222,8 +225,9 @@ const P1_OUTPUT = [
   SAMPLES[2], "  태그 [ 'black' ]",
   SAMPLES[3], "  태그 [ '운동', '러닝' ]",
   SAMPLES[4], '  태그 []',
-  SAMPLES[5], '  안 돼요: 태그는 10자까지 쓸 수 있어요',
-  SAMPLES[6], '  안 돼요: 태그는 리뷰 하나에 5개까지 쓸 수 있어요',
+  SAMPLES[5], "  태그 [ '가나다라마바사아자차' ]",
+  SAMPLES[6], '  안 돼요: 태그는 10자까지 쓸 수 있어요',
+  SAMPLES[7], '  안 돼요: 태그는 리뷰 하나에 5개까지 쓸 수 있어요',
 ];
 /** 정답 판의 네 줄을 비운 빈칸 판 — 비우는 곳: 정규식 · 태그 이름 만들기 · Set · 길이 검사. */
 const P1_BLANKS = [
@@ -253,11 +257,12 @@ const P1_WRONG = {
   noSet: swap('[...new Set(lowered)]', 'lowered'),
   noNullGuard: swap(' ?? []', ''),
   wideRegex: swap('/#[0-9A-Za-z가-힣_]+/g', '/#\\S+/g'),
+  lengthGte: swap('name.length > MAX_LENGTH', 'name.length >= MAX_LENGTH'),
   noLengthCheck: swap("  if (names.some((name) => name.length > MAX_LENGTH)) throw new Error('태그는 10자까지 쓸 수 있어요');\n", ''),
   noCountCheck: swap("  if (names.length > MAX_COUNT) throw new Error('태그는 리뷰 하나에 5개까지 쓸 수 있어요');\n", ''),
 };
 describe('축 ② 직접 해보기 1 — 해시태그 뽑기', () => {
-  it('🔴 정답 판 — 일곱 문장의 출력 줄(중복은 한 번 · 대문자는 소문자 · 쉼표와 느낌표는 태그가 아님 · 태그 없음은 [] · 11자 · 6개는 에러 문장)', () => {
+  it('🔴 정답 판 — 여덟 문장의 출력 줄(중복은 한 번 · 대문자는 소문자 · 쉼표와 느낌표는 태그가 아님 · 태그 없음은 [] · 딱 10자는 통과 · 11자 · 6개는 에러 문장)', () => {
     const out = runPractice1();
     expect(out.status).toBe(0);
     expect(out.lines).toEqual(P1_OUTPUT);
@@ -281,7 +286,7 @@ describe('축 ② 직접 해보기 1 — 해시태그 뽑기', () => {
     seen.practice1Blanks = differ;
   });
 
-  it('🔴 틀린 판마다 처음 달라지는 문장 — g 빠짐 · # 안 뗌은 첫 문장 · 소문자 빠짐은 «Black» · Set 빠짐은 «#가성비 두 번» · null 처리 빠짐은 «태그 없음»(TypeError 문장이 찍힌다) · 넓은 정규식은 «쉼표»(첫 문장도) · 길이 · 개수 검사 빠짐', () => {
+  it('🔴 틀린 판마다 처음 달라지는 문장 — g 빠짐 · # 안 뗌은 첫 문장 · 소문자 빠짐은 «Black» · Set 빠짐은 «#가성비 두 번» · null 처리 빠짐은 «태그 없음»(TypeError 문장이 찍힌다) · 넓은 정규식은 «쉼표»(첫 문장도) · 길이를 >= 로 하면 «딱 열 글자»(여섯째) · 길이 검사 빠짐은 «열한 글자»(일곱째) · 개수 검사 빠짐은 여덟째', () => {
     const right = runPractice1().lines;
     const diffs = {};
     for (const [name, edit] of Object.entries(P1_WRONG)) {
@@ -290,7 +295,7 @@ describe('축 ② 직접 해보기 1 — 해시태그 뽑기', () => {
     }
     seen.practice1Wrong = diffs;
     expect(Object.fromEntries(Object.entries(diffs).map(([k, d]) => [k, d.sample]))).toEqual({
-      noGlobal: 1, noSlice: 1, noLower: 3, noSet: 2, noNullGuard: 5, wideRegex: 4, noLengthCheck: 6, noCountCheck: 7,
+      noGlobal: 1, noSlice: 1, noLower: 3, noSet: 2, noNullGuard: 5, wideRegex: 4, lengthGte: 6, noLengthCheck: 7, noCountCheck: 8,
     });
     expect(diffs.noGlobal.wrong).toBe("  태그 [ '음질' ]");
     expect(diffs.noSlice.wrong).toBe("  태그 [ '#음질', '#가성비' ]");
@@ -298,6 +303,7 @@ describe('축 ② 직접 해보기 1 — 해시태그 뽑기', () => {
     expect(diffs.noSet.wrong).toBe("  태그 [ '가성비', '가성비' ]");
     expect(diffs.noNullGuard.wrong).toBe("  안 돼요: Cannot read properties of null (reading 'map')");
     expect(diffs.wideRegex.wrong).toBe("  태그 [ '운동,', '러닝!' ]");
+    expect(diffs.lengthGte.wrong).toBe('  안 돼요: 태그는 10자까지 쓸 수 있어요');
     expect(diffs.noLengthCheck.wrong).toBe("  태그 [ '가나다라마바사아자차카' ]");
     expect(diffs.noCountCheck.wrong).toBe("  태그 [ '하나', '둘', '셋', '넷', '다섯', '여섯' ]");
   }, 60_000);
@@ -502,7 +508,13 @@ describe('축 ⑤ 학생 파일 차이', () => {
     };
     for (const [which, list] of Object.entries(files)) {
       const at = WT ? null : commitOf(COMMITS[which]);
-      if (!WT) expect(execFileSync('git', ['diff', '--name-only', `${at}^`, at], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n')).toEqual(list);
+      const changed = (ref) => execFileSync('git', ['diff', '--name-only', `${ref}^`, ref], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n');
+      if (!WT && which === 'practice1') {
+        expect(changed(commitOf(FIRST1))).toEqual(list);
+        expect(changed(at)).toEqual(['lab/p3-56/practice1.js']);
+      } else if (!WT) {
+        expect(changed(at)).toEqual(list);
+      }
       for (const rel of list) {
         const text = WT ? read(P(rel)) : showAt(at, rel);
         if (rel.endsWith('.http')) {
