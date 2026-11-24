@@ -48,6 +48,7 @@ model Post {
   images       PostImage[]
   likes        PostLike[]
   uploads      Upload[]
+  hashtags     PostHashtag[]
 
   // 목록의 정렬과 같은 순서로 인덱스를 둔다 — 최신 글부터 정렬 없이 읽어 나갈 수 있다.
   @@index([createdAt(sort: Desc), id(sort: Desc)])
@@ -65,6 +66,29 @@ model PostLike {
 
   @@unique([postId, userId])
   @@map("post_likes")
+}
+
+// 해시태그 이름은 한 번만 적는다 — 같은 이름이 두 줄로 생기지 않게 UNIQUE.
+// 몇 개의 게시물에 붙었는지는 따로 적어 둔다 — 태그마다 매번 세지 않으려고.
+model Hashtag {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique @db.VarChar(30)
+  postCount Int           @default(0) @map("post_count")
+  posts     PostHashtag[]
+
+  @@map("hashtags")
+}
+
+// 게시물과 해시태그를 잇는 가운데 테이블 — 같은 게시물에 같은 태그가 두 번 붙지 않게 UNIQUE.
+model PostHashtag {
+  id        Int     @id @default(autoincrement())
+  postId    Int     @map("post_id")
+  post      Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  hashtagId Int     @map("hashtag_id")
+  hashtag   Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, hashtagId])
+  @@map("post_hashtags")
 }
 
 model PostImage {
