@@ -486,7 +486,7 @@ const ids = (items) => items.map((c) => c.id);
 
 // ── 축 ⓪ 판정 DB ─────────────────────────────────────────────────────────────────
 describe('축 ⓪ 판정 DB — p3-54 를 마친 학생 DB', () => {
-  it('🔴 1번 원댓글 4(minji + jaehoon 셋) · 행 6(답글 10 · 11) · 2번 원댓글 39 · 행 40(4번 댓글의 답글 12 하나) · 3번 2 · 숫자가 모두 맞다 · 시드 댓글 번호 그대로', async () => {
+  it('🔴 1번 원댓글 4(minji 1 + jaehoon 42 · 43 · 44) · 행 6(답글 10 · 11) · 2번 원댓글 39 · 행 40(4번 댓글의 답글 12 하나) · 3번 2 · 숫자가 모두 맞다 · 시드 댓글 번호 그대로', async () => {
     expect(await counts(TPL_DB)).toEqual([
       { id: 1, count: 4, roots: 4, rows: 6 },
       { id: 2, count: 39, roots: 39, rows: 40 },
@@ -523,6 +523,13 @@ describe('축 ⓪ 판정 DB — p3-54 를 마친 학생 DB', () => {
     const firstPage = await onDb(TPL_DB, 'SELECT id FROM comments WHERE post_id = 2 AND parent_id IS NULL ORDER BY created_at, id LIMIT 4');
     expect(firstPage.map((r) => r.id)).toEqual([4, 5, 6, 7]);
     expect(await idOf(TPL_DB, 'jaehoon')).toBe(2);
+    // 트랙 progress/reading-tools/next/reset-p3-55.example.sh(7ec4a45)의 재현과 같은 차례로 만들었으니 번호까지 같다 —
+    // 1번 게시물의 jaehoon 원댓글 42 · 43 · 44 · 지운 댓글 2 · 3 · 41 · 52 · 48행(원댓글 45 · 답글 3) · 다음 댓글 번호 53
+    expect(await onDb(TPL_DB, "SELECT id FROM comments WHERE post_id = 1 AND parent_id IS NULL AND author_id = 2 ORDER BY id")).toEqual([{ id: 42 }, { id: 43 }, { id: 44 }]);
+    const existing = new Set((await onDb(TPL_DB, 'SELECT id FROM comments')).map((r) => r.id));
+    expect(Array.from({ length: 52 }, (_, i) => i + 1).filter((id) => !existing.has(id))).toEqual([2, 3, 41, 52]);
+    expect(await onDb(TPL_DB, 'SELECT count(*)::int AS rows, count(*) FILTER (WHERE parent_id IS NULL)::int AS roots FROM comments')).toEqual([{ rows: 48, roots: 45 }]);
+    expect(await onDb(TPL_DB, 'SELECT last_value::int AS n FROM comments_id_seq')).toEqual([{ n: 52 }]);
     seen.tpl = { counts: await counts(TPL_DB), lastCommentId: (await onDb(TPL_DB, 'SELECT max(id) AS n FROM comments'))[0].n };
   });
 });
@@ -1104,6 +1111,19 @@ describe('축 ⑤ 학생 파일 차이 — 시작 판(code/p3-54)에서 각 판�
     const banned = /자리|박다|박아|박힌|결[이을로의]|갈래|몸통|판[이을으]|겹|까닭|걸리|걸린|돌리|돌려(?!주|준|줄)|가르|갈리|재다|재서|벗기|되살|짝/;
     for (const label of LABELS) expect([label, added(label).filter((line) => banned.test(line))]).toEqual([label, []]);
     seen.comments = comments;
+  });
+
+  it('🔴 post-comments.http — 이 회차는 끝에 덧붙이기만 한다 · 학생 파일의 «2번 게시물에 댓글 달기» 본문(p3-54 Step 2 에서 바꿔 보낸 «크기가 손바닥만 하네요»)이 달라도 덧붙인 부분과 이 회차 요청은 그대로다', () => {
+    const start = showAt(baseRef(), HTTP_FILE);
+    const end = showAt(versionRef(3), HTTP_FILE);
+    expect(end.startsWith(start)).toBe(true);
+    const student = start.replace('"content": "한 입만 나눠 주세요"', '"content": "크기가 손바닥만 하네요"');
+    expect(student).not.toBe(start);
+    const studentEnd = student + end.slice(start.length);
+    // 이 회차가 보내는 블록(Step 1~3)은 학생 파일과 코드베이스 파일에서 글자가 같다
+    const titles = [...STEP1_TITLES, LIST20, ...STEP3_NEW.map(([title]) => title)];
+    expect(compose(studentEnd, titles)).toBe(compose(end, titles));
+    expect(blockTexts(studentEnd).find((b) => b.title === ADD54).text).toContain('크기가 손바닥만 하네요');
   });
 });
 
