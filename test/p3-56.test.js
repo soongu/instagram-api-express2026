@@ -90,7 +90,7 @@ const versionRef = (step) => {
   return commits[0];
 };
 /** 그 Step 의 끝 판 — `P356_WT` 가 그 Step 이면 작업트리. */
-const version = (step) => (WT === String(step) ? worktree : refDir(versionRef(step)));
+const version = (step) => (WT === String(step) ? worktree : refDir(step === 'lab' ? LINE : versionRef(step)));
 const hasStep = (step) => WT === String(step) || step === 'start' || stepCommits(step).length > 0;
 
 const admin = async (fn) => {
@@ -600,5 +600,23 @@ describe.runIf(hasStep(5))('축 ⑧ 학생 한 사람의 흐름 — 켠 채로 �
     expect(await linksOf(GATE_DB, 26)).toEqual([]);
     const drift = await onDb(GATE_DB, 'SELECT h.name FROM hashtags h WHERE h.post_count <> (SELECT count(*) FROM post_hashtags ph WHERE ph.hashtag_id = h.id)');
     expect(drift).toEqual([]);
+    // Step 5 의 확인 SQL(교안 그대로)
+    const check = await onDb(GATE_DB, 'SELECT h.name, h.post_count, count(ph.id) AS links\nFROM hashtags h\nLEFT JOIN post_hashtags ph ON ph.hashtag_id = h.id\nGROUP BY h.id\nORDER BY h.id;');
+    expect(check.map((r) => `${r.name}:${r.post_count}:${r.links}`)).toEqual(['바다:1:1', '노을:3:3', 'sunset:0:0', '한강:1:1']);
+    // 과제 [기초] — 숫자 둘을 일부러 틀고 fix-hashtag-count.sql 을 통째로 두 번 실행한다
+    await onDb(GATE_DB, "UPDATE hashtags SET post_count = 9 WHERE name = '바다'");
+    await onDb(GATE_DB, "UPDATE hashtags SET post_count = 5 WHERE name = 'sunset'");
+    const fix = read(version('lab')('lab/p3-56/fix-hashtag-count.sql'));
+    for (let round = 0; round < 2; round++) {
+      const client = new pg.Client({ ...ADMIN, database: GATE_DB });
+      await client.connect();
+      try {
+        const results = await client.query(fix);
+        const last = results.at(-1).rows.map((r) => `${r.name}:${r.post_count}:${r.links}`);
+        expect([round, last]).toEqual([round, ['바다:1:1', '노을:3:3', 'sunset:0:0', '한강:1:1']]);
+      } finally {
+        await client.end();
+      }
+    }
   }, 120_000);
 });
