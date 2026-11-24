@@ -1,0 +1,22 @@
+### #가성비 리뷰 - 첫 페이지
+# @name first
+GET http://localhost:4001/api/tags/가성비/reviews?limit=2
+
+### 둘째 페이지
+# @name second
+GET http://localhost:4001/api/tags/가성비/reviews?limit=2&cursor={{first.nextCursor}}
+
+### 셋째 페이지
+GET http://localhost:4001/api/tags/가성비/reviews?limit=2&cursor={{second.nextCursor}}
+
+### 앞에 # 을 붙여 물어도 같은 태그
+GET http://localhost:4001/api/tags/%23가성비/reviews
+
+### 대문자로 물어도 같은 태그
+GET http://localhost:4001/api/tags/ANC/reviews
+
+### 리뷰가 모두 떨어져 나간 태그
+GET http://localhost:4001/api/tags/선물/reviews
+
+### 없는 태그
+GET http://localhost:4001/api/tags/디자인/reviews
