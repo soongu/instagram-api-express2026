@@ -5,7 +5,7 @@ import * as userService from './userService.js';
 import * as uploadService from './uploadService.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
-import { extractHashtags } from '../utils/hashtags.js';
+import { extractHashtags, normalizeHashtag } from '../utils/hashtags.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
 // 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
@@ -74,6 +74,57 @@ export async function getPosts({ username, userId, limit = 5, cursor }) {
     items: page.map(flatten),
     hasNext,
     // 다음 페이지가 있을 때만 커서를 만든다 — 마지막 페이지의 null 은 «여기가 끝» 이라는 뜻이다.
+    nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
+  };
+}
+
+// 그리드의 칸 하나에 필요한 것만 받는다 - 첫 사진과 «사진이 여러 장인가», 숫자 둘.
+// 사진은 두 장까지만 받는다 - 두 장이 오면 여러 장이다. 커서를 만들려고 시각도 받는다.
+const gridFields = {
+  id: true,
+  likeCount: true,
+  commentCount: true,
+  createdAt: true,
+  images: { select: { imageUrl: true }, orderBy: { imgOrder: 'asc' }, take: 2 },
+};
+
+function toGridItem({ id, likeCount, commentCount, images }) {
+  return {
+    id,
+    thumbnailUrl: images[0].imageUrl,
+    multipleImages: images.length > 1,
+    likeCount,
+    commentCount,
+  };
+}
+
+// 해시태그 하나가 붙은 게시물을 피드와 같은 차례로 나눠 준다.
+// 그런 이름의 태그가 없으면 404 다. 태그는 있는데 붙은 게시물이 없으면 빈 목록이다.
+export async function getHashtagPosts(name, { limit = 12, cursor }) {
+  const hashtag = await prisma.hashtag.findUnique({
+    where: { name: normalizeHashtag(name) },
+    select: { id: true },
+  });
+
+  if (!hashtag) throw new NotFoundError('HASHTAG_NOT_FOUND');
+
+  const posts = await prisma.post.findMany({
+    where: {
+      // 이 태그와의 짝이 하나라도 있는 게시물만.
+      hashtags: { some: { hashtagId: hashtag.id } },
+      ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
+    },
+    select: gridFields,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const hasNext = posts.length > limit;
+  const page = posts.slice(0, limit);
+
+  return {
+    items: page.map(toGridItem),
+    hasNext,
     nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
   };
 }

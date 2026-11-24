@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js';
 import { signupSchema } from '../schemas/authSchema.js';
 import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
+import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -149,6 +150,19 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/hashtags/{name}/posts': {
+      parameters: [pathParameter('name', '해시태그 이름 - 앞의 # 은 있어도 없어도 되고, 대문자는 소문자로 맞춰 찾는다')],
+      get: {
+        summary: '해시태그 게시물 목록 - 그리드용, 피드와 같은 차례',
+        parameters: queryParameters(hashtagPostsQuerySchema),
+        responses: {
+          200: { description: '그리드 칸 한 페이지 - 태그는 있는데 붙은 게시물이 없으면 빈 목록', content: json(data(ref('GridPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 이름의 해시태그가 없음', content: json(errorOf('HASHTAG_NOT_FOUND')) },
+        },
+      },
+    },
     '/api/v2/auth/signup': {
       post: {
         summary: '가입',
@@ -241,12 +255,30 @@ export const openapi = {
           nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
         },
       },
+      GridItem: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          thumbnailUrl: { type: 'string', description: '첫 사진의 주소' },
+          multipleImages: { type: 'boolean', description: '사진이 두 장 이상인가' },
+          likeCount: { type: 'integer' },
+          commentCount: { type: 'integer' },
+        },
+      },
+      GridPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: { $ref: '#/components/schemas/GridItem' } },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+        },
+      },
       ReplyPage: {
         type: 'object',
         properties: {
           items: { type: 'array', items: { $ref: '#/components/schemas/Comment' } },
           hasNext: { type: 'boolean' },
-          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 - 끝이면 null' },
         },
       },
       CommentChange: {

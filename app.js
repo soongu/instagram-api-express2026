@@ -10,6 +10,7 @@ import commentsRouter from './routes/comments.js';
 import authRouter from './routes/auth.js';
 import uploadsRouter from './routes/uploads.js';
 import adminRouter from './routes/admin.js';
+import hashtagsRouter from './routes/hashtags.js';
 import { HttpError, NotFoundError } from './errors.js';
 import { sendError } from './responses.js';
 import { logger } from './middlewares/logger.js';
@@ -71,6 +72,7 @@ api.use(requireLogin);
 api.use('/posts', postsRouter);
 api.use('/posts/:id/likes', likesRouter);
 api.use('/posts/:id/comments', commentsRouter);
+api.use('/hashtags', hashtagsRouter);
 api.use('/uploads', uploadsRouter);
 api.use('/admin', adminRouter);
 

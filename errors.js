@@ -25,6 +25,7 @@ export const MESSAGES = {
   ADMIN_ONLY: '관리자만 할 수 있어요',
   POST_NOT_FOUND: '그런 게시물은 없어요',
   COMMENT_NOT_FOUND: '그런 댓글은 없어요',
+  HASHTAG_NOT_FOUND: '그런 해시태그는 없어요',
   USER_NOT_FOUND: '그런 사용자는 없어요',
   POST_OR_USER_NOT_FOUND: '그런 게시물이나 사용자는 없어요',
   SOCIAL_ACCOUNT_NOT_FOUND: '연결된 소셜 계정이 없어요',
