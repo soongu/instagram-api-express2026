@@ -14,6 +14,7 @@
 // 축 ① 나눠 주는 데이터 — shop-data.js(p3-55 판에서 글에 #태그만 더했다 · 태그 일곱 · reviewCount = 연결 줄 수 · 답변과 숨긴 리뷰는 태그 없음)
 // 축 ② 직접 해보기 1 — 정답 판 출력 · 빈칸 판 node --check · 틀린 판(g 빠짐 · # 안 뗌 · 소문자 빠짐 · Set 빠짐 · null 처리 빠짐 · 넓은 정규식 · 길이 · 개수)이 처음 달라지는 문장
 // 축 ③ 직접 해보기 2 — 정답 판 · 틀린 판(숫자 안 내림 · 연결 안 지움 · 소문자 빠짐 · 새 태그 숫자 · 전부 다시 · 쓴 사람 확인 · 길이 · 개수 · 답변 고치기) × practice2.http · 로그인 없이 401
+// 축 ③-2 직접 해보기 2 나눠 주는 판 — 정답 판에서 syncTags 와 editReview 의 몸통만 한 줄 «  // 여기를 채워요» 로 비운 판(파일로 커밋하지 않고 이 판정이 만들어 본다) · node --check · 고치기 전 태그 목록은 정답 판과 같다 · 2번 리뷰 고치기는 몸통이 비어 정답이 아니다 · 차이는 두 몸통뿐
 // 축 ④ 과제 [응용] — 정답 판 · 틀린 판(숫자 안 올림 · 안 내림 · 동점 · 오름차순 · 다섯 · 쓴 사람 확인 · Set) × homework2.http · 로그인 없이 401
 // 축 ⑤ 학생 파일 차이 — 실습 커밋은 lab/p3-56/ 만 · 경로 주석 · 쓰지 않기로 한 낱말
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -368,6 +369,57 @@ describe('축 ③ 직접 해보기 2 — 리뷰 고치기와 태그 맞추기', 
       await Promise.race([lab.stop(), sleep(500)]);
     }
   }, 30_000);
+});
+
+// ── 축 ③-2 직접 해보기 2 나눠 주는 판 ─────────────────────────────────────────────────
+/** 정답 판에서 두 함수(syncTags · editReview)의 몸통을 «  // 여기를 채워요» 한 줄로 비운다 — 선언 줄 · 바로 위 주석 · 닫는 } 는 그대로. */
+const EMPTY_FUNCTIONS = ['syncTags(reviewId, names)', 'editReview(reviewId, userId, content)'];
+const emptyBodies = (text) => EMPTY_FUNCTIONS.reduce((out, signature) => {
+  const head = `function ${signature} {\n`;
+  const from = out.indexOf(head);
+  if (from === -1 || out.indexOf(head, from + 1) !== -1) throw new Error(`함수가 없거나 여럿이다: ${signature}`);
+  const to = out.indexOf('\n}\n', from);
+  return `${out.slice(0, from + head.length)}  // 여기를 채워요${out.slice(to)}`;
+}, text);
+describe('축 ③-2 직접 해보기 2 — 나눠 주는 판(두 함수의 몸통만 비움)', () => {
+  it('🔴 node --check 를 지난다 · 정답 판과의 차이는 두 몸통뿐(선언 줄 · 위 주석 · 닫는 } 는 같다) · 빈칸 줄은 정확히 둘', () => {
+    const answer = labText('practice2', 'practice2.js');
+    const start = emptyBodies(answer);
+    const dir = studentCopy('practice2', emptyBodies);
+    execFileSync(process.execPath, ['--check', join(dir, LAB, 'practice2.js')]);
+    expect(start.split('\n')[0]).toBe(`// ~/instagram-api/${LAB}/practice2.js`);
+    expect(start.split('// 여기를 채워요').length).toBe(3);
+    const a = answer.split('\n');
+    const b = start.split('\n');
+    // 정답 판에서 두 함수의 몸통(선언 줄 다음부터 닫는 } 앞까지)만 빼면 나눠 주는 판에서 빈칸 줄 둘을 뺀 것과 글자까지 같다.
+    const outside = a.filter((line, i) => !EMPTY_FUNCTIONS.some((signature) => {
+      const at = a.indexOf(`function ${signature} {`);
+      return i > at && i < a.indexOf('}', at);
+    }));
+    expect(b.filter((line) => line !== '  // 여기를 채워요')).toEqual(outside);
+    expect(b.length).toBeLessThan(a.length);
+    for (const signature of EMPTY_FUNCTIONS) {
+      const at = b.indexOf(`function ${signature} {`);
+      expect([signature, b.slice(at - 1, at + 3)]).toEqual([signature, [a[a.indexOf(`function ${signature} {`) - 1], `function ${signature} {`, '  // 여기를 채워요', '}']]);
+    }
+    seen.practice2Start = start;
+  });
+
+  it('🔴 그 판으로 서버가 뜬다 · «태그 목록 — 고치기 전» 은 정답 판과 같은 200 · 일곱 태그 · «2번 리뷰 고치기» 는 몸통이 비어 editReview 가 undefined 를 돌려줘서 정답(tags 가 든 review)이 아니다', async () => {
+    const right = (await runLab('practice2')).runs;
+    const blank = (await runLab('practice2', emptyBodies)).runs;
+    expect(blank.map((r) => [r.title, r.status]).slice(0, 2)).toEqual([[P2_TITLES[0], 200], [P2_TITLES[1], 200]]);
+    expect(blank[1].body).toEqual(right[1].body);
+    expect(blank[1].body).toEqual(ALL_BEFORE);
+    const diff = firstDiff(right, blank);
+    seen.practice2StartDiff = diff;
+    expect(diff.title).toBe(P2_TITLES[2]);
+    expect(diff.wrong).toEqual({ status: 200, body: {} });
+    expect(diff.right.status).toBe(200);
+    expect(diff.right.body.review.tags).toEqual(['가성비', 'fast']);
+    // 몸통이 비면 아무것도 바뀌지 않는다 — 고친 뒤에도 태그 목록은 처음과 같다.
+    expect(blank[3].body).toEqual(ALL_BEFORE);
+  }, 60_000);
 });
 
 // ── 축 ④ 과제 [응용] ─────────────────────────────────────────────────────────────
