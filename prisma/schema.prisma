@@ -88,6 +88,7 @@ model PostHashtag {
   hashtag   Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
 
   @@unique([postId, hashtagId])
+  @@index([hashtagId])
   @@map("post_hashtags")
 }
 
