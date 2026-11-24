@@ -25,3 +25,6 @@ GET http://localhost:3000/api/v2/profiles/minji/posts?cursor={{first.data.nextCu
 
 ### 게시물이 없는 sora
 GET http://localhost:3000/api/v2/profiles/sora/posts
+
+### 사용자 이름에 mi가 든 사람
+GET http://localhost:3000/api/v2/members/search?keyword=mi

@@ -6,6 +6,7 @@ import { signupSchema } from '../schemas/authSchema.js';
 import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
 import { profilePostsQuerySchema } from '../schemas/profileSchema.js';
+import { memberSearchQuerySchema } from '../schemas/memberSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -188,6 +189,17 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/members/search': {
+      get: {
+        summary: '사람 찾기 - 사용자 이름에 검색어가 든 사람을 이름 차례로 20명까지',
+        parameters: queryParameters(memberSearchQuerySchema),
+        responses: {
+          200: { description: '찾은 사람 목록 - 검색어가 없으면 빈 배열', content: json(data({ type: 'array', items: ref('Member') })) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
     '/api/v2/auth/signup': {
       post: {
         summary: '가입',
@@ -288,6 +300,15 @@ export const openapi = {
           name: { type: ['string', 'null'], description: '이름 - 적지 않은 사람은 null' },
           profileImage: { type: ['string', 'null'], description: '프로필 사진 주소 - 없으면 null' },
           postCount: { type: 'integer', description: '그 사람이 올린 게시물 수' },
+        },
+      },
+      Member: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          name: { type: ['string', 'null'] },
+          profileImage: { type: ['string', 'null'] },
         },
       },
       GridItem: {

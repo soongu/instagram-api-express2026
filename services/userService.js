@@ -56,6 +56,22 @@ export async function getProfile(username) {
   return { ...profile, postCount: _count.posts };
 }
 
+// 사람 찾기에 실을 것.
+const memberFields = { id: true, username: true, name: true, profileImage: true };
+
+// 사용자 이름에 검색어가 든 사람을 이름 차례로 20명까지 돌려준다 - 대소문자는 가리지 않는다.
+// 검색어가 비어 있으면 아무도 돌려주지 않는다.
+export function searchMembers(keyword) {
+  if (!keyword) return [];
+
+  return prisma.user.findMany({
+    where: { username: { contains: keyword, mode: 'insensitive' } },
+    select: memberFields,
+    orderBy: { username: 'asc' },
+    take: 20,
+  });
+}
+
 // 로그인 — 사용자 이름과 비밀번호가 맞으면 그 사람을, 아니면 null 을 돌려준다.
 // 해시는 이 함수 안에서만 꺼내 쓰고, 돌려줄 때는 응답에 실을 컬럼만 남긴다.
 export async function checkPassword(username, password) {
