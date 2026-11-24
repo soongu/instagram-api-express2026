@@ -1,0 +1,24 @@
+### yuna - 글쓴이 한 사람
+GET http://localhost:4001/api/users/yuna
+
+### yuna의 리뷰 - 첫 페이지
+# @name first
+GET http://localhost:4001/api/users/yuna/reviews
+
+### yuna의 리뷰 - 둘째 페이지
+GET http://localhost:4001/api/users/yuna/reviews?cursor={{first.nextCursor}}
+
+### jaehoon - 숨긴 리뷰와 답변은 세지 않는다
+GET http://localhost:4001/api/users/jaehoon
+
+### jisoo - 답변만 쓴 사람
+GET http://localhost:4001/api/users/jisoo
+
+### jisoo의 리뷰
+GET http://localhost:4001/api/users/jisoo/reviews
+
+### 없는 사람
+GET http://localhost:4001/api/users/minho
+
+### 없는 사람의 리뷰
+GET http://localhost:4001/api/users/minho/reviews
