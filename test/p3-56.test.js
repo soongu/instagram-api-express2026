@@ -620,3 +620,40 @@ describe.runIf(hasStep(5))('축 ⑧ 학생 한 사람의 흐름 — 켠 채로 �
     }
   }, 120_000);
 });
+
+// 축 ⑨ 다음 회차의 판정 DB — test/fixtures/p3-56-end.sql 은 학생 낭독(교안 차례대로 따라온 p356stu-db)을 pg_dump --inserts 로 뜬 것이다.
+//   학생이 만든 마이그레이션 폴더 이름(20261124081742)만 코드베이스의 이름으로 바꿨다 — 체크섬은 같다(학생이 친 schema 가 글자까지 같아서).
+//   그 끝 상태가 축 ⑧ 의 끝과 같은지 본다. 다음 회차는 이 파일 위에서 시작한다.
+describe('축 ⑨ p3-56 끝 학생 DB', () => {
+  it('게시물 · 태그 · 짝 · 댓글 수가 축 ⑧ 의 끝과 같고 코드베이스 마이그레이션으로 더 걸 것이 없다', async () => {
+    const name = `${DB_PREFIX}_end`;
+    const fixture = read(P('test/fixtures/p3-56-end.sql')).split('\n').filter((line) => !line.startsWith('\\')).join('\n');
+    await dropDb(name);
+    await admin((client) => client.query(`CREATE DATABASE ${name}`));
+    const client = new pg.Client({ ...ADMIN, database: name });
+    await client.connect();
+    try {
+      await client.query(fixture);
+    } finally {
+      await client.end();
+    }
+    try {
+      const posts = await onDb(name, 'SELECT id, content FROM posts ORDER BY id');
+      expect(posts.map((p) => p.id)).toEqual([1, 2, 3, 4, 5, 9, 14, 26, 28, 29]);
+      expect(posts.find((p) => p.id === 1).content).toBe(POST1_TAGGED);
+      expect(posts.find((p) => p.id === 26).content).toBe(SKY);
+      expect(posts.find((p) => p.id === 29).content).toBe('#노을 질 때 다시 왔어요');
+      expect((await onDb(name, 'SELECT id, name, post_count FROM hashtags ORDER BY id')).map((t) => `${t.id}:${t.name}:${t.post_count}`))
+        .toEqual(['1:바다:1', '2:노을:3', '4:sunset:0', '6:한강:1']);
+      expect((await onDb(name, 'SELECT id, post_id, hashtag_id FROM post_hashtags ORDER BY id')).map((r) => `${r.id}:${r.post_id}-${r.hashtag_id}`))
+        .toEqual(['1:28-1', '2:28-2', '3:29-2', '5:1-2', '6:1-6']);
+      expect(await onDb(name, 'SELECT count(*)::int AS n FROM comments')).toEqual([{ n: 351 }]);
+      const status = execFileSync(P('node_modules/.bin/prisma'), ['migrate', 'status'], {
+        cwd: studentDir(version(5)), env: { ...process.env, DATABASE_URL: dbUrl(name) }, encoding: 'utf8', stdio: 'pipe',
+      });
+      expect(status).toContain('Database schema is up to date!');
+    } finally {
+      await dropDb(name);
+    }
+  }, 60_000);
+});
