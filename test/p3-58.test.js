@@ -244,6 +244,8 @@ describe('축 ⓪ 판정 DB - p3-57 을 마친 학생 DB', () => {
     expect(counts).toEqual([
       { username: 'dahye', n: 1 }, { username: 'jaehoon', n: 5 }, { username: 'minji', n: 27 }, { username: 'seungwoo', n: 1 },
     ]);
+    // 교안 Step 1 의 쿼리 그대로 - 결과 표 «count 27».
+    expect(await onDb(GATE_DB, "SELECT count(*) FROM posts p JOIN users u ON u.id = p.author_id WHERE u.username = 'minji';")).toEqual([{ count: '27' }]);
     const seeded = await onDb(GATE_DB, "SELECT username, name FROM users WHERE username IN ('jaehoon', 'minji', 'seungwoo') ORDER BY id");
     expect(seeded.map((u) => u.name)).toEqual([null, null, null]);
   });
