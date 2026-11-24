@@ -129,6 +129,33 @@ export async function getHashtagPosts(name, { limit = 12, cursor }) {
   };
 }
 
+// 한 사람이 올린 게시물을 피드와 같은 차례로 나눠 준다 - 해시태그 목록과 같은 그리드 줄이다.
+// 그런 사람이 없으면 404 다. 있는데 올린 게시물이 없으면 빈 목록이다.
+export async function getUserPosts(username, { limit = 12, cursor }) {
+  const user = await prisma.user.findUnique({ where: { username }, select: { id: true } });
+
+  if (!user) throw new NotFoundError('USER_NOT_FOUND');
+
+  const posts = await prisma.post.findMany({
+    where: {
+      authorId: user.id,
+      ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
+    },
+    select: gridFields,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const hasNext = posts.length > limit;
+  const page = posts.slice(0, limit);
+
+  return {
+    items: page.map(toGridItem),
+    hasNext,
+    nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
+  };
+}
+
 // 옛 화면이 커서로 보내던 게시물 번호를 지금 커서로 바꾼다. 그 게시물이 없으면 null.
 export async function cursorOf(id) {
   const post = await prisma.post.findUnique({

@@ -5,6 +5,7 @@ import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js'
 import { signupSchema } from '../schemas/authSchema.js';
 import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
+import { profilePostsQuerySchema } from '../schemas/profileSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -169,6 +170,19 @@ export const openapi = {
         summary: '프로필 헤더 - 이름 · 사진 · 게시물 수',
         responses: {
           200: { description: '그 사람의 프로필', content: json(data(ref('Profile'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/profiles/{username}/posts': {
+      parameters: [pathParameter('username', '사용자 이름')],
+      get: {
+        summary: '프로필 그리드 - 그 사람이 올린 게시물, 피드와 같은 차례',
+        parameters: queryParameters(profilePostsQuerySchema),
+        responses: {
+          200: { description: '그리드 칸 한 페이지 - 올린 게시물이 없으면 빈 목록', content: json(data(ref('GridPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
           404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
         },
