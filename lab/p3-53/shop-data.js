@@ -19,11 +19,11 @@ export const products = [
 
 // hidden 이 true 인 리뷰는 관리자가 숨긴 것이다 — 3번은 광고라서, 9번은 4번과 같은 글이 한 번 더 올라와서 숨겼다.
 // 4번과 5번, 7번과 8번, 10번과 12번은 같은 시각에 올라왔다 — 시각이 같으면 번호가 작은 것이 먼저다.
-// 배열에는 5번이 4번보다 먼저 들어 있다. 배열의 차례가 시각의 차례는 아니니, 보낼 때는 시각과 번호로 늘어놓는다.
+// 2번은 1번보다 먼저 올라왔고, 배열에는 5번이 4번보다 먼저 들어 있다. 번호의 차례도 배열의 차례도 시각의 차례는 아니니, 보낼 때는 시각과 번호로 늘어놓는다.
 // 시각은 모두 같은 꼴의 ISO 문자열이라, 문자열끼리 비교해도 시각의 차례와 같다.
 export const reviews = [
   { id: 1, productId: 1, authorId: 1, content: '음질이 생각보다 좋아요', createdAt: '2026-11-02T09:00:00.000Z', hidden: false },
-  { id: 2, productId: 1, authorId: 2, content: '배송이 하루 만에 왔어요', createdAt: '2026-11-02T11:20:00.000Z', hidden: false },
+  { id: 2, productId: 1, authorId: 1, content: '배송이 하루 만에 왔어요', createdAt: '2026-11-01T22:30:00.000Z', hidden: false },
   { id: 3, productId: 1, authorId: 3, content: '여기보다 싼 곳을 알려 드려요', createdAt: '2026-11-03T08:15:00.000Z', hidden: true },
   { id: 5, productId: 1, authorId: 1, content: '케이스 색이 사진보다 밝아요', createdAt: '2026-11-03T21:40:00.000Z', hidden: false },
   { id: 4, productId: 1, authorId: 4, content: '귀에 꼭 맞아서 운동할 때 좋아요', createdAt: '2026-11-03T21:40:00.000Z', hidden: false },
