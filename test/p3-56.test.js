@@ -7,7 +7,7 @@
 //        Step 4 하나(만들 때 저장) · Step 5 하나(고칠 때 · 지울 때). Step 1 은 코드가 바뀌지 않는다.
 //        같은 «(Step N)» 표식이 여럿이면 가장 뒤 커밋이 그 Step 의 끝 판이다.
 // 🔑 짓는 동안 `P356_WT` 를 주면 그 판을 커밋 대신 작업트리에서 읽는다 — `2` · `3` · `4` · `5`.
-// 🔑 포트 — 3960 · 3961(둘째 서버). DB — `p356_api_` 로 시작하는 것만 만들고 지운다. `P356_PG_PORT` 로 PostgreSQL 호스트 포트를 바꾼다.
+// 🔑 포트 — 3960 · 3961(둘째 서버) · `P356_PORT` 로 바꾼다. DB — `p356_api_` 로 시작하는 것만 만들고 지운다(`P356_DB_PREFIX` 로 바꾼다 — 판정 둘을 함께 돌릴 때). `P356_PG_PORT` 로 PostgreSQL 호스트 포트를 바꾼다.
 // 🔑 판정 DB 는 «p3-55 를 마친 학생 DB» 다 — `test/fixtures/p3-55-end.sql` 은 낭독 판(`p355stu`, 교안 차례대로 따라온 학생 DB)을
 //    `pg_dump --inserts` 로 뜬 것이다. 인계문(`progress/NEXT-SESSION-p3-56.md`)의 숫자와 같다 —
 //    댓글 351(원댓글 45 · 답글 306) · `comment_count` 1:4 · 2:39 · 3:2 · 다음 댓글 361 · 게시물 7개 · 다음 게시물 26.
@@ -36,10 +36,11 @@ const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
 const PG_PORT = Number(process.env.P356_PG_PORT ?? 5432);
 const ADMIN = { host: 'localhost', port: PG_PORT, database: 'postgres', user: 'postgres', password: 'postgres' };
-const TPL_DB = 'p356_api_tpl';
-const GATE_DB = 'p356_api_gate';
+const DB_PREFIX = process.env.P356_DB_PREFIX ?? 'p356_api';
+const TPL_DB = `${DB_PREFIX}_tpl`;
+const GATE_DB = `${DB_PREFIX}_gate`;
 const dbUrl = (name) => `postgresql://postgres:postgres@localhost:${PG_PORT}/${name}`;
-const PORT = 3960;
+const PORT = Number(process.env.P356_PORT ?? 3960);
 const PORT2 = 3961;
 const SECRET = 'q2Xh0v9bGm4RkT7sYp1wLc8nZf3uJd6eHa5iVo0rQyE';
 const env = {
@@ -526,4 +527,78 @@ describe.runIf(hasStep(5))('축 ⑦ 학생 파일 차이', () => {
       expect([file, read(from(file))]).not.toEqual([file, expect.stringMatching(/게이트|TDD|retrofit|하네스|교안/)]);
     }
   });
+});
+
+// 축 ⑧ 학생 한 사람의 흐름 — 한 DB 에서 시작 판 → Step 2 → 3 → 4 → 5 의 판을 차례로 갈아 끼우며 교안이 시키는 조작을 그대로 한다.
+//   화면의 «공유하기» · «고치기»(«완료» 는 글을 안 바꿔도 PATCH 를 보낸다) · «삭제» 를 같은 요청으로 보낸다.
+//   교안의 숫자(게시물 번호 · SQL 결과 · 터미널 줄)는 모두 이 흐름의 값이다 — 장면마다 DB 를 새로 세운 위 축들과 숫자가 다르다.
+export const FLOW = {
+  step3: '바다 보러 왔어요 #바다 #노을 #바다',
+  tooLong: '한강에서 #오늘은퇴근하고한강공원에서노을이질때까지걷다가사진을많이찍었어요',
+  step4a: '노을 보러 또 왔어요 #바다 #노을',
+  step4b: '#노을 질 때 다시 왔어요 #Sunset',
+  step5: '#노을 질 때 다시 왔어요',
+};
+describe.runIf(hasStep(5))('축 ⑧ 학생 한 사람의 흐름 — 켠 채로 교안 차례대로', () => {
+  it('Step 1 → 5 의 숫자', async () => {
+    expect([...FLOW.tooLong.split('#')[1]].length).toBe(32);
+    await freshDb();
+    const log = [];
+    const tags = async () => (await onDb(GATE_DB, 'SELECT id, name, post_count FROM hashtags ORDER BY id')).map((t) => `${t.id}:${t.name}:${t.post_count}`);
+    const links = async () => (await onDb(GATE_DB, 'SELECT id, post_id, hashtag_id FROM post_hashtags ORDER BY id')).map((r) => `${r.id}:${r.post_id}-${r.hashtag_id}`);
+    // Step 1 — 시작 판
+    await serve('start', GATE_DB, async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      expect((await edit(jaehoon, 1, POST1_TAGGED)).status).toBe(200);
+      expect((await share(jaehoon, SKY)).body.data.id).toBe(26);
+    });
+    expect(await onDb(GATE_DB, LIKE_SQL)).toEqual([{ id: 1, content: POST1_TAGGED }, { id: 26, content: SKY }]);
+    expect(await onDb(GATE_DB, "SELECT id, content FROM posts WHERE content LIKE '%#한강 %';")).toEqual([]);
+    // Step 2
+    migrate(version(2), GATE_DB);
+    expect(await tags()).toEqual([]);
+    // Step 3
+    await serve(3, GATE_DB, async ({ base, tail }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      expect((await share(jaehoon, FLOW.step3)).body.data.id).toBe(27);
+      const bad = await share(jaehoon, FLOW.tooLong);
+      expect([bad.status, bad.body.error.message]).toEqual([400, '해시태그는 30자까지 쓸 수 있어요']);
+      log.push(...tail().split('\n').filter((l) => l.startsWith('뽑은 해시태그')));
+    });
+    expect(log).toEqual(["뽑은 해시태그: [ '바다', '노을' ]"]);
+    expect(await tags()).toEqual([]);
+    // Step 4
+    await serve(4, GATE_DB, async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      expect((await share(jaehoon, FLOW.step4a)).body.data.id).toBe(28);
+      expect((await share(jaehoon, FLOW.step4b)).body.data.id).toBe(29);
+      expect(await tags()).toEqual(['1:바다:1', '2:노을:2', '4:sunset:1']);
+      expect(await links()).toEqual(['1:28-1', '2:28-2', '3:29-2', '4:29-4']);
+      // 🚨 sunset 이 3 이 아니라 4 다 — 29번의 노을 upsert 가 ON CONFLICT 로 끝나면서도 번호 3 을 하나 써 버렸다.
+      for (const id of [1, 26, 27]) expect(await linksOf(GATE_DB, id)).toEqual([]);
+      // 겪기 — #Sunset 을 빼도 그대로
+      expect((await edit(jaehoon, 29, FLOW.step5)).status).toBe(200);
+      expect(await tags()).toEqual(['1:바다:1', '2:노을:2', '4:sunset:1']);
+      expect(await links()).toEqual(['1:28-1', '2:28-2', '3:29-2', '4:29-4']);
+    });
+    // Step 5
+    await serve(5, GATE_DB, async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      expect((await edit(jaehoon, 29, FLOW.step5)).status).toBe(200);
+      expect(await tags()).toEqual(['1:바다:1', '2:노을:2', '4:sunset:0']);
+      expect(await links()).toEqual(['1:28-1', '2:28-2', '3:29-2']);
+      expect((await edit(jaehoon, 1, POST1_TAGGED)).status).toBe(200);
+      expect(await tags()).toEqual(['1:바다:1', '2:노을:3', '4:sunset:0', '6:한강:1']);
+      expect(await links()).toEqual(['1:28-1', '2:28-2', '3:29-2', '5:1-2', '6:1-6']);
+      expect((await edit(jaehoon, 27, FLOW.step3)).status).toBe(200);
+      expect(await tags()).toEqual(['1:바다:2', '2:노을:4', '4:sunset:0', '6:한강:1']);
+      expect(await links()).toEqual(['1:28-1', '2:28-2', '3:29-2', '5:1-2', '6:1-6', '7:27-1', '8:27-2']);
+      expect((await jaehoon.send('DELETE', '/api/v2/posts/27')).status).toBe(200);
+      expect(await tags()).toEqual(['1:바다:1', '2:노을:3', '4:sunset:0', '6:한강:1']);
+      expect(await links()).toEqual(['1:28-1', '2:28-2', '3:29-2', '5:1-2', '6:1-6']);
+    });
+    expect(await linksOf(GATE_DB, 26)).toEqual([]);
+    const drift = await onDb(GATE_DB, 'SELECT h.name FROM hashtags h WHERE h.post_count <> (SELECT count(*) FROM post_hashtags ph WHERE ph.hashtag_id = h.id)');
+    expect(drift).toEqual([]);
+  }, 120_000);
 });
