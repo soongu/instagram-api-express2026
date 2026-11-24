@@ -5,6 +5,7 @@ import * as userService from './userService.js';
 import * as uploadService from './uploadService.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
+import { extractHashtags } from '../utils/hashtags.js';
 
 // 저장하는 모양과 내보내는 모양은 다르다.
 // 테이블은 글쓴이를 번호로, 사진을 딴 테이블의 행으로 갖고 있지만,
@@ -99,6 +100,10 @@ export async function getPost(id, userId) {
 }
 
 export async function createPost({ imageUrls, ...data }) {
+  // 해시태그는 아무것도 쓰기 전에 뽑는다 — 규칙에 안 맞으면 여기서 400 이 나고 게시물도 안 생긴다.
+  const names = extractHashtags(data.content);
+  console.log('뽑은 해시태그:', names);
+
   // 우리 서버에 올린 사진(/uploads/…)만 기록에서 찾는다. 바깥 주소(https://…)는 우리 파일이 아니라 그대로 넣는다.
   const fileNames = imageUrls
     .filter((imageUrl) => imageUrl.startsWith('/uploads/'))
