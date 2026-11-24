@@ -1,0 +1,65 @@
+### jaehoon으로 로그인 — 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 태그 목록 — 고치기 전
+GET http://localhost:4001/api/tags
+
+### 2번 리뷰 고치기 — 태그 하나를 빼고 하나를 더하기
+PATCH http://localhost:4001/api/reviews/2
+Content-Type: application/json
+
+{
+  "content": "배송이 하루 만에 왔어요 #Fast #가성비"
+}
+
+### 태그 목록 — 고친 뒤
+GET http://localhost:4001/api/tags
+
+### 태그를 여섯 개 쓰면
+PATCH http://localhost:4001/api/reviews/2
+Content-Type: application/json
+
+{
+  "content": "배송이 하루 만에 왔어요 #하나 #둘 #셋 #넷 #다섯 #여섯"
+}
+
+### 태그가 열한 글자면
+PATCH http://localhost:4001/api/reviews/2
+Content-Type: application/json
+
+{
+  "content": "배송이 하루 만에 왔어요 #가나다라마바사아자차카"
+}
+
+### 태그 목록 — 400 뒤에도 그대로
+GET http://localhost:4001/api/tags
+
+### 남이 쓴 1번 리뷰 고치기
+PATCH http://localhost:4001/api/reviews/1
+Content-Type: application/json
+
+{
+  "content": "음질이 생각보다 별로예요 #음질"
+}
+
+### 없는 리뷰 고치기
+PATCH http://localhost:4001/api/reviews/99
+Content-Type: application/json
+
+{
+  "content": "없는 리뷰예요 #없음"
+}
+
+### 내가 쓴 18번 답변 고치기
+PATCH http://localhost:4001/api/reviews/18
+Content-Type: application/json
+
+{
+  "content": "얼음을 가득 넣어도 괜찮아요 #보냉"
+}
