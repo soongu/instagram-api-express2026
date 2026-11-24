@@ -46,11 +46,8 @@ export async function getComments(postId, { limit = 20, cursor }) {
       // 커서가 오면 «그 댓글 다음» 부터다. 커서의 값만 쓰므로 그 댓글이 지워졌어도 이어진다.
       ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
     },
-    // 원댓글마다 달린 답글도 오래된 것부터 함께 받는다.
-    select: {
-      ...commentFields,
-      replies: { select: commentFields, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
-    },
+    // 원댓글마다 달린 답글은 받지 않고 개수만 센다. 답글은 답글 목록 주소로 따로 받는다.
+    select: { ...commentFields, _count: { select: { replies: true } } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     take: limit + 1,
   });
@@ -59,8 +56,8 @@ export async function getComments(postId, { limit = 20, cursor }) {
   const page = comments.slice(0, limit);
 
   return {
-    // 답글도 원댓글처럼 글쓴이의 이름과 사진을 꺼내 둔다.
-    items: page.map(({ replies, ...comment }) => ({ ...flatten(comment), replies: replies.map(flatten) })),
+    // 센 개수는 _count 안에 들어 있어서 replyCount 로 꺼내 둔다.
+    items: page.map(({ _count, ...comment }) => ({ ...flatten(comment), replyCount: _count.replies })),
     hasNext,
     // 다음 페이지가 있을 때만 커서를 만든다 — 마지막 페이지의 null 은 «여기가 끝» 이라는 뜻이다.
     nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
