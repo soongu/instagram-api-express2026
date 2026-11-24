@@ -95,23 +95,35 @@ export async function getReplies(postId, commentId, { limit = 3, cursor }) {
   };
 }
 
-// 댓글을 단다. 이 주소로 다는 댓글은 모두 원댓글이다.
-export async function createComment(postId, userId, content) {
+// 댓글을 단다. parentId 가 있으면 그 원댓글에 다는 답글이다.
+export async function createComment(postId, userId, content, parentId) {
   // 게시물이 없으면 404 로 답한다. 목록과 같은 확인이다.
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
   if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
-  // 댓글을 넣는 일과 게시물의 댓글 수를 올리는 일은 함께 끝나야 한다.
-  // 이 주소로 다는 댓글은 모두 원댓글이라 숫자를 늘 1 올린다.
+  if (parentId !== undefined) {
+    // 답글을 달 댓글을 찾는다. 없는 댓글이면 404 다.
+    const parent = await prisma.comment.findUnique({ where: { id: parentId }, select: { parentId: true } });
+    if (!parent) throw new NotFoundError('COMMENT_NOT_FOUND');
+
+    // 답글에는 답글을 달 수 없다. 댓글은 원댓글과 답글 두 단까지다.
+    if (parent.parentId !== null) throw new BadRequestError('CANNOT_REPLY_TO_REPLY');
+  }
+
+  // 댓글을 넣는 일과 게시물의 댓글 수를 고치는 일은 함께 끝나야 한다.
   return prisma.$transaction(async (tx) => {
     const comment = await tx.comment.create({
-      data: { postId, authorId: userId, content },
+      data: { postId, authorId: userId, content, parentId },
       select: commentFields,
     });
 
-    const commentCount = await changeCommentCount(tx, postId, 1);
+    // 답글은 게시물의 댓글 수에 세지 않는다. 답글이면 0 만큼 고쳐서 지금 숫자만 읽는다.
+    const commentCount = await changeCommentCount(tx, postId, parentId === undefined ? 1 : 0);
 
     // 화면이 카드의 «댓글 N개» 를 다시 받지 않고 고칠 수 있게 바뀐 숫자도 함께 보낸다.
+    // 원댓글에는 목록처럼 답글 수를 함께 싣는다. 방금 단 원댓글이라 답글은 아직 없다.
+    if (parentId === undefined) return { comment: { ...flatten(comment), replyCount: 0 }, commentCount };
+
     return { comment: flatten(comment), commentCount };
   });
 }
