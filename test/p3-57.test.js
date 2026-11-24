@@ -499,7 +499,9 @@ describe('축 ⑥-b 과제 [기초] 의 확인이 틀린 판을 가르는가', (
 
 describe('축 ⑦ 학생 파일 차이', () => {
   it('시작 판에서 바뀐 학생 파일 · 경로 주석 · 내부 어휘 없음', () => {
-    const changed = git(['diff', '--name-only', START, LINE, '--', ...STUDENT_FILES]).trim().split('\n').sort();
+    // 이 회차 첫 커밋의 부모와 비교한다 - 그사이 다른 회차를 고친 커밋(선 위)이 끼어 있을 수 있다.
+    const first = git(['log', '--reverse', '--format=%H %s', `${START}..${LINE}`]).split('\n').find((l) => / (feat|fix)\(p3-57\): /.test(l)).split(' ')[0];
+    const changed = git(['diff', '--name-only', `${first}~1`, LINE, '--', ...STUDENT_FILES]).trim().split('\n').sort();
     expect(changed).toEqual([
       'app.js', 'controllers/hashtagController.js', 'docs/openapi.js', 'errors.js',
       'lab/p3-57/homework1.http', 'lab/p3-57/homework1.js', 'lab/p3-57/many-tags.sql', 'lab/p3-57/practice1.http', 'lab/p3-57/practice1.js', 'lab/p3-57/shop-data.js', 'lab/p3-57/sunset-posts.sql',
@@ -514,4 +516,27 @@ describe('축 ⑦ 학생 파일 차이', () => {
       expect([f, /게이트|retrofit|TDD|하네스/.test(read(at(f)))]).toEqual([f, false]);
     }
   });
+});
+
+describe('축 ⑧ 다음 회차 판정 DB - test/fixtures/p3-57-end.sql(학생 낭독 DB · 마이그레이션 이름만 코드베이스 것)', () => {
+  it('게시물 34(다음 54) · 노을 27 · 짝 29 · 인덱스 · 1번 좋아요 jaehoon · migrate deploy 가 적용할 것이 없다', async () => {
+    const db = `${DB_PREFIX}_end`;
+    const fixture = read(P('test/fixtures/p3-57-end.sql')).split('\n').filter((line) => !line.startsWith('\\')).join('\n');
+    await dropDb(db);
+    await admin((client) => client.query(`CREATE DATABASE ${db}`));
+    await runSql(db, fixture);
+    expect(await onDb(db, 'SELECT count(*)::int AS n FROM posts')).toEqual([{ n: 34 }]);
+    expect(await onDb(db, "SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END::int AS n FROM posts_id_seq")).toEqual([{ n: 54 }]);
+    expect(await tagsOf(db)).toEqual([
+      { name: '바다', post_count: 1 }, { name: '노을', post_count: 27 }, { name: 'sunset', post_count: 0 }, { name: '한강', post_count: 1 },
+    ]);
+    expect(await onDb(db, 'SELECT count(*)::int AS n FROM post_hashtags')).toEqual([{ n: 29 }]);
+    expect((await onDb(db, "SELECT indexname FROM pg_indexes WHERE tablename = 'post_hashtags' ORDER BY indexname")).map((i) => i.indexname))
+      .toContain('post_hashtags_hashtag_id_idx');
+    expect(await onDb(db, 'SELECT p.like_count, (SELECT count(*)::int FROM post_likes l WHERE l.post_id = 1 AND l.user_id = 2) AS mine FROM posts p WHERE p.id = 1'))
+      .toEqual([{ like_count: 131, mine: 1 }]);
+    const out = migrate(version(2), db);
+    expect(out).toMatch(/No pending migrations to apply/);
+    await dropDb(db);
+  }, 120_000);
 });
