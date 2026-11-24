@@ -325,3 +325,71 @@ describe('축 ③ Step 6 - 사람 찾기 API', () => {
     });
   });
 });
+
+const LAB_PORT = Number(process.env.P358_LAB_PORT ?? 3987);
+/** 학생 쪽 포트 4001 을 판정 포트로 - 바꾸는 곳은 app.listen 의 수와 기다린다는 문장 둘뿐이어야 한다. */
+const onPort = (file, port) => {
+  const source = read(file);
+  expect(source.split('4001').length - 1).toBe(2);
+  writeFileSync(file, source.replaceAll('4001', String(port)));
+};
+/** 실습 서버를 띄운다 - `patch(source)` 를 주면 그 판으로 바꿔 띄운다(틀린 판). */
+const labServer = async (which, fn, patch = null) => {
+  const from = version('lab');
+  const dir = studentDir(from);
+  const file = join(dir, 'lab/p3-58', `${which}.js`);
+  onPort(file, LAB_PORT);
+  if (patch) writeFileSync(file, patch(read(file)));
+  const srv = await boot(file, { port: LAB_PORT, cwd: dir, env: { ...env, DATABASE_URL: dbUrl(GATE_DB) }, ready: `${LAB_PORT}번 포트에서` });
+  try {
+    return await fn(browser(`http://localhost:${LAB_PORT}`));
+  } finally {
+    await Promise.race([srv.stop(), new Promise((r) => setTimeout(r, 500))]);
+  }
+};
+
+describe('축 ④ 직접 해보기 1 - 리뷰 글쓴이', () => {
+  it('yuna 4 · 12 10 5 다음 1 · jaehoon 2 · jisoo 0 과 빈 목록 · 없는 사람 404 둘', async () => {
+    await labServer('practice1', async (tab) => {
+      expect(await tab.get('/api/users/yuna')).toEqual({ status: 200, body: { id: 1, username: 'yuna', reviewCount: 4 } });
+      const first = await tab.get('/api/users/yuna/reviews');
+      expect([first.body.items.map((r) => r.id), first.body.hasNext]).toEqual([[12, 10, 5], true]);
+      expect(Object.keys(first.body.items[0])).toEqual(['id', 'content', 'createdAt']);
+      const second = await tab.get(`/api/users/yuna/reviews?cursor=${first.body.nextCursor}`);
+      expect([second.body.items.map((r) => r.id), second.body.hasNext, second.body.nextCursor]).toEqual([[1], false, null]);
+      expect((await tab.get('/api/users/jaehoon')).body.reviewCount).toBe(2);
+      expect((await tab.get('/api/users/jisoo')).body.reviewCount).toBe(0);
+      expect(await tab.get('/api/users/jisoo/reviews')).toEqual({ status: 200, body: { items: [], hasNext: false, nextCursor: null } });
+      expect(await tab.get('/api/users/minho')).toEqual({ status: 404, body: { message: '그런 사용자는 없어요' } });
+      expect(await tab.get('/api/users/minho/reviews')).toEqual({ status: 404, body: { message: '그런 사용자는 없어요' } });
+    });
+  });
+});
+
+describe('축 ⑤ 과제 [기초] - 사람 찾기', () => {
+  it('j 셋(이름 차례 · sujin 도) · J 같음 · u 둘 · minho 와 빈 검색어는 [] · 글쓴이 주소는 그대로', async () => {
+    await labServer('homework1', async (tab) => {
+      const names = async (q) => (await tab.get(`/api/users/search${q}`)).body.map((u) => u.username);
+      expect(await names('?keyword=j')).toEqual(['jaehoon', 'jisoo', 'sujin']);
+      expect(await names('?keyword=J')).toEqual(['jaehoon', 'jisoo', 'sujin']);
+      expect(await names('?keyword=u')).toEqual(['sujin', 'yuna']);
+      expect(await tab.get('/api/users/search?keyword=minho')).toEqual({ status: 200, body: [] });
+      expect(await tab.get('/api/users/search')).toEqual({ status: 200, body: [] });
+      expect((await tab.get('/api/users/yuna')).body.reviewCount).toBe(4);
+    });
+  });
+
+  it('틀린 판 - 사람 찾기를 /api/users/:username 아래에 두면 search 를 사용자 이름으로 읽어 404', async () => {
+    const moveDown = (source) => {
+      const start = source.indexOf('// 사람 찾기의 쿼리 문자열');
+      const end = source.indexOf('// 글쓴이 한 사람 - 리뷰 수는');
+      const block = source.slice(start, end);
+      const rest = source.slice(0, start) + source.slice(end);
+      const at = rest.indexOf('// 이 서버의 실패는');
+      return rest.slice(0, at) + block + rest.slice(at);
+    };
+    await labServer('homework1', async (tab) => {
+      expect(await tab.get('/api/users/search?keyword=j')).toEqual({ status: 404, body: { message: '그런 사용자는 없어요' } });
+    }, moveDown);
+  });
+});
