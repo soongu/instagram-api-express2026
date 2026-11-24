@@ -12,6 +12,7 @@ export const MESSAGES = {
   UNEXPECTED_FILE: '사진은 images 이름으로 10장까지 보낼 수 있어요',
   UPLOAD_FAILED: '사진을 받지 못했어요',
   IMAGE_NOT_AVAILABLE: '내가 올리고 아직 게시물에 쓰지 않은 사진만 넣을 수 있어요',
+  REPLY_HAS_NO_REPLIES: '답글에는 답글이 없어요',
   LOGIN_FAILED: '사용자 이름이나 비밀번호가 맞지 않아요',
   SOCIAL_LOGIN_FAILED: '소셜 로그인을 마치지 못했어요',
   LOGIN_REQUIRED: '로그인이 필요해요',

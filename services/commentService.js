@@ -1,6 +1,6 @@
 // ~/instagram-api/services/commentService.js
 import { prisma } from '../db.js';
-import { ForbiddenError, NotFoundError } from '../errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
 
 // 댓글 목록에 쓸 필드만 골라서 받는다 — 글쓴이는 번호와 함께 이름과 프로필 사진도 받는다.
@@ -65,6 +65,13 @@ export async function getComments(postId, { limit = 20, cursor }) {
 // 원댓글 하나에 달린 답글을 받는다. 답글도 오래된 것부터 보여 준다.
 // 답글은 parentId 에 원댓글 번호가 들어 있는 댓글이다.
 export async function getReplies(postId, commentId, { limit = 3, cursor }) {
+  // 주소의 게시물에 달린 댓글인지 먼저 확인한다. 없는 댓글과 답글이 없는 원댓글(빈 목록)을 구별한다.
+  const comment = await prisma.comment.findUnique({ where: { id: commentId, postId }, select: { parentId: true } });
+  if (!comment) throw new NotFoundError('COMMENT_NOT_FOUND');
+
+  // 답글은 원댓글에만 달린다. 답글 번호로 물으면 400 으로 알린다.
+  if (comment.parentId !== null) throw new BadRequestError('REPLY_HAS_NO_REPLIES');
+
   const replies = await prisma.comment.findMany({
     where: {
       parentId: commentId,
