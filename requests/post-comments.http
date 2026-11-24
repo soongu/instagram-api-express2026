@@ -88,3 +88,56 @@ GET http://localhost:3000/api/v2/posts/1/comments/10/replies
 
 ### 2번 게시물의 댓글 — 모달이 받는 첫 페이지
 GET http://localhost:3000/api/v2/posts/2/comments?limit=20
+
+### 1번 댓글에 답글 달기
+# @name firstReply
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "@minji 저녁에 가면 노을도 보여요",
+  "parentId": 1
+}
+
+### 고치기 전 서버에서 원댓글로 달린 그 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/1/comments/{{firstReply.data.comment.id}}
+
+### 답글에 답글 달기
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "@dahye 다음엔 셋이 가요",
+  "parentId": 11
+}
+
+### 2번 게시물 주소로 1번 댓글에 답글 달기
+# @name misplaced
+POST http://localhost:3000/api/v2/posts/2/comments
+Content-Type: application/json
+
+{
+  "content": "@minji 저도 가 보고 싶어요",
+  "parentId": 1
+}
+
+### 잘못 달린 답글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/{{misplaced.data.comment.id}}
+
+### 없는 댓글에 답글 달기
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "이 댓글에도 답글을 달아요",
+  "parentId": 999
+}
+
+### parentId를 글자로 보낸 답글
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "번호를 글자로 보내요",
+  "parentId": "1"
+}
