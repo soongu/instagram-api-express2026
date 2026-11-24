@@ -1,0 +1,52 @@
+### jaehoon으로 로그인 — 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 10번 리뷰에 답변 달기
+POST http://localhost:4001/api/products/2/reviews
+Content-Type: application/json
+
+{
+  "content": "쓰다 보면 조금씩 부드러워져요",
+  "parentId": 10
+}
+
+### 답변에 답변 달기
+POST http://localhost:4001/api/products/2/reviews
+Content-Type: application/json
+
+{
+  "content": "얼음은 큰 것으로 넣어 주세요",
+  "parentId": 18
+}
+
+### 다른 상품 주소로 답변 달기
+POST http://localhost:4001/api/products/1/reviews
+Content-Type: application/json
+
+{
+  "content": "쓰다 보면 조금씩 부드러워져요",
+  "parentId": 10
+}
+
+### 남이 파는 상품의 리뷰에 답변 달기
+POST http://localhost:4001/api/products/1/reviews
+Content-Type: application/json
+
+{
+  "content": "저도 음질이 좋다고 생각해요",
+  "parentId": 1
+}
+
+### 3번 상품에 리뷰 달기
+POST http://localhost:4001/api/products/3/reviews
+Content-Type: application/json
+
+{
+  "content": "높이를 바꿀 수 있어서 목이 편해요"
+}
