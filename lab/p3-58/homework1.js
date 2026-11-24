@@ -47,7 +47,7 @@ const userSearchQuerySchema = z.object({
   keyword: z.string().max(30).optional(),
 });
 
-// 사용자 이름에 검색어가 든 사람을 이름 차례로 5명까지 - 대소문자는 가리지 않는다.
+// 사용자 이름에 검색어가 든 사람을 사용자 이름 차례로 5명까지 - 대소문자는 가리지 않는다.
 // /api/users/:username 보다 «위» 에 둔다. 아래에 두면 search 를 사용자 이름으로 읽어 404 가 난다.
 app.get('/api/users/search', validateQuery(userSearchQuerySchema), (req, res) => {
   const keyword = (res.locals.query.keyword ?? '').toLowerCase();

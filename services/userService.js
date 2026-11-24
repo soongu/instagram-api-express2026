@@ -59,7 +59,7 @@ export async function getProfile(username) {
 // 사람 찾기에 실을 것.
 const memberFields = { id: true, username: true, name: true, profileImage: true };
 
-// 사용자 이름에 검색어가 든 사람을 이름 차례로 20명까지 돌려준다 - 대소문자는 가리지 않는다.
+// 사용자 이름에 검색어가 든 사람을 사용자 이름 차례로 20명까지 돌려준다 - 대소문자는 가리지 않는다.
 // 검색어가 비어 있으면 아무도 돌려주지 않는다.
 export function searchMembers(keyword) {
   if (!keyword) return [];
