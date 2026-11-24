@@ -1423,7 +1423,9 @@ const lessonFacts = () => (lessonRun ??= (async () => {
   out.step2a = await withServer(version('2a'), GATE_DB, () => httpyac(read(version('2a')(HTTP_FILE))));
   Object.assign(out, await withServer(version(2), GATE_DB, async ({ base: url }) => {
     const tab = await loggedIn(url, 'jaehoon');
-    return { step2: await httpyac(read(version(2)(HTTP_FILE))), post99: (await tab.get('/api/v2/posts/99')).body };
+    // 같은 꼴의 좋아요 목록(`routes/likes.js`)은 지금도 없는 게시물에 빈 목록이다 — 교안 Step 2 가 «오늘은 댓글 목록만» 으로 말한다
+    const likes99 = await tab.get('/api/v2/posts/99/likes');
+    return { step2: await httpyac(read(version(2)(HTTP_FILE))), post99: (await tab.get('/api/v2/posts/99')).body, likes99: { status: likes99.status, body: likes99.body } };
   }));
   Object.assign(out, await withServer(version(3), GATE_DB, async ({ base: url }) => {
     const tab = await loggedIn(url, 'jaehoon');
@@ -1528,6 +1530,7 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 블록 대조 — 수업 백엔드(
         (m) => Number(m[1]) === f.step1[1].body.data.length && f.step1[1].body.data.filter((c) => c.parentId === Number(m[4])).map((c) => c.id).join() === `${m[2]},${m[3]}`],
       ['1번 카드의 «댓글 N개 보기»', /1번 게시물 카드를 보면 «댓글 (\d+)개 보기»/, (m) => Number(m[1]) === f.count1],
       ['게시물 99번 상세', /`GET \/api\/v2\/posts\/99`로 물으면 (\d{3}) «([^»]+)»/, (m) => Number(m[1]) === 404 && f.post99.error?.message === m[2]],
+      ['좋아요 목록의 99번', /좋아요 누른 사람 목록 `GET \/api\/v2\/posts\/99\/likes`도 지금은 `(\{ "data": \[\] \})`로 답해요/, (m) => f.likes99.status === 200 && JSON.stringify(JSON.parse(m[1])) === JSON.stringify(f.likes99.body)],
       ['Step 2 고친 판의 4번', /4번은 그대로 `(\{ "data": \[\] \})`/, (m) => JSON.stringify(JSON.parse(m[1])) === JSON.stringify(f.step2[3].body)],
       ['2번 게시물의 원댓글 수', /2번 게시물은 원댓글이 (\d+)개/, (m) => Number(m[1]) === f.roots2],
       ['기본 limit', /`limit`이 없으면 서비스가 (\d+)개/, (m) => new RegExp(`limit = ${m[1]}`).test(read(version(3)('services/commentService.js')))],
