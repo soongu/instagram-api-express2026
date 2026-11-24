@@ -66,3 +66,22 @@ DELETE http://localhost:3000/api/v2/posts/2/comments/6
 
 ### 없는 댓글 지우기
 DELETE http://localhost:3000/api/v2/posts/2/comments/999
+
+### 1번 게시물의 1번 댓글에 달린 답글
+GET http://localhost:3000/api/v2/posts/1/comments/1/replies
+
+### 답글 첫 페이지 — 하나만
+# @name firstReplies
+GET http://localhost:3000/api/v2/posts/1/comments/1/replies?limit=1
+
+### 답글 둘째 페이지 — 받은 커서를 그대로 돌려준다
+GET http://localhost:3000/api/v2/posts/1/comments/1/replies?limit=1&cursor={{firstReplies.data.nextCursor}}
+
+### 없는 댓글의 답글
+GET http://localhost:3000/api/v2/posts/1/comments/999/replies
+
+### 2번 게시물 주소로 1번 게시물 댓글의 답글
+GET http://localhost:3000/api/v2/posts/2/comments/1/replies
+
+### 답글의 답글
+GET http://localhost:3000/api/v2/posts/1/comments/10/replies
