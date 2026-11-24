@@ -375,10 +375,20 @@ describe('축 ⑤ 과제 [기초] - 사람 찾기', () => {
       expect(await names('?keyword=j')).toEqual(['jaehoon', 'jisoo', 'sujin']);
       expect(await names('?keyword=J')).toEqual(['jaehoon', 'jisoo', 'sujin']);
       expect(await names('?keyword=u')).toEqual(['sujin', 'yuna']);
+      // n 이 든 사람은 넷(jaehoon · sujin · taeyang · yuna)이지만 셋까지.
+      expect(await names('?keyword=n')).toEqual(['jaehoon', 'sujin', 'taeyang']);
       expect(await tab.get('/api/users/search?keyword=minho')).toEqual({ status: 200, body: [] });
       expect(await tab.get('/api/users/search')).toEqual({ status: 200, body: [] });
       expect((await tab.get('/api/users/yuna')).body.reviewCount).toBe(4);
     });
+  });
+
+  it('틀린 판 - 정렬을 빼면 n 이 yuna · jaehoon · sujin · 개수 제한을 빼면 넷', async () => {
+    const names = async (tab) => (await tab.get('/api/users/search?keyword=n')).body.map((u) => u.username);
+    await labServer('homework1', async (tab) => expect(await names(tab)).toEqual(['yuna', 'jaehoon', 'sujin']),
+      (source) => source.replace("    .sort((a, b) => (a.username < b.username ? -1 : 1))\n", ''));
+    await labServer('homework1', async (tab) => expect(await names(tab)).toEqual(['jaehoon', 'sujin', 'taeyang', 'yuna']),
+      (source) => source.replace('    .slice(0, 3)\n', ''));
   });
 
   it('틀린 판 - 사람 찾기를 /api/users/:username 아래에 두면 search 를 사용자 이름으로 읽어 404', async () => {
