@@ -102,8 +102,8 @@ export async function createComment(postId, userId, content, parentId) {
   if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
   if (parentId !== undefined) {
-    // 답글을 달 댓글을 찾는다. 없는 댓글이면 404 다.
-    const parent = await prisma.comment.findUnique({ where: { id: parentId }, select: { parentId: true } });
+    // 주소의 게시물에 달린 댓글에만 답글을 단다. 번호만으로 찾으면 다른 게시물의 댓글에도 답글이 달린다.
+    const parent = await prisma.comment.findUnique({ where: { id: parentId, postId }, select: { parentId: true } });
     if (!parent) throw new NotFoundError('COMMENT_NOT_FOUND');
 
     // 답글에는 답글을 달 수 없다. 댓글은 원댓글과 답글 두 단까지다.
