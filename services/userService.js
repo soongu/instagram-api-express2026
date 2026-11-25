@@ -257,3 +257,12 @@ export async function unlinkSocialAccount(userId, provider) {
     await tx.socialAccount.deleteMany({ where: { userId, provider } });
   });
 }
+
+// 프로필 사진 주소를 바꾼다.
+export async function updateProfileImage(userId, imageUrl) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { profileImage: imageUrl },
+    select: { profileImage: true },
+  });
+}

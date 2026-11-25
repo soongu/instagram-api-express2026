@@ -6,7 +6,7 @@ import { signupSchema } from '../schemas/authSchema.js';
 import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
 import { profilePostsQuerySchema } from '../schemas/profileSchema.js';
-import { memberSearchQuerySchema } from '../schemas/memberSchema.js';
+import { memberSearchQuerySchema, profileImageSchema } from '../schemas/memberSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -196,6 +196,20 @@ export const openapi = {
         responses: {
           200: { description: '찾은 사람 목록 - 검색어가 없으면 빈 배열', content: json(data({ type: 'array', items: ref('Member') })) },
           400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/members/me/profile-image': {
+      put: {
+        summary: '내 프로필 사진 바꾸기 - 사진은 먼저 /api/v2/uploads 로 올리고 받은 주소를 보낸다',
+        requestBody: { required: true, content: json(toSchema(profileImageSchema)) },
+        responses: {
+          200: {
+            description: '바꾼 프로필 사진 주소',
+            content: json(data({ type: 'object', properties: { profileImage: { type: 'string' } } })),
+          },
+          400: { description: '보낸 내용이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY')) },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
         },
       },

@@ -7,3 +7,10 @@ export async function search(req, res) {
 
   sendData(res, members);
 }
+
+// 로그인한 사람의 프로필 사진을 바꾼다 - 누구의 사진인지는 주소가 아니라 로그인 정보로 정한다.
+export async function updateProfileImage(req, res) {
+  const profile = await userService.updateProfileImage(res.locals.userId, req.body.imageUrl);
+
+  sendData(res, profile);
+}
