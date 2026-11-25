@@ -4,8 +4,9 @@ import * as postService from '../services/postService.js';
 import * as followService from '../services/followService.js';
 import { sendData } from '../responses.js';
 
+// 프로필 헤더 - 팔로우하고 있는지는 로그인한 사람을 기준으로 본다.
 export async function show(req, res) {
-  const profile = await userService.getProfile(req.params.username);
+  const profile = await userService.getProfile(req.params.username, res.locals.userId);
 
   sendData(res, profile);
 }

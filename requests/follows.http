@@ -24,3 +24,9 @@ PUT http://localhost:3000/api/v2/profiles/jaehoon/followers/me
 
 ### 없는 사람을 팔로우
 PUT http://localhost:3000/api/v2/profiles/nobody/followers/me
+
+### minji의 프로필 - 팔로워 수 · 팔로잉 수 · 내가 팔로우하고 있는지
+GET http://localhost:3000/api/v2/profiles/minji
+
+### 내 프로필
+GET http://localhost:3000/api/v2/profiles/jaehoon

@@ -168,7 +168,7 @@ export const openapi = {
     '/api/v2/profiles/{username}': {
       parameters: [pathParameter('username', '사용자 이름')],
       get: {
-        summary: '프로필 헤더 - 이름 · 사진 · 게시물 수',
+        summary: '프로필 헤더 - 이름 · 사진 · 게시물 수 · 팔로워 수 · 팔로잉 수 · 내가 팔로우하고 있는지',
         responses: {
           200: { description: '그 사람의 프로필', content: json(data(ref('Profile'))) },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
@@ -338,6 +338,9 @@ export const openapi = {
           name: { type: ['string', 'null'], description: '이름 - 적지 않은 사람은 null' },
           profileImage: { type: ['string', 'null'], description: '프로필 사진 주소 - 없으면 null' },
           postCount: { type: 'integer', description: '그 사람이 올린 게시물 수' },
+          followerCount: { type: 'integer', description: '그 사람을 팔로우하는 사람 수' },
+          followingCount: { type: 'integer', description: '그 사람이 팔로우하는 사람 수' },
+          isFollowing: { type: 'boolean', description: '요청한 사람이 그 사람을 팔로우하고 있는가 - 내 프로필이면 false' },
         },
       },
       FollowStatus: {
