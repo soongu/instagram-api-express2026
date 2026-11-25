@@ -119,7 +119,7 @@ const failOf = async (name, sql) => {
     await onDb(name, sql);
     return null;
   } catch (error) {
-    return { code: error.code, constraint: error.constraint, message: error.message };
+    return { code: error.code, constraint: error.constraint, message: error.message, detail: error.detail };
   }
 };
 const dropDb = (name) => admin(async (client) => {
@@ -286,6 +286,9 @@ describe('축 ① Step 1 - follows 테이블', () => {
     await onDb(GATE_DB, 'INSERT INTO follows (follower_id, following_id) VALUES (2, 3)');
     const twice = await failOf(GATE_DB, 'INSERT INTO follows (follower_id, following_id) VALUES (2, 3)');
     expect([twice.code, twice.constraint]).toEqual(['23505', 'follows_follower_id_following_id_key']);
+    // 학생이 VS Code 확장에서 같은 INSERT 를 한 번 더 실행하면 보는 문장 그대로
+    expect(twice.message).toBe('duplicate key value violates unique constraint "follows_follower_id_following_id_key"');
+    expect(twice.detail).toBe('Key (follower_id, following_id)=(2, 3) already exists.');
     expect(await failOf(GATE_DB, 'INSERT INTO follows (follower_id, following_id) VALUES (2, 2)')).toBe(null);
     await onDb(GATE_DB, "INSERT INTO follows (follower_id, following_id) SELECT id, 3 FROM users WHERE username = 'boram'");
     await onDb(GATE_DB, "DELETE FROM users WHERE username = 'boram'");
@@ -396,6 +399,14 @@ describe('축 ③ Step 3 - 팔로우와 취소', () => {
       expect(brief(await unfollow(tab, 'minji'))).toEqual({ status: 200, body: { data: { following: false, followerCount: 1 } } });
       expect(brief(await unfollow(tab, 'minji'))).toEqual({ status: 200, body: { data: { following: false, followerCount: 1 } } });
       expect(await followRows()).toEqual([{ follower_id: 43, following_id: MINJI_ID }]);
+    });
+  });
+
+  it('팔로우한 적 없이 취소부터 보내도 200 { following: false, followerCount: 0 } · 행도 숫자도 그대로', async () => {
+    await serve(3, async ({ base }) => {
+      const tab = await loggedIn(base, 'jaehoon');
+      expect(brief(await unfollow(tab, 'minji'))).toEqual({ status: 200, body: { data: { following: false, followerCount: 0 } } });
+      expect(await followRows()).toEqual([]);
     });
   });
 
@@ -557,7 +568,7 @@ describe('축 ④ Step 4 - 팔로워 수는 컬럼으로', () => {
     expect(await onDb(GATE_DB, `SELECT count(*)::int AS n FROM follows WHERE follower_id = ${JAEHOON_ID} AND following_id = ${MINJI_ID}`)).toEqual([{ n: 0 }]);
   });
 
-  it('데이터를 채운 뒤 jaehoon 이 minji 를 팔로우하면 21 · 취소하면 20', async () => {
+  it('데이터를 채운 뒤 jaehoon 이 minji 를 팔로우하면 21 · 한 번 더 팔로우해도 21 · 취소하면 20', async () => {
     const from = version(4);
     await freshDb();
     migrate(from, GATE_DB);
@@ -565,6 +576,8 @@ describe('축 ④ Step 4 - 팔로워 수는 컬럼으로', () => {
     await serve(4, async ({ base }) => {
       const tab = await loggedIn(base, 'jaehoon');
       expect((await follow(tab, 'minji')).body.data).toEqual({ following: true, followerCount: 21 });
+      expect((await follow(tab, 'minji')).body.data).toEqual({ following: true, followerCount: 21 });
+      expect(await followerCountOf('minji')).toBe(21);
       expect((await unfollow(tab, 'minji')).body.data).toEqual({ following: false, followerCount: 20 });
     }, { fresh: false });
   });
