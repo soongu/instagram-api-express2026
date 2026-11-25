@@ -24,6 +24,8 @@ model User {
   profileImage String?   @map("profile_image")
   deactivatedAt DateTime? @map("deactivated_at")
   role         Role      @default(USER)
+  // 나를 팔로우하는 사람의 수 - 헤더를 열 때마다 세지 않으려고 따로 적어 둔다.
+  followerCount Int      @default(0) @map("follower_count")
   posts        Post[]
   comments     Comment[]
   likes        PostLike[]
