@@ -11,6 +11,7 @@
 //    사람 22명 · 사진이 있는 사람 넷(dahye · jaehoon · minji · seungwoo) · uploads 기록 4(전부 게시물에 씀).
 //
 // 축 ⓪ 판정 DB · 축 ① Step 2 사진 주소 적기 · 축 ② Step 3 한 시간 뒤 · 축 ③ Step 4 기록에 «프로필에 썼다» · 축 ④ Step 5 앞 사진 치우기
+// 축 ⑤ 직접 해보기 1 글쓴이 사진 적기 · 축 ⑥ 과제 [기초] 글쓴이 사진 지우기
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -470,3 +471,110 @@ describe('축 ④ Step 5 - 앞 사진 치우기', () => {
     });
   });
 });
+
+const LAB_PORT = Number(process.env.P359_LAB_PORT ?? 3992);
+/** 학생 쪽 포트 4001 을 판정 포트로 - 바꾸는 곳은 app.listen 의 수와 기다린다는 문장 둘뿐이어야 한다. */
+const onPort = (file, port) => {
+  const source = read(file);
+  expect(source.split('4001').length - 1).toBe(2);
+  writeFileSync(file, source.replaceAll('4001', String(port)));
+};
+/** 실습 서버를 띄운다 - `patch(source)` 를 주면 그 판으로 바꿔 띄운다(틀린 판). 실습 서버는 메모리 데이터라 띄울 때마다 처음 상태다. */
+const labServer = async (which, fn, patch = null) => {
+  const from = version('lab');
+  const dir = studentDir(from);
+  const file = join(dir, 'lab/p3-59', `${which}.js`);
+  onPort(file, LAB_PORT);
+  if (patch) {
+    const before = read(file);
+    const after = patch(before);
+    expect(after).not.toBe(before);
+    writeFileSync(file, after);
+  }
+  const srv = await boot(file, { port: LAB_PORT, cwd: dir, env, ready: `${LAB_PORT}번 포트에서` });
+  try {
+    return await fn(browser(`http://localhost:${LAB_PORT}`));
+  } finally {
+    await Promise.race([srv.stop(), new Promise((r) => setTimeout(r, 500))]);
+  }
+};
+const putPhoto = (tab, name, file) => tab.send('PUT', `/api/users/${name}/photo`, { imageUrl: `/uploads/${file}` });
+const BAD = { status: 400, body: { message: '내가 올리고 아직 아무 데도 쓰지 않은 사진만 쓸 수 있어요' } };
+/** practice1.http 를 차례로 보낸다 - 상태 코드 여섯. */
+const practiceRun = async (tab) => [
+  (await tab.get('/api/users/yuna')).body.profileImage,
+  (await putPhoto(tab, 'yuna', 'cat.jpg')).status,
+  (await putPhoto(tab, 'yuna', 'cake.jpg')).status,
+  (await putPhoto(tab, 'yuna', 'dog.jpg')).status,
+  (await putPhoto(tab, 'yuna', 'cat.jpg')).status,
+  (await putPhoto(tab, 'yuna', 'nothing.jpg')).status,
+  (await tab.get('/api/users/yuna')).body.profileImage,
+];
+const CONDITION = (name) => ` && item.${name} === `;
+
+describe('축 ⑤ 직접 해보기 1 - 글쓴이 사진 적기', () => {
+  it('practice1.http 차례대로 - 처음엔 null · cat 200 · cake · dog · cat 다시 · 없는 파일은 400 · 끝에 cat', async () => {
+    await labServer('practice1', async (tab) => {
+      expect(await tab.get('/api/users/yuna')).toEqual({ status: 200, body: { id: 1, username: 'yuna', profileImage: null } });
+      expect(await putPhoto(tab, 'yuna', 'cat.jpg')).toEqual({ status: 200, body: { profileImage: '/uploads/cat.jpg' } });
+      expect(await putPhoto(tab, 'yuna', 'cake.jpg')).toEqual(BAD);
+      expect(await putPhoto(tab, 'yuna', 'dog.jpg')).toEqual(BAD);
+      expect(await putPhoto(tab, 'yuna', 'cat.jpg')).toEqual(BAD);
+      expect(await putPhoto(tab, 'yuna', 'nothing.jpg')).toEqual(BAD);
+      expect(await tab.get('/api/users/yuna')).toEqual({ status: 200, body: { id: 1, username: 'yuna', profileImage: '/uploads/cat.jpg' } });
+      expect(await tab.send('PUT', '/api/users/yuna/photo', { imageUrl: 'https://picsum.photos/seed/yuna/150/150' }))
+        .toEqual({ status: 400, body: { message: '보낸 내용이 규칙에 안 맞아요' } });
+      expect(await putPhoto(tab, 'minho', 'cat.jpg')).toEqual({ status: 404, body: { message: '그런 사용자는 없어요' } });
+      expect((await tab.get('/uploads/cat.jpg')).status).toBe(200);
+    });
+  });
+
+  it('빈칸 넷 - 하나를 빼면 400 이어야 할 요청 하나가 200 이 된다 · 빈칸 그대로면 500', async () => {
+    const ok = [null, 200, 400, 400, 400, 400, '/uploads/cat.jpg'];
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual(ok));
+    const drop = (cond) => (source) => source.replace(cond, '');
+    // 파일 이름을 안 보면 cake.jpg 를 보냈는데 yuna 의 다른 사진(sea.jpg) 기록이 적히고 주소는 cake 가 된다.
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 200, 400, 400, 400, '/uploads/cake.jpg']),
+      drop('item.fileName === fileName && '));
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 400, 200, 400, 400, '/uploads/dog.jpg']),
+      drop(`${CONDITION('uploaderId')}user.id`));
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 200, 400, 400, 400, '/uploads/cake.jpg']),
+      drop(`${CONDITION('reviewId')}null`));
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 400, 400, 200, 400, '/uploads/cat.jpg']),
+      drop(`${CONDITION('profileUserId')}null`));
+    const blanks = (source) => source.replace('item.fileName === fileName', 'item.fileName === ____')
+      .replace(`${CONDITION('uploaderId')}user.id`, `${CONDITION('uploaderId')}____`)
+      .replace(`${CONDITION('reviewId')}null`, `${CONDITION('reviewId')}____`)
+      .replace(`${CONDITION('profileUserId')}null`, `${CONDITION('profileUserId')}____`);
+    await labServer('practice1', async (tab) => {
+      expect(await putPhoto(tab, 'yuna', 'cat.jpg')).toEqual({ status: 500, body: { message: '서버에서 문제가 생겼어요' } });
+    }, blanks);
+  });
+});
+
+describe('축 ⑥ 과제 [기초] - 글쓴이 사진 지우기', () => {
+  it('homework1.http 차례대로 - 지우면 null 과 파일 404 · 한 번 더도 200 null · 바깥 주소 sujin 은 기록 없이 null · 남의 파일은 그대로 · 없는 사람 404', async () => {
+    await labServer('homework1', async (tab) => {
+      expect((await putPhoto(tab, 'yuna', 'cat.jpg')).status).toBe(200);
+      expect(await tab.send('DELETE', '/api/users/yuna/photo')).toEqual({ status: 200, body: { profileImage: null } });
+      expect((await tab.get('/api/users/yuna')).body.profileImage).toBe(null);
+      expect(await tab.get('/uploads/cat.jpg')).toEqual({ status: 404, body: { message: '그런 파일은 없어요' } });
+      expect(await tab.send('DELETE', '/api/users/yuna/photo')).toEqual({ status: 200, body: { profileImage: null } });
+      expect(await tab.send('DELETE', '/api/users/sujin/photo')).toEqual({ status: 200, body: { profileImage: null } });
+      expect((await tab.get('/api/users/sujin')).body.profileImage).toBe(null);
+      expect((await tab.get('/uploads/dog.jpg')).status).toBe(200);
+      expect(await tab.send('DELETE', '/api/users/minho/photo')).toEqual({ status: 404, body: { message: '그런 사용자는 없어요' } });
+      // 사진 적기는 직접 해보기 1 그대로
+      expect((await putPhoto(tab, 'yuna', 'sea.jpg')).status).toBe(200);
+    });
+  });
+
+  it('틀린 판 - 파일을 안 지우면 지운 뒤에도 cat.jpg 가 200', async () => {
+    await labServer('homework1', async (tab) => {
+      await putPhoto(tab, 'yuna', 'cat.jpg');
+      await tab.send('DELETE', '/api/users/yuna/photo');
+      expect((await tab.get('/uploads/cat.jpg')).status).toBe(200);
+    }, (source) => source.replace('    files.delete(upload.fileName);\n', ''));
+  });
+});
+

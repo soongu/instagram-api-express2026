@@ -265,6 +265,11 @@ const seen = {};
 const scrub = (text, dir) => text.replaceAll(`/private${dir}`, '~/instagram-api').replaceAll(dir, '~/instagram-api').replace(/\d+(\.\d+)?ms/g, 'Nms');
 
 beforeAll(async () => {
+  // 🚨 Prisma 클라이언트는 node_modules 안에 하나뿐이다 (2026-11-25 p3-59) - 뒤 회차가 uploads 에 컬럼을 더한 스키마로
+  //    클라이언트를 만들어 두면, 이 회차 DB 에 없는 그 컬럼을 고르다 ColumnNotFound 로 죽는다. 이 회차 끝 판 스키마로 다시 만든다.
+  execFileSync(P('node_modules/.bin/prisma'), ['generate'], {
+    cwd: studentDir(stepDir(8)), env: { ...process.env, DATABASE_URL: dbUrl(TPL_DB) }, stdio: 'pipe',
+  });
   await admin(async (client) => {
     for (const name of [GATE_DB, TPL_DB]) {
       await kick(client, name);
