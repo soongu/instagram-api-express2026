@@ -258,7 +258,7 @@ const rebootIn = async (dir, db, fn, port = PORT) => {
   }
 };
 /** 교안 Step 3 의 SQL 그대로 - 아직 아무 게시물에도 안 쓴 기록의 올린 시각을 2시간 앞당긴다. */
-const BACKDATE = "UPDATE uploads SET created_at = created_at - interval '2 hours' WHERE post_id IS NULL;";
+const BACKDATE = "UPDATE uploads SET created_at = created_at - INTERVAL '2 hours' WHERE post_id IS NULL;";
 
 describe('축 ⓪ 판정 DB - p3-58 을 마친 학생 DB', () => {
   it('사람 22명 · 사진이 있는 사람 넷 · me 는 사진이 없다 · uploads 기록 4(전부 게시물에 씀)', async () => {
