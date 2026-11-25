@@ -4,6 +4,7 @@ import path from 'node:path';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../errors.js';
+import * as uploadService from './uploadService.js';
 
 // 응답에 실어 보낼 컬럼만 고른다.
 const userFields = { id: true, username: true, profileImage: true, role: true };
@@ -260,11 +261,16 @@ export async function unlinkSocialAccount(userId, provider) {
 }
 
 // 프로필 사진 주소를 바꾼다.
-// 기록에 «이 사람의 프로필 사진» 이라고 적는 일과 주소를 바꾸는 일을 한 트랜잭션으로 묶는다.
+// 앞 사진의 기록을 지우는 일, 새 사진의 기록에 «이 사람의 프로필 사진» 이라고 적는 일,
+// 주소를 바꾸는 일을 한 트랜잭션으로 묶는다.
 export async function updateProfileImage(userId, imageUrl) {
   const fileName = path.basename(imageUrl);
 
-  return prisma.$transaction(async (tx) => {
+  const [profile, previous] = await prisma.$transaction(async (tx) => {
+    // 앞 프로필 사진의 기록을 먼저 지운다 - 한 사람의 프로필 사진 기록은 하나뿐이라 남아 있으면 새 사진을 못 적는다.
+    const previous = await tx.upload.findUnique({ where: { profileUserId: userId }, select: { fileName: true } });
+    if (previous) await tx.upload.delete({ where: { profileUserId: userId } });
+
     // 내가 올렸고 아직 게시물에도 프로필에도 쓰지 않은 사진의 기록에만 적는다.
     // 적은 기록이 하나가 아니면 남의 사진이거나 이미 쓴 사진이거나 없는 사진이다.
     const { count } = await tx.upload.updateMany({
@@ -273,10 +279,16 @@ export async function updateProfileImage(userId, imageUrl) {
     });
     if (count !== 1) throw new BadRequestError('IMAGE_NOT_AVAILABLE');
 
-    return tx.user.update({
+    const profile = await tx.user.update({
       where: { id: userId },
       data: { profileImage: imageUrl },
       select: { profileImage: true },
     });
+    return [profile, previous];
   });
+
+  // 앞 사진 파일은 트랜잭션이 끝난 뒤에 지운다 - 바꾸기가 실패해 없던 일이 되면 앞 사진이 그대로 남아야 한다.
+  if (previous) await uploadService.removeFiles([previous.fileName]);
+
+  return profile;
 }
