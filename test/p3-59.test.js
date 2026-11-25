@@ -565,9 +565,22 @@ describe('축 ⑥ 과제 [기초] - 글쓴이 사진 지우기', () => {
       expect((await tab.get('/api/users/sujin')).body.profileImage).toBe(null);
       expect((await tab.get('/uploads/dog.jpg')).status).toBe(200);
       expect(await tab.send('DELETE', '/api/users/minho/photo')).toEqual({ status: 404, body: { message: '그런 사용자는 없어요' } });
-      // 사진 적기는 직접 해보기 1 그대로
+      // 사진 적기는 직접 해보기 1 그대로 · 바꾼 sea 를 다시 지우면 sea 파일도 404
       expect((await putPhoto(tab, 'yuna', 'sea.jpg')).status).toBe(200);
+      expect(await tab.send('DELETE', '/api/users/yuna/photo')).toEqual({ status: 200, body: { profileImage: null } });
+      expect((await tab.get('/uploads/sea.jpg')).status).toBe(404);
     });
+  });
+
+  it('틀린 판 - 기록을 uploads 에서 안 빼면 cat 기록이 남아 다음 지우기가 sea 대신 cat 을 찾는다 - sea.jpg 가 200', async () => {
+    await labServer('homework1', async (tab) => {
+      await putPhoto(tab, 'yuna', 'cat.jpg');
+      await tab.send('DELETE', '/api/users/yuna/photo');
+      expect((await tab.get('/uploads/cat.jpg')).status).toBe(404);
+      expect((await putPhoto(tab, 'yuna', 'sea.jpg')).status).toBe(200);
+      await tab.send('DELETE', '/api/users/yuna/photo');
+      expect((await tab.get('/uploads/sea.jpg')).status).toBe(200);
+    }, (source) => source.replace('    const [upload] = uploads.splice(index, 1);\n', '    const upload = uploads[index];\n'));
   });
 
   it('틀린 판 - 파일을 안 지우면 지운 뒤에도 cat.jpg 가 200', async () => {

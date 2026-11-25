@@ -29,3 +29,17 @@ GET http://localhost:4001/uploads/dog.jpg
 
 ### 없는 사람
 DELETE http://localhost:4001/api/users/minho/photo
+
+### yuna가 올린 sea.jpg를 글쓴이 사진으로
+PUT http://localhost:4001/api/users/yuna/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/sea.jpg"
+}
+
+### yuna의 사진을 다시 지우기
+DELETE http://localhost:4001/api/users/yuna/photo
+
+### sea.jpg 파일
+GET http://localhost:4001/uploads/sea.jpg
