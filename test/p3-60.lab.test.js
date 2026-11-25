@@ -151,7 +151,7 @@ const view = (runs) => runs.map((r) => [r.title, r.status, r.body]);
 const ids = (r) => r.body.map((item) => item.id);
 
 describe('축 ⑥ 직접 해보기 1 - 글쓴이 구독', () => {
-  it('practice1.http 차례대로 - jisoo 0 · 구독 1 · 한 번 더 1 · 취소 0 · 한 번 더 0 · 안 한 taeyang 취소는 1 그대로 · 나 자신 400 · 없는 사람 404 · taeyang 1', async () => {
+  it('practice1.http 차례대로 - jisoo 0 · 구독 1 · 한 번 더 1 · 취소 0 · 한 번 더 0 · 안 한 taeyang 취소는 1 그대로 · 나 자신 400 · 없는 사람 404 · taeyang 1 · 처음부터 구독하던 yuna 취소 1(배열 0번 줄)', async () => {
     const { runs } = await runLab('practice1');
     seen.practice1 = runs;
     expect(view(runs)).toEqual([
@@ -165,6 +165,7 @@ describe('축 ⑥ 직접 해보기 1 - 글쓴이 구독', () => {
       ['나 자신을 구독', 400, { message: '나 자신은 구독할 수 없어요' }],
       ['없는 사람을 구독', 404, { message: '그런 사용자는 없어요' }],
       ['taeyang - 구독자 수', 200, { id: 4, username: 'taeyang', subscriberCount: 1 }],
+      ['처음부터 구독하던 yuna 구독 취소', 200, { subscribed: false, subscriberCount: 1 }],
     ]);
   }, 60_000);
 
@@ -190,10 +191,11 @@ describe('축 ⑥ 직접 해보기 1 - 글쓴이 구독', () => {
     '남의 구독까지 지운다(누가 구독했는지 안 본다)': swap('subscriptions.findIndex((item) => item.subscriberId === subscriberId && item.authorId === author.id)', 'subscriptions.findIndex((item) => item.authorId === author.id)'),
     '무조건 -1(구독하고 있었는지 안 본다)': swap('    subscriptions.splice(index, 1);\n    author.subscriberCount -= 1;\n  }', '    subscriptions.splice(index, 1);\n  }\n  author.subscriberCount -= 1;'),
     '나 자신을 막지 않는다': swap('  if (author.id === res.locals.userId) {', '  if (false) {'),
+    '0번 줄을 못 지운다(index > 0)': swap('  if (index !== -1) {', '  if (index > 0) {'),
     '누구를 구독했는지 안 본다': swap('subscriptions.some((item) => item.subscriberId === subscriberId && item.authorId === author.id)', 'subscriptions.some((item) => item.subscriberId === subscriberId)'),
   };
 
-  it('틀린 답 다섯 - 각자 처음 달라지는 확인 번호가 있다', async () => {
+  it('틀린 답 여섯 - 각자 처음 달라지는 확인 번호가 있다', async () => {
     const right = (await runLab('practice1')).runs;
     const diffs = {};
     for (const [name, edit] of Object.entries(PRACTICE_WRONG)) diffs[name] = firstDiff(right, (await runLab('practice1', edit)).runs);
@@ -203,6 +205,7 @@ describe('축 ⑥ 직접 해보기 1 - 글쓴이 구독', () => {
       '남의 구독까지 지운다(누가 구독했는지 안 본다)': [7, '구독하지 않은 taeyang 구독 취소', 200, { subscribed: false, subscriberCount: 0 }],
       '무조건 -1(구독하고 있었는지 안 본다)': [6, '한 번 더 취소', 200, { subscribed: false, subscriberCount: -1 }],
       '나 자신을 막지 않는다': [8, '나 자신을 구독', 200, { subscribed: true, subscriberCount: 2 }],
+      '0번 줄을 못 지운다(index > 0)': [11, '처음부터 구독하던 yuna 구독 취소', 200, { subscribed: false, subscriberCount: 2 }],
       '누구를 구독했는지 안 본다': [3, 'jisoo 구독', 200, { subscribed: true, subscriberCount: 0 }],
     });
   }, 120_000);
