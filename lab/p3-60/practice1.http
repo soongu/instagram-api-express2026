@@ -1,0 +1,35 @@
+### jaehoon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### jisoo - 아직 아무도 구독하지 않았다
+GET http://localhost:4001/api/users/jisoo
+
+### jisoo 구독
+PUT http://localhost:4001/api/users/jisoo/subscribers/me
+
+### 한 번 더 구독
+PUT http://localhost:4001/api/users/jisoo/subscribers/me
+
+### jisoo 구독 취소
+DELETE http://localhost:4001/api/users/jisoo/subscribers/me
+
+### 한 번 더 취소
+DELETE http://localhost:4001/api/users/jisoo/subscribers/me
+
+### 구독하지 않은 taeyang 구독 취소
+DELETE http://localhost:4001/api/users/taeyang/subscribers/me
+
+### 나 자신을 구독
+PUT http://localhost:4001/api/users/jaehoon/subscribers/me
+
+### 없는 사람을 구독
+PUT http://localhost:4001/api/users/minho/subscribers/me
+
+### taeyang - 구독자 수
+GET http://localhost:4001/api/users/taeyang
