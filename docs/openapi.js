@@ -209,7 +209,10 @@ export const openapi = {
             description: '바꾼 프로필 사진 주소',
             content: json(data({ type: 'object', properties: { profileImage: { type: 'string' } } })),
           },
-          400: { description: '보낸 내용이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY')) },
+          400: {
+            description: '보낸 내용이 규칙에 안 맞거나, 내가 올리고 아직 아무 데도 쓰지 않은 사진이 아님',
+            content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'IMAGE_NOT_AVAILABLE')),
+          },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
         },
       },

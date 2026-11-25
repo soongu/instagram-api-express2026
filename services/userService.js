@@ -1,8 +1,9 @@
 // ~/instagram-api/services/userService.js
 import { randomInt, randomUUID } from 'node:crypto';
+import path from 'node:path';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db.js';
-import { ConflictError, NotFoundError } from '../errors.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../errors.js';
 
 // 응답에 실어 보낼 컬럼만 고른다.
 const userFields = { id: true, username: true, profileImage: true, role: true };
@@ -259,10 +260,23 @@ export async function unlinkSocialAccount(userId, provider) {
 }
 
 // 프로필 사진 주소를 바꾼다.
+// 기록에 «이 사람의 프로필 사진» 이라고 적는 일과 주소를 바꾸는 일을 한 트랜잭션으로 묶는다.
 export async function updateProfileImage(userId, imageUrl) {
-  return prisma.user.update({
-    where: { id: userId },
-    data: { profileImage: imageUrl },
-    select: { profileImage: true },
+  const fileName = path.basename(imageUrl);
+
+  return prisma.$transaction(async (tx) => {
+    // 내가 올렸고 아직 게시물에도 프로필에도 쓰지 않은 사진의 기록에만 적는다.
+    // 적은 기록이 하나가 아니면 남의 사진이거나 이미 쓴 사진이거나 없는 사진이다.
+    const { count } = await tx.upload.updateMany({
+      where: { fileName, uploaderId: userId, postId: null, profileUserId: null },
+      data: { profileUserId: userId },
+    });
+    if (count !== 1) throw new BadRequestError('IMAGE_NOT_AVAILABLE');
+
+    return tx.user.update({
+      where: { id: userId },
+      data: { profileImage: imageUrl },
+      select: { profileImage: true },
+    });
   });
 }

@@ -242,10 +242,10 @@ export async function createPost({ imageUrls, ...data }) {
         select: postFields,
       });
 
-      // 내가 올렸고 아직 어느 게시물에도 쓰지 않은 사진의 기록에만 이 게시물을 적는다.
+      // 내가 올렸고 아직 게시물에도 프로필에도 쓰지 않은 사진의 기록에만 이 게시물을 적는다.
       // 적은 기록 수가 사진 수와 다르면, 남의 사진이나 이미 쓴 사진이 섞여 있다는 뜻이다.
       const { count } = await tx.upload.updateMany({
-        where: { fileName: { in: fileNames }, uploaderId: data.authorId, postId: null },
+        where: { fileName: { in: fileNames }, uploaderId: data.authorId, postId: null, profileUserId: null },
         data: { postId: post.id },
       });
       if (count !== fileNames.length) throw new BadRequestError('IMAGE_NOT_AVAILABLE');
