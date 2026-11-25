@@ -426,6 +426,7 @@ describe('축 ③ Step 4 - 기록에 «프로필에 썼다»', () => {
       const second = await setPhoto(me, await upload(me));
       expect([second.status, second.body.error.code]).toEqual([500, 'INTERNAL_ERROR']);
       expect(tail()).toContain('P2002');
+      if (process.env.P359_TAIL_DUMP) writeFileSync(process.env.P359_TAIL_DUMP, tail());
     });
   });
 });
