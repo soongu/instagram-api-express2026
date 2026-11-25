@@ -640,3 +640,25 @@ describe('축 ⑤ Step 5 - 헤더 응답의 세 값', () => {
     }, { edit: withQueryLog });
   });
 });
+
+describe('축 ⑧ 판정 DB 덤프 - p3-60-end.sql(다음 회차가 쓴다)', () => {
+  it('교안 차례대로 이어진 흐름의 끝 - follows 33 · minji 21(jaehoon 포함) · doyun 팔로워 2(seoyeon · jaehoon) · 숫자 컬럼 = 행 수 · 이 회차 마이그레이션 셋', async () => {
+    const name = `${DB_PREFIX}_end`;
+    await dropDb(name);
+    await admin((client) => client.query(`CREATE DATABASE ${name}`));
+    await runSqlFile(name, read(P('test/fixtures/p3-60-end.sql')).split('\n').filter((line) => !line.startsWith('\\')).join('\n'));
+    try {
+      expect(await onDb(name, 'SELECT count(*)::int AS n FROM follows')).toEqual([{ n: 33 }]);
+      expect(await onDb(name, "SELECT username, follower_count FROM users WHERE username IN ('minji', 'jaehoon', 'doyun') ORDER BY username"))
+        .toEqual([{ username: 'doyun', follower_count: 2 }, { username: 'jaehoon', follower_count: 4 }, { username: 'minji', follower_count: 21 }]);
+      expect(await onDb(name, `SELECT u.username FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.following_id = 44 ORDER BY f.created_at`))
+        .toEqual([{ username: 'seoyeon' }, { username: 'jaehoon' }]);
+      expect(await onDb(name, `SELECT count(*)::int AS n FROM follows WHERE follower_id = ${JAEHOON_ID} AND following_id = ${MINJI_ID}`)).toEqual([{ n: 1 }]);
+      expect(await onDb(name, 'SELECT count(*)::int AS n FROM users u WHERE follower_count <> (SELECT count(*) FROM follows f WHERE f.following_id = u.id)')).toEqual([{ n: 0 }]);
+      const migrations = await onDb(name, "SELECT migration_name FROM _prisma_migrations WHERE migration_name LIKE '20261125%' ORDER BY 1");
+      expect(migrations.map((m) => m.migration_name.slice(15))).toEqual(['add_upload_profile_user', 'add_follows', 'follows_not_self', 'add_user_follower_count']);
+    } finally {
+      await dropDb(name);
+    }
+  });
+});
