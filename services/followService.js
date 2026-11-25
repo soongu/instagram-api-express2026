@@ -25,31 +25,32 @@ async function changeFollowerCount(tx, followingId, amount) {
 }
 
 // 몇 번을 불러도 결과는 «팔로우한 상태» 하나다.
-// 이미 팔로우하고 있으면 행이 안 들어간다(count 0).
+// 이미 팔로우하고 있으면 행이 안 들어가고(count 0), 숫자도 오르지 않는다.
 export async function follow(username, followerId) {
   const followingId = await findFollowing(username, followerId);
 
   // 행을 넣는 일과 숫자를 고치는 일은 «함께» 끝나야 한다.
   const followerCount = await prisma.$transaction(async (tx) => {
-    await tx.follow.createMany({
+    const { count } = await tx.follow.createMany({
       data: [{ followerId, followingId }],
       skipDuplicates: true,
     });
 
-    return changeFollowerCount(tx, followingId, 1);
+    return changeFollowerCount(tx, followingId, count);
   });
 
   return { following: true, followerCount };
 }
 
 // 몇 번을 불러도 결과는 «팔로우하지 않은 상태» 하나다.
+// 팔로우하고 있지 않았으면 지울 행이 없고(count 0), 숫자도 내려가지 않는다.
 export async function unfollow(username, followerId) {
   const followingId = await findFollowing(username, followerId);
 
   const followerCount = await prisma.$transaction(async (tx) => {
-    await tx.follow.deleteMany({ where: { followerId, followingId } });
+    const { count } = await tx.follow.deleteMany({ where: { followerId, followingId } });
 
-    return changeFollowerCount(tx, followingId, -1);
+    return changeFollowerCount(tx, followingId, -count);
   });
 
   return { following: false, followerCount };
