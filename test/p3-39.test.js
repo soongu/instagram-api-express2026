@@ -27,7 +27,7 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
-import { applyMigration, ROLE_MIGRATION } from './helpers/tip-schema.js';
+import { applyMigration, ROLE_MIGRATION, FOLLOWER_COUNT_MIGRATION } from './helpers/tip-schema.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -136,6 +136,8 @@ beforeAll(async () => {
   }
   // p3-43 뒤 — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다. sessions(p3-41)는 얹지 않는다 — 이 회차 북마크의 시드가 그 테이블을 모른다
   await applyMigration(tpl, ROLE_MIGRATION);
+  // p3-60 뒤 - 작업트리 클라이언트가 users.follower_count 를 고른다(follows 테이블은 얹지 않는다)
+  await applyMigration(tpl, FOLLOWER_COUNT_MIGRATION);
   await tpl.end();
   // 🚨 2026-11-10 p3-40 — 작업트리 seed.js 는 시드 다섯에게 비밀번호를 준다(userService.createUser). 이 회차의 시드 다섯은
   //    비밀번호가 없어야 하니(축 ⑧ «다른 사람은 NULL») 이 회차 북마크의 seed.js 로 넣는다.

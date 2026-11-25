@@ -31,6 +31,7 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { boot } from './helpers/boot.js';
+import { FOLLOWER_COUNT_MIGRATION } from './helpers/tip-schema.js';
 import { roundDir } from './helpers/round.js';
 import { startFakeGoogle, DEFAULT_PROFILE as GOOGLE_PROFILE } from './helpers/fake-google.js';
 import { startFakeKakao, KAKAO_EMAIL_VALID } from './helpers/fake-kakao.js';
@@ -323,6 +324,8 @@ beforeAll(async () => {
     BASE_MIGRATIONS.add(dir);
     await onDb(TPL_DB, read(base(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // p3-60 뒤 - 작업트리 클라이언트가 users.follower_count 를 고른다(follows 테이블은 얹지 않는다)
+  await onDb(TPL_DB, read(P(`prisma/migrations/${FOLLOWER_COUNT_MIGRATION}/migration.sql`)));
   const seedDir = studentDir(base);
   execFileSync(process.execPath, [join(seedDir, 'seed.js')], {
     cwd: seedDir, encoding: 'utf8',
