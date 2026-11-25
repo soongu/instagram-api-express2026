@@ -1,6 +1,7 @@
 // ~/instagram-api/controllers/profileController.js
 import * as userService from '../services/userService.js';
 import * as postService from '../services/postService.js';
+import * as followService from '../services/followService.js';
 import { sendData } from '../responses.js';
 
 export async function show(req, res) {
@@ -14,4 +15,18 @@ export async function posts(req, res) {
   const page = await postService.getUserPosts(req.params.username, { limit, cursor });
 
   sendData(res, page);
+}
+
+// 그 사람을 팔로우한다 - 누가 팔로우하는지는 주소가 아니라 로그인 정보로 정한다.
+export async function follow(req, res) {
+  const status = await followService.follow(req.params.username, res.locals.userId);
+
+  sendData(res, status);
+}
+
+// 그 사람의 팔로우를 취소한다.
+export async function unfollow(req, res) {
+  const status = await followService.unfollow(req.params.username, res.locals.userId);
+
+  sendData(res, status);
 }

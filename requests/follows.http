@@ -1,0 +1,26 @@
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### minji 팔로우
+PUT http://localhost:3000/api/v2/profiles/minji/followers/me
+
+### 한 번 더 팔로우
+PUT http://localhost:3000/api/v2/profiles/minji/followers/me
+
+### 팔로우 취소
+DELETE http://localhost:3000/api/v2/profiles/minji/followers/me
+
+### 한 번 더 취소
+DELETE http://localhost:3000/api/v2/profiles/minji/followers/me
+
+### 나 자신을 팔로우
+PUT http://localhost:3000/api/v2/profiles/jaehoon/followers/me
+
+### 없는 사람을 팔로우
+PUT http://localhost:3000/api/v2/profiles/nobody/followers/me

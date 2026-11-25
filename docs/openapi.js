@@ -189,6 +189,27 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/profiles/{username}/followers/me': {
+      parameters: [pathParameter('username', '팔로우할 사람의 사용자 이름')],
+      put: {
+        summary: '팔로우 - 이미 팔로우하고 있으면 아무것도 바꾸지 않는다',
+        responses: {
+          200: { description: '팔로우한 상태와 그 사람의 팔로워 수', content: json(data(ref('FollowStatus'))) },
+          400: { description: '나 자신은 팔로우할 수 없음', content: json(errorOf('CANNOT_FOLLOW_SELF')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+      delete: {
+        summary: '팔로우 취소 - 팔로우하고 있지 않으면 아무것도 바꾸지 않는다',
+        responses: {
+          200: { description: '팔로우하지 않은 상태와 그 사람의 팔로워 수', content: json(data(ref('FollowStatus'))) },
+          400: { description: '나 자신은 팔로우할 수 없음', content: json(errorOf('CANNOT_FOLLOW_SELF')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
     '/api/v2/members/search': {
       get: {
         summary: '사람 찾기 - 사용자 이름에 검색어가 든 사람을 이름 차례로 20명까지',
@@ -317,6 +338,13 @@ export const openapi = {
           name: { type: ['string', 'null'], description: '이름 - 적지 않은 사람은 null' },
           profileImage: { type: ['string', 'null'], description: '프로필 사진 주소 - 없으면 null' },
           postCount: { type: 'integer', description: '그 사람이 올린 게시물 수' },
+        },
+      },
+      FollowStatus: {
+        type: 'object',
+        properties: {
+          following: { type: 'boolean', description: '요청한 사람이 이제 그 사람을 팔로우하고 있는가' },
+          followerCount: { type: 'integer', description: '그 사람의 팔로워 수' },
         },
       },
       Member: {

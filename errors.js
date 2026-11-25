@@ -12,6 +12,7 @@ export const MESSAGES = {
   UNEXPECTED_FILE: '사진은 images 이름으로 10장까지 보낼 수 있어요',
   UPLOAD_FAILED: '사진을 받지 못했어요',
   IMAGE_NOT_AVAILABLE: '내가 올리고 아직 아무 데도 쓰지 않은 사진만 쓸 수 있어요',
+  CANNOT_FOLLOW_SELF: '나 자신은 팔로우할 수 없어요',
   HASHTAG_TOO_LONG: '해시태그는 30자까지 쓸 수 있어요',
   TOO_MANY_HASHTAGS: '해시태그는 게시물 하나에 30개까지 쓸 수 있어요',
   REPLY_HAS_NO_REPLIES: '답글에는 답글이 없어요',
