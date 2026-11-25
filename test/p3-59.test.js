@@ -561,6 +561,8 @@ describe('축 ⑥ 과제 [기초] - 글쓴이 사진 지우기', () => {
       expect((await tab.get('/api/users/yuna')).body.profileImage).toBe(null);
       expect(await tab.get('/uploads/cat.jpg')).toEqual({ status: 404, body: { message: '그런 파일은 없어요' } });
       expect(await tab.send('DELETE', '/api/users/yuna/photo')).toEqual({ status: 200, body: { profileImage: null } });
+      expect((await tab.get('/uploads/cake.jpg')).status).toBe(200);
+      expect((await tab.get('/api/uploads')).body.map((u) => u.fileName)).toEqual(['cake.jpg', 'dog.jpg', 'sea.jpg']);
       expect(await tab.send('DELETE', '/api/users/sujin/photo')).toEqual({ status: 200, body: { profileImage: null } });
       expect((await tab.get('/api/users/sujin')).body.profileImage).toBe(null);
       expect((await tab.get('/uploads/dog.jpg')).status).toBe(200);
@@ -570,6 +572,21 @@ describe('축 ⑥ 과제 [기초] - 글쓴이 사진 지우기', () => {
       expect(await tab.send('DELETE', '/api/users/yuna/photo')).toEqual({ status: 200, body: { profileImage: null } });
       expect((await tab.get('/uploads/sea.jpg')).status).toBe(404);
     });
+  });
+
+  it('틀린 판 - 올린 사람으로 기록을 찾으면 두 번째 지우기가 리뷰의 cake 를 지운다 · 파일만 지우고 기록을 남기면 기록 보기에 cat 이 남는다', async () => {
+    await labServer('homework1', async (tab) => {
+      await putPhoto(tab, 'yuna', 'cat.jpg');
+      await tab.send('DELETE', '/api/users/yuna/photo');
+      await tab.send('DELETE', '/api/users/yuna/photo');
+      expect((await tab.get('/uploads/cake.jpg')).status).toBe(404);
+    }, (source) => source.replace('uploads.findIndex((item) => item.profileUserId === user.id)', 'uploads.findIndex((item) => item.uploaderId === user.id)'));
+    await labServer('homework1', async (tab) => {
+      await putPhoto(tab, 'yuna', 'cat.jpg');
+      await tab.send('DELETE', '/api/users/yuna/photo');
+      expect((await tab.get('/uploads/cat.jpg')).status).toBe(404);
+      expect((await tab.get('/api/uploads')).body.map((u) => u.fileName)).toContain('cat.jpg');
+    }, (source) => source.replace('    const [upload] = uploads.splice(index, 1);\n', '    const upload = uploads[index];\n'));
   });
 
   it('틀린 판 - 기록을 uploads 에서 안 빼면 cat 기록이 남아 다음 지우기가 sea 대신 cat 을 찾는다 - sea.jpg 가 200', async () => {

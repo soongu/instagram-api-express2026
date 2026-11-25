@@ -44,6 +44,11 @@ app.get('/uploads/:fileName', (req, res) => {
   res.json({ fileName: req.params.fileName });
 });
 
+// 올린 사진의 기록 전부 - 실습 서버라 기록을 그대로 보여 준다.
+app.get('/api/uploads', (req, res) => {
+  res.json(uploads);
+});
+
 // 글쓴이 사진 바꾸기 - 로그인이 없는 실습 서버라 누구의 사진인지는 주소의 사용자 이름으로 정한다.
 app.put('/api/users/:username/photo', validateBody(photoSchema), (req, res) => {
   const user = findUser(req, res);

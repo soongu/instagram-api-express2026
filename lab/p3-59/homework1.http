@@ -18,6 +18,12 @@ GET http://localhost:4001/uploads/cat.jpg
 ### yuna의 사진을 한 번 더 지우기
 DELETE http://localhost:4001/api/users/yuna/photo
 
+### cake.jpg 파일 - 리뷰에 붙인 사진은 그대로
+GET http://localhost:4001/uploads/cake.jpg
+
+### 기록 보기 - cat.jpg 줄이 없다
+GET http://localhost:4001/api/uploads
+
 ### sujin의 사진 지우기 - 바깥 주소
 DELETE http://localhost:4001/api/users/sujin/photo
 
