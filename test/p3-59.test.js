@@ -577,5 +577,19 @@ describe('축 ⑥ 과제 [기초] - 글쓴이 사진 지우기', () => {
       expect((await tab.get('/uploads/cat.jpg')).status).toBe(200);
     }, (source) => source.replace('    files.delete(upload.fileName);\n', ''));
   });
+
+  it('틀린 판 - 주소를 null 로 돌리지 않으면 지운 뒤에도 yuna 의 사진이 cat · 기록이 없을 때 404 로 답하면 sujin 이 404', async () => {
+    await labServer('homework1', async (tab) => {
+      await putPhoto(tab, 'yuna', 'cat.jpg');
+      expect(await tab.send('DELETE', '/api/users/yuna/photo')).toEqual({ status: 200, body: { profileImage: null } });
+      expect((await tab.get('/api/users/yuna')).body.profileImage).toBe('/uploads/cat.jpg');
+    }, (source) => source.replace('  user.profileImage = null;\n', ''));
+    await labServer('homework1', async (tab) => {
+      await putPhoto(tab, 'yuna', 'cat.jpg');
+      expect((await tab.send('DELETE', '/api/users/yuna/photo')).status).toBe(200);
+      expect(await tab.send('DELETE', '/api/users/yuna/photo')).toEqual({ status: 404, body: { message: '지울 사진이 없어요' } });
+      expect(await tab.send('DELETE', '/api/users/sujin/photo')).toEqual({ status: 404, body: { message: '지울 사진이 없어요' } });
+    }, (source) => source.replace("  if (index !== -1) {\n", "  if (index === -1) {\n    res.status(404).json({ message: '지울 사진이 없어요' });\n    return;\n  }\n\n  {\n"));
+  });
 });
 
