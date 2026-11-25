@@ -33,3 +33,6 @@ PUT http://localhost:4001/api/users/minho/subscribers/me
 
 ### taeyang - 구독자 수
 GET http://localhost:4001/api/users/taeyang
+
+### 처음부터 구독하던 yuna 구독 취소
+DELETE http://localhost:4001/api/users/yuna/subscribers/me
