@@ -14,7 +14,7 @@ function withTimes({ minutesAgo, ...row }) {
 // 테이블을 하나 만들 때마다 이 목록에 넣어야 한다.
 // 빠뜨리면 「외래 키가 걸린 테이블은 못 비운다」며 막힌다.
 await prisma.$executeRaw`
-  TRUNCATE TABLE uploads, social_accounts, sessions, post_likes, post_images, comments, post_hashtags, hashtags, posts, users RESTART IDENTITY`;
+  TRUNCATE TABLE follows, uploads, social_accounts, sessions, post_likes, post_images, comments, post_hashtags, hashtags, posts, users RESTART IDENTITY`;
 
 // 사람을 먼저 넣는다 — 게시물과 댓글이 가리킬 대상이라서.
 // 게시물은 안 쓰고 댓글만 쓴 사람도 있으니 세 목록을 함께 훑는다(답글까지).
