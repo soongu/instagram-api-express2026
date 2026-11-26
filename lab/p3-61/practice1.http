@@ -1,0 +1,31 @@
+### jaehoon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### yuna의 구독자 - 첫 페이지
+# @name first
+GET http://localhost:4001/api/users/yuna/subscribers
+
+### yuna의 구독자 - 둘째 페이지
+# @name second
+GET http://localhost:4001/api/users/yuna/subscribers?cursor={{first.nextCursor}}
+
+### yuna의 구독자 - 셋째 페이지
+GET http://localhost:4001/api/users/yuna/subscribers?cursor={{second.nextCursor}}
+
+### yuna의 구독자 - 한 번에 20명
+GET http://localhost:4001/api/users/yuna/subscribers?limit=20
+
+### 구독자가 없는 dabin
+GET http://localhost:4001/api/users/dabin/subscribers
+
+### 없는 사람
+GET http://localhost:4001/api/users/nobody/subscribers
+
+### 잘못된 커서
+GET http://localhost:4001/api/users/yuna/subscribers?cursor=abc
