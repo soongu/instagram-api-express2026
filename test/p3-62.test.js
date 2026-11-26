@@ -684,3 +684,54 @@ describe('Step 8 🙋 - Offline 으로 끊으면 45초쯤 «연결됐어요» �
     expect(await b.lines()).toEqual(['jaehoon: 터널 지났어요?']);
   }, 90_000);
 });
+
+describe('Step 3 🙋 - clearTimeout 을 빼면 메시지로 답한 응답에 25초 뒤 또 답하려다 서버가 멈춘다', () => {
+  let step, server, a;
+  beforeAll(async () => {
+    step = commitDir('Step 3');
+    const file = join(step.dir, 'lab/p3-62/chat-http.js');
+    const src = readFileSync(file, 'utf8');
+    const without = src.replace('    clearTimeout(waiter.timer);\n', '');
+    expect(without).not.toBe(src);
+    writeFileSync(file, without);
+    server = await serve(step, 'lab/p3-62/chat-http.js', 4001, '기다리고 있어요');
+    a = await chrome.newTab();
+    await a.open(PAGE(server.port, 'long-polling.html', 'jaehoon'));
+  }, 30_000);
+  afterAll(async () => { await Promise.race([server?.stop(), sleep(2000)]); step?.cleanup(); });
+
+  it('메시지 하나를 보내고 25초를 기다리면 ERR_HTTP_HEADERS_SENT 로 서버가 끝난다', async () => {
+    await sleep(500);
+    await a.say('안녕');
+    await a.waitUntil(`document.querySelectorAll('#list li').length === 1`, 3000);
+    await sleep(26_000);
+    note('[Step 3 🙋] clearTimeout 없는 판 서버 끝 출력:\n' + server.tail());
+    expect(server.tail()).toContain('ERR_HTTP_HEADERS_SENT');
+    expect(await portIsFree(server.port)).toBe(true);
+  }, 40_000);
+});
+
+describe('Step 4 - 브라우저 탭이 붙은 채로 curl 을 보내면', () => {
+  let step, server, tab;
+  beforeAll(async () => {
+    step = stepDir(4);
+    server = await serve(step, 'lab/p3-62/chat-ws.js', 4002, '기다리고 있어요');
+    tab = await chrome.newTab();
+    await tab.open(`http://localhost:${server.port}/ws.html`);
+    await tab.waitUntil(statusIs('연결됐어요'), 5000);
+  }, 30_000);
+  afterAll(async () => { await server?.stop(); step?.cleanup(); });
+
+  it('«열렸어요 2개» 뒤 2초 뒤 «닫혔어요 1개»', async () => {
+    spawnSync('curl', ['-i', '-N', '-s', '-m', '2', '-H', 'Connection: Upgrade', '-H', 'Upgrade: websocket', '-H', 'Sec-WebSocket-Version: 13',
+      '-H', 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==', `http://localhost:${server.port}/`]);
+    await sleep(200);
+    expect(server.tail()).toBe([
+      '채팅 서버가 http://localhost:4002 에서 기다리고 있어요.',
+      '연결이 하나 열렸어요. 지금 연결은 1개예요.',
+      '연결이 하나 열렸어요. 지금 연결은 2개예요.',
+      '연결이 하나 닫혔어요. 지금 연결은 1개예요.',
+      '',
+    ].join('\n'));
+  }, 20_000);
+});
