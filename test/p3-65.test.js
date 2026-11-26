@@ -714,3 +714,179 @@ describe('축 ⑬ last_message_id 에 UNIQUE 를 걸면 - 같은 방에 거의 �
     });
   }, 60_000);
 });
+
+// ── 실습 서버 ──────────────────────────────────────────────────────────────
+// 수업 백엔드(Step 8 판)에서 로그인하고, 같은 쿠키로 실습 서버에 HTTP 요청과 연결을 보낸다 - 학생이 3000 에서 로그인하고 4001 을 쓰는 것과 같다.
+/** 그 표식 판의 실습 파일을 포트 숫자만 바꿔 띄운다. `edit(src)` 로 빈칸만 바꾼 판을 만든다. */
+const labServe = async (mark, file, fn, { edit = null } = {}) => {
+  await serve(8, async ({ base }) => {
+    const dir = studentDir(version(mark));
+    const path = join(dir, 'lab/p3-65', file);
+    const source = read(path);
+    let changed = source.replaceAll('4001', String(LAB_PORT));
+    expect(changed.split('\n').filter((l, i) => l !== source.split('\n')[i]).every((l) => l.includes(String(LAB_PORT)))).toBe(true);
+    if (edit) {
+      const edited = edit(changed);
+      expect(edited).not.toBe(changed);
+      changed = edited;
+    }
+    writeFileSync(path, changed);
+    const srv = await boot(path, { port: LAB_PORT, cwd: dir, env: { JWT_SECRET: SECRET }, ready: '기다리고 있어요' });
+    try {
+      const lab = `http://localhost:${LAB_PORT}`;
+      const tabOf = async (username) => {
+        const tab = await loggedIn(base, username);
+        return { ...tab, lab: (method, path, body) => labSend(lab, tab.cookie(), method, path, body) };
+      };
+      await fn({ base, lab, tabOf, tail: srv.tail });
+    } finally {
+      await Promise.race([srv.stop(), sleep(500)]);
+    }
+  });
+};
+const labSend = async (lab, cookie, method, path, body) => {
+  const headers = { Cookie: cookie };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const res = await fetch(`${lab}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const text = await res.text();
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { parsed = text; }
+  return { status: res.status, body: parsed };
+};
+const emitAck = (person, event, payload, ms = 1500) => person.socket.timeout(ms).emitWithAck(event, payload).catch((e) => ({ timeout: e.message }));
+const swap = (a, b) => (src) => {
+  if (src.split(a).length !== 2) throw new Error(`바꿀 글자가 없거나 여럿이다: ${a}`);
+  return src.replace(a, b);
+};
+const inquiryRows = (body) => body.items.map((i) => [i.id, i.lastMessage?.content ?? null]);
+const ASK = '이번 주에 받을 수 있나요?';
+const ASK2 = '색상은 무엇이 있어요?';
+
+/** 직접 해보기 1 의 확인 - 처음 목록 · seoyeon 이 1번 방에 보낸 뒤 목록 */
+const checkPractice1 = async ({ base, lab, tabOf }) => {
+  const jaehoon = await tabOf('jaehoon');
+  const first = await jaehoon.lab('GET', '/api/inquiries');
+  const seoyeon = await personOf(base, 'seoyeon', lab);
+  const ack = await emitAck(seoyeon, 'inquiry:send', { inquiryId: 1, content: ASK });
+  seoyeon.close();
+  const second = await jaehoon.lab('GET', '/api/inquiries');
+  return { first: inquiryRows(first.body), ack: ack.data?.id ?? ack, second: inquiryRows(second.body) };
+};
+const PRACTICE1_OK = {
+  first: [[4, null], [2, '주문하시면 바로 보내 드려요'], [1, '네, 넣어도 돼요']],
+  ack: 10,
+  second: [[1, ASK], [4, null], [2, '주문하시면 바로 보내 드려요']],
+};
+
+describe('축 ⑭ 직접 해보기 1 - 문의방 목록이 메시지를 따라가게', () => {
+  it('정답 판 - 처음 [4, 2, 1] · seoyeon 이 1번 방에 보내면 [1, 4, 2] 이고 1번 방의 미리보기가 그 메시지', async () => {
+    await labServe('lab1', 'practice1.js', async (ctx) => {
+      expect(await checkPractice1(ctx)).toEqual(PRACTICE1_OK);
+    });
+  }, 60_000);
+
+  const wrongs = [
+    ['빈칸 1 - 채울 때 번호 대신 문의방 번호', swap('inquiry.lastMessageId = last ? last.id : null;', 'inquiry.lastMessageId = last ? last.inquiryId : null;')],
+    ['빈칸 2 - 보낼 때 시각을 문의방을 연 시각으로', swap('    inquiry.lastMessageAt = message.createdAt;', '    inquiry.lastMessageAt = inquiry.createdAt;')],
+    ['빈칸 3 - 연 시각으로 줄 세우기', swap('  return a.lastMessageAt < b.lastMessageAt ? 1 : -1;', '  return a.createdAt < b.createdAt ? 1 : -1;')],
+    ['빈칸 4 - 미리보기를 문의방 번호로 찾기', swap('messages.find((message) => message.id === inquiry.lastMessageId)', 'messages.find((message) => message.id === inquiry.id)')],
+  ];
+  for (const [name, edit] of wrongs) {
+    it(`틀린 판 - ${name} - 확인 절차가 가려낸다`, async () => {
+      await labServe('lab1', 'practice1.js', async (ctx) => {
+        expect(await checkPractice1(ctx)).not.toEqual(PRACTICE1_OK);
+      }, { edit });
+    }, 60_000);
+  }
+});
+
+/** 직접 해보기 2 의 확인 - 처음 · 1번(파는 사람) · 2번(사려는 사람) 지운 뒤 · seoyeon 이 1번 방에 보낸 뒤 · seoyeon 의 목록 */
+const checkPractice2 = async ({ base, lab, tabOf }) => {
+  const jaehoon = await tabOf('jaehoon');
+  const first = inquiryRows((await jaehoon.lab('GET', '/api/inquiries')).body);
+  const del = [(await jaehoon.lab('DELETE', '/api/inquiries/1')).status, (await jaehoon.lab('DELETE', '/api/inquiries/2')).status];
+  const cleared = inquiryRows((await jaehoon.lab('GET', '/api/inquiries')).body);
+  const seoyeon = await personOf(base, 'seoyeon', lab);
+  await emitAck(seoyeon, 'inquiry:send', { inquiryId: 1, content: ASK });
+  seoyeon.close();
+  const back = inquiryRows((await jaehoon.lab('GET', '/api/inquiries')).body);
+  const sTab = await tabOf('seoyeon');
+  const theirs = inquiryRows((await sTab.lab('GET', '/api/inquiries')).body);
+  return { first, del, cleared, back, theirs };
+};
+const PRACTICE2_OK = {
+  first: [[4, null], [2, '주문하시면 바로 보내 드려요'], [1, '네, 넣어도 돼요']],
+  del: [204, 204],
+  cleared: [[4, null]],
+  back: [[1, ASK], [4, null]],
+  theirs: [[1, ASK]],
+};
+
+describe('축 ⑮ 직접 해보기 2 - 지운 문의방이 다시 뜨게', () => {
+  it('정답 판 - 1번 · 2번을 지우면 [4] · seoyeon 이 1번 방에 보내면 [1, 4] · seoyeon 의 목록은 [1]', async () => {
+    await labServe('lab2', 'practice2.js', async (ctx) => {
+      expect(await checkPractice2(ctx)).toEqual(PRACTICE2_OK);
+    });
+  }, 60_000);
+
+  const wrongs = [
+    ['빈칸 1 - 지운 적이 없는 방도 빼기', swap('  if (!clearedAt) return true;', '  if (!clearedAt) return false;')],
+    ['빈칸 2 - 마지막 메시지가 지운 시각보다 앞이면 보이기', swap('  return inquiry.lastMessageAt > clearedAt;', '  return inquiry.lastMessageAt < clearedAt;')],
+    ['빈칸 3 - 지운 시각을 문의방을 연 시각으로', swap('  inquiry[myClearedField(inquiry, myId)] = new Date().toISOString();', '  inquiry[myClearedField(inquiry, myId)] = inquiry.createdAt;')],
+    ['빈칸 2 다른 틀림 - 지운 뒤에 온 메시지가 있어도 빼기', swap('  return inquiry.lastMessageAt > clearedAt;', '  return false;')],
+  ];
+  for (const [name, edit] of wrongs) {
+    it(`틀린 판 - ${name} - 확인 절차가 가려낸다`, async () => {
+      await labServe('lab2', 'practice2.js', async (ctx) => {
+        expect(await checkPractice2(ctx)).not.toEqual(PRACTICE2_OK);
+      }, { edit });
+    }, 60_000);
+  }
+});
+
+describe('축 ⑯ 과제 [기초] - 문의방 목록을 커서로 나눠 주기', () => {
+  it('2개씩 [4, 2] → [1] · 2개를 받은 뒤 seoyeon 이 1번 방에 보내면 다음은 빈 목록 · 새로 받으면 [1, 4] · limit 0 과 망가진 커서는 400', async () => {
+    await labServe('hw1', 'homework1.js', async ({ base, lab, tabOf }) => {
+      const jaehoon = await tabOf('jaehoon');
+      const p1 = (await jaehoon.lab('GET', '/api/inquiries?limit=2')).body;
+      expect([p1.items.map((i) => i.id), p1.hasNext]).toEqual([[4, 2], true]);
+      expect(Object.keys(JSON.parse(Buffer.from(p1.nextCursor, 'base64url').toString()))).toEqual(['lastMessageAt', 'id']);
+      const p2 = (await jaehoon.lab('GET', `/api/inquiries?limit=2&cursor=${p1.nextCursor}`)).body;
+      expect([p2.items.map((i) => i.id), p2.hasNext, p2.nextCursor]).toEqual([[1], false, null]);
+      const again = (await jaehoon.lab('GET', '/api/inquiries?limit=2')).body;
+      const seoyeon = await personOf(base, 'seoyeon', lab);
+      await emitAck(seoyeon, 'inquiry:send', { inquiryId: 1, content: ASK });
+      seoyeon.close();
+      const after = (await jaehoon.lab('GET', `/api/inquiries?limit=2&cursor=${again.nextCursor}`)).body;
+      expect([after.items, after.hasNext]).toEqual([[], false]);
+      const fresh = (await jaehoon.lab('GET', '/api/inquiries?limit=2')).body;
+      expect(fresh.items.map((i) => i.id)).toEqual([1, 4]);
+      expect(errOfLab(await jaehoon.lab('GET', '/api/inquiries?limit=0'))).toEqual([400, '한 번에 1~50개까지 받을 수 있어요']);
+      expect(errOfLab(await jaehoon.lab('GET', '/api/inquiries?cursor=abc'))).toEqual([400, '커서 값이 올바르지 않아요']);
+    });
+  }, 60_000);
+});
+const errOfLab = (res) => [res.status, res.body.message];
+
+describe('축 ⑰ 과제 [응용] - 안 읽은 문의 수를 문의방에 적어 두기', () => {
+  it('처음 jaehoon 은 4번 0 · 2번 2 · 1번 1 · seoyeon 이 보내면 1번 방 2 · jaehoon 이 읽으면 0 이고 seoyeon 쪽은 1 그대로', async () => {
+    await labServe('hw2', 'homework2.js', async ({ base, lab, tabOf }) => {
+      const unreadOf = async (tab) => (await tab.lab('GET', '/api/inquiries')).body.items.map((i) => [i.id, i.unreadCount]);
+      const jaehoon = await tabOf('jaehoon');
+      const sTab = await tabOf('seoyeon');
+      expect(await unreadOf(jaehoon)).toEqual([[4, 0], [2, 2], [1, 1]]);
+      expect(await unreadOf(sTab)).toEqual([[1, 1]]);
+      const seoyeon = await personOf(base, 'seoyeon', lab);
+      await emitAck(seoyeon, 'inquiry:send', { inquiryId: 1, content: ASK });
+      seoyeon.close();
+      expect(await unreadOf(jaehoon)).toEqual([[1, 2], [4, 0], [2, 2]]);
+      expect(await unreadOf(sTab)).toEqual([[1, 1]]);
+      const j = await personOf(base, 'jaehoon', lab);
+      const read = await emitAck(j, 'inquiry:read', { inquiryId: 1 });
+      j.close();
+      expect(read).toEqual({ data: { readCount: 2 } });
+      expect(await unreadOf(jaehoon)).toEqual([[1, 0], [4, 0], [2, 2]]);
+      expect(await unreadOf(sTab)).toEqual([[1, 1]]);
+    });
+  }, 60_000);
+});
