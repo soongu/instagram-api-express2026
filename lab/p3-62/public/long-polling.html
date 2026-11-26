@@ -1,0 +1,52 @@
+<!-- ~/instagram-api/lab/p3-62/public/long-polling.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>롱 폴링 채팅</title>
+  </head>
+  <body>
+    <h1>롱 폴링 채팅</h1>
+    <form id="form">
+      <input id="text" placeholder="메시지" autocomplete="off" />
+      <button>보내기</button>
+    </form>
+    <ul id="list"></ul>
+
+    <script>
+      const name = new URLSearchParams(location.search).get('name');
+      const list = document.querySelector('#list');
+      let lastId = 0;
+
+      function show(message) {
+        const li = document.createElement('li');
+        li.textContent = `${message.name}: ${message.text}`;
+        list.append(li);
+        lastId = message.id;
+      }
+
+      // 답이 오면 그 자리에서 다음 요청을 보낸다. 서버는 새 메시지가 생길 때까지 답을 미룬다.
+      // cache: 'no-store' 가 없으면 같은 브라우저의 다른 탭이 똑같은 주소를 기다리는 동안 이 요청이 나가지 않고 서 있는다.
+      async function wait() {
+        while (true) {
+          const response = await fetch(`/messages/wait?after=${lastId}`, { cache: 'no-store' });
+          const messages = await response.json();
+          messages.forEach(show);
+        }
+      }
+
+      wait();
+
+      document.querySelector('#form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const input = document.querySelector('#text');
+        await fetch('/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, text: input.value }),
+        });
+        input.value = '';
+      });
+    </script>
+  </body>
+</html>
