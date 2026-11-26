@@ -1,6 +1,6 @@
 // ~/instagram-api/services/conversationService.js
 import { prisma } from '../db.js';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
+import { BadRequestError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
 
 // 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
@@ -98,7 +98,8 @@ export async function getConversations(myId, { limit = 20, cursor }) {
   };
 }
 
-// 내가 참여한 대화방을 찾는다 - 없으면 404, 있는데 두 자리 어디에도 내가 없으면 403 이다.
+// 내가 참여한 대화방을 찾는다 - 없는 방과 남의 방에 똑같이 404 로 답한다.
+// 남의 방에 403 으로 답하면 «이 번호의 방은 있다» 를 알려 주게 된다. 진짜 이유는 서버 로그에만 남긴다.
 async function findMyConversation(conversationId, myId) {
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
@@ -108,7 +109,8 @@ async function findMyConversation(conversationId, myId) {
   if (!conversation) throw new NotFoundError('CONVERSATION_NOT_FOUND');
 
   if (conversation.participantAId !== myId && conversation.participantBId !== myId) {
-    throw new ForbiddenError('NOT_CONVERSATION_MEMBER');
+    console.warn(`${conversationId}번 대화방은 ${myId}번 사용자의 방이 아니라서 404 로 답했어요.`);
+    throw new NotFoundError('CONVERSATION_NOT_FOUND');
   }
 
   return conversation;
