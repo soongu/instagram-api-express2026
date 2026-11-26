@@ -735,3 +735,32 @@ describe('Step 4 - 브라우저 탭이 붙은 채로 curl 을 보내면', () => 
     ].join('\n'));
   }, 20_000);
 });
+
+describe('Step 7 🙋 - Socket.IO 도 이벤트 함수 안의 에러로 서버가 멈춘다 · 맨 WebSocket 실패는 Console 에 에러 줄', () => {
+  let step, server, a;
+  beforeAll(async () => {
+    step = stepDir(7);
+    server = await serve(step, 'lab/p3-62/chat-io.js', 4003, '기다리고 있어요');
+    a = await chrome.newTab();
+    await a.open(PAGE(server.port, 'io.html', 'jaehoon'));
+    await a.waitUntil(statusIs('연결됐어요'), 5000);
+  }, 30_000);
+  afterAll(async () => { await Promise.race([server?.stop(), sleep(2000)]); step?.cleanup(); });
+
+  it('맨 new WebSocket(주소 /) 은 Console 에 «Connection closed before receiving a handshake response» 에러 줄', async () => {
+    const mark = a.mark();
+    await a.evaluate(`new Promise((ok) => { const w = new WebSocket('ws://' + location.host); w.onclose = () => ok(); })`);
+    await sleep(300);
+    const texts = a.since(mark, 'Log.entryAdded').map((e) => `${e.params.entry.level} ${e.params.entry.text}`);
+    note('[Step 7 🙋] 맨 WebSocket 실패 Console:', JSON.stringify(texts));
+    expect(texts).toContain(`error WebSocket connection to 'ws://localhost:${server.port}/' failed: Connection closed before receiving a handshake response`);
+  });
+
+  it("Console 에서 socket.emit('whisper') 를 값 없이 보내면 TypeError 로 서버가 끝난다", async () => {
+    await a.evaluate("void socket.emit('whisper')");
+    await a.waitUntil(statusIs('연결이 끊겼어요'), 5000);
+    await sleep(300);
+    expect(server.tail()).toContain("TypeError: Cannot destructure property 'to' of 'undefined' as it is undefined.");
+    expect(await portIsFree(server.port)).toBe(true);
+  }, 20_000);
+});
