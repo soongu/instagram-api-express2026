@@ -91,3 +91,15 @@ Content-Type: application/json
 
 ### jaehoon과 seoyeon의 대화방 메시지
 GET http://localhost:3000/api/v2/conversations/1/messages
+
+### seoyeon으로 다시 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon과의 대화방 읽음
+PATCH http://localhost:3000/api/v2/conversations/1/messages/read

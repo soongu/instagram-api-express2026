@@ -24,3 +24,10 @@ export async function messages(req, res) {
 
   sendData(res, page);
 }
+
+// 그 대화방에서 상대가 보낸 메시지를 읽음으로 - 화면은 대화방을 열 때 한 번 부른다.
+export async function read(req, res) {
+  const result = await conversationService.markAsRead(req.conversationId, res.locals.userId);
+
+  sendData(res, result);
+}
