@@ -24,18 +24,24 @@ const conversationFields = {
   id: true,
   createdAt: true,
   lastMessageAt: true,
+  aClearedAt: true,
+  bClearedAt: true,
   participantA: { select: personFields },
   participantB: { select: personFields },
   lastMessage: { select: messageFields },
 };
 
 // 두 자리 가운데 내가 아닌 쪽이 상대다. 응답에는 상대만 싣는다.
-// 메시지가 하나도 없는 방은 lastMessage 가 null 이다.
-function toConversation({ participantA, participantB, lastMessage, ...conversation }, myId) {
+// 메시지가 하나도 없는 방은 lastMessage 가 null 이다. 내가 지운 시각 전의 메시지도 미리보기로 주지 않는다.
+// 지운 시각은 그 사람만의 기록이라 응답에 싣지 않는다.
+function toConversation({ participantA, participantB, aClearedAt, bClearedAt, lastMessage, ...conversation }, myId) {
+  const iAmA = participantA.id === myId;
+  const clearedAt = iAmA ? aClearedAt : bClearedAt;
+
   return {
     ...conversation,
-    otherUser: participantA.id === myId ? participantB : participantA,
-    lastMessage,
+    otherUser: iAmA ? participantB : participantA,
+    lastMessage: lastMessage && (!clearedAt || lastMessage.createdAt > clearedAt) ? lastMessage : null,
   };
 }
 
@@ -88,8 +94,20 @@ export async function getConversations(myId, { limit = 20, cursor }) {
     where: {
       // 두 조건이 모두 OR 를 써서 한 객체에 펼치면 뒤의 OR 가 앞의 OR 를 덮는다 - AND 로 묶는다.
       AND: [
-        // 내가 a 자리에 있고 지우지 않은 방과, b 자리에 있고 지우지 않은 방
-        { OR: [{ participantAId: myId, aClearedAt: null }, { participantBId: myId, bClearedAt: null }] },
+        // 내가 a 자리에 있는 방과 b 자리에 있는 방 - 지운 적이 없거나, 지운 뒤에 메시지가 온 방만
+        // fields 는 값이 아니라 같은 행의 다른 컬럼과 비교할 때 쓴다(last_message_at > a_cleared_at).
+        {
+          OR: [
+            {
+              participantAId: myId,
+              OR: [{ aClearedAt: null }, { lastMessageAt: { gt: prisma.conversation.fields.aClearedAt } }],
+            },
+            {
+              participantBId: myId,
+              OR: [{ bClearedAt: null }, { lastMessageAt: { gt: prisma.conversation.fields.bClearedAt } }],
+            },
+          ],
+        },
         cursor ? afterListCursor(decodeCursor(cursor, 'lastMessageAt')) : {},
       ],
     },
