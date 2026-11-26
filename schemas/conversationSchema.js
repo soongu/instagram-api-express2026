@@ -17,3 +17,10 @@ export const messageListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional().describe('한 번에 받을 메시지 수 - 없으면 20'),
   cursor: z.string().min(1).optional().describe('앞 응답의 nextCursor 그대로'),
 });
+
+// 메시지 보내기 - 연결로 받는 값이다. 보낸 사람은 받지 않는다(연결이 열릴 때 확인한 사람이다).
+// 내용은 앞뒤 공백을 떼고 1~1000자 - 컬럼이 VARCHAR(1000) 이다.
+export const messageSendSchema = z.object({
+  conversationId: z.number().int().positive(),
+  content: z.string().trim().min(1).max(1000),
+});

@@ -1,10 +1,21 @@
 // ~/instagram-api/realtime.js
 import { Server } from 'socket.io';
 import cookieParser from 'cookie-parser';
+import { z } from 'zod';
 import * as tokenService from './services/tokenService.js';
 import * as conversationService from './services/conversationService.js';
 import { readToken } from './middlewares/auth.js';
-import { MESSAGES } from './errors.js';
+import { messageSendSchema } from './schemas/conversationSchema.js';
+import { BadRequestError, MESSAGES } from './errors.js';
+
+// 이벤트로 받은 값을 검사한다 - HTTP 요청 본문을 검사하던 validateBody 와 같은 일이다.
+function parse(schema, value) {
+  const result = schema.safeParse(value);
+
+  if (!result.success) throw new BadRequestError('VALIDATION_FAILED', z.treeifyError(result.error));
+
+  return result.data;
+}
 
 // API 를 내주는 그 HTTP 서버에 Socket.IO 를 붙인다 - 화면은 같은 주소, 같은 포트로 연결을 연다.
 export function startRealtime(server) {
@@ -36,9 +47,15 @@ export function startRealtime(server) {
     socket.join(`user:${userId}`);
 
     // 메시지 보내기 - 저장한 메시지를 그 대화방의 두 사람에게만 알린다.
-    socket.on('dm:send', async ({ conversationId, content }) => {
-      const { message, participantAId, participantBId } = await conversationService.sendMessage(conversationId, userId, content);
-      io.to(`user:${participantAId}`).to(`user:${participantBId}`).emit('dm:message', message);
+    socket.on('dm:send', async (payload) => {
+      // 이벤트 함수에서 난 에러는 Express 의 에러 미들웨어로 가지 않는다. 여기서 잡지 않으면 서버가 꺼진다.
+      try {
+        const { conversationId, content } = parse(messageSendSchema, payload);
+        const { message, participantAId, participantBId } = await conversationService.sendMessage(conversationId, userId, content);
+        io.to(`user:${participantAId}`).to(`user:${participantBId}`).emit('dm:message', message);
+      } catch (error) {
+        console.error(`${userId}번 사용자의 메시지를 보내지 못했어요 - ${error.message}`);
+      }
     });
 
     socket.on('disconnect', () => {

@@ -189,10 +189,8 @@ export async function clearConversation(conversationId, myId) {
 // 대화방에 메시지를 보낸다 - 보낸 사람은 연결이 열릴 때 확인한 사람이다.
 // 저장한 메시지와 그 방의 두 사람 번호를 돌려준다. 두 사람에게만 알리려고.
 export async function sendMessage(conversationId, myId, content) {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { participantAId: true, participantBId: true },
-  });
+  // 이력을 줄 때와 같은 확인 - 없는 방과 남의 방이면 404 에러를 던진다.
+  const conversation = await findMyConversation(conversationId, myId);
 
   // 이벤트로 알릴 때 어느 방의 메시지인지 화면이 알아야 해서 대화방 번호를 함께 싣는다.
   const message = await prisma.directMessage.create({
