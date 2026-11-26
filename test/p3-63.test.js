@@ -527,3 +527,267 @@ describe('축 ④-쿼리 Step 4 - 마지막 메시지 하나를 보이려고 그
     expect(status).toBe(500);
   }, 180_000);
 });
+
+const MSG = (id, query = '') => `${CONV}/${id}/messages${query}`;
+const contents = (items) => items.map((item) => item.content);
+const SEOYEON_ROOM = ['네, 꼭요!', '가면 사진 보여 주세요', '이번 주말에 가 봐야겠어요', '반포대교 아래에서요. 해 질 때 가면 좋아요', '한강 사진 정말 예뻐요! 어디서 찍었어요?'];
+const probe = async (tab) => {
+  const out = [];
+  for (let id = 1; id <= 8; id += 1) out.push((await tab.get(MSG(id))).status);
+  return out;
+};
+const STAGE_5 = { step: 5, run: async ({ base }) => {
+  const jaehoon = await loggedIn(base, 'jaehoon');
+  await jaehoon.get(MSG(1));
+} };
+
+describe('축 ⑤ Step 5 - 메시지 이력', () => {
+  it('최신 → 과거 · 줄은 id · senderId · content · createdAt · isRead · 2개씩 7 6 / 5 4 / 3 · 없는 방 404 · 번호가 아니면 404', async () => {
+    await flow([...STAGES_TO_4, { step: 5, run: async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      const all = await jaehoon.get(MSG(1));
+      expect(all.status).toBe(200);
+      expect(contents(all.body.data.items)).toEqual(SEOYEON_ROOM);
+      expect(Object.keys(all.body.data.items[0])).toEqual(['id', 'senderId', 'content', 'createdAt', 'isRead']);
+      expect(all.body.data.items.map((m) => [m.id, m.senderId, m.isRead])).toEqual([[7, 43, false], [6, 2, false], [5, 43, false], [4, 2, false], [3, 43, false]]);
+      const pages = [];
+      let cursor = null;
+      for (;;) {
+        const res = await jaehoon.get(MSG(1, `?limit=2${cursor ? `&cursor=${cursor}` : ''}`));
+        pages.push(res.body.data.items.map((m) => m.id));
+        if (!res.body.data.hasNext) break;
+        cursor = res.body.data.nextCursor;
+      }
+      expect(pages).toEqual([[7, 6], [5, 4], [3]]);
+      expect(errOf(await jaehoon.get(MSG(999)))).toEqual([404, 'CONVERSATION_NOT_FOUND']);
+      expect(errOf(await jaehoon.get(MSG('abc')))).toEqual([404, 'CONVERSATION_NOT_FOUND']);
+      expect(errOf(await jaehoon.get(MSG(7)))).toEqual([200, undefined]);
+      expect((await jaehoon.get(MSG(7))).body.data.items).toEqual([]);
+      const post = await jaehoon.send('POST', MSG(1));
+      expect([post.status, post.headers.get('allow')]).toEqual([405, 'GET']);
+    } }]);
+  }, 120_000);
+
+  it('겪기 - 이 판에서는 boram 이 jaehoon 과 seoyeon 의 방 이력을 200 으로 다 받는다', async () => {
+    await flow([...STAGES_TO_4, { step: 5, run: async ({ base }) => {
+      const boram = await loggedIn(base, 'boram');
+      const res = await boram.get(MSG(1));
+      expect(res.status).toBe(200);
+      expect(contents(res.body.data.items)).toEqual(SEOYEON_ROOM);
+    } }]);
+  }, 120_000);
+});
+
+describe('축 ⑥ Step 6 - 남의 대화방', () => {
+  it('403 판 - boram 이 방 1 은 403 NOT_CONVERSATION_MEMBER · 1~8 을 넣으면 있는 방(1 · 6 · 7)만 403', async () => {
+    await flow([...STAGES_TO_4, STAGE_5, { step: '6a', run: async ({ base }) => {
+      const boram = await loggedIn(base, 'boram');
+      expect(errOf(await boram.get(MSG(1)))).toEqual([403, 'NOT_CONVERSATION_MEMBER']);
+      expect(await probe(boram)).toEqual([403, 404, 404, 404, 404, 403, 403, 404]);
+      expect((await (await loggedIn(base, 'jaehoon')).get(MSG(1))).status).toBe(200);
+    } }]);
+  }, 120_000);
+
+  it('고친 판 - 1~8 모두 404 CONVERSATION_NOT_FOUND · 서버 터미널에 진짜 이유 한 줄 · 참여자는 200 · NOT_CONVERSATION_MEMBER 문장은 지웠다', async () => {
+    await flow([...STAGES_TO_4, STAGE_5, { step: 6, run: async ({ base, tail }) => {
+      const boram = await loggedIn(base, 'boram');
+      expect(await probe(boram)).toEqual([404, 404, 404, 404, 404, 404, 404, 404]);
+      expect(errOf(await boram.get(MSG(1)))).toEqual([404, 'CONVERSATION_NOT_FOUND']);
+      await new Promise((r) => setTimeout(r, 200));
+      const warns = tail().split('\n').filter((line) => line.includes('사용자의 방이 아니라서'));
+      expect(warns[0]).toBe('1번 대화방은 48번 사용자의 방이 아니라서 404 로 답했어요.');
+      expect(warns).toHaveLength(4);
+      expect((await (await loggedIn(base, 'seoyeon')).get(MSG(1))).status).toBe(200);
+    } }]);
+    expect(read(version(6)('errors.js'))).not.toMatch(/NOT_CONVERSATION_MEMBER/);
+  }, 120_000);
+});
+
+const STAGE_6 = { step: 6, run: async ({ base }) => {
+  const boram = await loggedIn(base, 'boram');
+  await boram.get(MSG(1));
+} };
+
+describe('축 ⑦ Step 7 - 읽음 처리', () => {
+  it('seoyeon 이 읽으면 jaehoon 이 보낸 둘(readCount 2) · 다시 0 · jaehoon 이 읽으면 3 · 남의 방 404 · GET 은 405 + Allow: PATCH', async () => {
+    await flow([...STAGES_TO_4, STAGE_5, STAGE_6, { step: 7, run: async ({ base }) => {
+      const seoyeon = await loggedIn(base, 'seoyeon');
+      expect((await seoyeon.send('PATCH', MSG(1, '/read'))).body).toEqual({ data: { readCount: 2 } });
+      expect((await seoyeon.send('PATCH', MSG(1, '/read'))).body).toEqual({ data: { readCount: 0 } });
+      const flags = await onDb(GATE_DB, 'SELECT id, is_read FROM direct_messages WHERE conversation_id = 1 ORDER BY id');
+      expect(flags.map((r) => [r.id, r.is_read])).toEqual([[3, false], [4, true], [5, false], [6, true], [7, false]]);
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      expect((await jaehoon.send('PATCH', MSG(1, '/read'))).body.data.readCount).toBe(3);
+      expect((await jaehoon.get(MSG(1))).body.data.items.every((m) => m.isRead)).toBe(true);
+      expect(errOf(await (await loggedIn(base, 'boram')).send('PATCH', MSG(1, '/read')))).toEqual([404, 'CONVERSATION_NOT_FOUND']);
+      const get = await seoyeon.get(MSG(1, '/read'));
+      expect([get.status, get.headers.get('allow')]).toEqual([405, 'PATCH']);
+    } }]);
+  }, 120_000);
+});
+
+const STAGE_7 = { step: 7, run: async ({ base }) => {
+  await (await loggedIn(base, 'seoyeon')).send('PATCH', MSG(1, '/read'));
+} };
+
+describe('축 ⑧ Step 8 - 내 쪽에서만 지우기', () => {
+  it('jaehoon 이 지우면 204 · 목록에서 빠지고 이력은 빈다 · seoyeon 은 그대로 5 · seoyeon 도 지우면 메시지 다섯이 실제로 지워진다 · 행은 남는다', async () => {
+    await flow([...STAGES_TO_4, STAGE_5, STAGE_6, STAGE_7, { step: 8, run: async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      const del = await jaehoon.send('DELETE', `${CONV}/1`);
+      expect([del.status, del.body]).toEqual([204, '']);
+      expect((await jaehoon.get(LIST())).body.data.items.map(brief4)).toEqual([[7, 'doyun', null], [6, 'minji', '저녁 7시요!']]);
+      expect((await jaehoon.get(MSG(1))).body.data).toEqual({ items: [], hasNext: false, nextCursor: null });
+      const seoyeon = await loggedIn(base, 'seoyeon');
+      expect(contents((await seoyeon.get(MSG(1))).body.data.items)).toEqual(SEOYEON_ROOM);
+      expect((await seoyeon.get(LIST())).body.data.items.map(brief4)).toEqual([[1, 'jaehoon', '네, 꼭요!']]);
+      expect(await count('SELECT count(*)::int AS n FROM direct_messages WHERE conversation_id = 1')).toBe(5);
+      expect((await seoyeon.send('DELETE', `${CONV}/1`)).status).toBe(204);
+      expect(await count('SELECT count(*)::int AS n FROM direct_messages WHERE conversation_id = 1')).toBe(0);
+      expect(await count('SELECT count(*)::int AS n FROM direct_messages')).toBe(2);
+      expect(await count('SELECT count(*)::int AS n FROM conversations WHERE id = 1 AND a_cleared_at IS NOT NULL AND b_cleared_at IS NOT NULL')).toBe(1);
+      expect((await seoyeon.get(LIST())).body.data.items).toEqual([]);
+      expect(errOf(await (await loggedIn(base, 'boram')).send('DELETE', `${CONV}/1`))).toEqual([404, 'CONVERSATION_NOT_FOUND']);
+      const put = await jaehoon.send('PUT', `${CONV}/1`);
+      expect([put.status, put.headers.get('allow')]).toEqual([405, 'DELETE']);
+    } }]);
+  }, 120_000);
+
+  it('지운 시각 칸 둘(NULL 허용) · 마이그레이션 셋째', async () => {
+    const names = readdirSync(version(8)('prisma/migrations')).filter((d) => /^\d/.test(d)).slice(-3).map((d) => d.replace(/^\d+_/, ''));
+    expect(names).toEqual(['add_conversations', 'conversations_a_before_b', 'add_conversation_cleared_at']);
+    await serve(8, async () => {
+      const cols = await onDb(GATE_DB, `SELECT column_name, is_nullable FROM information_schema.columns
+        WHERE table_name = 'conversations' AND column_name LIKE '%cleared_at' ORDER BY column_name`);
+      expect(cols.map((c) => [c.column_name, c.is_nullable])).toEqual([['a_cleared_at', 'YES'], ['b_cleared_at', 'YES']]);
+    });
+  }, 60_000);
+});
+
+// ── 실습·과제 - 상품 문의 실습 서버(lab/p3-63) ─────────────────────────────
+// 수업 백엔드(Step 8 판)로 jaehoon 이 로그인하고, 같은 쿠키를 실습 서버에 싣는다.
+// 실습 서버는 사본에서 포트 숫자 4001 만 바꿔 띄운다(그 숫자 말고는 안 바뀐다).
+const LAB_PORT = Number(process.env.P363_LAB_PORT ?? 3964);
+const lab = async (file, fn, { edit = null } = {}) => serve(8, async ({ base }) => {
+  const jaehoon = await loggedIn(base, 'jaehoon');
+  const dir = studentDir(version('lab'));
+  const rel = `lab/p3-63/${file}`;
+  const source = read(join(dir, rel));
+  expect(source.split('4001').length - 1).toBe(2);
+  writeFileSync(join(dir, rel), source.replaceAll('4001', String(LAB_PORT)));
+  if (edit) edit(dir, rel);
+  const srv = await boot(join(dir, rel), { port: LAB_PORT, cwd: dir, env: { ...env, PORT: String(LAB_PORT) }, ready: `${LAB_PORT}번 포트에서` });
+  const url = `http://localhost:${LAB_PORT}`;
+  const send = async (method, path) => {
+    const res = await fetch(`${url}${path}`, { method, headers: { Cookie: jaehoon.cookie() } });
+    const text = await res.text();
+    let body;
+    try { body = JSON.parse(text); } catch { body = text; }
+    return { status: res.status, body };
+  };
+  try {
+    return await fn({ send, url });
+  } finally {
+    await Promise.race([srv.stop(), new Promise((r) => setTimeout(r, 500))]);
+  }
+});
+const rooms = (body) => body.items.map((item) => [item.id, item.productName, item.otherUser.username, item.lastMessage?.content ?? null]);
+const ROOMS = [[4, '텀블러', 'taeyang', null], [2, '무선 이어폰', 'jisoo', '주문하시면 바로 보내 드려요'], [1, '텀블러', 'yuna', '네, 넣어도 돼요']];
+
+describe('축 ⑨ 직접 해보기 1 - 내 문의방 목록', () => {
+  it('jaehoon 의 문의방 4 · 2 · 1(파는 방 둘 · 사려는 방 하나) · 상대 · 마지막 메시지 · 남의 방 3 은 없다 · 로그인 없이 401', async () => {
+    await lab('practice1.js', async ({ send, url }) => {
+      const res = await send('GET', '/api/inquiries');
+      expect(res.status).toBe(200);
+      expect(rooms(res.body)).toEqual(ROOMS);
+      expect(Object.keys(res.body.items[1])).toEqual(['id', 'productName', 'otherUser', 'lastMessage']);
+      expect((await fetch(`${url}/api/inquiries`)).status).toBe(401);
+    });
+  }, 90_000);
+
+  it('틀린 판 셋 - 사려는 방만 보면 [2] · 상대를 늘 파는 사람으로 하면 4 와 1 의 상대가 jaehoon · 정렬 없이 첫 줄을 고르면 오래된 메시지', async () => {
+    const variants = [
+      ['.filter((inquiry) => inquiry.buyerId === myId || sellerIdOf(inquiry) === myId)', '.filter((inquiry) => inquiry.buyerId === myId)'],
+      ['const otherId = inquiry.buyerId === myId ? sellerIdOf(inquiry) : inquiry.buyerId;', 'const otherId = sellerIdOf(inquiry);'],
+      ['const [last] = messages.filter((message) => message.inquiryId === inquiry.id).sort(newestFirst);', 'const [last] = messages.filter((message) => message.inquiryId === inquiry.id);'],
+    ];
+    const results = [];
+    for (const [a, b] of variants) {
+      await lab('practice1.js', async ({ send }) => {
+        results.push(rooms((await send('GET', '/api/inquiries')).body));
+      }, { edit: (dir, rel) => replaceIn(dir, rel, a, b) });
+    }
+    expect(results[0]).toEqual([[2, '무선 이어폰', 'jisoo', '주문하시면 바로 보내 드려요']]);
+    expect(results[1].map((r) => r[2])).toEqual(['jaehoon', 'jisoo', 'jaehoon']);
+    expect(results[2].map((r) => r[3])).toEqual([null, '노이즈 캔슬링 되나요?', '텀블러 용량이 몇 ml예요?']);
+  }, 180_000);
+});
+
+describe('축 ⑩ 직접 해보기 2 - 문의방 메시지', () => {
+  it('2번 방 7 · 6 · 4 · 1번 방 9 · 3 · 2 · 1 · 남의 방 3 과 없는 방 99 는 404 «그런 문의방은 없어요» · 목록은 그대로', async () => {
+    await lab('practice2.js', async ({ send }) => {
+      expect((await send('GET', '/api/inquiries/2/messages')).body.items.map((m) => m.id)).toEqual([7, 6, 4]);
+      const one = await send('GET', '/api/inquiries/1/messages');
+      expect(one.body.items.map((m) => m.id)).toEqual([9, 3, 2, 1]);
+      expect(Object.keys(one.body.items[0])).toEqual(['id', 'senderId', 'content', 'isRead', 'createdAt']);
+      expect(await send('GET', '/api/inquiries/3/messages')).toEqual({ status: 404, body: { message: '그런 문의방은 없어요' } });
+      expect(await send('GET', '/api/inquiries/99/messages')).toEqual({ status: 404, body: { message: '그런 문의방은 없어요' } });
+      expect(rooms((await send('GET', '/api/inquiries')).body)).toEqual(ROOMS);
+    });
+  }, 90_000);
+
+  it('틀린 판 - 번호로만 찾으면 남의 방 3 이 200 으로 나온다', async () => {
+    await lab('practice2.js', async ({ send }) => {
+      const res = await send('GET', '/api/inquiries/3/messages');
+      expect([res.status, res.body.items.map((m) => m.id)]).toEqual([200, [8, 5]]);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, '(inquiry) => inquiry.id === id && (inquiry.buyerId === myId || sellerIdOf(inquiry) === myId),', '(inquiry) => inquiry.id === id,') });
+  }, 90_000);
+});
+
+describe('축 ⑪ 과제 [기초] - 문의방 읽음', () => {
+  it('2번 방 2 · 다시 0 · 1번 방 1(내가 보낸 9 는 그대로) · 남의 방 404 · 읽은 뒤 2번 방은 모두 isRead', async () => {
+    await lab('homework1.js', async ({ send }) => {
+      expect(await send('PATCH', '/api/inquiries/2/messages/read')).toEqual({ status: 200, body: { readCount: 2 } });
+      expect((await send('PATCH', '/api/inquiries/2/messages/read')).body).toEqual({ readCount: 0 });
+      expect((await send('PATCH', '/api/inquiries/1/messages/read')).body).toEqual({ readCount: 1 });
+      expect((await send('PATCH', '/api/inquiries/3/messages/read')).status).toBe(404);
+      expect((await send('GET', '/api/inquiries/2/messages')).body.items.every((m) => m.isRead)).toBe(true);
+      expect((await send('GET', '/api/inquiries/1/messages')).body.items.map((m) => [m.id, m.isRead])).toEqual([[9, false], [3, true], [2, true], [1, true]]);
+    });
+  }, 90_000);
+
+  it('흔한 실수 - 보낸 사람을 안 보면 1번 방이 2 가 되고 상대가 읽을 9 가 읽음이 된다', async () => {
+    await lab('homework1.js', async ({ send }) => {
+      expect((await send('PATCH', '/api/inquiries/1/messages/read')).body).toEqual({ readCount: 2 });
+    }, { edit: (dir, rel) => replaceIn(dir, rel, '(message) => message.inquiryId === inquiry.id && message.senderId !== myId && !message.isRead,', '(message) => message.inquiryId === inquiry.id && !message.isRead,') });
+  }, 90_000);
+});
+
+describe('축 ⑫ 과제 [응용] - 내 쪽에서만 지우기', () => {
+  it('1번 방을 지우면 204 · 목록 4 · 2 · 1번 방 메시지는 빈 배열 · 남의 방 404 · 서버를 다시 켜면 처음대로', async () => {
+    await lab('homework2.js', async ({ send }) => {
+      const del = await send('DELETE', '/api/inquiries/1');
+      expect([del.status, del.body]).toEqual([204, '']);
+      expect(rooms((await send('GET', '/api/inquiries')).body)).toEqual(ROOMS.slice(0, 2));
+      expect((await send('GET', '/api/inquiries/1/messages')).body).toEqual({ items: [] });
+      expect((await send('DELETE', '/api/inquiries/3')).status).toBe(404);
+      // 2번 방(사려는 쪽)도 지울 수 있다
+      expect((await send('DELETE', '/api/inquiries/2')).status).toBe(204);
+      expect(rooms((await send('GET', '/api/inquiries')).body)).toEqual(ROOMS.slice(0, 1));
+    });
+    await lab('homework2.js', async ({ send }) => {
+      expect(rooms((await send('GET', '/api/inquiries')).body)).toEqual(ROOMS);
+    });
+  }, 120_000);
+
+  it('흔한 실수 - 목록을 거르지 않으면 지운 1번 방이 목록에 남는다 · 메시지를 거르지 않으면 1번 방 메시지가 그대로', async () => {
+    await lab('homework2.js', async ({ send }) => {
+      await send('DELETE', '/api/inquiries/1');
+      expect(rooms((await send('GET', '/api/inquiries')).body).map((r) => r[0])).toEqual([4, 2, 1]);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, '    .filter((inquiry) => inquiry[myClearedField(inquiry, myId)] === null)\n', '') });
+    await lab('homework2.js', async ({ send }) => {
+      await send('DELETE', '/api/inquiries/1');
+      expect((await send('GET', '/api/inquiries/1/messages')).body.items.map((m) => m.id)).toEqual([9, 3, 2, 1]);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, '    .filter((message) => clearedAt === null || message.createdAt > clearedAt)\n', '') });
+  }, 120_000);
+});
