@@ -1,0 +1,69 @@
+<!-- ~/instagram-api/lab/p3-62/public/io.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>Socket.IO 채팅</title>
+  </head>
+  <body>
+    <h1>Socket.IO 채팅</h1>
+    <p id="status">연결하는 중...</p>
+    <form id="form">
+      <input id="to" placeholder="받는 사람(비우면 모두에게)" autocomplete="off" />
+      <input id="text" placeholder="메시지" autocomplete="off" />
+      <button>보내기</button>
+    </form>
+    <ul id="list"></ul>
+    <p id="typing"></p>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const name = new URLSearchParams(location.search).get('name');
+      const status = document.querySelector('#status');
+      const list = document.querySelector('#list');
+      const typing = document.querySelector('#typing');
+      const input = document.querySelector('#text');
+      const to = document.querySelector('#to');
+      let typingTimer;
+
+      const socket = io({ query: { name } });
+
+      socket.on('connect', () => {
+        status.textContent = '연결됐어요';
+      });
+
+      socket.on('disconnect', () => {
+        status.textContent = '연결이 끊겼어요';
+      });
+
+      socket.on('chat', (message) => {
+        const li = document.createElement('li');
+        li.textContent = `${message.name}: ${message.text}`;
+        list.append(li);
+        typing.textContent = '';
+      });
+
+      socket.on('typing', (message) => {
+        typing.textContent = `${message.name}님이 입력 중이에요...`;
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => {
+          typing.textContent = '';
+        }, 3000);
+      });
+
+      input.addEventListener('input', () => {
+        socket.emit('typing');
+      });
+
+      document.querySelector('#form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        if (to.value) {
+          socket.emit('whisper', { to: to.value, text: input.value });
+        } else {
+          socket.emit('chat', input.value);
+        }
+        input.value = '';
+      });
+    </script>
+  </body>
+</html>
