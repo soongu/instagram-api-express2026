@@ -272,6 +272,23 @@ const labServer = async (which, db, fn) => {
     await Promise.race([srv.stop(), new Promise((r) => setTimeout(r, 500))]);
   }
 };
+/** 학생 답에서 한 군데만 바꾼 판을 띄운다 - 확인이 그 판을 가려내는지 본다. */
+const variantServer = async (which, before, after, db, fn) => {
+  const from = version('lab');
+  generateFor(from);
+  const dir = studentDir(from);
+  const file = join(dir, 'lab/p3-57', `${which}.js`);
+  const text = read(file);
+  expect(text.split(before).length).toBe(2);
+  writeFileSync(file, text.replace(before, after));
+  onPort(file, LAB_PORT);
+  const srv = await boot(file, { port: LAB_PORT, cwd: dir, env: { ...env, DATABASE_URL: dbUrl(db) }, ready: `${LAB_PORT}번 포트에서` });
+  try {
+    return await fn(`http://localhost:${LAB_PORT}`);
+  } finally {
+    await Promise.race([srv.stop(), new Promise((r) => setTimeout(r, 500))]);
+  }
+};
 
 describe('축 ⓪ 판정 DB - p3-56 을 마친 학생 DB', () => {
   it('게시물 10개 · 태그 넷과 post_count · 짝 다섯 · 26번은 연결 없음 · 인덱스는 짝 UNIQUE 하나', async () => {
@@ -388,6 +405,15 @@ describe('축 ③ Step 2 - 실습 DB 의 실행 계획', () => {
     expect(after).toMatch(/Index Scan using post_hashtags_hashtag_id_idx on post_hashtags/);
     expect(after).not.toMatch(/Rows Removed by Filter/);
     expect(after).toMatch(/Index Cond: \(hashtag_id = 2\)/);
+    // 과제 [기초] 확인 7 - 실습 DB 는 수가 큰 차례(여행 50000 · 노을 3)와 이름 차례(노을 · 여행)가 반대다.
+    // 수업 DB(노을 27 · 바다 1 · 한강 1)는 두 차례가 같아서 이름으로만 정렬한 판을 못 가린다(2026-11-26 학생 낭독).
+    const suggestions = async (base) => (await fetch(`${base}/api/hashtags/suggestions`)).json();
+    await labServer('homework1', LAB_DB, async (base) => {
+      expect(await suggestions(base)).toEqual([{ name: '여행', postCount: 50000 }, { name: '노을', postCount: 3 }]);
+    });
+    await variantServer('homework1', "orderBy: [{ postCount: 'desc' }, { name: 'asc' }]", "orderBy: [{ name: 'asc' }]", LAB_DB, async (base) => {
+      expect(await suggestions(base)).toEqual([{ name: '노을', postCount: 3 }, { name: '여행', postCount: 50000 }]);
+    });
     await dropDb(LAB_DB);
   }, 300_000);
 });
@@ -453,7 +479,7 @@ describe('축 ⑤-b 직접 해보기 1 의 확인이 소문자를 안 맞춘 판
 });
 
 describe('축 ⑥ 과제 [기초] - 태그 추천', () => {
-  it('p3-57 끝 DB - 노을 27 · 바다 1 · 한강 1 (sunset 0 은 빠진다) · 노 · #노 · s · limit 2 · limit 20 은 400', async () => {
+  it('p3-57 끝 DB - 노을 27 · 바다 1 · 한강 1 (sunset 0 은 빠진다) · 노 · #노 · s · limit 2 · limit 20 과 0 은 400 · 을 은 []', async () => {
     await freshDb();
     migrate(version(2), GATE_DB);
     await runSql(GATE_DB, read(version(6)('lab/p3-57/sunset-posts.sql')));
@@ -465,18 +491,23 @@ describe('축 ⑥ 과제 [기초] - 태그 추천', () => {
       expect(await get('?prefix=s')).toEqual([200, []]);
       expect((await get('?limit=2'))[1]).toHaveLength(2);
       expect(await get('?limit=20')).toEqual([400, { message: '보낸 내용이 규칙에 안 맞아요' }]);
+      // 확인 5 의 limit=0 · 확인 6 의 «을» (2026-11-26 학생 낭독 - 최솟값 · 시작 글자)
+      expect(await get('?limit=0')).toEqual([400, { message: '보낸 내용이 규칙에 안 맞아요' }]);
+      expect(await get('?prefix=%EC%9D%84')).toEqual([200, []]);
     });
   });
 });
 
 describe('축 ⑥-b 과제 [기초] 의 확인이 틀린 판을 가르는가', () => {
-  it('접두사의 # 을 안 떼면 «#노» 가 [] · post_count 0 을 안 빼면 «s» 가 sunset', async () => {
+  it('접두사의 # 을 안 떼면 «#노» 가 [] · post_count 0 을 안 빼면 «s» 가 sunset · contains 면 «을» 이 노을 · min(0) 이면 limit=0 이 200 []', async () => {
     await freshDb();
     migrate(version(2), GATE_DB);
     await runSql(GATE_DB, read(version(6)('lab/p3-57/sunset-posts.sql')));
     const variants = [
       [".replace(/^#/, '').toLowerCase()", ".toLowerCase()", '?prefix=%23%EB%85%B8', []],
       ['postCount: { gt: 0 }', 'postCount: { gte: 0 }', '?prefix=s', [{ name: 'sunset', postCount: 0 }]],
+      ['startsWith: start', 'contains: start', '?prefix=%EC%9D%84', [{ name: '노을', postCount: 27 }]],
+      ['.min(1).max(10)', '.min(0).max(10)', '?limit=0', []],
     ];
     for (const [before, after, query, wrong] of variants) {
       const from = version('lab');
