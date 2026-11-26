@@ -86,6 +86,9 @@ GET http://localhost:3000/api/v2/conversations/1/messages?limit=2&cursor={{first
 ### seoyeon과의 대화방 메시지 - 84번 뒤
 GET http://localhost:3000/api/v2/conversations/1/messages?after=84
 
+### jaehoon 연결 끊기 - 10초 동안 다시 붙지 못한다(개발용)
+DELETE http://localhost:3000/api/v2/dev/connections/jaehoon
+
 ### 없는 대화방의 메시지
 GET http://localhost:3000/api/v2/conversations/999/messages
 

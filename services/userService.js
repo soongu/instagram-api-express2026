@@ -39,6 +39,15 @@ export function findUserById(id) {
   return prisma.user.findUnique({ where: { id }, select: userFields });
 }
 
+// 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
+export async function findUserIdByUsername(username) {
+  const user = await prisma.user.findUnique({ where: { username }, select: { id: true } });
+
+  if (!user) throw new NotFoundError('USER_NOT_FOUND');
+
+  return user.id;
+}
+
 // 프로필 헤더에 실을 것 - 팔로워 수는 컬럼에 적혀 있고, 게시물 수와 팔로잉 수는 요청마다 센다.
 // 보는 사람이 이 사람을 팔로우하는 행도 센다 - 하나면 팔로우하고 있는 것이다.
 function profileFieldsFor(viewerId) {

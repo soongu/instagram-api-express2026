@@ -14,6 +14,7 @@ import hashtagsRouter from './routes/hashtags.js';
 import profilesRouter from './routes/profiles.js';
 import membersRouter from './routes/members.js';
 import conversationsRouter from './routes/conversations.js';
+import devRouter from './routes/dev.js';
 import { HttpError, NotFoundError } from './errors.js';
 import { sendError } from './responses.js';
 import { logger } from './middlewares/logger.js';
@@ -85,6 +86,10 @@ api.use('/members', membersRouter);
 api.use('/conversations', conversationsRouter);
 api.use('/uploads', uploadsRouter);
 api.use('/admin', adminRouter);
+// 개발할 때만 쓰는 주소 - 배포한 서버(NODE_ENV=production)에는 붙이지 않아 404 다.
+if (process.env.NODE_ENV !== 'production') {
+  api.use('/dev', devRouter);
+}
 
 // 새 주소 — 버전은 위에서 적어 두었다.
 app.use('/api/v2', api);

@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js';
 import { signupSchema } from '../schemas/authSchema.js';
+import { connectionDropQuerySchema } from '../schemas/devSchema.js';
 import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
 import { profilePostsQuerySchema, followListQuerySchema } from '../schemas/profileSchema.js';
@@ -308,6 +309,19 @@ export const openapi = {
           200: { description: '읽음으로 바뀐 메시지 수 - 바꿀 것이 없으면 0 · 1 이상이면 상대와 나의 연결에 dm:read { conversationId, readerId }', content: json(data(ref('ReadResult'))) },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
           404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/dev/connections/{username}': {
+      parameters: [{ name: 'username', in: 'path', required: true, description: '연결을 끊을 사람의 사용자 이름', schema: { type: 'string' } }],
+      delete: {
+        summary: '개발용 - 그 사람의 실시간 연결을 끊고 잠깐 다시 붙지 못하게 한다(NODE_ENV=production 이면 없는 주소)',
+        parameters: queryParameters(connectionDropQuerySchema),
+        responses: {
+          200: { description: '끊은 연결 수와 막은 초', content: json(data({ type: 'object', properties: { closedCount: { type: 'integer' }, blockedSeconds: { type: 'integer' } } })) },
+          400: { description: 'seconds 가 0~60 의 정수가 아님', content: json(errorOf('VALIDATION_FAILED')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
         },
       },
     },

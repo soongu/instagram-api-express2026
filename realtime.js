@@ -36,6 +36,34 @@ function reply(ack, body) {
 // 붙인 Socket.IO 서버 - 연결 밖(REST 요청을 처리하는 곳)에서도 이벤트를 보내려고 모듈에 둔다.
 let io = null;
 
+// 개발용 - 사람 번호마다 «이 시각까지는 연결을 받지 않는다». dropConnections 가 적는다.
+const blockedUntil = new Map();
+
+// 개발용 - 그 사람의 연결을 모두 끊고 seconds 초 동안 다시 붙지 못하게 한다. 끊은 연결 수를 돌려준다.
+// 연결의 전송(socket.conn)만 닫는다 - 화면은 네트워크가 끊긴 것으로 보고 스스로 다시 연결을 시도한다.
+// socket.disconnect() 는 «서버가 끊었다» 로 알려서 화면이 다시 연결하지 않는다.
+export function dropConnections(userId, seconds) {
+  if (io === null) return 0;
+
+  blockedUntil.set(userId, Date.now() + seconds * 1000);
+
+  const ids = io.sockets.adapter.rooms.get(`user:${userId}`) ?? new Set();
+  const sockets = [...ids].map((id) => io.sockets.sockets.get(id)).filter(Boolean);
+  sockets.forEach((socket) => socket.conn.close());
+
+  return sockets.length;
+}
+
+// 막아 둔 사람이 보낸 연결 요청인가 - 쿠키의 토큰으로 누구인지 본다. 토큰이 없거나 틀리면 막지 않는다(로그인 확인은 io.use 가 한다).
+function isBlocked(req) {
+  try {
+    const userId = Number(tokenService.verifyAccessToken(readToken(req)).sub);
+    return (blockedUntil.get(userId) ?? 0) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 // 그 사람들의 연결에 이벤트를 보낸다 - 한 사람이 탭을 여럿 열었으면 그 탭 모두에 간다.
 // REST 요청을 처리하다가 연결로 알려야 할 때 쓴다. 서버를 띄우기 전(io 가 없을 때)에는 아무것도 안 한다.
 export function emitToUsers(userIds, event, payload) {
@@ -50,6 +78,17 @@ export function startRealtime(server) {
 
   // 연결을 여는 HTTP 요청에도 쿠키가 실려 온다. Express 앱에서처럼 그 쿠키를 읽어 둔다.
   io.engine.use(cookieParser());
+
+  // 막아 둔 사람의 연결 요청은 HTTP 403 으로 돌려보낸다 - 화면은 네트워크 실패로 보고 간격을 늘려 가며 다시 시도한다.
+  // io.use 에서 거절하면 화면이 «서버가 거절했다» 로 보고 다시 시도하지 않아서, 그 앞 단계에서 막는다.
+  io.engine.use((req, res, next) => {
+    if (isBlocked(req)) {
+      res.writeHead(403);
+      res.end();
+      return;
+    }
+    next();
+  });
 
   // 연결이 열리기 전에 한 번 - HTTP 요청에서 requireLogin 이 하던 확인을 여기서 한다.
   io.use((socket, next) => {
