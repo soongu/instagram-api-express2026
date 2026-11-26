@@ -1,0 +1,23 @@
+### jaehoon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 내 문의방 목록
+GET http://localhost:4001/api/inquiries
+
+### 2번 문의방의 메시지
+GET http://localhost:4001/api/inquiries/2/messages
+
+### 1번 문의방의 메시지
+GET http://localhost:4001/api/inquiries/1/messages
+
+### 3번 문의방의 메시지 - sujin 과 taeyang 의 방
+GET http://localhost:4001/api/inquiries/3/messages
+
+### 없는 문의방의 메시지
+GET http://localhost:4001/api/inquiries/99/messages
