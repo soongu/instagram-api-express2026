@@ -2,6 +2,7 @@
 import { Server } from 'socket.io';
 import cookieParser from 'cookie-parser';
 import * as tokenService from './services/tokenService.js';
+import * as conversationService from './services/conversationService.js';
 import { readToken } from './middlewares/auth.js';
 import { MESSAGES } from './errors.js';
 
@@ -30,6 +31,12 @@ export function startRealtime(server) {
   io.on('connection', (socket) => {
     const { userId } = socket.data;
     console.log(`${userId}번 사용자의 연결이 열렸어요. 지금 연결은 ${io.engine.clientsCount}개예요.`);
+
+    // 메시지 보내기 - 저장한 메시지를 알린다.
+    socket.on('dm:send', async ({ conversationId, content }) => {
+      const message = await conversationService.sendMessage(conversationId, userId, content);
+      io.emit('dm:message', message);
+    });
 
     socket.on('disconnect', () => {
       console.log(`${userId}번 사용자의 연결이 닫혔어요.`);

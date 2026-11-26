@@ -185,3 +185,12 @@ export async function clearConversation(conversationId, myId) {
     await prisma.directMessage.deleteMany({ where: { conversationId, createdAt: { lte: both } } });
   }
 }
+
+// 대화방에 메시지를 보낸다 - 보낸 사람은 연결이 열릴 때 확인한 사람이다.
+// 이벤트로 알릴 때 어느 방의 메시지인지 화면이 알아야 해서 대화방 번호를 함께 싣는다.
+export async function sendMessage(conversationId, myId, content) {
+  return prisma.directMessage.create({
+    data: { conversationId, senderId: myId, content },
+    select: { conversationId: true, ...historyFields },
+  });
+}
