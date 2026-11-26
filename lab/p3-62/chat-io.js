@@ -11,6 +11,15 @@ const server = app.listen(4003, () => {
 
 const io = new Server(server);
 
+// 연결로 보낸 메시지는 그때 붙어 있던 사람에게만 간다. 지난 이야기는 HTTP 로 다시 받게 기록해 둔다.
+const messages = [];
+let nextId = 1;
+
+app.get('/messages', (req, res) => {
+  const after = Number(req.query.after ?? 0);
+  res.json(messages.filter((message) => message.id > after));
+});
+
 io.on('connection', (socket) => {
   const name = socket.handshake.query.name;
   console.log(`${name} 연결이 열렸어요. 지금 연결은 ${io.engine.clientsCount}개예요.`);
@@ -20,7 +29,9 @@ io.on('connection', (socket) => {
 
   // 이벤트 이름이 곧 종류다. 값은 객체 그대로 오간다.
   socket.on('chat', (text) => {
-    io.emit('chat', { name, text });
+    const message = { id: nextId++, name, text };
+    messages.push(message);
+    io.emit('chat', message);
   });
 
   socket.on('typing', () => {
