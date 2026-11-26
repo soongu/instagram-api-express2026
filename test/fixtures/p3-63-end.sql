@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ndpGcvrybDMnt0neH063TlbyU8qsxcY52cTj6vgXnl5OFNwol2LxYCbTdDgO57P
+\restrict nqkOjBLZMqMJO8tA2sBEjjWVyFfnHzLqJmigCYC8MQ1kO7Oay32ot4yfHKyxoSZ
 
 -- Dumped from database version 18.6 (Debian 18.6-1.pgdg13+2)
 -- Dumped by pg_dump version 18.6 (Debian 18.6-1.pgdg13+2)
@@ -636,9 +636,9 @@ INSERT INTO public._prisma_migrations VALUES ('ad41f8de-9929-4d61-9190-26f986638
 INSERT INTO public._prisma_migrations VALUES ('89544f59-6e88-47f6-b67f-4aca6e86663e', '847325e270bdc93d577e5a6a41755576c012a451373d2075ffa805633f44de74', '2026-11-25 10:31:44.49782+00', '20261125090443_follows_not_self', NULL, NULL, '2026-11-25 10:31:44.496548+00', 1);
 INSERT INTO public._prisma_migrations VALUES ('b59d1cd8-270c-4b35-944b-129076d5e6e7', '71197c0a9b3f5aa907e9baaf40a113dc4c8ed100e46abf9a2c43216123f405d8', '2026-11-25 10:31:44.499567+00', '20261125090825_add_user_follower_count', NULL, NULL, '2026-11-25 10:31:44.498323+00', 1);
 INSERT INTO public._prisma_migrations VALUES ('701fb443-56cd-4355-b67d-de0dad61ba66', '673891940051690273707e9ce2b4726c1f82c1b7ba8f6ef8dba7a1bbf4b199c6', '2026-11-26 01:22:52.90939+00', '20261126005703_add_follow_list_indexes', NULL, NULL, '2026-11-26 01:22:52.904905+00', 1);
-INSERT INTO public._prisma_migrations VALUES ('70e49d08-5210-4404-8d47-64adaacc37cc', 'af1a6f1afafa8a521ecf62c863026f8f0904475017fb598a4ba80f547dd1e6e3', '2026-11-26 05:50:43.807783+00', '20261126053116_add_conversations', NULL, NULL, '2026-11-26 05:50:43.798247+00', 1);
-INSERT INTO public._prisma_migrations VALUES ('c3fd0730-a02d-4ac3-9638-bcd97dfb647f', 'e8575b137fc62c972e60fac1fff75aefba57d1cc25f97e19f8bec1cd10a168d4', '2026-11-26 05:50:45.927234+00', '20261126053306_conversations_a_before_b', NULL, NULL, '2026-11-26 05:50:45.923052+00', 1);
-INSERT INTO public._prisma_migrations VALUES ('8a48f332-64db-4580-b7c6-29aa3ea5101e', 'dd7a4e63607729b7ad02b7ab234d2e5672c2448be4105dc4ccb810468a12fac1', '2026-11-26 05:50:54.824117+00', '20261126054329_add_conversation_cleared_at', NULL, NULL, '2026-11-26 05:50:54.821364+00', 1);
+INSERT INTO public._prisma_migrations VALUES ('dd6b6851-1768-459a-8dbe-a42aac04105b', 'af1a6f1afafa8a521ecf62c863026f8f0904475017fb598a4ba80f547dd1e6e3', '2026-11-26 06:19:59.924688+00', '20261126053116_add_conversations', NULL, NULL, '2026-11-26 06:19:59.913299+00', 1);
+INSERT INTO public._prisma_migrations VALUES ('0a8e73b3-318c-4b3e-a3d9-7bfed996044b', 'e8575b137fc62c972e60fac1fff75aefba57d1cc25f97e19f8bec1cd10a168d4', '2026-11-26 06:20:01.951049+00', '20261126053306_conversations_a_before_b', NULL, NULL, '2026-11-26 06:20:01.948329+00', 1);
+INSERT INTO public._prisma_migrations VALUES ('23890734-75bc-4bad-bd80-5d5931266cfe', 'dd7a4e63607729b7ad02b7ab234d2e5672c2448be4105dc4ccb810468a12fac1', '2026-11-26 06:20:10.956872+00', '20261126054329_add_conversation_cleared_at', NULL, NULL, '2026-11-26 06:20:10.954266+00', 1);
 
 
 --
@@ -1002,17 +1002,17 @@ INSERT INTO public.comments VALUES (360, 2, '@jaehoon 버터 향이 좋아요', 
 -- Data for Name: conversations; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-INSERT INTO public.conversations VALUES (6, 2, 3, '2026-11-23 05:50:47.41', NULL, NULL);
-INSERT INTO public.conversations VALUES (7, 2, 44, '2026-11-25 05:50:47.41', NULL, NULL);
-INSERT INTO public.conversations VALUES (1, 2, 43, '2026-11-26 05:50:44.65', '2026-11-26 05:50:55.612', '2026-11-26 05:50:56.11');
+INSERT INTO public.conversations VALUES (7, 2, 3, '2026-11-23 06:20:03.565', NULL, NULL);
+INSERT INTO public.conversations VALUES (8, 2, 44, '2026-11-25 06:20:03.565', NULL, NULL);
+INSERT INTO public.conversations VALUES (1, 2, 43, '2026-11-26 06:20:00.729', '2026-11-26 06:20:11.736', '2026-11-26 06:20:12.217');
 
 
 --
 -- Data for Name: direct_messages; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-INSERT INTO public.direct_messages VALUES (1, 6, 3, '다음 주 스터디 몇 시에 해요?', false, '2026-11-24 04:50:47.41');
-INSERT INTO public.direct_messages VALUES (2, 6, 2, '저녁 7시요!', false, '2026-11-24 05:50:47.41');
+INSERT INTO public.direct_messages VALUES (1, 7, 3, '다음 주 스터디 몇 시에 해요?', false, '2026-11-24 05:20:03.565');
+INSERT INTO public.direct_messages VALUES (2, 7, 2, '저녁 7시요!', false, '2026-11-24 06:20:03.565');
 
 
 --
@@ -1308,15 +1308,15 @@ INSERT INTO public.sessions VALUES ('7889e9ee-ece0-4aae-a1e4-4668d955492c', 2, '
 INSERT INTO public.sessions VALUES ('69f83e44-e03c-4fb3-bcfc-da0250e554fe', 2, '2026-12-03 01:23:23.227', '2026-11-26 01:23:23.23', '1ae7c189a37225bdb9212d22da93fdcb20f1f95ce10b688c433d588644de55ee', NULL);
 INSERT INTO public.sessions VALUES ('0f029b60-942d-4326-a3cf-92dd8cd3a016', 2, '2026-12-03 01:23:36.24', '2026-11-26 01:23:36.245', '8658ff18d2a0830332f11049c90de10aeb0c6fe2906fddc381dc224f0f1de9cb', NULL);
 INSERT INTO public.sessions VALUES ('ff9d96dc-190d-4923-a98d-b3fb9008b8fb', 2, '2026-12-03 01:23:48.422', '2026-11-26 01:23:48.425', '7cc46704f2eaabbf98d3255d4d196f9c8cf907b188a2115f369d589e01db0008', NULL);
-INSERT INTO public.sessions VALUES ('a1bb9af7-0cee-4862-b9be-1434536b9c21', 2, '2026-12-03 05:50:44.631', '2026-11-26 05:50:44.636', 'c32cdd90aaee1af8fc25eab463aac0ebf767a342c3483d7d96e1c78d20301eea', NULL);
-INSERT INTO public.sessions VALUES ('7a3dd9f6-ece1-40eb-900b-23c932e82263', 43, '2026-12-03 05:50:45.143', '2026-11-26 05:50:45.143', '2732968424f9696fb8ae6aa18b398724cd82d5bdbf5b1f501e495b68ef4e154c', NULL);
-INSERT INTO public.sessions VALUES ('b06e9353-f9ec-426a-81dd-e29e516eefbc', 2, '2026-12-03 05:50:46.709', '2026-11-26 05:50:46.713', 'e4f94871df21e550a57dcece36986f71530f2778856b3506b2be071942ad8712', NULL);
-INSERT INTO public.sessions VALUES ('31e35390-b0a6-42bc-bfa7-d885208b5595', 43, '2026-12-03 05:50:47.179', '2026-11-26 05:50:47.179', '35bd6e797d94efc6aeac9136c1cd5302cd9db8975262019ee14e3eb9fe23fe68', NULL);
-INSERT INTO public.sessions VALUES ('0708a14c-0a5a-4485-a034-95c5006db683', 2, '2026-12-03 05:50:50.011', '2026-11-26 05:50:50.016', '7b5c4f9ea6cfdd1d4e522e9d207cd6dfe87d6f4b93341ca8f97459f8ebf560dc', NULL);
-INSERT INTO public.sessions VALUES ('088939ef-9d24-4fb6-97f5-04ea7ac95fc0', 48, '2026-12-03 05:50:51.578', '2026-11-26 05:50:51.582', 'ff2c6a87a79ffaceabd253c7de8bca444fdbb0762f6faf868e5c8e9f2dd2a059', NULL);
-INSERT INTO public.sessions VALUES ('d6429fc0-a682-4909-b458-6b663637ab64', 43, '2026-12-03 05:50:53.347', '2026-11-26 05:50:53.351', 'fb59aac4ef5ee1bc5caac5bd308d4c2d7882bf5e875e247ef7e04cb1ecd7aaae', NULL);
-INSERT INTO public.sessions VALUES ('a5e4c4c7-df08-456a-8ed8-fdde0cfc774b', 2, '2026-12-03 05:50:55.599', '2026-11-26 05:50:55.602', '679728068bd087cb84a281756acc22f0d47091b5161bc7d2f7e8963b1e7d4220', NULL);
-INSERT INTO public.sessions VALUES ('f0fe22da-b152-43dc-a294-0a7e12c82353', 43, '2026-12-03 05:50:56.096', '2026-11-26 05:50:56.097', '44ad4eb3d68ea72a5fd63f68d150b7a515675e21b313c3cbc5070870c8879660', NULL);
+INSERT INTO public.sessions VALUES ('fb35084e-d1a3-4149-be04-6ddc2e83e3cf', 2, '2026-12-03 06:20:00.71', '2026-11-26 06:20:00.714', '9079fbd3768a60dc30cf29480ea12882787c7061fb0feefdba4707d1d89d2ef8', NULL);
+INSERT INTO public.sessions VALUES ('b1b2e3ad-66ff-4ed3-9e58-7539a2f83d09', 43, '2026-12-03 06:20:01.204', '2026-11-26 06:20:01.204', 'cb464cfd95421ac280e537294a8051ccef31c8d5b08f6923962ea3877df2a7af', NULL);
+INSERT INTO public.sessions VALUES ('0aa40556-832f-41ec-998b-b59ad96c3ba5', 2, '2026-12-03 06:20:02.728', '2026-11-26 06:20:02.732', '46dff4e9806e89d35833909dc1daa99dbab6fbd823bd12f3222d7a78309093b9', NULL);
+INSERT INTO public.sessions VALUES ('5479b24a-684c-4b02-b842-b377ffa1ba3e', 43, '2026-12-03 06:20:03.303', '2026-11-26 06:20:03.304', '17dea3b3787291d00bf7467988ae9c5302e2e4a8f14ebc94b8e2476215070ae6', NULL);
+INSERT INTO public.sessions VALUES ('74789f08-807b-4600-a346-665625685989', 2, '2026-12-03 06:20:06.267', '2026-11-26 06:20:06.271', '4da6fda675db8e9a562bde3db42f8af02cb594222691a154bfd63192cc434010', NULL);
+INSERT INTO public.sessions VALUES ('3461c8c1-08a0-415b-ac99-173a337b976c', 48, '2026-12-03 06:20:07.815', '2026-11-26 06:20:07.819', '32b03a182e4191a63bcb7caa67ca21a5a10c1ca444ee93efad37321fe66c0ef9', NULL);
+INSERT INTO public.sessions VALUES ('a891b24d-661e-4aee-b1e6-542f9205b0b7', 43, '2026-12-03 06:20:09.571', '2026-11-26 06:20:09.575', '4d18ff40dcd2531fe8b243a49f929aee46e3635d65f2c00f3efb9de84254bc08', NULL);
+INSERT INTO public.sessions VALUES ('ab2c9316-0c3d-40ba-a344-d35d188bd4f7', 2, '2026-12-03 06:20:11.721', '2026-11-26 06:20:11.725', '010673ce0d9017fbba766f5d59921e18a574dbd00446cea0c0da0ea912021352', NULL);
+INSERT INTO public.sessions VALUES ('9eb3b7b3-524a-4380-8748-8ac1f90e91a2', 43, '2026-12-03 06:20:12.208', '2026-11-26 06:20:12.208', '63bebca858f7e7335a386120b7cc38bb85521c1252d2f74eea6a0fb016fd2f1f', NULL);
 
 
 --
@@ -1379,7 +1379,7 @@ SELECT pg_catalog.setval('public.comments_id_seq', 360, true);
 -- Name: conversations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.conversations_id_seq', 7, true);
+SELECT pg_catalog.setval('public.conversations_id_seq', 8, true);
 
 
 --
@@ -1875,5 +1875,5 @@ ALTER TABLE ONLY public.uploads
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ndpGcvrybDMnt0neH063TlbyU8qsxcY52cTj6vgXnl5OFNwol2LxYCbTdDgO57P
+\unrestrict nqkOjBLZMqMJO8tA2sBEjjWVyFfnHzLqJmigCYC8MQ1kO7Oay32ot4yfHKyxoSZ
 

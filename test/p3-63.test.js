@@ -419,8 +419,9 @@ const flow = async (stages) => {
   }
 };
 const MESSAGES_SQL = () => read(version(4)('lab/p3-63/messages.sql'));
-// Step 2~4 를 교안 차례대로 - 방 1(seoyeon) · 겪기 방 3·4 를 지우고 · SQL 로 방 6(minji) · 7(doyun)과 메시지 일곱.
+// Step 2~4 를 교안 차례대로 - 방 1(seoyeon) · 겪기 방 3·4 를 지우고 · SQL 로 방 7(minji) · 8(doyun)과 메시지 일곱.
 // 이미 있는 방을 다시 열면(ON CONFLICT DO NOTHING) 행은 안 들어가도 번호는 하나 쓴다 - 2 와 5 가 그렇게 비었다.
+// CHECK 에 막힌 INSERT 도 번호를 쓴다 - 6 이 그렇게 비었다.
 const STAGES_TO_4 = [
   { step: 2, run: async ({ base }) => {
     const jaehoon = await loggedIn(base, 'jaehoon');
@@ -433,6 +434,8 @@ const STAGES_TO_4 = [
   { step: 3, before: () => onDb(GATE_DB, 'DELETE FROM conversations WHERE participant_a_id >= participant_b_id'), run: async ({ base }) => {
     await open(await loggedIn(base, 'jaehoon'), 'jaehoon');
     await open(await loggedIn(base, 'seoyeon'), 'jaehoon');
+    // 교안이 쿼리 창에서 시키는 뒤집힌 짝 INSERT - CHECK 에 막혀도 번호(6)를 쓴다.
+    expect((await failOf(GATE_DB, 'INSERT INTO conversations (participant_a_id, participant_b_id) VALUES (43, 2)')).code).toBe('23514');
   } },
   { step: 4, before: () => runSqlFile(GATE_DB, MESSAGES_SQL()), run: async () => {} },
 ];
@@ -440,16 +443,16 @@ const LIST = (query = '') => `${CONV}${query}`;
 const brief4 = (item) => [item.id, item.otherUser.username, item.lastMessage?.content ?? null];
 
 describe('축 ④ Step 4 - 내 대화방 목록', () => {
-  it('이어진 흐름 - 방 번호 1 · 6 · 7(다시 열기가 번호를 하나씩 쓴다) · jaehoon 의 목록은 만든 차례(seoyeon · doyun · minji) · 마지막 메시지 · doyun 방은 null', async () => {
+  it('이어진 흐름 - 방 번호 1 · 7 · 8(다시 열기와 막힌 INSERT 가 번호를 하나씩 쓴다) · jaehoon 의 목록은 만든 차례(seoyeon · doyun · minji) · 마지막 메시지 · doyun 방은 null', async () => {
     await flow([...STAGES_TO_4, { step: 4, run: async ({ base }) => {
       const rows = await onDb(GATE_DB, 'SELECT id, participant_a_id AS a, participant_b_id AS b FROM conversations ORDER BY id');
-      expect(rows.map((r) => [r.id, r.a, r.b])).toEqual([[1, 2, 43], [6, 2, 3], [7, 2, 44]]);
+      expect(rows.map((r) => [r.id, r.a, r.b])).toEqual([[1, 2, 43], [7, 2, 3], [8, 2, 44]]);
       expect(await count('SELECT count(*)::int AS n FROM direct_messages')).toBe(7);
       const jaehoon = await loggedIn(base, 'jaehoon');
       const res = await jaehoon.get(LIST());
       expect(res.status).toBe(200);
       expect(Object.keys(res.body.data)).toEqual(['items', 'hasNext', 'nextCursor']);
-      expect(res.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [7, 'doyun', null], [6, 'minji', '저녁 7시요!']]);
+      expect(res.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [8, 'doyun', null], [7, 'minji', '저녁 7시요!']]);
       expect(Object.keys(res.body.data.items[0])).toEqual(['id', 'createdAt', 'otherUser', 'lastMessage']);
       expect(Object.keys(res.body.data.items[0].lastMessage)).toEqual(['id', 'senderId', 'content', 'createdAt']);
       expect(res.body.data.items[0].lastMessage).toMatchObject({ id: 7, senderId: SEOYEON_ID });
@@ -466,15 +469,15 @@ describe('축 ④ Step 4 - 내 대화방 목록', () => {
     await flow([...STAGES_TO_4, { step: 4, run: async ({ base }) => {
       const jaehoon = await loggedIn(base, 'jaehoon');
       const one = await jaehoon.get(LIST('?limit=2'));
-      expect(one.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [7, 'doyun', null]]);
+      expect(one.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [8, 'doyun', null]]);
       expect(one.body.data.hasNext).toBe(true);
       const two = await jaehoon.get(LIST(`?limit=2&cursor=${one.body.data.nextCursor}`));
-      expect(two.body.data.items.map(brief4)).toEqual([[6, 'minji', '저녁 7시요!']]);
+      expect(two.body.data.items.map(brief4)).toEqual([[7, 'minji', '저녁 7시요!']]);
       expect(two.body.data).toMatchObject({ hasNext: false, nextCursor: null });
       expect(errOf(await jaehoon.get(LIST('?cursor=abc')))).toEqual([400, 'INVALID_CURSOR']);
       expect(errOf(await jaehoon.get(LIST('?limit=51')))).toEqual([400, 'VALIDATION_FAILED']);
       const again = await open(jaehoon, 'minji');
-      expect([again.status, again.body.data.id, again.body.data.lastMessage.content]).toEqual([200, 6, '저녁 7시요!']);
+      expect([again.status, again.body.data.id, again.body.data.lastMessage.content]).toEqual([200, 7, '저녁 7시요!']);
       const del = await jaehoon.send('DELETE', CONV);
       expect([del.status, del.headers.get('allow')]).toEqual([405, 'GET, POST']);
     } }]);
@@ -488,7 +491,7 @@ describe('축 ④ Step 4 - 내 대화방 목록', () => {
     }, run: async ({ base }) => {
       const jaehoon = await loggedIn(base, 'jaehoon');
       const one = await jaehoon.get(LIST('?limit=2'));
-      expect(one.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [7, 'doyun', null]]);
+      expect(one.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [8, 'doyun', null]]);
       const two = await jaehoon.get(LIST(`?limit=2&cursor=${one.body.data.nextCursor}`));
       second = two.body.data.items.map((item) => item.id);
     }, edit: (dir) => replaceIn(dir, 'services/conversationService.js',
@@ -499,8 +502,8 @@ describe('축 ④ Step 4 - 내 대화방 목록', () => {
       ],`,
       `OR: [{ participantAId: myId }, { participantBId: myId }],
       ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),`) }]);
-    // 둘째 페이지에 seoyeon·boram 의 방(8)이 섞인다.
-    expect(second).toEqual([8, 6]);
+    // 둘째 페이지에 seoyeon·boram 의 방(9)이 섞인다.
+    expect(second).toEqual([9, 7]);
   }, 120_000);
 });
 
@@ -561,8 +564,8 @@ describe('축 ⑤ Step 5 - 메시지 이력', () => {
       expect(pages).toEqual([[7, 6], [5, 4], [3]]);
       expect(errOf(await jaehoon.get(MSG(999)))).toEqual([404, 'CONVERSATION_NOT_FOUND']);
       expect(errOf(await jaehoon.get(MSG('abc')))).toEqual([404, 'CONVERSATION_NOT_FOUND']);
-      expect(errOf(await jaehoon.get(MSG(7)))).toEqual([200, undefined]);
-      expect((await jaehoon.get(MSG(7))).body.data.items).toEqual([]);
+      expect(errOf(await jaehoon.get(MSG(8)))).toEqual([200, undefined]);
+      expect((await jaehoon.get(MSG(8))).body.data.items).toEqual([]);
       const post = await jaehoon.send('POST', MSG(1));
       expect([post.status, post.headers.get('allow')]).toEqual([405, 'GET']);
     } }]);
@@ -579,11 +582,11 @@ describe('축 ⑤ Step 5 - 메시지 이력', () => {
 });
 
 describe('축 ⑥ Step 6 - 남의 대화방', () => {
-  it('403 판 - boram 이 방 1 은 403 NOT_CONVERSATION_MEMBER · 1~8 을 넣으면 있는 방(1 · 6 · 7)만 403', async () => {
+  it('403 판 - boram 이 방 1 은 403 NOT_CONVERSATION_MEMBER · 1~8 을 넣으면 있는 방(1 · 7 · 8)만 403', async () => {
     await flow([...STAGES_TO_4, STAGE_5, { step: '6a', run: async ({ base }) => {
       const boram = await loggedIn(base, 'boram');
       expect(errOf(await boram.get(MSG(1)))).toEqual([403, 'NOT_CONVERSATION_MEMBER']);
-      expect(await probe(boram)).toEqual([403, 404, 404, 404, 404, 403, 403, 404]);
+      expect(await probe(boram)).toEqual([403, 404, 404, 404, 404, 404, 403, 403]);
       expect((await (await loggedIn(base, 'jaehoon')).get(MSG(1))).status).toBe(200);
     } }]);
   }, 120_000);
@@ -601,7 +604,7 @@ describe('축 ⑥ Step 6 - 남의 대화방', () => {
       const lines = tail().split('\n');
       const at = lines.indexOf(warns[0]);
       expect(lines[at + 1]).toMatch(/^GET \/api\/v2\/conversations\/1\/messages 404 \d+\.\dms$/);
-      expect((await boram.get(MSG(6))).body.error.message).toBe('그런 대화방은 없어요');
+      expect((await boram.get(MSG(7))).body.error.message).toBe('그런 대화방은 없어요');
       expect((await boram.get(MSG(2))).body.error.message).toBe('그런 대화방은 없어요');
       expect((await (await loggedIn(base, 'seoyeon')).get(MSG(1))).status).toBe(200);
     } }]);
@@ -642,7 +645,10 @@ describe('축 ⑧ Step 8 - 내 쪽에서만 지우기', () => {
       const jaehoon = await loggedIn(base, 'jaehoon');
       const del = await jaehoon.send('DELETE', `${CONV}/1`);
       expect([del.status, del.body]).toEqual([204, '']);
-      expect((await jaehoon.get(LIST())).body.data.items.map(brief4)).toEqual([[7, 'doyun', null], [6, 'minji', '저녁 7시요!']]);
+      // 🤔 해설의 주장 - 지운 방을 다시 열면 만들기 응답의 lastMessage 는 지운 메시지 그대로다(지운 시각을 안 본다).
+      const reopen = await open(jaehoon, 'seoyeon');
+      expect([reopen.status, reopen.body.data.id, reopen.body.data.lastMessage.content]).toEqual([200, 1, '네, 꼭요!']);
+      expect((await jaehoon.get(LIST())).body.data.items.map(brief4)).toEqual([[8, 'doyun', null], [7, 'minji', '저녁 7시요!']]);
       expect((await jaehoon.get(MSG(1))).body.data).toEqual({ items: [], hasNext: false, nextCursor: null });
       const seoyeon = await loggedIn(base, 'seoyeon');
       expect(contents((await seoyeon.get(MSG(1))).body.data.items)).toEqual(SEOYEON_ROOM);
@@ -830,7 +836,7 @@ describe('축 ⑬ 다음 회차 판정 DB - p3-63-end.sql(교안 차례대로 �
     });
   }, 180_000);
 
-  it('덤프 - 방 1 · 6 · 7(방 1 은 두 사람 모두 지움 · 메시지 0) · 메시지는 minji 방의 둘 · CHECK 와 인덱스가 들어 있다 · 마이그레이션 셋', async () => {
+  it('덤프 - 방 1 · 7 · 8(방 1 은 두 사람 모두 지움 · 메시지 0) · 메시지는 minji 방의 둘 · CHECK 와 인덱스가 들어 있다 · 마이그레이션 셋', async () => {
     const dump = read(P('test/fixtures/p3-63-end.sql')).split('\n').filter((line) => !line.startsWith('\\')).join('\n');
     const db = `${DB_PREFIX}_dump`;
     await dropDb(db);
@@ -839,9 +845,9 @@ describe('축 ⑬ 다음 회차 판정 DB - p3-63-end.sql(교안 차례대로 �
       await runSqlFile(db, dump);
       const rows = await onDb(db, `SELECT id, participant_a_id AS a, participant_b_id AS b,
         a_cleared_at IS NOT NULL AS ac, b_cleared_at IS NOT NULL AS bc FROM conversations ORDER BY id`);
-      expect(rows.map((r) => [r.id, r.a, r.b, r.ac, r.bc])).toEqual([[1, 2, 43, true, true], [6, 2, 3, false, false], [7, 2, 44, false, false]]);
+      expect(rows.map((r) => [r.id, r.a, r.b, r.ac, r.bc])).toEqual([[1, 2, 43, true, true], [7, 2, 3, false, false], [8, 2, 44, false, false]]);
       const msgs = await onDb(db, 'SELECT id, conversation_id AS c, content, is_read AS r FROM direct_messages ORDER BY id');
-      expect(msgs.map((m) => [m.id, m.c, m.content, m.r])).toEqual([[1, 6, '다음 주 스터디 몇 시에 해요?', false], [2, 6, '저녁 7시요!', false]]);
+      expect(msgs.map((m) => [m.id, m.c, m.content, m.r])).toEqual([[1, 7, '다음 주 스터디 몇 시에 해요?', false], [2, 7, '저녁 7시요!', false]]);
       const check = await onDb(db, "SELECT conname FROM pg_constraint WHERE conname = 'conversations_a_before_b'");
       expect(check).toHaveLength(1);
       const migrations = await onDb(db, "SELECT migration_name FROM _prisma_migrations WHERE migration_name LIKE '20261126053%' OR migration_name LIKE '%cleared_at' ORDER BY migration_name");
