@@ -355,6 +355,13 @@ describe('축 ⓪ 판정 DB - p3-64 를 마친 학생 DB', () => {
 // ── 이어진 흐름 - 교안 차례 그대로 ──────────────────────────────────────────
 // 학생은 수업 서버 하나를 켜 둔 채 Step 마다 파일을 고친다. 판정은 Step 마다 그 판의 서버로 갈아 끼우고 DB 는 이어 쓴다.
 const seen = {};
+// 답안 주제 1 - 적어 둔 번호와 실제 가장 최근 메시지가 다른 방
+const DRIFT = `SELECT c.id, c.last_message_id, m.id AS actual
+FROM conversations c
+LEFT JOIN LATERAL (
+  SELECT id FROM direct_messages WHERE conversation_id = c.id ORDER BY created_at DESC, id DESC LIMIT 1
+) m ON true
+WHERE c.last_message_id IS DISTINCT FROM m.id;`;
 const STAGE_1 = {
   step: 'start',
   run: async ({ base }) => {
@@ -376,6 +383,7 @@ const STAGE_2 = {
       seen.mb = await sendOk(jaehoon, 7, MB);
     });
     seen.afterMb = await lastIds();
+    seen.drift = await onDb(GATE_DB, DRIFT);
   },
 };
 const STAGE_3 = {
@@ -500,6 +508,23 @@ describe('축 ①~⑧ 이어진 흐름 - 교안 차례 그대로', () => {
   it('Step 3 겪기 - Step 2 판으로 보낸 14번은 대화방 행을 안 고친다(7번 방은 여전히 13)', () => {
     expect(seen.mb.id).toBe(14);
     expect(seen.afterMb).toEqual([[1, null], [7, 13], [8, 12]]);
+  });
+
+  it('답안 주제 1 - 14번 직후 어긋남 SQL 은 7번 방 한 줄(13 · 14) · 마이그레이션의 채우기 SQL 을 다시 돌리면 0줄', async () => {
+    expect(seen.drift.map((r) => [r.id, r.last_message_id, r.actual])).toEqual([[7, 13, 14]]);
+    const scratch = `${DB_PREFIX}_drift`;
+    await dropDb(scratch);
+    await admin(async (client) => { await kick(client, GATE_DB); await client.query(`CREATE DATABASE ${scratch} TEMPLATE ${GATE_DB}`); });
+    try {
+      await onDb(scratch, 'UPDATE conversations SET last_message_id = 13 WHERE id = 7');
+      expect((await onDb(scratch, DRIFT)).map((r) => [r.id, r.last_message_id, r.actual])).toEqual([[7, 13, 15]]);
+      const migration = read(version(2)('prisma/migrations/20261126084350_add_conversation_last_message/migration.sql'));
+      const fill = migration.slice(migration.indexOf('-- 이미 있는 대화방'));
+      await runSqlFile(scratch, fill);
+      expect(await onDb(scratch, DRIFT)).toEqual([]);
+    } finally {
+      await dropDb(scratch);
+    }
   });
 
   it('Step 3 - 트랜잭션 판으로 보낸 15번이 7번 방의 마지막 메시지가 된다 · 목록은 아직 만든 차례 [8, 7]', () => {
@@ -889,7 +914,17 @@ describe('축 ⑯ 과제 [기초] - 문의방 목록을 커서로 나눠 주기'
       expect(fresh.items.map((i) => i.id)).toEqual([1, 4]);
       expect(errOfLab(await jaehoon.lab('GET', '/api/inquiries?limit=0'))).toEqual([400, '한 번에 1~50개까지 받을 수 있어요']);
       expect(errOfLab(await jaehoon.lab('GET', '/api/inquiries?cursor=abc'))).toEqual([400, '커서 값이 올바르지 않아요']);
+      expect(JSON.parse(Buffer.from(p1.nextCursor, 'base64url').toString())).toEqual({ lastMessageAt: '2026-11-22T12:01:00.000Z', id: 2 });
     });
+  }, 60_000);
+
+  it('흔한 실수 - nextCursor 를 rows[limit] 으로 만들면 확인 2 가 빈 목록', async () => {
+    await labServe('hw1', 'homework1.js', async ({ tabOf }) => {
+      const jaehoon = await tabOf('jaehoon');
+      const p1 = (await jaehoon.lab('GET', '/api/inquiries?limit=2')).body;
+      const p2 = (await jaehoon.lab('GET', `/api/inquiries?limit=2&cursor=${p1.nextCursor}`)).body;
+      expect(p2.items).toEqual([]);
+    }, { edit: swap('nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null', 'nextCursor: hasNext ? encodeCursor(rows[limit]) : null') });
   }, 60_000);
 });
 const errOfLab = (res) => [res.status, res.body.message];
@@ -914,5 +949,31 @@ describe('축 ⑰ 과제 [응용] - 안 읽은 문의 수를 문의방에 적어
       expect(await unreadOf(jaehoon)).toEqual([[1, 0], [4, 0], [2, 2]]);
       expect(await unreadOf(sTab)).toEqual([[1, 1]]);
     });
+  }, 60_000);
+
+  const flowOf = async ({ base, lab, tabOf }) => {
+    const unreadOf = async (tab) => (await tab.lab('GET', '/api/inquiries')).body.items.map((i) => [i.id, i.unreadCount]);
+    const jaehoon = await tabOf('jaehoon');
+    const sTab = await tabOf('seoyeon');
+    const seoyeon = await personOf(base, 'seoyeon', lab);
+    await emitAck(seoyeon, 'inquiry:send', { inquiryId: 1, content: ASK });
+    seoyeon.close();
+    const sent = [await unreadOf(jaehoon), await unreadOf(sTab)];
+    const j = await personOf(base, 'jaehoon', lab);
+    await emitAck(j, 'inquiry:read', { inquiryId: 1 });
+    j.close();
+    return { sent, read: await unreadOf(jaehoon) };
+  };
+  it('흔한 실수 - 보낸 사람 쪽을 늘리면 확인 2 에서 jaehoon 은 1 그대로 · seoyeon 이 2', async () => {
+    await labServe('hw2', 'homework2.js', async (ctx) => {
+      const got = await flowOf(ctx);
+      expect(got.sent).toEqual([[[1, 1], [4, 0], [2, 2]], [[1, 2]]]);
+    }, { edit: swap('inquiry[unreadField(inquiry, otherId)] += 1;', 'inquiry[unreadField(inquiry, userId)] += 1;') });
+  }, 60_000);
+  it('흔한 실수 - 읽음에서 수를 0 으로 적지 않으면 확인 3 에서 1번 방이 2 그대로', async () => {
+    await labServe('hw2', 'homework2.js', async (ctx) => {
+      const got = await flowOf(ctx);
+      expect(got.read).toEqual([[1, 2], [4, 0], [2, 2]]);
+    }, { edit: swap('    inquiry[unreadField(inquiry, userId)] = 0;\n', '') });
   }, 60_000);
 });
