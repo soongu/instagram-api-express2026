@@ -217,7 +217,12 @@ model Conversation {
   // 그 자리의 사람이 이 방을 지운 시각 - 그때까지의 메시지는 그 사람에게 안 보인다. 지운 적이 없으면 비어 있다.
   aClearedAt     DateTime?       @map("a_cleared_at")
   bClearedAt     DateTime?       @map("b_cleared_at")
-  messages       DirectMessage[]
+  messages       DirectMessage[] @relation("Messages")
+  // 이 방의 가장 최근 메시지 - 목록의 미리보기는 이 번호로 메시지 한 행만 읽는다. 그 메시지가 지워지면 비워진다.
+  lastMessageId  Int?            @map("last_message_id")
+  lastMessage    DirectMessage?  @relation("LastMessage", fields: [lastMessageId], references: [id], onDelete: SetNull)
+  // 가장 최근 메시지를 보낸 시각 - 목록은 이 시각이 늦은 방부터 준다. 메시지가 아직 없는 방은 만든 시각이다.
+  lastMessageAt  DateTime        @default(now()) @map("last_message_at")
 
   @@unique([participantAId, participantBId])
   // UNIQUE 짝의 인덱스는 participant_a_id 가 앞이라 «b 자리에 내가 있는 방» 을 찾을 때는 못 쓴다.
@@ -229,13 +234,15 @@ model Conversation {
 model DirectMessage {
   id             Int          @id @default(autoincrement())
   conversationId Int          @map("conversation_id")
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation @relation("Messages", fields: [conversationId], references: [id], onDelete: Cascade)
   senderId       Int          @map("sender_id")
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
   content        String       @db.VarChar(1000)
   // 받는 사람이 읽었나 - 보낸 사람이 아니라 받는 사람이 대화방을 열면 true 가 된다.
   isRead         Boolean      @default(false) @map("is_read")
   createdAt      DateTime     @default(now()) @map("created_at")
+  // 이 메시지를 «마지막 메시지» 로 적어 둔 대화방 - 많아야 하나지만 UNIQUE 를 걸지 않아 배열이다.
+  lastOf         Conversation[] @relation("LastMessage")
 
   // 한 대화방의 메시지를 최신순으로 읽는다 - 같은 값으로 찾는 컬럼을 앞에, 차례를 정하는 컬럼을 뒤에.
   @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
