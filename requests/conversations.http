@@ -1,0 +1,24 @@
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### seoyeon과의 대화방 열기
+POST http://localhost:3000/api/v2/conversations
+Content-Type: application/json
+
+{
+  "username": "seoyeon"
+}
+
+### 없는 사람과의 대화방 열기
+POST http://localhost:3000/api/v2/conversations
+Content-Type: application/json
+
+{
+  "username": "nobody"
+}

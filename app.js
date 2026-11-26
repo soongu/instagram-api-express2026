@@ -13,6 +13,7 @@ import adminRouter from './routes/admin.js';
 import hashtagsRouter from './routes/hashtags.js';
 import profilesRouter from './routes/profiles.js';
 import membersRouter from './routes/members.js';
+import conversationsRouter from './routes/conversations.js';
 import { HttpError, NotFoundError } from './errors.js';
 import { sendError } from './responses.js';
 import { logger } from './middlewares/logger.js';
@@ -77,6 +78,7 @@ api.use('/posts/:id/comments', commentsRouter);
 api.use('/hashtags', hashtagsRouter);
 api.use('/profiles', profilesRouter);
 api.use('/members', membersRouter);
+api.use('/conversations', conversationsRouter);
 api.use('/uploads', uploadsRouter);
 api.use('/admin', adminRouter);
 
