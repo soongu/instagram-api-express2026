@@ -791,3 +791,48 @@ describe('축 ⑫ 과제 [응용] - 내 쪽에서만 지우기', () => {
     }, { edit: (dir, rel) => replaceIn(dir, rel, '    .filter((message) => clearedAt === null || message.createdAt > clearedAt)\n', '') });
   }, 120_000);
 });
+
+// 교안 Step 8 의 차례 - jaehoon 이 지우고, seoyeon 이 보고 나서 지운다.
+const STAGE_8 = { step: 8, run: async ({ base }) => {
+  const jaehoon = await loggedIn(base, 'jaehoon');
+  await jaehoon.send('DELETE', `${CONV}/1`);
+  await jaehoon.get(LIST());
+  await jaehoon.get(MSG(1));
+  const seoyeon = await loggedIn(base, 'seoyeon');
+  await seoyeon.get(MSG(1));
+  await seoyeon.send('DELETE', `${CONV}/1`);
+} };
+
+describe('축 ⑬ 다음 회차 판정 DB - p3-63-end.sql(교안 차례대로 이어진 흐름의 끝)', () => {
+  it('P363_KEEP 이면 흐름 끝 DB 를 p363_api_end 로 남긴다(덤프를 뜰 때만)', async () => {
+    if (!process.env.P363_KEEP) return;
+    await flow([...STAGES_TO_4, STAGE_5, STAGE_6, STAGE_7, STAGE_8]);
+    await admin(async (client) => {
+      await client.query(`DROP DATABASE IF EXISTS ${DB_PREFIX}_end`);
+      await kick(client, GATE_DB);
+      await client.query(`CREATE DATABASE ${DB_PREFIX}_end TEMPLATE ${GATE_DB}`);
+    });
+  }, 180_000);
+
+  it('덤프 - 방 1 · 6 · 7(방 1 은 두 사람 모두 지움 · 메시지 0) · 메시지는 minji 방의 둘 · CHECK 와 인덱스가 들어 있다 · 마이그레이션 셋', async () => {
+    const dump = read(P('test/fixtures/p3-63-end.sql')).split('\n').filter((line) => !line.startsWith('\\')).join('\n');
+    const db = `${DB_PREFIX}_dump`;
+    await dropDb(db);
+    await admin((client) => client.query(`CREATE DATABASE ${db}`));
+    try {
+      await runSqlFile(db, dump);
+      const rows = await onDb(db, `SELECT id, participant_a_id AS a, participant_b_id AS b,
+        a_cleared_at IS NOT NULL AS ac, b_cleared_at IS NOT NULL AS bc FROM conversations ORDER BY id`);
+      expect(rows.map((r) => [r.id, r.a, r.b, r.ac, r.bc])).toEqual([[1, 2, 43, true, true], [6, 2, 3, false, false], [7, 2, 44, false, false]]);
+      const msgs = await onDb(db, 'SELECT id, conversation_id AS c, content, is_read AS r FROM direct_messages ORDER BY id');
+      expect(msgs.map((m) => [m.id, m.c, m.content, m.r])).toEqual([[1, 6, '다음 주 스터디 몇 시에 해요?', false], [2, 6, '저녁 7시요!', false]]);
+      const check = await onDb(db, "SELECT conname FROM pg_constraint WHERE conname = 'conversations_a_before_b'");
+      expect(check).toHaveLength(1);
+      const migrations = await onDb(db, "SELECT migration_name FROM _prisma_migrations WHERE migration_name LIKE '20261126053%' OR migration_name LIKE '%cleared_at' ORDER BY migration_name");
+      expect(migrations.map((m) => m.migration_name.replace(/^\d+_/, ''))).toEqual(['add_conversations', 'conversations_a_before_b', 'add_conversation_cleared_at']);
+      expect(await count('SELECT count(*)::int AS n FROM follows', db)).toBe(34);
+    } finally {
+      await dropDb(db);
+    }
+  }, 60_000);
+});
