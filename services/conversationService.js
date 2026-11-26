@@ -228,8 +228,10 @@ export async function sendMessage(conversationId, myId, content) {
       select: { conversationId: true, ...historyFields },
     });
 
-    await tx.conversation.update({
-      where: { id: conversationId },
+    // 이 메시지보다 늦은 메시지가 이미 적혀 있으면 고치지 않는다 - 늦게 끝난 요청이 앞 메시지로 덮어쓰지 않게.
+    // update 는 맞는 행이 없으면 에러를 던져 메시지까지 되돌린다. updateMany 는 고친 수(0)만 돌려준다.
+    await tx.conversation.updateMany({
+      where: { id: conversationId, lastMessageAt: { lte: created.createdAt } },
       data: { lastMessageId: created.id, lastMessageAt: created.createdAt },
     });
 
