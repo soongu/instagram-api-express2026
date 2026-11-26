@@ -426,3 +426,26 @@ describe('축 ④ Step 4 - 줄마다 보는 사람 기준', () => {
     expect(counts[0]).toBeLessThanOrEqual(3);
   }, 90_000);
 });
+
+describe('축 ⑤ 다음 회차 판정 DB - p3-61-end.sql(교안 차례대로 이어진 흐름의 끝)', () => {
+  it('jaehoon 팔로잉 일곱(boram · admin.hong 을 더하고 seoyeon 을 취소) · admin.hong 1 · boram 1 · seoyeon 0 · 인덱스 둘이 들어 있다', async () => {
+    const dump = read(P('test/fixtures/p3-61-end.sql')).split('\n').filter((line) => !line.startsWith('\\')).join('\n');
+    const db = `${DB_PREFIX}_end`;
+    await dropDb(db);
+    await admin((client) => client.query(`CREATE DATABASE ${db}`));
+    try {
+      await runSqlFile(db, dump);
+      const mine = await onDb(db, `SELECT b.username FROM follows f JOIN users a ON a.id = f.follower_id JOIN users b ON b.id = f.following_id
+        WHERE a.username = 'jaehoon' ORDER BY f.created_at DESC, f.id DESC`);
+      expect(mine.map((r) => r.username)).toEqual(['boram', 'admin.hong', 'doyun', 'minji', 'dahye', 'seungwoo', 'nayeon']);
+      expect(await followerCountOf('admin.hong', db)).toBe(1);
+      expect(await followerCountOf('boram', db)).toBe(1);
+      expect(await followerCountOf('seoyeon', db)).toBe(0);
+      expect(await followerCountOf('minji', db)).toBe(21);
+      const idx = await onDb(db, "SELECT indexname FROM pg_indexes WHERE tablename = 'follows' ORDER BY indexname");
+      expect(idx.map((r) => r.indexname)).toEqual(['follows_follower_id_created_at_id_idx', 'follows_follower_id_following_id_key', 'follows_following_id_created_at_id_idx', 'follows_pkey']);
+    } finally {
+      await dropDb(db);
+    }
+  }, 60_000);
+});
