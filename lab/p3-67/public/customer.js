@@ -20,7 +20,7 @@ document.querySelector('#who').addEventListener('submit', (event) => {
 document.querySelector('#drop').addEventListener('click', async () => {
   const res = await fetch('/dev/drop?user=jaehoon', { method: 'POST' });
   const { closedCount } = await res.json();
-  document.querySelector('#dropped').textContent = `jaehoon 의 연결 ${closedCount}개를 끊었어요 - 10초 동안 다시 못 붙어요`;
+  document.querySelector('#dropped').textContent = `jaehoon의 연결 ${closedCount}개를 끊었어요 - 10초 동안 다시 못 붙어요`;
 });
 
 document.querySelector('#text').addEventListener('input', (event) => {
