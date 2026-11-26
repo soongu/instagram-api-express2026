@@ -67,15 +67,27 @@ export async function unfollow(username, followerId) {
 // 목록 한 줄에 실을 사람 정보.
 const personFields = { id: true, username: true, name: true, profileImage: true };
 
-// 그 사람을 팔로우하는 사람들 - 가장 최근에 팔로우한 사람이 먼저다.
-export async function getFollowers(username) {
+// 그 사람을 팔로우하는 사람들 - 가장 최근에 팔로우한 사람이 먼저다. 한 번에 limit 명씩 나눠 준다.
+export async function getFollowers(username, { limit = 20, cursor }) {
   const followingId = await findUserId(username);
 
   const rows = await prisma.follow.findMany({
-    where: { followingId },
+    where: {
+      followingId,
+      // 커서가 오면 «앞 페이지 마지막 사람» 다음부터다 - 그 사람의 번호보다 작은 사람들이다.
+      ...(cursor ? { followerId: { lt: cursor } } : {}),
+    },
     select: { follower: { select: personFields } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
   });
 
-  return rows.map((row) => row.follower);
+  const hasNext = rows.length > limit;
+  const items = rows.slice(0, limit).map((row) => row.follower);
+
+  return {
+    items,
+    hasNext,
+    nextCursor: hasNext ? items[items.length - 1].id : null,
+  };
 }

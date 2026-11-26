@@ -33,3 +33,10 @@ GET http://localhost:3000/api/v2/profiles/jaehoon
 
 ### minji의 팔로워
 GET http://localhost:3000/api/v2/profiles/minji/followers
+
+### minji의 팔로워 - 5명씩
+# @name firstFollowers
+GET http://localhost:3000/api/v2/profiles/minji/followers?limit=5
+
+### minji의 팔로워 - 다음 5명
+GET http://localhost:3000/api/v2/profiles/minji/followers?limit=5&cursor={{firstFollowers.data.nextCursor}}
