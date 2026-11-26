@@ -998,3 +998,28 @@ describe('축 ⑰ 과제 [응용] - 안 읽은 문의 수를 문의방에 적어
     }, { edit: swap('    inquiry[unreadField(inquiry, userId)] = 0;\n', '') });
   }, 60_000);
 });
+
+describe('축 ⑱ 다음 회차 판정 DB - p3-65-end.sql(교안 차례대로 이어진 흐름의 끝)', () => {
+  it('덤프 - 방 1 · 7 · 8 의 마지막 메시지 17 · 15 · 22 · 메시지 번호 22 까지 · 1번 방 a 쪽(jaehoon) 지운 시각이 16 과 17 사이', async () => {
+    const dump = read(P('test/fixtures/p3-65-end.sql')).split('\n').filter((line) => !line.startsWith('\\')).join('\n');
+    const db = `${DB_PREFIX}_dump`;
+    await dropDb(db);
+    await admin((client) => client.query(`CREATE DATABASE ${db}`));
+    try {
+      await runSqlFile(db, dump);
+      const rooms = await onDb(db, 'SELECT id, last_message_id AS m FROM conversations ORDER BY id');
+      expect(rooms.map((r) => [r.id, r.m])).toEqual([[1, 17], [7, 15], [8, 22]]);
+      const msgs = await onDb(db, 'SELECT id, conversation_id AS c FROM direct_messages ORDER BY id');
+      expect(msgs.map((m) => [m.id, m.c])).toEqual([
+        [1, 7], [2, 7], [8, 8], [9, 8], [10, 8], [12, 8], [13, 7], [14, 7], [15, 7], [16, 1], [17, 1],
+        [18, 8], [19, 8], [20, 8], [21, 8], [22, 8],
+      ]);
+      expect(await count('SELECT last_value::int AS n FROM direct_messages_id_seq', db)).toBe(22);
+      const [c1] = await onDb(db, `SELECT a_cleared_at > (SELECT created_at FROM direct_messages WHERE id = 16) AS after16,
+        a_cleared_at < (SELECT created_at FROM direct_messages WHERE id = 17) AS before17 FROM conversations WHERE id = 1`);
+      expect([c1.after16, c1.before17]).toEqual([true, true]);
+    } finally {
+      await dropDb(db);
+    }
+  }, 60_000);
+});
