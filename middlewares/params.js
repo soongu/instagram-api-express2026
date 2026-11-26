@@ -36,3 +36,15 @@ export function parseCommentId(req, res, next) {
   req.commentId = commentId;
   next();
 }
+
+export function parseConversationId(req, res, next) {
+  const conversationId = Number(req.params.id);
+
+  if (!Number.isInteger(conversationId)) {
+    next(new NotFoundError('CONVERSATION_NOT_FOUND'));
+    return;
+  }
+
+  req.conversationId = conversationId;
+  next();
+}

@@ -97,3 +97,42 @@ export async function getConversations(myId, { limit = 20, cursor }) {
     nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
   };
 }
+
+// 대화방 번호로 방을 찾는다 - 없으면 404 다.
+async function findConversation(conversationId) {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { id: true, participantAId: true, participantBId: true },
+  });
+
+  if (!conversation) throw new NotFoundError('CONVERSATION_NOT_FOUND');
+
+  return conversation;
+}
+
+// 이력 한 줄 - 목록의 마지막 메시지와 같은 값에 «받는 사람이 읽었나» 를 더한다.
+const historyFields = { ...messageFields, isRead: true };
+
+// 대화방의 메시지 - 가장 최근 메시지가 먼저다. 화면은 위로 올릴 때마다 그 앞을 limit 개씩 더 받는다.
+export async function getMessages(conversationId, { limit = 20, cursor }) {
+  await findConversation(conversationId);
+
+  const rows = await prisma.directMessage.findMany({
+    where: {
+      conversationId,
+      ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
+    },
+    select: historyFields,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const hasNext = rows.length > limit;
+  const items = rows.slice(0, limit);
+
+  return {
+    items,
+    hasNext,
+    nextCursor: hasNext ? encodeCursor(items[items.length - 1]) : null,
+  };
+}

@@ -401,3 +401,129 @@ describe('축 ③ Step 3 - 두 사람에 방 하나', () => {
     });
   }, 60_000);
 });
+
+/**
+ * 교안 차례대로 이어진 흐름 - 한 DB 에서 Step 마다 그 판의 서버로 갈아 끼운다(학생이 저장하면 서버가 다시 뜨는 것과 같다).
+ * stages 는 { step, run({ base, tail }) } 의 배열이다. 마이그레이션은 그 판에 새로 생긴 것만 걸린다(migrate deploy).
+ */
+const flow = async (stages) => {
+  await freshDb();
+  for (const { step, before, run, edit = null } of stages) {
+    if (before) await before();
+    const from = version(step);
+    generateFor(from);
+    migrate(from, GATE_DB);
+    const dir = studentDir(from);
+    if (edit) edit(dir);
+    await bootIn(dir, GATE_DB, run);
+  }
+};
+const MESSAGES_SQL = () => read(version(4)('lab/p3-63/messages.sql'));
+// Step 2~4 를 교안 차례대로 - 방 1(seoyeon) · 겪기 방 3·4 를 지우고 · SQL 로 방 6(minji) · 7(doyun)과 메시지 일곱.
+// 이미 있는 방을 다시 열면(ON CONFLICT DO NOTHING) 행은 안 들어가도 번호는 하나 쓴다 - 2 와 5 가 그렇게 비었다.
+const STAGES_TO_4 = [
+  { step: 2, run: async ({ base }) => {
+    const jaehoon = await loggedIn(base, 'jaehoon');
+    await open(jaehoon, 'seoyeon');
+    await open(jaehoon, 'seoyeon');
+    await open(jaehoon, 'nobody');
+    await open(jaehoon, 'jaehoon');
+    await open(await loggedIn(base, 'seoyeon'), 'jaehoon');
+  } },
+  { step: 3, before: () => onDb(GATE_DB, 'DELETE FROM conversations WHERE participant_a_id >= participant_b_id'), run: async ({ base }) => {
+    await open(await loggedIn(base, 'jaehoon'), 'jaehoon');
+    await open(await loggedIn(base, 'seoyeon'), 'jaehoon');
+  } },
+  { step: 4, before: () => runSqlFile(GATE_DB, MESSAGES_SQL()), run: async () => {} },
+];
+const LIST = (query = '') => `${CONV}${query}`;
+const brief4 = (item) => [item.id, item.otherUser.username, item.lastMessage?.content ?? null];
+
+describe('축 ④ Step 4 - 내 대화방 목록', () => {
+  it('이어진 흐름 - 방 번호 1 · 6 · 7(다시 열기가 번호를 하나씩 쓴다) · jaehoon 의 목록은 만든 차례(seoyeon · doyun · minji) · 마지막 메시지 · doyun 방은 null', async () => {
+    await flow([...STAGES_TO_4, { step: 4, run: async ({ base }) => {
+      const rows = await onDb(GATE_DB, 'SELECT id, participant_a_id AS a, participant_b_id AS b FROM conversations ORDER BY id');
+      expect(rows.map((r) => [r.id, r.a, r.b])).toEqual([[1, 2, 43], [6, 2, 3], [7, 2, 44]]);
+      expect(await count('SELECT count(*)::int AS n FROM direct_messages')).toBe(7);
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      const res = await jaehoon.get(LIST());
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body.data)).toEqual(['items', 'hasNext', 'nextCursor']);
+      expect(res.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [7, 'doyun', null], [6, 'minji', '저녁 7시요!']]);
+      expect(Object.keys(res.body.data.items[0])).toEqual(['id', 'createdAt', 'otherUser', 'lastMessage']);
+      expect(Object.keys(res.body.data.items[0].lastMessage)).toEqual(['id', 'senderId', 'content', 'createdAt']);
+      expect(res.body.data.items[0].lastMessage).toMatchObject({ id: 7, senderId: SEOYEON_ID });
+      expect(res.body.data).toMatchObject({ hasNext: false, nextCursor: null });
+      // seoyeon 의 목록에는 jaehoon 과의 방 하나 - 상대는 jaehoon 이다.
+      const seoyeon = await loggedIn(base, 'seoyeon');
+      expect((await seoyeon.get(LIST())).body.data.items.map(brief4)).toEqual([[1, 'jaehoon', '네, 꼭요!']]);
+      // 방이 없는 boram 은 빈 목록
+      expect((await (await loggedIn(base, 'boram')).get(LIST())).body.data).toEqual({ items: [], hasNext: false, nextCursor: null });
+    } }]);
+  }, 120_000);
+
+  it('2개씩 - 첫 페이지 seoyeon · doyun 다음 minji · 잘못된 커서 400 · limit 51 은 400 · 만들기 응답에도 lastMessage', async () => {
+    await flow([...STAGES_TO_4, { step: 4, run: async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      const one = await jaehoon.get(LIST('?limit=2'));
+      expect(one.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [7, 'doyun', null]]);
+      expect(one.body.data.hasNext).toBe(true);
+      const two = await jaehoon.get(LIST(`?limit=2&cursor=${one.body.data.nextCursor}`));
+      expect(two.body.data.items.map(brief4)).toEqual([[6, 'minji', '저녁 7시요!']]);
+      expect(two.body.data).toMatchObject({ hasNext: false, nextCursor: null });
+      expect(errOf(await jaehoon.get(LIST('?cursor=abc')))).toEqual([400, 'INVALID_CURSOR']);
+      expect(errOf(await jaehoon.get(LIST('?limit=51')))).toEqual([400, 'VALIDATION_FAILED']);
+      const again = await open(jaehoon, 'minji');
+      expect([again.status, again.body.data.id, again.body.data.lastMessage.content]).toEqual([200, 6, '저녁 7시요!']);
+      const del = await jaehoon.send('DELETE', CONV);
+      expect([del.status, del.headers.get('allow')]).toEqual([405, 'GET, POST']);
+    } }]);
+  }, 120_000);
+
+  it('겪기 판 - 두 OR 를 한 객체에 펼치면 커서의 OR 가 덮어 둘째 페이지에 남의 방까지 섞인다', async () => {
+    let second = null;
+    await flow([...STAGES_TO_4, { step: 4, before: async () => {
+      // boram 이 seoyeon 과 연 방 - jaehoon 의 방이 아니다.
+      await onDb(GATE_DB, 'INSERT INTO conversations (participant_a_id, participant_b_id, created_at) VALUES (43, 48, now() - interval \'2 days\')');
+    }, run: async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      const one = await jaehoon.get(LIST('?limit=2'));
+      expect(one.body.data.items.map(brief4)).toEqual([[1, 'seoyeon', '네, 꼭요!'], [7, 'doyun', null]]);
+      const two = await jaehoon.get(LIST(`?limit=2&cursor=${one.body.data.nextCursor}`));
+      second = two.body.data.items.map((item) => item.id);
+    }, edit: (dir) => replaceIn(dir, 'services/conversationService.js',
+      `AND: [
+        // 내가 a 자리에 있는 방과 b 자리에 있는 방
+        { OR: [{ participantAId: myId }, { participantBId: myId }] },
+        cursor ? afterCursor(decodeCursor(cursor)) : {},
+      ],`,
+      `OR: [{ participantAId: myId }, { participantBId: myId }],
+      ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),`) }]);
+    // 둘째 페이지에 seoyeon·boram 의 방(8)이 섞인다.
+    expect(second).toEqual([8, 6]);
+  }, 120_000);
+});
+
+describe('축 ④-쿼리 Step 4 - 마지막 메시지 하나를 보이려고 그 방들의 메시지를 전부 읽는다(🙋 의 주장)', () => {
+  it('목록 한 번에 쿼리 넷 · 메시지 쿼리는 방 번호 IN 셋 · LIMIT 이 없다 · join 전략은 preview 없이 500', async () => {
+    const logs = [];
+    await flow([...STAGES_TO_4, { step: 4, edit: withQueryLog, run: async ({ base, tail }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      const before = queryLines(tail()).length;
+      await jaehoon.get(LIST());
+      await new Promise((r) => setTimeout(r, 200));
+      logs.push(...queryLines(tail()).slice(before));
+    } }]);
+    expect(logs).toHaveLength(4);
+    const messages = logs.find((line) => line.includes('FROM "public"."direct_messages"'));
+    expect(messages).toMatch(/"conversation_id" IN \(\$1,\$2,\$3\)/);
+    expect(messages).not.toMatch(/LIMIT/);
+    let status = null;
+    await flow([...STAGES_TO_4, { step: 4, edit: (dir) => replaceIn(dir, 'services/conversationService.js',
+      '    select: conversationFields,\n    orderBy', "    relationLoadStrategy: 'join',\n    select: conversationFields,\n    orderBy"),
+    run: async ({ base }) => {
+      status = (await (await loggedIn(base, 'jaehoon')).get(LIST())).status;
+    } }]);
+    expect(status).toBe(500);
+  }, 180_000);
+});

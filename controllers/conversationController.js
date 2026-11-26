@@ -17,3 +17,10 @@ export async function list(req, res) {
 
   sendData(res, page);
 }
+
+// 그 대화방의 메시지 이력
+export async function messages(req, res) {
+  const page = await conversationService.getMessages(req.conversationId, res.locals.query);
+
+  sendData(res, page);
+}
