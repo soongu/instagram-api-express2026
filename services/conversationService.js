@@ -205,9 +205,29 @@ async function findMyConversation(conversationId, myId) {
 const historyFields = { ...messageFields, isRead: true };
 
 // 대화방의 메시지 - 가장 최근 메시지가 먼저다. 화면은 위로 올릴 때마다 그 앞을 limit 개씩 더 받는다.
-export async function getMessages(conversationId, myId, { limit = 20, cursor }) {
+// after 를 주면 그 번호 뒤의 메시지를 오래된 것부터 준다 - 연결이 끊긴 사이에 온 메시지를 채울 때 쓴다.
+export async function getMessages(conversationId, myId, { limit = 20, cursor, after }) {
   const conversation = await findMyConversation(conversationId, myId);
   const clearedAt = myClearedAt(conversation, myId);
+
+  if (after !== undefined) {
+    const rows = await prisma.directMessage.findMany({
+      where: {
+        AND: [
+          { conversationId },
+          clearedAt ? { createdAt: { gt: clearedAt } } : {},
+          // 메시지 번호는 만든 차례대로 붙는다 - 화면이 가진 가장 최근 번호보다 큰 것이 그 뒤에 만든 메시지다.
+          { id: { gt: after } },
+        ],
+      },
+      select: historyFields,
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+    });
+
+    // 더 있으면(hasNext) 화면은 마지막 번호로 다시 묻는다. 위로 올리는 커서와 방향이 달라 nextCursor 는 주지 않는다.
+    return { items: rows.slice(0, limit), hasNext: rows.length > limit, nextCursor: null };
+  }
 
   const rows = await prisma.directMessage.findMany({
     where: {

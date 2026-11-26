@@ -13,9 +13,14 @@ export const conversationListQuerySchema = z.object({
 });
 
 // 메시지 이력 주소의 쿼리 문자열 - 한 번에 limit 개이고, 없으면 20개 · 많아야 50개다.
+// after 를 주면 그 번호 «뒤» 의 메시지를 받는다(연결이 끊긴 사이에 온 메시지). cursor 와 함께 쓰지 않는다.
 export const messageListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional().describe('한 번에 받을 메시지 수 - 없으면 20'),
   cursor: z.string().min(1).optional().describe('앞 응답의 nextCursor 그대로'),
+  after: z.coerce.number().int().positive().optional().describe('이 번호 뒤의 메시지만 오래된 것부터 - cursor 와 함께 쓰지 않는다'),
+}).refine((query) => query.after === undefined || query.cursor === undefined, {
+  message: 'after 와 cursor 는 함께 쓰지 않아요',
+  path: ['after'],
 });
 
 // 메시지 보내기 - 연결로 받는 값이다. 보낸 사람은 받지 않는다(연결이 열릴 때 확인한 사람이다).

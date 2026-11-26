@@ -293,7 +293,7 @@ export const openapi = {
         summary: '메시지 이력 - 가장 최근 메시지가 먼저, 내가 지운 시각 뒤의 메시지만',
         parameters: queryParameters(messageListQuerySchema),
         responses: {
-          200: { description: '메시지 한 페이지', content: json(data(ref('MessagePage'))) },
+          200: { description: '메시지 한 페이지 - after 를 주면 그 번호 뒤의 메시지를 오래된 것부터(nextCursor 는 null)', content: json(data(ref('MessagePage'))) },
           400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
           404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },

@@ -83,6 +83,9 @@ GET http://localhost:3000/api/v2/conversations/1/messages?limit=2
 ### seoyeon과의 대화방 메시지 - 그 앞 2개
 GET http://localhost:3000/api/v2/conversations/1/messages?limit=2&cursor={{firstMessages.data.nextCursor}}
 
+### seoyeon과의 대화방 메시지 - 84번 뒤
+GET http://localhost:3000/api/v2/conversations/1/messages?after=84
+
 ### 없는 대화방의 메시지
 GET http://localhost:3000/api/v2/conversations/999/messages
 
