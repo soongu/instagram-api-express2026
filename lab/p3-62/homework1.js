@@ -1,5 +1,6 @@
 // ~/instagram-api/lab/p3-62/homework1.js
 import express from 'express';
+import { Server } from 'socket.io';
 
 const app = express();
 app.use(express.json());
@@ -20,8 +21,13 @@ app.post('/bids', (req, res) => {
   item.price = price;
   item.bidder = name;
   res.status(201).json(item);
+
+  // 받아들인 입찰은 연결로 모두에게 알린다.
+  io.emit('price', item);
 });
 
-app.listen(4006, () => {
+const server = app.listen(4006, () => {
   console.log('경매 서버가 http://localhost:4006 에서 기다리고 있어요.');
 });
+
+const io = new Server(server);

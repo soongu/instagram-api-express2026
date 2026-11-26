@@ -14,6 +14,7 @@
     </form>
     <p id="notice"></p>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script>
       const name = new URLSearchParams(location.search).get('name');
       const notice = document.querySelector('#notice');
@@ -28,8 +29,10 @@
         show(await response.json());
       }
 
-      load();
-      setInterval(load, 2000);
+      // 붙을 때 지금 가격을 한 번 받고, 그 뒤로는 서버가 알려 줄 때만 바꾼다.
+      const socket = io();
+      socket.on('connect', load);
+      socket.on('price', show);
 
       document.querySelector('#form').addEventListener('submit', async (event) => {
         event.preventDefault();
