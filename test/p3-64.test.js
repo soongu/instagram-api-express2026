@@ -890,13 +890,14 @@ describeChrome('축 ⑬ 시험 화면 - 브라우저에서', () => {
       const dir2 = studentDir(version(2));
       let a;
       let b;
-      await bootIn(dir1, GATE_DB, async ({ base }) => {
+      await bootIn(dir1, GATE_DB, async ({ base, tail }) => {
         a = await page(A, base);
         await loginOn(a, 'jaehoon', 'jaehoon1234');
         await waitStatus(a, '연결됐어요');
         b = await page(B, base);
         await loginOn(b, 'jaehoon', 'wrong');
         await waitStatus(b, '연결됐어요');
+        expect(logLines(tail, /연결이 열렸어요/)).toEqual(['연결이 열렸어요. 지금 연결은 1개예요.', '연결이 열렸어요. 지금 연결은 2개예요.']);
       });
       expect([await statusOf(a), await statusOf(b)]).toEqual(['연결이 끊겼어요', '연결이 끊겼어요']);
       await bootIn(dir2, GATE_DB, async ({ tail }) => {
@@ -904,6 +905,10 @@ describeChrome('축 ⑬ 시험 화면 - 브라우저에서', () => {
         await waitStatus(b, '연결하지 못했어요 - 로그인이 필요해요');
         await sleep(500);
         expect(logLines(tail, /연결이 열렸어요/)).toEqual(['2번 사용자의 연결이 열렸어요. 지금 연결은 1개예요.']);
+        await loginOn(b, 'doyun', 'instagram1234');
+        await waitStatus(b, '연결됐어요');
+        await sleep(300);
+        expect(logLines(tail, /연결이 열렸어요/)).toEqual(['2번 사용자의 연결이 열렸어요. 지금 연결은 1개예요.', '44번 사용자의 연결이 열렸어요. 지금 연결은 2개예요.']);
       });
     } finally {
       await A.close();
@@ -1010,5 +1015,77 @@ describe('축 ②-쿠키 io.engine.use(cookieParser()) 를 빼면', () => {
       const jaehoon = await personOf(base, 'jaehoon');
       expect([jaehoon.connected, jaehoon.data]).toEqual([false, { code: 'LOGIN_REQUIRED' }]);
     }, { edit: (dir) => replaceIn(dir, 'realtime.js', '  io.engine.use(cookieParser());\n', '') });
+  }, 60_000);
+});
+
+describe('축 ⑧-틀린 답 직접 해보기 1 - 빈칸만 바꾼 판 넷', () => {
+  const ANSWERS = {
+    a: ['socket.data.userId = Number(payload.sub);', 'socket.data.userId = payload.sub;'],
+    b: ['socket.join(`user:${userId}`);', 'socket.join(userId);'],
+    c: ['io.to(`user:${inquiry.buyerId}`).to(`user:${sellerIdOf(inquiry)}`)', 'io.to(`user:${inquiry.buyerId}`).to(`user:${inquiry.buyerId}`)'],
+    d: ['io.to(`user:${inquiry.buyerId}`).to(`user:${sellerIdOf(inquiry)}`)', 'io.to(`user:${sellerIdOf(inquiry)}`).to(`user:${sellerIdOf(inquiry)}`)'],
+  };
+  const run = (key) => async ({ base, lab }) => {
+    const jaehoon = await labPerson(base, lab, 'jaehoon');
+    const seoyeon = await labPerson(base, lab, 'seoyeon');
+    jaehoon.socket.emit('inquiry:send', { inquiryId: 1, content: '내일 보내 드릴게요' });
+    await settle();
+    const got = { jaehoon: jaehoon.events.filter(([e]) => e === 'inquiry:message').map(([, m]) => m.senderId), seoyeon: seoyeon.events.filter(([e]) => e === 'inquiry:message').map(([, m]) => m.senderId) };
+    jaehoon.close();
+    seoyeon.close();
+    return got;
+  };
+  it('첫 빈칸 payload.sub - senderId 가 글자 "2"', async () => {
+    let got;
+    await labServe('lab1', 'practice1.js', async (x) => { got = await run('a')(x); }, { edit: swap(...ANSWERS.a) });
+    expect(got).toEqual({ jaehoon: ['2'], seoyeon: ['2'] });
+  }, 60_000);
+  it('둘째 빈칸 userId - 아무 탭에도 안 온다', async () => {
+    let got;
+    await labServe('lab1', 'practice1.js', async (x) => { got = await run('b')(x); }, { edit: swap(...ANSWERS.b) });
+    expect(got).toEqual({ jaehoon: [], seoyeon: [] });
+  }, 60_000);
+  it('셋째·넷째 모두 buyerId - jaehoon(파는 사람)에게 안 온다 · 모두 sellerIdOf - seoyeon 에게 안 온다', async () => {
+    let got;
+    await labServe('lab1', 'practice1.js', async (x) => { got = await run('c')(x); }, { edit: swap(...ANSWERS.c) });
+    expect(got).toEqual({ jaehoon: [], seoyeon: [2] });
+    await labServe('lab1', 'practice1.js', async (x) => { got = await run('d')(x); }, { edit: swap(...ANSWERS.d) });
+    expect(got).toEqual({ jaehoon: [2], seoyeon: [] });
+  }, 90_000);
+});
+
+describe('축 ⑨-틀린 답 직접 해보기 2 - 빈칸만 바꾼 판 넷', () => {
+  const firstAck = async ({ base, lab, tail }) => {
+    const jaehoon = await labPerson(base, lab, 'jaehoon');
+    const one = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 1, content: '  내일 보내 드릴게요  ' }, 800);
+    const three = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 3, content: 'x' }, 800);
+    await settle();
+    const blank = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 1, content: '   ' }, 800);
+    jaehoon.close();
+    return { one, three, blank, log: tail() };
+  };
+  it('첫 빈칸 buyerId 한 번 더 - 확인 1 이 «그런 문의방은 없어요»', async () => {
+    let got;
+    await labServe('lab2', 'practice2.js', async (x) => { got = await firstAck(x); }, { edit: swap('inquiry.buyerId === myId || sellerIdOf(inquiry) === myId', 'inquiry.buyerId === myId || inquiry.buyerId === myId') });
+    expect(got.one).toEqual({ error: { message: '그런 문의방은 없어요' } });
+  }, 60_000);
+  it('둘째 빈칸 inquiry - 확인 1 이 «그런 문의방은 없어요» · 확인 2 에서 서버가 TypeError 로 꺼진다', async () => {
+    let got;
+    await labServe('lab2', 'practice2.js', async (x) => { got = await firstAck(x); }, { edit: swap('if (!inquiry) {', 'if (inquiry) {') });
+    expect(got.one).toEqual({ error: { message: '그런 문의방은 없어요' } });
+    expect(got.three).toEqual({ timeout: 'socket has been disconnected' });
+    expect(got.log).toMatch(/TypeError/);
+  }, 60_000);
+  it('셋째 빈칸 reply - 확인 3 에서 결과가 안 온다', async () => {
+    let got;
+    await labServe('lab2', 'practice2.js', async (x) => { got = await firstAck(x); }, { edit: swap("reply(ack, { error: { message: '문의는 1~500자로 보내 주세요' } });", "reply(reply, { error: { message: '문의는 1~500자로 보내 주세요' } });") });
+    expect(got.one.data.content).toBe('내일 보내 드릴게요');
+    expect(got.blank).toEqual({ timeout: 'operation has timed out' });
+  }, 60_000);
+  it('넷째 빈칸 message - 확인 1 이 { data } 없이 메시지 그대로', async () => {
+    let got;
+    await labServe('lab2', 'practice2.js', async (x) => { got = await firstAck(x); }, { edit: swap('reply(ack, { data: message });', 'reply(ack, message);') });
+    expect(got.one).toMatchObject({ id: 10, inquiryId: 1, content: '내일 보내 드릴게요' });
+    expect(got.one.data).toBeUndefined();
   }, 60_000);
 });
