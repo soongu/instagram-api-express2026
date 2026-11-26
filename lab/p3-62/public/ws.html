@@ -1,0 +1,25 @@
+<!-- ~/instagram-api/lab/p3-62/public/ws.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebSocket 채팅</title>
+  </head>
+  <body>
+    <h1>WebSocket 채팅</h1>
+    <p id="status">연결하는 중...</p>
+
+    <script>
+      const status = document.querySelector('#status');
+      const socket = new WebSocket(`ws://${location.host}`);
+
+      socket.addEventListener('open', () => {
+        status.textContent = '연결됐어요';
+      });
+
+      socket.addEventListener('close', () => {
+        status.textContent = '연결이 끊겼어요';
+      });
+    </script>
+  </body>
+</html>
