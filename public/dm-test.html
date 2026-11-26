@@ -1,0 +1,28 @@
+<!-- ~/instagram-api/public/dm-test.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>DM 시험 화면</title>
+  </head>
+  <body>
+    <h1>DM 시험 화면</h1>
+    <form id="login">
+      <input id="username" placeholder="사용자 이름" autocomplete="off" />
+      <input id="password" type="password" placeholder="비밀번호" />
+      <button>로그인하고 연결</button>
+    </form>
+    <p id="status">연결하지 않았어요</p>
+    <form id="send">
+      <input id="room" placeholder="대화방 번호" autocomplete="off" />
+      <input id="text" placeholder="메시지" autocomplete="off" />
+      <button>보내기</button>
+    </form>
+    <p id="result"></p>
+    <p id="typing"></p>
+    <ul id="list"></ul>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/dm-test.js"></script>
+  </body>
+</html>
