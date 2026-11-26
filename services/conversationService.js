@@ -26,24 +26,43 @@ const conversationFields = {
   lastMessageAt: true,
   aClearedAt: true,
   bClearedAt: true,
+  participantAId: true,
   participantA: { select: personFields },
   participantB: { select: personFields },
   lastMessage: { select: messageFields },
 };
 
-// 대화방 한 줄에 «내가 안 읽은 메시지 수» 를 더한다 - 상대가 보냈고 아직 안 읽은 메시지를 센다.
-// 누가 보는지에 따라 수가 달라서 내 번호를 받아 고를 값을 만든다.
-function conversationFieldsFor(myId) {
-  return {
-    ...conversationFields,
-    _count: { select: { messages: { where: { senderId: { not: myId }, isRead: false } } } },
-  };
+// 이 방에서 내 자리의 «지운 시각» - 내가 a 자리면 aClearedAt, b 자리면 bClearedAt 이다.
+function myClearedAt(conversation, myId) {
+  return conversation.participantAId === myId ? conversation.aClearedAt : conversation.bClearedAt;
+}
+
+// 방마다 내가 안 읽은 메시지 수 - 상대가 보냈고, 아직 안 읽었고, 내가 지운 시각 뒤에 온 메시지를 센다.
+// 지운 시각은 방마다 달라서 _count 의 where 하나로는 못 적는다. 방마다 조건을 하나씩 만들어 OR 로 묶고,
+// groupBy 로 방 번호마다 나눠 한 번에 센다. 안 읽은 것이 없는 방은 결과에 없다.
+async function countUnread(conversations, myId) {
+  if (conversations.length === 0) return new Map();
+
+  const groups = await prisma.directMessage.groupBy({
+    by: ['conversationId'],
+    where: {
+      senderId: { not: myId },
+      isRead: false,
+      OR: conversations.map((conversation) => {
+        const clearedAt = myClearedAt(conversation, myId);
+        return clearedAt ? { conversationId: conversation.id, createdAt: { gt: clearedAt } } : { conversationId: conversation.id };
+      }),
+    },
+    _count: { _all: true },
+  });
+
+  return new Map(groups.map((group) => [group.conversationId, group._count._all]));
 }
 
 // 두 자리 가운데 내가 아닌 쪽이 상대다. 응답에는 상대만 싣는다.
 // 메시지가 하나도 없는 방은 lastMessage 가 null 이다. 내가 지운 시각 전의 메시지도 미리보기로 주지 않는다.
-// 지운 시각은 그 사람만의 기록이라 응답에 싣지 않는다.
-function toConversation({ participantA, participantB, aClearedAt, bClearedAt, lastMessage, _count, ...conversation }, myId) {
+// 지운 시각은 그 사람만의 기록이라 응답에 싣지 않는다. 안 읽은 수는 countUnread 가 센 것을 받는다.
+function toConversation({ participantAId, participantA, participantB, aClearedAt, bClearedAt, lastMessage, ...conversation }, myId, unread) {
   const iAmA = participantA.id === myId;
   const clearedAt = iAmA ? aClearedAt : bClearedAt;
 
@@ -51,7 +70,7 @@ function toConversation({ participantA, participantB, aClearedAt, bClearedAt, la
     ...conversation,
     otherUser: iAmA ? participantB : participantA,
     lastMessage: lastMessage && (!clearedAt || lastMessage.createdAt > clearedAt) ? lastMessage : null,
-    unreadCount: _count.messages,
+    unreadCount: unread.get(conversation.id) ?? 0,
   };
 }
 
@@ -76,10 +95,10 @@ export async function openConversation(username, myId) {
 
   const conversation = await prisma.conversation.findUnique({
     where: { participantAId_participantBId: pair },
-    select: conversationFieldsFor(myId),
+    select: conversationFields,
   });
 
-  return { created: count > 0, conversation: toConversation(conversation, myId) };
+  return { created: count > 0, conversation: toConversation(conversation, myId, await countUnread([conversation], myId)) };
 }
 
 // 대화방 하나 - 목록의 한 줄과 같은 모양이다. 없는 방과 남의 방은 404 다.
@@ -89,10 +108,10 @@ export async function getConversation(conversationId, myId) {
 
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    select: conversationFieldsFor(myId),
+    select: conversationFields,
   });
 
-  return toConversation(conversation, myId);
+  return toConversation(conversation, myId, await countUnread([conversation], myId));
 }
 
 // 커서 다음 행은 시각이 더 이르거나, 시각이 같고 번호가 더 작은 행이다 - 게시물 목록과 같은 차례다.
@@ -134,7 +153,7 @@ export async function getConversations(myId, { limit = 20, cursor }) {
         cursor ? afterListCursor(decodeCursor(cursor, 'lastMessageAt')) : {},
       ],
     },
-    select: conversationFieldsFor(myId),
+    select: conversationFields,
     orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
   });
@@ -142,11 +161,26 @@ export async function getConversations(myId, { limit = 20, cursor }) {
   const hasNext = rows.length > limit;
   const page = rows.slice(0, limit);
 
+  const unread = await countUnread(page, myId);
+
   return {
-    items: page.map((row) => toConversation(row, myId)),
+    items: page.map((row) => toConversation(row, myId, unread)),
     hasNext,
     nextCursor: hasNext ? encodeCursor(page[page.length - 1], 'lastMessageAt') : null,
   };
+}
+
+// 안 읽은 메시지가 있는 내 대화방 수 - 화면의 사이드바가 «메시지» 옆에 점을 찍을지 정한다.
+// 내 방을 모두 읽고(번호와 지운 시각만) 목록과 같은 방법으로 센다.
+export async function countUnreadConversations(myId) {
+  const conversations = await prisma.conversation.findMany({
+    where: { OR: [{ participantAId: myId }, { participantBId: myId }] },
+    select: { id: true, participantAId: true, aClearedAt: true, bClearedAt: true },
+  });
+
+  const unread = await countUnread(conversations, myId);
+
+  return { conversationCount: unread.size };
 }
 
 // 내가 참여한 대화방을 찾는다 - 없는 방과 남의 방에 똑같이 404 로 답한다.
@@ -165,11 +199,6 @@ async function findMyConversation(conversationId, myId) {
   }
 
   return conversation;
-}
-
-// 이 방에서 내 자리의 «지운 시각» - 내가 a 자리면 aClearedAt, b 자리면 bClearedAt 이다.
-function myClearedAt(conversation, myId) {
-  return conversation.participantAId === myId ? conversation.aClearedAt : conversation.bClearedAt;
 }
 
 // 이력 한 줄 - 목록의 마지막 메시지와 같은 값에 «받는 사람이 읽었나» 를 더한다.

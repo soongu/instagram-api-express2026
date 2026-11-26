@@ -259,6 +259,15 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/conversations/unread': {
+      get: {
+        summary: '안 읽은 메시지가 있는 내 대화방 수 - 사이드바의 «메시지» 점',
+        responses: {
+          200: { description: '방 수 - 없으면 0', content: json(data(ref('UnreadConversations'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
     '/api/v2/conversations/{id}': {
       parameters: [pathParameter('id', '대화방 번호')],
       get: {
@@ -477,6 +486,13 @@ export const openapi = {
           lastMessageAt: { type: 'string', format: 'date-time', description: '가장 최근 메시지를 보낸 시각 - 목록은 이 시각이 늦은 방부터 준다. 메시지가 없으면 만든 시각' },
           otherUser: ref('ConversationPerson'),
           lastMessage: { oneOf: [ref('LastMessage'), { type: 'null' }], description: '가장 최근 메시지 - 메시지가 없으면 null' },
+          unreadCount: { type: 'integer', description: '내가 안 읽은 메시지 수 - 상대가 보냈고 아직 안 읽었고 내가 지운 시각 뒤에 온 것' },
+        },
+      },
+      UnreadConversations: {
+        type: 'object',
+        properties: {
+          conversationCount: { type: 'integer', description: '안 읽은 메시지가 있는 내 대화방 수' },
         },
       },
       LastMessage: {

@@ -70,6 +70,9 @@ GET http://localhost:3000/api/v2/conversations?limit=2&cursor={{firstConversatio
 ### seoyeon과의 대화방 하나
 GET http://localhost:3000/api/v2/conversations/1
 
+### 안 읽은 메시지가 있는 대화방 수
+GET http://localhost:3000/api/v2/conversations/unread
+
 ### seoyeon과의 대화방 메시지
 GET http://localhost:3000/api/v2/conversations/1/messages
 

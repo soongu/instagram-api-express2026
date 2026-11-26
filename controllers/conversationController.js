@@ -18,6 +18,13 @@ export async function list(req, res) {
   sendData(res, page);
 }
 
+// 안 읽은 메시지가 있는 내 대화방 수
+export async function unread(req, res) {
+  const result = await conversationService.countUnreadConversations(res.locals.userId);
+
+  sendData(res, result);
+}
+
 // 대화방 하나 - 그 방에 참여한 사람만 받는다.
 export async function get(req, res) {
   const conversation = await conversationService.getConversation(req.conversationId, res.locals.userId);
