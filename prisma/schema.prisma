@@ -112,6 +112,9 @@ model Follow {
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@unique([followerId, followingId])
+  // 목록 둘을 위한 인덱스 - 같은 사람의 행을 모아 두고, 그 안에서 시각과 번호의 차례로 둔다.
+  @@index([followingId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([followerId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("follows")
 }
 
