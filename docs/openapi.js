@@ -7,6 +7,7 @@ import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } fro
 import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
 import { profilePostsQuerySchema, followListQuerySchema } from '../schemas/profileSchema.js';
 import { memberSearchQuerySchema, profileImageSchema } from '../schemas/memberSchema.js';
+import { conversationCreateSchema, conversationListQuerySchema, messageListQuerySchema } from '../schemas/conversationSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -236,6 +237,63 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/conversations': {
+      get: {
+        summary: '내 대화방 목록 - 늦게 만든 방이 먼저, 내가 지운 방은 빠진다',
+        parameters: queryParameters(conversationListQuerySchema),
+        responses: {
+          200: { description: '대화방 한 페이지 - 방이 없으면 빈 목록', content: json(data(ref('ConversationPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+      post: {
+        summary: '대화방 열기 - 그 사람과의 방이 없으면 만들고, 있으면 있는 방을 준다',
+        requestBody: { required: true, content: json(toSchema(conversationCreateSchema)) },
+        responses: {
+          200: { description: '이미 있던 대화방', content: json(data(ref('Conversation'))) },
+          201: { description: '새로 만든 대화방 - Location 헤더에 그 방의 주소', content: json(data(ref('Conversation'))) },
+          400: { description: '보낸 내용이 규칙에 안 맞거나 나 자신과의 방', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'CANNOT_MESSAGE_SELF')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/conversations/{id}': {
+      parameters: [pathParameter('id', '대화방 번호')],
+      delete: {
+        summary: '대화방을 내 쪽에서만 지우기 - 상대에게는 그대로 보이고, 두 사람이 모두 지운 메시지는 실제로 지운다',
+        responses: {
+          204: { description: '지웠다 - 본문 없음' },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/conversations/{id}/messages': {
+      parameters: [pathParameter('id', '대화방 번호')],
+      get: {
+        summary: '메시지 이력 - 가장 최근 메시지가 먼저, 내가 지운 시각 뒤의 메시지만',
+        parameters: queryParameters(messageListQuerySchema),
+        responses: {
+          200: { description: '메시지 한 페이지', content: json(data(ref('MessagePage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/conversations/{id}/messages/read': {
+      parameters: [pathParameter('id', '대화방 번호')],
+      patch: {
+        summary: '읽음 처리 - 상대가 보낸, 아직 안 읽은 메시지를 모두 읽음으로',
+        responses: {
+          200: { description: '읽음으로 바뀐 메시지 수 - 바꿀 것이 없으면 0', content: json(data(ref('ReadResult'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
+    },
     '/api/v2/members/search': {
       get: {
         summary: '사람 찾기 - 사용자 이름에 검색어가 든 사람을 이름 차례로 20명까지',
@@ -392,6 +450,65 @@ export const openapi = {
           items: { type: 'array', items: ref('FollowPerson') },
           hasNext: { type: 'boolean' },
           nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      ConversationPerson: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          name: { type: ['string', 'null'] },
+          profileImage: { type: ['string', 'null'] },
+        },
+      },
+      Conversation: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          createdAt: { type: 'string', format: 'date-time' },
+          otherUser: ref('ConversationPerson'),
+          lastMessage: { oneOf: [ref('LastMessage'), { type: 'null' }], description: '가장 최근 메시지 - 메시지가 없으면 null' },
+        },
+      },
+      LastMessage: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          senderId: { type: 'integer' },
+          content: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      ConversationPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: ref('Conversation') },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      Message: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          senderId: { type: 'integer' },
+          content: { type: 'string', maxLength: 1000 },
+          createdAt: { type: 'string', format: 'date-time' },
+          isRead: { type: 'boolean', description: '받는 사람이 읽었는가' },
+        },
+      },
+      MessagePage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: ref('Message') },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '더 오래된 메시지를 받을 때 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      ReadResult: {
+        type: 'object',
+        properties: {
+          readCount: { type: 'integer', description: '이번에 읽음으로 바뀐 메시지 수' },
         },
       },
       Member: {
