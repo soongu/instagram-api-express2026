@@ -32,16 +32,16 @@ export async function unfollow(req, res) {
   sendData(res, status);
 }
 
-// 그 사람을 팔로우하는 사람들의 목록.
+// 그 사람을 팔로우하는 사람들의 목록 - 줄마다 «내가 이 사람을 팔로우하나» 는 로그인한 사람을 기준으로 본다.
 export async function followers(req, res) {
-  const page = await followService.getFollowList(req.params.username, 'followers', res.locals.query);
+  const page = await followService.getFollowList(req.params.username, 'followers', res.locals.userId, res.locals.query);
 
   sendData(res, page);
 }
 
 // 그 사람이 팔로우하는 사람들의 목록.
 export async function following(req, res) {
-  const page = await followService.getFollowList(req.params.username, 'following', res.locals.query);
+  const page = await followService.getFollowList(req.params.username, 'following', res.locals.userId, res.locals.query);
 
   sendData(res, page);
 }

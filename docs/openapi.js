@@ -5,7 +5,7 @@ import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js'
 import { signupSchema } from '../schemas/authSchema.js';
 import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
-import { profilePostsQuerySchema } from '../schemas/profileSchema.js';
+import { profilePostsQuerySchema, followListQuerySchema } from '../schemas/profileSchema.js';
 import { memberSearchQuerySchema, profileImageSchema } from '../schemas/memberSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
@@ -210,6 +210,32 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/profiles/{username}/followers': {
+      parameters: [pathParameter('username', '사용자 이름')],
+      get: {
+        summary: '팔로워 목록 - 그 사람을 팔로우하는 사람들, 가장 최근에 팔로우한 사람이 먼저',
+        parameters: queryParameters(followListQuerySchema),
+        responses: {
+          200: { description: '팔로워 한 페이지 - 팔로워가 없으면 빈 목록', content: json(data(ref('FollowPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/profiles/{username}/following': {
+      parameters: [pathParameter('username', '사용자 이름')],
+      get: {
+        summary: '팔로잉 목록 - 그 사람이 팔로우하는 사람들, 가장 최근에 팔로우한 사람이 먼저',
+        parameters: queryParameters(followListQuerySchema),
+        responses: {
+          200: { description: '팔로잉 한 페이지 - 팔로우하는 사람이 없으면 빈 목록', content: json(data(ref('FollowPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
     '/api/v2/members/search': {
       get: {
         summary: '사람 찾기 - 사용자 이름에 검색어가 든 사람을 이름 차례로 20명까지',
@@ -348,6 +374,24 @@ export const openapi = {
         properties: {
           following: { type: 'boolean', description: '요청한 사람이 이제 그 사람을 팔로우하고 있는가' },
           followerCount: { type: 'integer', description: '그 사람의 팔로워 수' },
+        },
+      },
+      FollowPerson: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          name: { type: ['string', 'null'] },
+          profileImage: { type: ['string', 'null'] },
+          isFollowing: { type: 'boolean', description: '요청한 사람이 이 사람을 팔로우하고 있는가' },
+        },
+      },
+      FollowPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: ref('FollowPerson') },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 - 끝이면 null' },
         },
       },
       Member: {

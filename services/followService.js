@@ -65,8 +65,21 @@ export async function unfollow(username, followerId) {
   return { following: false, followerCount };
 }
 
-// 목록 한 줄에 실을 사람 정보.
-const personFields = { id: true, username: true, name: true, profileImage: true };
+// 목록 한 줄에 실을 사람 - 보는 사람이 이 사람을 팔로우하는 행도 센다(프로필 헤더와 같은 방법).
+function personFieldsFor(viewerId) {
+  return {
+    id: true,
+    username: true,
+    name: true,
+    profileImage: true,
+    _count: { select: { followers: { where: { followerId: viewerId } } } },
+  };
+}
+
+// 센 수를 «보는 사람이 이 사람을 팔로우하고 있나» 로 바꾼다.
+function toPerson({ _count, ...person }) {
+  return { ...person, isFollowing: _count.followers > 0 };
+}
 
 // 목록은 «팔로우한 시각이 늦은 순, 같으면 행 번호가 큰 순» 이다 - 게시물 목록과 같은 차례라 조건도 같다.
 // 커서 다음 행은 시각이 더 이르거나, 시각이 같고 번호가 더 작은 행이다.
@@ -87,7 +100,8 @@ const LISTS = {
 };
 
 // 그 사람의 팔로워 목록이나 팔로잉 목록 - 가장 최근에 팔로우한 행이 먼저다. 한 번에 limit 명씩 나눠 준다.
-export async function getFollowList(username, list, { limit = 20, cursor }) {
+// 줄마다 «보는 사람(viewerId)이 이 사람을 팔로우하고 있나» 를 함께 싣는다.
+export async function getFollowList(username, list, viewerId, { limit = 20, cursor }) {
   const userId = await findUserId(username);
   const { by, person } = LISTS[list];
 
@@ -97,7 +111,7 @@ export async function getFollowList(username, list, { limit = 20, cursor }) {
       // 커서는 사람이 아니라 «follows 의 행» 을 가리킨다 - 차례를 정하는 값이 그 행의 시각과 번호라서.
       ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
     },
-    select: { id: true, createdAt: true, [person]: { select: personFields } },
+    select: { id: true, createdAt: true, [person]: { select: personFieldsFor(viewerId) } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
   });
@@ -106,7 +120,7 @@ export async function getFollowList(username, list, { limit = 20, cursor }) {
   const page = rows.slice(0, limit);
 
   return {
-    items: page.map((row) => row[person]),
+    items: page.map((row) => toPerson(row[person])),
     hasNext,
     nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
   };
