@@ -23,16 +23,24 @@
       const notice = document.querySelector('#notice');
       const list = document.querySelector('#list');
       const socket = io({ query: { name } });
+      let lastId = 0;
 
       function show(bid) {
+        if (bid.id <= lastId) {
+          return;
+        }
+        lastId = bid.id;
         const li = document.createElement('li');
         li.textContent = `${bid.name} ${bid.price.toLocaleString()}원`;
         list.append(li);
         notice.textContent = '';
       }
 
-      socket.on('connect', () => {
+      socket.on('connect', async () => {
         status.textContent = '연결됐어요';
+        const response = await fetch(`/bids?after=${lastId}`);
+        const missed = await response.json();
+        missed.forEach(show);
       });
 
       socket.on('disconnect', () => {

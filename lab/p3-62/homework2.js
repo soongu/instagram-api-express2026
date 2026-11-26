@@ -16,6 +16,11 @@ const bids = [];
 let nextId = 1;
 let price = 20000;
 
+app.get('/bids', (req, res) => {
+  const after = Number(req.query.after ?? 0);
+  res.json(bids.filter((bid) => bid.id > after));
+});
+
 io.on('connection', (socket) => {
   const name = socket.handshake.query.name;
 
