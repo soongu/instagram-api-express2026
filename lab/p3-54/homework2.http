@@ -55,6 +55,14 @@ Content-Type: application/json
   "hidden": true
 }
 
+### 남이 파는 상품의 없는 리뷰 숨기기
+PATCH http://localhost:4001/api/products/1/reviews/99
+Content-Type: application/json
+
+{
+  "hidden": true
+}
+
 ### hidden 없이 보내기
 PATCH http://localhost:4001/api/products/2/reviews/6
 Content-Type: application/json
