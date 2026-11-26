@@ -31,10 +31,19 @@ const conversationFields = {
   lastMessage: { select: messageFields },
 };
 
+// 대화방 한 줄에 «내가 안 읽은 메시지 수» 를 더한다 - 상대가 보냈고 아직 안 읽은 메시지를 센다.
+// 누가 보는지에 따라 수가 달라서 내 번호를 받아 고를 값을 만든다.
+function conversationFieldsFor(myId) {
+  return {
+    ...conversationFields,
+    _count: { select: { messages: { where: { senderId: { not: myId }, isRead: false } } } },
+  };
+}
+
 // 두 자리 가운데 내가 아닌 쪽이 상대다. 응답에는 상대만 싣는다.
 // 메시지가 하나도 없는 방은 lastMessage 가 null 이다. 내가 지운 시각 전의 메시지도 미리보기로 주지 않는다.
 // 지운 시각은 그 사람만의 기록이라 응답에 싣지 않는다.
-function toConversation({ participantA, participantB, aClearedAt, bClearedAt, lastMessage, ...conversation }, myId) {
+function toConversation({ participantA, participantB, aClearedAt, bClearedAt, lastMessage, _count, ...conversation }, myId) {
   const iAmA = participantA.id === myId;
   const clearedAt = iAmA ? aClearedAt : bClearedAt;
 
@@ -42,6 +51,7 @@ function toConversation({ participantA, participantB, aClearedAt, bClearedAt, la
     ...conversation,
     otherUser: iAmA ? participantB : participantA,
     lastMessage: lastMessage && (!clearedAt || lastMessage.createdAt > clearedAt) ? lastMessage : null,
+    unreadCount: _count.messages,
   };
 }
 
@@ -66,7 +76,7 @@ export async function openConversation(username, myId) {
 
   const conversation = await prisma.conversation.findUnique({
     where: { participantAId_participantBId: pair },
-    select: conversationFields,
+    select: conversationFieldsFor(myId),
   });
 
   return { created: count > 0, conversation: toConversation(conversation, myId) };
@@ -79,7 +89,7 @@ export async function getConversation(conversationId, myId) {
 
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    select: conversationFields,
+    select: conversationFieldsFor(myId),
   });
 
   return toConversation(conversation, myId);
@@ -124,7 +134,7 @@ export async function getConversations(myId, { limit = 20, cursor }) {
         cursor ? afterListCursor(decodeCursor(cursor, 'lastMessageAt')) : {},
       ],
     },
-    select: conversationFields,
+    select: conversationFieldsFor(myId),
     orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
   });
