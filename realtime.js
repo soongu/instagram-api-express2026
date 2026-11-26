@@ -33,9 +33,20 @@ function reply(ack, body) {
   if (typeof ack === 'function') ack(body);
 }
 
+// 붙인 Socket.IO 서버 - 연결 밖(REST 요청을 처리하는 곳)에서도 이벤트를 보내려고 모듈에 둔다.
+let io = null;
+
+// 그 사람들의 연결에 이벤트를 보낸다 - 한 사람이 탭을 여럿 열었으면 그 탭 모두에 간다.
+// REST 요청을 처리하다가 연결로 알려야 할 때 쓴다. 서버를 띄우기 전(io 가 없을 때)에는 아무것도 안 한다.
+export function emitToUsers(userIds, event, payload) {
+  if (io === null) return;
+
+  io.to(userIds.map((id) => `user:${id}`)).emit(event, payload);
+}
+
 // API 를 내주는 그 HTTP 서버에 Socket.IO 를 붙인다 - 화면은 같은 주소, 같은 포트로 연결을 연다.
 export function startRealtime(server) {
-  const io = new Server(server);
+  io = new Server(server);
 
   // 연결을 여는 HTTP 요청에도 쿠키가 실려 온다. Express 앱에서처럼 그 쿠키를 읽어 둔다.
   io.engine.use(cookieParser());

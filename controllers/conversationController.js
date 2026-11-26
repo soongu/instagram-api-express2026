@@ -1,6 +1,7 @@
 // ~/instagram-api/controllers/conversationController.js
 import * as conversationService from '../services/conversationService.js';
 import { sendData } from '../responses.js';
+import { emitToUsers } from '../realtime.js';
 
 // 대화방을 연다 - 새로 만들었으면 201 과 그 방의 주소, 이미 있던 방이면 200 이다.
 export async function create(req, res) {
@@ -40,10 +41,16 @@ export async function messages(req, res) {
 }
 
 // 그 대화방에서 상대가 보낸 메시지를 읽음으로 - 화면은 대화방을 열 때 한 번 부른다.
+// 읽음으로 바뀐 것이 있으면 연결로 알린다 - 상대의 화면은 «읽음» 을 띄우고, 내 다른 탭은 안 읽음 표시를 지운다.
 export async function read(req, res) {
-  const result = await conversationService.markAsRead(req.conversationId, res.locals.userId);
+  const myId = res.locals.userId;
+  const { readCount, otherId } = await conversationService.markAsRead(req.conversationId, myId);
 
-  sendData(res, result);
+  if (readCount > 0) {
+    emitToUsers([otherId, myId], 'dm:read', { conversationId: req.conversationId, readerId: myId });
+  }
+
+  sendData(res, { readCount });
 }
 
 // 대화방을 내 쪽에서만 지운다 - 돌려줄 것이 없어 204 다.

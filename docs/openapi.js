@@ -305,7 +305,7 @@ export const openapi = {
       patch: {
         summary: '읽음 처리 - 상대가 보낸, 아직 안 읽은 메시지를 모두 읽음으로',
         responses: {
-          200: { description: '읽음으로 바뀐 메시지 수 - 바꿀 것이 없으면 0', content: json(data(ref('ReadResult'))) },
+          200: { description: '읽음으로 바뀐 메시지 수 - 바꿀 것이 없으면 0 · 1 이상이면 상대와 나의 연결에 dm:read { conversationId, readerId }', content: json(data(ref('ReadResult'))) },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
           404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
         },

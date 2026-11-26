@@ -234,17 +234,19 @@ export async function getMessages(conversationId, myId, { limit = 20, cursor }) 
   };
 }
 
-// 상대가 보낸 메시지 가운데 아직 안 읽은 것을 모두 읽음으로 바꾼다 - 바뀐 수를 돌려준다.
+// 상대가 보낸 메시지 가운데 아직 안 읽은 것을 모두 읽음으로 바꾼다 - 바뀐 수와 상대 번호를 돌려준다.
 // 내가 보낸 메시지는 상대가 읽을 것이라 건드리지 않는다. 다시 불러도 바꿀 것이 없어 0 이다.
 export async function markAsRead(conversationId, myId) {
-  await findMyConversation(conversationId, myId);
+  const conversation = await findMyConversation(conversationId, myId);
 
   const { count } = await prisma.directMessage.updateMany({
     where: { conversationId, senderId: { not: myId }, isRead: false },
     data: { isRead: true },
   });
 
-  return { readCount: count };
+  const otherId = conversation.participantAId === myId ? conversation.participantBId : conversation.participantAId;
+
+  return { readCount: count, otherId };
 }
 
 // 대화방을 «내 쪽에서만» 지운다 - 내 자리의 지운 시각을 지금으로 적는다. 상대의 기록은 그대로다.
