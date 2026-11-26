@@ -22,6 +22,7 @@ const messageFields = { id: true, senderId: true, content: true, createdAt: true
 const conversationFields = {
   id: true,
   createdAt: true,
+  lastMessageAt: true,
   participantA: { select: personFields },
   participantB: { select: personFields },
   messages: { select: messageFields, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1 },
@@ -72,7 +73,15 @@ function afterCursor({ createdAt, id }) {
   };
 }
 
-// 내 대화방 목록 - 늦게 만든 방이 먼저다. 한 번에 limit 개씩 나눠 준다.
+// 목록의 커서 다음 방 - 마지막 메시지 시각이 더 이르거나, 시각이 같고 번호가 더 작은 방이다.
+function afterListCursor({ lastMessageAt, id }) {
+  return {
+    lastMessageAt: { lte: lastMessageAt },
+    OR: [{ lastMessageAt: { lt: lastMessageAt } }, { id: { lt: id } }],
+  };
+}
+
+// 내 대화방 목록 - 마지막 메시지가 늦은 방이 먼저다. 한 번에 limit 개씩 나눠 준다.
 export async function getConversations(myId, { limit = 20, cursor }) {
   const rows = await prisma.conversation.findMany({
     where: {
@@ -80,11 +89,11 @@ export async function getConversations(myId, { limit = 20, cursor }) {
       AND: [
         // 내가 a 자리에 있고 지우지 않은 방과, b 자리에 있고 지우지 않은 방
         { OR: [{ participantAId: myId, aClearedAt: null }, { participantBId: myId, bClearedAt: null }] },
-        cursor ? afterCursor(decodeCursor(cursor)) : {},
+        cursor ? afterListCursor(decodeCursor(cursor, 'lastMessageAt')) : {},
       ],
     },
     select: conversationFields,
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
   });
 
@@ -94,7 +103,7 @@ export async function getConversations(myId, { limit = 20, cursor }) {
   return {
     items: page.map((row) => toConversation(row, myId)),
     hasNext,
-    nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
+    nextCursor: hasNext ? encodeCursor(page[page.length - 1], 'lastMessageAt') : null,
   };
 }
 

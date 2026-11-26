@@ -239,7 +239,7 @@ export const openapi = {
     },
     '/api/v2/conversations': {
       get: {
-        summary: '내 대화방 목록 - 늦게 만든 방이 먼저, 내가 지운 방은 빠진다',
+        summary: '내 대화방 목록 - 마지막 메시지가 늦은 방이 먼저, 내가 지운 방은 빠진다',
         parameters: queryParameters(conversationListQuerySchema),
         responses: {
           200: { description: '대화방 한 페이지 - 방이 없으면 빈 목록', content: json(data(ref('ConversationPage'))) },
@@ -466,6 +466,7 @@ export const openapi = {
         properties: {
           id: { type: 'integer' },
           createdAt: { type: 'string', format: 'date-time' },
+          lastMessageAt: { type: 'string', format: 'date-time', description: '가장 최근 메시지를 보낸 시각 - 목록은 이 시각이 늦은 방부터 준다. 메시지가 없으면 만든 시각' },
           otherUser: ref('ConversationPerson'),
           lastMessage: { oneOf: [ref('LastMessage'), { type: 'null' }], description: '가장 최근 메시지 - 메시지가 없으면 null' },
         },
