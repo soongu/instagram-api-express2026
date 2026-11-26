@@ -16,6 +16,14 @@ Content-Type: application/json
   "authorId": 1
 }
 
+### 3번 상품에 리뷰 하나 더 달기
+POST http://localhost:4001/api/products/3/reviews
+Content-Type: application/json
+
+{
+  "content": "책상 위가 넓어졌어요"
+}
+
 ### 공백만 보낸 리뷰
 POST http://localhost:4001/api/products/3/reviews
 Content-Type: application/json
