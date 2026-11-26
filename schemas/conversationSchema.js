@@ -19,7 +19,7 @@ export const messageListQuerySchema = z.object({
   cursor: z.string().min(1).optional().describe('앞 응답의 nextCursor 그대로'),
   after: z.coerce.number().int().positive().optional().describe('이 번호 뒤의 메시지만 오래된 것부터 - cursor 와 함께 쓰지 않는다'),
 }).refine((query) => query.after === undefined || query.cursor === undefined, {
-  message: 'after 와 cursor 는 함께 쓰지 않아요',
+  error: 'after 와 cursor 는 함께 쓰지 않아요',
   path: ['after'],
 });
 
