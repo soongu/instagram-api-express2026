@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict NoCujOpVZq5yCA1LMXxyIaPPjYuSOXluxam9SpaNzTNLtzmWk1j5ZfL8QpY7ADi
+\restrict KKiLZYeNOUrYnvgt8iacjKNfrkcbbkfQq7cn1ZPHj11uVEvLhCwVaAQeE7I76MA
 
 -- Dumped from database version 18.6 (Debian 18.6-1.pgdg13+2)
 -- Dumped by pg_dump version 18.6 (Debian 18.6-1.pgdg13+2)
@@ -1013,10 +1013,10 @@ INSERT INTO public.conversations VALUES (1, 2, 43, '2026-11-26 06:20:00.729', '2
 
 INSERT INTO public.direct_messages VALUES (1, 7, 3, '다음 주 스터디 몇 시에 해요?', false, '2026-11-24 05:20:03.565');
 INSERT INTO public.direct_messages VALUES (2, 7, 2, '저녁 7시요!', false, '2026-11-24 06:20:03.565');
-INSERT INTO public.direct_messages VALUES (8, 8, 2, '도윤 님, 내일 사진 보내 드릴게요', false, '2026-11-26 07:19:32.432');
-INSERT INTO public.direct_messages VALUES (9, 8, 2, '사진은 저녁에 보낼게요', false, '2026-11-26 07:19:34.167');
-INSERT INTO public.direct_messages VALUES (10, 8, 2, '사진 크기는 원본 그대로 괜찮아요?', false, '2026-11-26 07:19:36.568');
-INSERT INTO public.direct_messages VALUES (12, 8, 2, '방금 사진 보냈어요', false, '2026-11-26 07:19:40.825');
+INSERT INTO public.direct_messages VALUES (8, 8, 2, '도윤 님, 지난번 사진 보내 드릴게요', false, '2026-11-26 07:30:44.431');
+INSERT INTO public.direct_messages VALUES (9, 8, 2, '사진은 저녁에 보낼게요', false, '2026-11-26 07:30:46.179');
+INSERT INTO public.direct_messages VALUES (10, 8, 2, '사진 크기는 원본 그대로 괜찮아요?', false, '2026-11-26 07:30:48.543');
+INSERT INTO public.direct_messages VALUES (12, 8, 2, '방금 사진 보냈어요', false, '2026-11-26 07:30:52.785');
 
 
 --
@@ -1321,14 +1321,14 @@ INSERT INTO public.sessions VALUES ('3461c8c1-08a0-415b-ac99-173a337b976c', 48, 
 INSERT INTO public.sessions VALUES ('a891b24d-661e-4aee-b1e6-542f9205b0b7', 43, '2026-12-03 06:20:09.571', '2026-11-26 06:20:09.575', '4d18ff40dcd2531fe8b243a49f929aee46e3635d65f2c00f3efb9de84254bc08', NULL);
 INSERT INTO public.sessions VALUES ('ab2c9316-0c3d-40ba-a344-d35d188bd4f7', 2, '2026-12-03 06:20:11.721', '2026-11-26 06:20:11.725', '010673ce0d9017fbba766f5d59921e18a574dbd00446cea0c0da0ea912021352', NULL);
 INSERT INTO public.sessions VALUES ('9eb3b7b3-524a-4380-8748-8ac1f90e91a2', 43, '2026-12-03 06:20:12.208', '2026-11-26 06:20:12.208', '63bebca858f7e7335a386120b7cc38bb85521c1252d2f74eea6a0fb016fd2f1f', NULL);
-INSERT INTO public.sessions VALUES ('e993a21e-8a7f-47a9-a925-c1e13c58efa9', 2, '2026-12-03 07:19:32.166', '2026-11-26 07:19:32.17', 'b5c28bb484a947bd87fef5a7782dae5d353efb7d6f4e55b2c62e6abd47028aaf', NULL);
-INSERT INTO public.sessions VALUES ('69322f0b-41d9-499f-b201-a155d7c509de', 44, '2026-12-03 07:19:32.42', '2026-11-26 07:19:32.42', 'd76809e9587b3f473addb46a601277efa37786df163a745b7b6f659dbc0a7970', NULL);
-INSERT INTO public.sessions VALUES ('89fae045-ab81-4a30-a80a-1c4106e5fdcc', 48, '2026-12-03 07:19:34.155', '2026-11-26 07:19:34.156', '2e13dc0ca2cffe3c923a241fc4f27e094dea90b6593003bb42a0507a5264591e', NULL);
-INSERT INTO public.sessions VALUES ('44e416b0-1924-4469-8f53-66ebc0518815', 2, '2026-12-03 07:19:36.311', '2026-11-26 07:19:36.314', '83a52e2863875e7c223f41a826283d00fcc8f01b8a64b33e73938c0791f59494', NULL);
-INSERT INTO public.sessions VALUES ('e165c31b-afb9-4d47-b4c5-2db16d0a1a7e', 48, '2026-12-03 07:19:36.552', '2026-11-26 07:19:36.553', '0388ebd1694594c64d523907e1ce270c907271f833fbbb3d8b8316a2aeec3c14', NULL);
-INSERT INTO public.sessions VALUES ('8e59f43b-12a0-49a8-b533-70ae19d70527', 48, '2026-12-03 07:19:38.692', '2026-11-26 07:19:38.696', 'ed16db8c4c4f6459a84d45ad0f0c4b3d765c961f0756f5fcc97daf4f5e507022', NULL);
-INSERT INTO public.sessions VALUES ('ea0cd0f7-34f7-4ce8-ac65-538db6ff4444', 48, '2026-12-03 07:19:40.56', '2026-11-26 07:19:40.564', 'd2a7c54e09a1b22b7fa96cadc3bbdfc570f3095a5247e5a6c6f3ce0785607ec5', NULL);
-INSERT INTO public.sessions VALUES ('2d94efa4-400f-4bbc-8e1b-2105c5db6457', 2, '2026-12-03 07:19:40.807', '2026-11-26 07:19:40.808', '271159f33da1469b0cbd17f46bf07e5f5ca0f4a3ad74dea90fc5a09199b55ccf', NULL);
+INSERT INTO public.sessions VALUES ('0992edec-eb65-4f7b-8a4f-93ce54396040', 2, '2026-12-03 07:30:44.166', '2026-11-26 07:30:44.169', 'e1e55084b3e6907c7dd2d8a45dd8612e5d414e44a0f37945e795c9bb4ba9006e', NULL);
+INSERT INTO public.sessions VALUES ('248e2601-9504-4823-8638-4a678b6347a7', 44, '2026-12-03 07:30:44.419', '2026-11-26 07:30:44.419', 'c25ef95f86c3e18282dac0df1bc2e6bba7b87679e8e9081fec04cdf02a1bca1a', NULL);
+INSERT INTO public.sessions VALUES ('ee215dfd-a66c-4f7d-86ca-ac0432a4310a', 48, '2026-12-03 07:30:46.168', '2026-11-26 07:30:46.168', '49e9eab8b7db49363ce4627cb391d7c61e12f7a21eaf48840c84068031c15494', NULL);
+INSERT INTO public.sessions VALUES ('5eb15616-d25a-451e-9910-356b29e021e1', 2, '2026-12-03 07:30:48.286', '2026-11-26 07:30:48.29', 'efe9da0ec59e9f8e45eee64ef62dbdb1ae30983104dd6bef1d79908516aea070', NULL);
+INSERT INTO public.sessions VALUES ('cb96041d-6a07-4cc1-a0c1-b17ef7b68793', 48, '2026-12-03 07:30:48.53', '2026-11-26 07:30:48.531', 'c3027a19db81b1b9ceb6fe371bcb8881b121df84fe350a58a91ca9c9e25f9e8f', NULL);
+INSERT INTO public.sessions VALUES ('3b961bc1-cf3a-4f92-b9d3-c21499940f52', 48, '2026-12-03 07:30:50.679', '2026-11-26 07:30:50.684', 'a0542a7b5c9c51f6f9c6f04328474ef0a96ab9f30b6c8fe89c88af00961e652f', NULL);
+INSERT INTO public.sessions VALUES ('21cf10ba-eb18-40ac-a44c-1ec0c702b292', 48, '2026-12-03 07:30:52.52', '2026-11-26 07:30:52.525', '837cec0ce93de9c518f5a963b73b3aeb96abfb0938502d6c6ec5dc5153c33970', NULL);
+INSERT INTO public.sessions VALUES ('7267ed4f-dd51-4134-b37a-99b235982e68', 2, '2026-12-03 07:30:52.766', '2026-11-26 07:30:52.766', '8e73ec8c07ae90d8ac051bdbf8cc2f688ebb6ad7fc4b0f3edfcb8d74e8c183f7', NULL);
 
 
 --
@@ -1887,5 +1887,5 @@ ALTER TABLE ONLY public.uploads
 -- PostgreSQL database dump complete
 --
 
-\unrestrict NoCujOpVZq5yCA1LMXxyIaPPjYuSOXluxam9SpaNzTNLtzmWk1j5ZfL8QpY7ADi
+\unrestrict KKiLZYeNOUrYnvgt8iacjKNfrkcbbkfQq7cn1ZPHj11uVEvLhCwVaAQeE7I76MA
 

@@ -277,7 +277,7 @@ const rowsOf = async (conversationId) => (await onDb(GATE_DB,
 const logLines = (tail, re) => tail().split('\n').filter((line) => re.test(line));
 
 // 교안의 메시지 - 이어진 흐름에서 이 차례로 보낸다.
-const M1 = '도윤 님, 내일 사진 보내 드릴게요';
+const M1 = '도윤 님, 지난번 사진 보내 드릴게요';
 const M2 = '사진은 저녁에 보낼게요';
 const M3 = '사진 크기는 원본 그대로 괜찮아요?';
 const BORAM = '저도 사진 보고 싶어요';
@@ -722,10 +722,10 @@ describe('축 ⑧ 직접 해보기 1 - 문의방 실시간', () => {
       expect([anon.connected, anon.message]).toEqual([false, '로그인이 필요해요']);
       const jaehoon = await labPerson(base, lab, 'jaehoon');
       const seoyeon = await labPerson(base, lab, 'seoyeon');
-      jaehoon.socket.emit('inquiry:send', { inquiryId: 1, content: '내일 보내 드릴게요' });
+      jaehoon.socket.emit('inquiry:send', { inquiryId: 1, content: '오늘 보내 드릴게요' });
       await settle();
-      expect(inquiryMessages(seoyeon)).toEqual([[10, 1, JAEHOON_ID, '내일 보내 드릴게요']]);
-      expect(inquiryMessages(jaehoon)).toEqual([[10, 1, JAEHOON_ID, '내일 보내 드릴게요']]);
+      expect(inquiryMessages(seoyeon)).toEqual([[10, 1, JAEHOON_ID, '오늘 보내 드릴게요']]);
+      expect(inquiryMessages(jaehoon)).toEqual([[10, 1, JAEHOON_ID, '오늘 보내 드릴게요']]);
       // 4번 방(taeyang 이 jaehoon 의 텀블러를 묻는 방)에 보내면 seoyeon 은 못 받는다
       jaehoon.socket.emit('inquiry:send', { inquiryId: 4, content: '재고 있어요' });
       await settle();
@@ -754,8 +754,8 @@ describe('축 ⑨ 직접 해보기 2 - 문의 보내기 확인과 결과', () =>
     await labServe('lab2', 'practice2.js', async ({ base, lab }) => {
       const jaehoon = await labPerson(base, lab, 'jaehoon');
       const seoyeon = await labPerson(base, lab, 'seoyeon');
-      const ok = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 1, content: '  내일 보내 드릴게요  ' });
-      expect(ok.data).toMatchObject({ id: 10, inquiryId: 1, senderId: JAEHOON_ID, content: '내일 보내 드릴게요', isRead: false });
+      const ok = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 1, content: '  오늘 보내 드릴게요  ' });
+      expect(ok.data).toMatchObject({ id: 10, inquiryId: 1, senderId: JAEHOON_ID, content: '오늘 보내 드릴게요', isRead: false });
       for (const id of [3, 99]) expect(await emitAck(jaehoon, 'inquiry:send', { inquiryId: id, content: 'x' })).toEqual({ error: { message: '그런 문의방은 없어요' } });
       for (const content of ['   ', '가'.repeat(501), 5]) {
         expect(await emitAck(jaehoon, 'inquiry:send', { inquiryId: 1, content })).toEqual({ error: { message: '문의는 1~500자로 보내 주세요' } });
@@ -1028,7 +1028,7 @@ describe('축 ⑧-틀린 답 직접 해보기 1 - 빈칸만 바꾼 판 넷', () 
   const run = (key) => async ({ base, lab }) => {
     const jaehoon = await labPerson(base, lab, 'jaehoon');
     const seoyeon = await labPerson(base, lab, 'seoyeon');
-    jaehoon.socket.emit('inquiry:send', { inquiryId: 1, content: '내일 보내 드릴게요' });
+    jaehoon.socket.emit('inquiry:send', { inquiryId: 1, content: '오늘 보내 드릴게요' });
     await settle();
     const got = { jaehoon: jaehoon.events.filter(([e]) => e === 'inquiry:message').map(([, m]) => m.senderId), seoyeon: seoyeon.events.filter(([e]) => e === 'inquiry:message').map(([, m]) => m.senderId) };
     jaehoon.close();
@@ -1057,7 +1057,7 @@ describe('축 ⑧-틀린 답 직접 해보기 1 - 빈칸만 바꾼 판 넷', () 
 describe('축 ⑨-틀린 답 직접 해보기 2 - 빈칸만 바꾼 판 넷', () => {
   const firstAck = async ({ base, lab, tail }) => {
     const jaehoon = await labPerson(base, lab, 'jaehoon');
-    const one = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 1, content: '  내일 보내 드릴게요  ' }, 800);
+    const one = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 1, content: '  오늘 보내 드릴게요  ' }, 800);
     const three = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 3, content: 'x' }, 800);
     await settle();
     const blank = await emitAck(jaehoon, 'inquiry:send', { inquiryId: 1, content: '   ' }, 800);
@@ -1079,13 +1079,13 @@ describe('축 ⑨-틀린 답 직접 해보기 2 - 빈칸만 바꾼 판 넷', () 
   it('셋째 빈칸 reply - 확인 3 에서 결과가 안 온다', async () => {
     let got;
     await labServe('lab2', 'practice2.js', async (x) => { got = await firstAck(x); }, { edit: swap("reply(ack, { error: { message: '문의는 1~500자로 보내 주세요' } });", "reply(reply, { error: { message: '문의는 1~500자로 보내 주세요' } });") });
-    expect(got.one.data.content).toBe('내일 보내 드릴게요');
+    expect(got.one.data.content).toBe('오늘 보내 드릴게요');
     expect(got.blank).toEqual({ timeout: 'operation has timed out' });
   }, 60_000);
   it('넷째 빈칸 message - 확인 1 이 { data } 없이 메시지 그대로', async () => {
     let got;
     await labServe('lab2', 'practice2.js', async (x) => { got = await firstAck(x); }, { edit: swap('reply(ack, { data: message });', 'reply(ack, message);') });
-    expect(got.one).toMatchObject({ id: 10, inquiryId: 1, content: '내일 보내 드릴게요' });
+    expect(got.one).toMatchObject({ id: 10, inquiryId: 1, content: '오늘 보내 드릴게요' });
     expect(got.one.data).toBeUndefined();
   }, 60_000);
 });
