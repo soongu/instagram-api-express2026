@@ -214,6 +214,9 @@ model Conversation {
   participantBId Int             @map("participant_b_id")
   participantB   User            @relation("ParticipantB", fields: [participantBId], references: [id], onDelete: Cascade)
   createdAt      DateTime        @default(now()) @map("created_at")
+  // 그 자리의 사람이 이 방을 지운 시각 - 그때까지의 메시지는 그 사람에게 안 보인다. 지운 적이 없으면 비어 있다.
+  aClearedAt     DateTime?       @map("a_cleared_at")
+  bClearedAt     DateTime?       @map("b_cleared_at")
   messages       DirectMessage[]
 
   @@unique([participantAId, participantBId])

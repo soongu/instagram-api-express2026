@@ -31,3 +31,10 @@ export async function read(req, res) {
 
   sendData(res, result);
 }
+
+// 대화방을 내 쪽에서만 지운다 - 돌려줄 것이 없어 204 다.
+export async function remove(req, res) {
+  await conversationService.clearConversation(req.conversationId, res.locals.userId);
+
+  res.status(204).end();
+}

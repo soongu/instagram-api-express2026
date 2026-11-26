@@ -103,3 +103,36 @@ Content-Type: application/json
 
 ### jaehoon과의 대화방 읽음
 PATCH http://localhost:3000/api/v2/conversations/1/messages/read
+
+### jaehoon으로 로그인 - 지우기
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### seoyeon과의 대화방 지우기
+DELETE http://localhost:3000/api/v2/conversations/1
+
+### 지운 뒤 내 대화방 목록
+GET http://localhost:3000/api/v2/conversations
+
+### 지운 뒤 seoyeon과의 대화방 메시지
+GET http://localhost:3000/api/v2/conversations/1/messages
+
+### seoyeon으로 로그인 - 지우기
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon과의 대화방 메시지 - seoyeon 쪽
+GET http://localhost:3000/api/v2/conversations/1/messages
+
+### jaehoon과의 대화방 지우기 - seoyeon 쪽
+DELETE http://localhost:3000/api/v2/conversations/1

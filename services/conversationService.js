@@ -78,8 +78,8 @@ export async function getConversations(myId, { limit = 20, cursor }) {
     where: {
       // 두 조건이 모두 OR 를 써서 한 객체에 펼치면 뒤의 OR 가 앞의 OR 를 덮는다 - AND 로 묶는다.
       AND: [
-        // 내가 a 자리에 있는 방과 b 자리에 있는 방
-        { OR: [{ participantAId: myId }, { participantBId: myId }] },
+        // 내가 a 자리에 있고 지우지 않은 방과, b 자리에 있고 지우지 않은 방
+        { OR: [{ participantAId: myId, aClearedAt: null }, { participantBId: myId, bClearedAt: null }] },
         cursor ? afterCursor(decodeCursor(cursor)) : {},
       ],
     },
@@ -103,7 +103,7 @@ export async function getConversations(myId, { limit = 20, cursor }) {
 async function findMyConversation(conversationId, myId) {
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    select: { id: true, participantAId: true, participantBId: true },
+    select: { id: true, participantAId: true, participantBId: true, aClearedAt: true, bClearedAt: true },
   });
 
   if (!conversation) throw new NotFoundError('CONVERSATION_NOT_FOUND');
@@ -116,17 +116,28 @@ async function findMyConversation(conversationId, myId) {
   return conversation;
 }
 
+// 이 방에서 내 자리의 «지운 시각» - 내가 a 자리면 aClearedAt, b 자리면 bClearedAt 이다.
+function myClearedAt(conversation, myId) {
+  return conversation.participantAId === myId ? conversation.aClearedAt : conversation.bClearedAt;
+}
+
 // 이력 한 줄 - 목록의 마지막 메시지와 같은 값에 «받는 사람이 읽었나» 를 더한다.
 const historyFields = { ...messageFields, isRead: true };
 
 // 대화방의 메시지 - 가장 최근 메시지가 먼저다. 화면은 위로 올릴 때마다 그 앞을 limit 개씩 더 받는다.
 export async function getMessages(conversationId, myId, { limit = 20, cursor }) {
-  await findMyConversation(conversationId, myId);
+  const conversation = await findMyConversation(conversationId, myId);
+  const clearedAt = myClearedAt(conversation, myId);
 
   const rows = await prisma.directMessage.findMany({
     where: {
-      conversationId,
-      ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
+      // 두 조건이 모두 createdAt 을 쓰니 한 객체에 펼치지 않고 AND 로 묶는다.
+      AND: [
+        { conversationId },
+        // 내가 지운 적이 있으면 그 뒤에 온 메시지만
+        clearedAt ? { createdAt: { gt: clearedAt } } : {},
+        cursor ? afterCursor(decodeCursor(cursor)) : {},
+      ],
     },
     select: historyFields,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -154,4 +165,23 @@ export async function markAsRead(conversationId, myId) {
   });
 
   return { readCount: count };
+}
+
+// 대화방을 «내 쪽에서만» 지운다 - 내 자리의 지운 시각을 지금으로 적는다. 상대의 기록은 그대로다.
+// 두 사람이 모두 지운 메시지는 이제 아무에게도 안 보이니 그 메시지만 실제로 지운다.
+export async function clearConversation(conversationId, myId) {
+  const conversation = await findMyConversation(conversationId, myId);
+  const field = conversation.participantAId === myId ? 'aClearedAt' : 'bClearedAt';
+
+  const { aClearedAt, bClearedAt } = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { [field]: new Date() },
+    select: { aClearedAt: true, bClearedAt: true },
+  });
+
+  if (aClearedAt && bClearedAt) {
+    // 두 시각 가운데 이른 쪽까지가 «둘 다 지운» 메시지다.
+    const both = aClearedAt < bClearedAt ? aClearedAt : bClearedAt;
+    await prisma.directMessage.deleteMany({ where: { conversationId, createdAt: { lte: both } } });
+  }
 }
