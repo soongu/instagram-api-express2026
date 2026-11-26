@@ -682,6 +682,7 @@ describe('축 ⑧ Step 8 - 내 쪽에서만 지우기', () => {
 const LAB_PORT = Number(process.env.P363_LAB_PORT ?? 3964);
 const lab = async (file, fn, { edit = null } = {}) => serve(8, async ({ base }) => {
   const jaehoon = await loggedIn(base, 'jaehoon');
+  const seoyeonTab = await loggedIn(base, 'seoyeon');
   const dir = studentDir(version('lab'));
   const rel = `lab/p3-63/${file}`;
   const source = read(join(dir, rel));
@@ -690,21 +691,23 @@ const lab = async (file, fn, { edit = null } = {}) => serve(8, async ({ base }) 
   if (edit) edit(dir, rel);
   const srv = await boot(join(dir, rel), { port: LAB_PORT, cwd: dir, env: { ...env, PORT: String(LAB_PORT) }, ready: `${LAB_PORT}번 포트에서` });
   const url = `http://localhost:${LAB_PORT}`;
-  const send = async (method, path) => {
-    const res = await fetch(`${url}${path}`, { method, headers: { Cookie: jaehoon.cookie() } });
+  const sendAs = async (tab, method, path) => {
+    const res = await fetch(`${url}${path}`, { method, headers: { Cookie: tab.cookie() } });
     const text = await res.text();
     let body;
     try { body = JSON.parse(text); } catch { body = text; }
     return { status: res.status, body };
   };
+  const send = (method, path) => sendAs(jaehoon, method, path);
+  const asSeoyeon = (method, path) => sendAs(seoyeonTab, method, path);
   try {
-    return await fn({ send, url });
+    return await fn({ send, asSeoyeon, url });
   } finally {
     await Promise.race([srv.stop(), new Promise((r) => setTimeout(r, 500))]);
   }
 });
 const rooms = (body) => body.items.map((item) => [item.id, item.productName, item.otherUser.username, item.lastMessage?.content ?? null]);
-const ROOMS = [[4, '텀블러', 'taeyang', null], [2, '무선 이어폰', 'jisoo', '주문하시면 바로 보내 드려요'], [1, '텀블러', 'yuna', '네, 넣어도 돼요']];
+const ROOMS = [[4, '텀블러', 'taeyang', null], [2, '무선 이어폰', 'jisoo', '주문하시면 바로 보내 드려요'], [1, '텀블러', 'seoyeon', '네, 넣어도 돼요']];
 
 describe('축 ⑨ 직접 해보기 1 - 내 문의방 목록', () => {
   it('jaehoon 의 문의방 4 · 2 · 1(파는 방 둘 · 사려는 방 하나) · 상대 · 마지막 메시지 · 남의 방 3 은 없다 · 로그인 없이 401', async () => {
@@ -731,7 +734,7 @@ describe('축 ⑨ 직접 해보기 1 - 내 문의방 목록', () => {
       }, { edit: (dir, rel) => replaceIn(dir, rel, a, b) });
     }
     expect(rooms(results[0])).toEqual([[2, '무선 이어폰', 'jisoo', '주문하시면 바로 보내 드려요']]);
-    expect(rooms(results[1]).map((r) => r[2])).toEqual(['taeyang', 'jaehoon', 'yuna']);
+    expect(rooms(results[1]).map((r) => r[2])).toEqual(['taeyang', 'jaehoon', 'seoyeon']);
     expect(rooms(results[2]).map((r) => r[3])).toEqual([null, '노이즈 캔슬링 되나요?', '텀블러 용량이 몇 ml예요?']);
     expect(Object.keys(results[3].items[0])).toEqual(['id', 'productName', 'otherUser']);
   }, 180_000);
@@ -786,20 +789,34 @@ describe('축 ⑪ 과제 [기초] - 문의방 읽음', () => {
 });
 
 describe('축 ⑫ 과제 [응용] - 내 쪽에서만 지우기', () => {
-  it('1번 방을 지우면 204 · 목록 4 · 2 · 1번 방 메시지는 빈 배열 · 남의 방 404 · 서버를 다시 켜면 처음대로', async () => {
-    await lab('homework2.js', async ({ send }) => {
+  it('1번 방을 지우면 204 · 목록 4 · 2 · 1번 방 메시지는 빈 배열 · 사려는 2번 방도 지워진다 · 남의 방 404 · seoyeon 쪽 1번 방은 그대로 · 다시 켜면 처음대로', async () => {
+    await lab('homework2.js', async ({ send, asSeoyeon }) => {
       const del = await send('DELETE', '/api/inquiries/1');
       expect([del.status, del.body]).toEqual([204, '']);
       expect(rooms((await send('GET', '/api/inquiries')).body)).toEqual(ROOMS.slice(0, 2));
       expect((await send('GET', '/api/inquiries/1/messages')).body).toEqual({ items: [] });
-      expect((await send('DELETE', '/api/inquiries/3')).status).toBe(404);
-      // 2번 방(사려는 쪽)도 지울 수 있다
       expect((await send('DELETE', '/api/inquiries/2')).status).toBe(204);
+      expect((await send('DELETE', '/api/inquiries/3')).status).toBe(404);
       expect(rooms((await send('GET', '/api/inquiries')).body)).toEqual(ROOMS.slice(0, 1));
+      expect(rooms((await asSeoyeon('GET', '/api/inquiries')).body)).toEqual([[1, '텀블러', 'jaehoon', '네, 넣어도 돼요']]);
+      expect((await asSeoyeon('GET', '/api/inquiries/1/messages')).body.items.map((m) => m.id)).toEqual([9, 3, 2, 1]);
     });
     await lab('homework2.js', async ({ send }) => {
       expect(rooms((await send('GET', '/api/inquiries')).body)).toEqual(ROOMS);
     });
+  }, 120_000);
+
+  it('틀린 판 둘 - 두 칸 모두 적으면 seoyeon 의 목록에서 1번 방이 사라진다 · 늘 sellerClearedAt 에 적으면 jaehoon 이 사려는 2번 방이 목록에 남는다', async () => {
+    const write = '  inquiry[myClearedField(inquiry, myId)] = new Date().toISOString();';
+    await lab('homework2.js', async ({ send, asSeoyeon }) => {
+      await send('DELETE', '/api/inquiries/1');
+      expect(rooms((await asSeoyeon('GET', '/api/inquiries')).body)).toEqual([]);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, write, '  inquiry.buyerClearedAt = inquiry.sellerClearedAt = new Date().toISOString();') });
+    await lab('homework2.js', async ({ send }) => {
+      await send('DELETE', '/api/inquiries/1');
+      await send('DELETE', '/api/inquiries/2');
+      expect(rooms((await send('GET', '/api/inquiries')).body).map((r) => r[0])).toEqual([4, 2]);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, write, '  inquiry.sellerClearedAt = new Date().toISOString();') });
   }, 120_000);
 
   it('흔한 실수 - 목록을 거르지 않으면 지운 1번 방이 목록에 남는다 · 메시지를 거르지 않으면 1번 방 메시지가 그대로', async () => {
