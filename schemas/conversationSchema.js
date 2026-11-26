@@ -24,3 +24,9 @@ export const messageSendSchema = z.object({
   conversationId: z.number().int().positive(),
   content: z.string().trim().min(1).max(1000),
 });
+
+// 입력 중 - 어느 대화방에서 치기 시작했는지(true), 멈췄는지(false)만 받는다.
+export const typingSchema = z.object({
+  conversationId: z.number().int().positive(),
+  typing: z.boolean(),
+});

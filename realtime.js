@@ -5,7 +5,7 @@ import { z } from 'zod';
 import * as tokenService from './services/tokenService.js';
 import * as conversationService from './services/conversationService.js';
 import { readToken } from './middlewares/auth.js';
-import { messageSendSchema } from './schemas/conversationSchema.js';
+import { messageSendSchema, typingSchema } from './schemas/conversationSchema.js';
 import { BadRequestError, HttpError, MESSAGES } from './errors.js';
 
 // 이벤트로 받은 값을 검사한다 - HTTP 요청 본문을 검사하던 validateBody 와 같은 일이다.
@@ -73,6 +73,18 @@ export function startRealtime(server) {
         reply(ack, { data: message });
       } catch (error) {
         reply(ack, { error: errorBody(error) });
+      }
+    });
+
+    // 입력 중 - 저장하지 않고 상대에게만 알린다. 나는 내가 치고 있다는 것을 이미 안다.
+    socket.on('dm:typing', async (payload) => {
+      try {
+        const { conversationId, typing } = parse(typingSchema, payload);
+        const otherId = await conversationService.otherParticipantId(conversationId, userId);
+        io.to(`user:${otherId}`).emit('dm:typing', { conversationId, senderId: userId, typing });
+      } catch (error) {
+        // 입력 중 표시는 놓쳐도 다음 글자에서 다시 온다. 결과를 돌려주지 않고 로그만 남긴다.
+        console.warn(`${userId}번 사용자의 입력 중 표시를 보내지 못했어요 - ${error.message}`);
       }
     });
 

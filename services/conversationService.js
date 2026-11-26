@@ -200,3 +200,10 @@ export async function sendMessage(conversationId, myId, content) {
 
   return { message, participantAId: conversation.participantAId, participantBId: conversation.participantBId };
 }
+
+// 이 대화방의 상대 번호 - 내가 참여한 방이 아니면 404 에러를 던진다.
+export async function otherParticipantId(conversationId, myId) {
+  const conversation = await findMyConversation(conversationId, myId);
+
+  return conversation.participantAId === myId ? conversation.participantBId : conversation.participantAId;
+}
