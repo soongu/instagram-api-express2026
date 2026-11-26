@@ -193,8 +193,8 @@ describe('축 ⑥ 직접 해보기 1 - 글쓴이의 구독자 목록', () => {
     '시각이 같을 때 번호로 가르지 않는다(isAfter)': swap(' || (item.createdAt === cursor.createdAt && item.id < cursor.id)', ''),
     '정렬에서 번호를 안 본다(newestFirst)': swap('  return b.id - a.id;', '  return 0;'),
     '다음 커서를 페이지 첫 줄로': swap('encodeCursor(page[page.length - 1])', 'encodeCursor(page[0])'),
-    '이 사람이 yuna 를 구독하나로 셌다': swap('(row) => row.subscriberId === res.locals.userId && row.authorId === subscriber.id', '(row) => row.subscriberId === subscriber.id && row.authorId === author.id'),
-    '이 사람이 나를 구독하나로 셌다': swap('(row) => row.subscriberId === res.locals.userId && row.authorId === subscriber.id', '(row) => row.subscriberId === subscriber.id && row.authorId === res.locals.userId'),
+    '빈칸에 subscriber.id': swap('(row) => row.subscriberId === res.locals.userId && row.authorId === subscriber.id', '(row) => row.subscriberId === subscriber.id && row.authorId === subscriber.id'),
+    '빈칸에 author.id': swap('(row) => row.subscriberId === res.locals.userId && row.authorId === subscriber.id', '(row) => row.subscriberId === author.id && row.authorId === subscriber.id'),
     'hasNext 를 limit 과 같을 때도 true': swap('const hasNext = rows.length > limit;', 'const hasNext = rows.length >= limit;'),
   };
 
@@ -207,8 +207,8 @@ describe('축 ⑥ 직접 해보기 1 - 글쓴이의 구독자 목록', () => {
       '시각이 같을 때 번호로 가르지 않는다(isAfter)': [3, 'yuna의 구독자 - 둘째 페이지'],
       '정렬에서 번호를 안 본다(newestFirst)': [2, 'yuna의 구독자 - 첫 페이지'],
       '다음 커서를 페이지 첫 줄로': [3, 'yuna의 구독자 - 둘째 페이지'],
-      '이 사람이 yuna 를 구독하나로 셌다': [2, 'yuna의 구독자 - 첫 페이지'],
-      '이 사람이 나를 구독하나로 셌다': [2, 'yuna의 구독자 - 첫 페이지'],
+      '빈칸에 subscriber.id': [2, 'yuna의 구독자 - 첫 페이지'],
+      '빈칸에 author.id': [2, 'yuna의 구독자 - 첫 페이지'],
       'hasNext 를 limit 과 같을 때도 true': null,
     });
   }, 180_000);
