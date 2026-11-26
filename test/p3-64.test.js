@@ -1175,3 +1175,27 @@ describe('축 ⑫-주제 1 disconnectSockets', () => {
     }
   }, 60_000);
 });
+
+describe('축 ⑩-학생 낭독 과제 [기초] 확인 4 - seoyeon 이 남의 2번 방에 보내면', () => {
+  const scene = (out) => async ({ base, lab }) => {
+    const jaehoon = await labPerson(base, lab, 'jaehoon');
+    const seoyeon = await labPerson(base, lab, 'seoyeon');
+    seoyeon.socket.emit('inquiry:typing', { inquiryId: 2, typing: true });
+    jaehoon.socket.emit('inquiry:typing', { inquiryId: 1 });
+    await settle();
+    out.jaehoon = jaehoon.events.filter(([e]) => e === 'inquiry:typing').map(([, t]) => t);
+    out.seoyeon = seoyeon.events.filter(([e]) => e === 'inquiry:typing').map(([, t]) => t);
+    jaehoon.close();
+    seoyeon.close();
+  };
+  it('정답은 jaehoon 에게 안 간다 · 내 방인지 안 보는 판은 jaehoon 에게 간다(확인 4 가 가려낸다)', async () => {
+    const ok = {};
+    await labServe('hw1', 'homework1.js', scene(ok));
+    expect([ok.jaehoon, ok.seoyeon]).toEqual([[], []]);
+    const wrong = {};
+    await labServe('hw1', 'homework1.js', scene(wrong), { edit: swap(
+      "  socket.on('inquiry:typing', (payload) => {\n    const inquiry = findMyInquiry(payload?.inquiryId, userId);",
+      "  socket.on('inquiry:typing', (payload) => {\n    const inquiry = inquiries.find((one) => one.id === payload?.inquiryId);") });
+    expect(wrong.jaehoon).toEqual([{ inquiryId: 2, senderId: 43, typing: true }]);
+  }, 90_000);
+});
