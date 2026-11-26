@@ -8,9 +8,16 @@
   <body>
     <h1>WebSocket 채팅</h1>
     <p id="status">연결하는 중...</p>
+    <form id="form">
+      <input id="text" placeholder="메시지" autocomplete="off" />
+      <button>보내기</button>
+    </form>
+    <ul id="list"></ul>
 
     <script>
+      const name = new URLSearchParams(location.search).get('name');
       const status = document.querySelector('#status');
+      const list = document.querySelector('#list');
       const socket = new WebSocket(`ws://${location.host}`);
 
       socket.addEventListener('open', () => {
@@ -19,6 +26,20 @@
 
       socket.addEventListener('close', () => {
         status.textContent = '연결이 끊겼어요';
+      });
+
+      // 서버가 보낸 것은 요청하지 않아도 이 이벤트로 들어온다.
+      socket.addEventListener('message', (event) => {
+        const li = document.createElement('li');
+        li.textContent = event.data;
+        list.append(li);
+      });
+
+      document.querySelector('#form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const input = document.querySelector('#text');
+        socket.send(`${name}: ${input.value}`);
+        input.value = '';
       });
     </script>
   </body>
