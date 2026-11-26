@@ -19,22 +19,23 @@ const personFields = { id: true, username: true, name: true, profileImage: true 
 const messageFields = { id: true, senderId: true, content: true, createdAt: true };
 
 // 대화방 한 줄 - 두 자리의 사람과 가장 최근 메시지 하나를 함께 받는다.
+// 가장 최근 메시지는 대화방 행에 적어 둔 번호로 그 메시지 한 행만 읽는다.
 const conversationFields = {
   id: true,
   createdAt: true,
   lastMessageAt: true,
   participantA: { select: personFields },
   participantB: { select: personFields },
-  messages: { select: messageFields, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1 },
+  lastMessage: { select: messageFields },
 };
 
 // 두 자리 가운데 내가 아닌 쪽이 상대다. 응답에는 상대만 싣는다.
 // 메시지가 하나도 없는 방은 lastMessage 가 null 이다.
-function toConversation({ participantA, participantB, messages, ...conversation }, myId) {
+function toConversation({ participantA, participantB, lastMessage, ...conversation }, myId) {
   return {
     ...conversation,
     otherUser: participantA.id === myId ? participantB : participantA,
-    lastMessage: messages[0] ?? null,
+    lastMessage,
   };
 }
 
