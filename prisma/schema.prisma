@@ -37,6 +37,11 @@ model User {
   following    Follow[]  @relation("Following")
   // 나를 팔로우하는 사람들 - follows 에서 내가 following 인 행이다.
   followers    Follow[]  @relation("Followers")
+  // 내가 참여한 대화방 - 대화방의 두 자리 가운데 어느 쪽에 들어 있는지에 따라 둘로 나뉜다.
+  conversationsAsA Conversation[] @relation("ParticipantA")
+  conversationsAsB Conversation[] @relation("ParticipantB")
+  // 내가 보낸 메시지
+  sentMessages DirectMessage[]
 
   @@map("users")
 }
@@ -199,4 +204,37 @@ model Upload {
 
   @@index([postId])
   @@map("uploads")
+}
+
+// 두 사람의 1:1 대화방 - 같은 두 사람의 방은 하나만 있어야 한다.
+model Conversation {
+  id             Int             @id @default(autoincrement())
+  participantAId Int             @map("participant_a_id")
+  participantA   User            @relation("ParticipantA", fields: [participantAId], references: [id], onDelete: Cascade)
+  participantBId Int             @map("participant_b_id")
+  participantB   User            @relation("ParticipantB", fields: [participantBId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  messages       DirectMessage[]
+
+  @@unique([participantAId, participantBId])
+  // UNIQUE 짝의 인덱스는 participant_a_id 가 앞이라 «b 자리에 내가 있는 방» 을 찾을 때는 못 쓴다.
+  @@index([participantBId])
+  @@map("conversations")
+}
+
+// 대화방 안의 메시지 한 줄
+model DirectMessage {
+  id             Int          @id @default(autoincrement())
+  conversationId Int          @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       Int          @map("sender_id")
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String       @db.VarChar(1000)
+  // 받는 사람이 읽었나 - 보낸 사람이 아니라 받는 사람이 대화방을 열면 true 가 된다.
+  isRead         Boolean      @default(false) @map("is_read")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  // 한 대화방의 메시지를 최신순으로 읽는다 - 같은 값으로 찾는 컬럼을 앞에, 차례를 정하는 컬럼을 뒤에.
+  @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("direct_messages")
 }
