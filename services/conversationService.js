@@ -1,6 +1,6 @@
 // ~/instagram-api/services/conversationService.js
 import { prisma } from '../db.js';
-import { BadRequestError, NotFoundError } from '../errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
 
 // 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
@@ -98,14 +98,18 @@ export async function getConversations(myId, { limit = 20, cursor }) {
   };
 }
 
-// 대화방 번호로 방을 찾는다 - 없으면 404 다.
-async function findConversation(conversationId) {
+// 내가 참여한 대화방을 찾는다 - 없으면 404, 있는데 두 자리 어디에도 내가 없으면 403 이다.
+async function findMyConversation(conversationId, myId) {
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
     select: { id: true, participantAId: true, participantBId: true },
   });
 
   if (!conversation) throw new NotFoundError('CONVERSATION_NOT_FOUND');
+
+  if (conversation.participantAId !== myId && conversation.participantBId !== myId) {
+    throw new ForbiddenError('NOT_CONVERSATION_MEMBER');
+  }
 
   return conversation;
 }
@@ -114,8 +118,8 @@ async function findConversation(conversationId) {
 const historyFields = { ...messageFields, isRead: true };
 
 // 대화방의 메시지 - 가장 최근 메시지가 먼저다. 화면은 위로 올릴 때마다 그 앞을 limit 개씩 더 받는다.
-export async function getMessages(conversationId, { limit = 20, cursor }) {
-  await findConversation(conversationId);
+export async function getMessages(conversationId, myId, { limit = 20, cursor }) {
+  await findMyConversation(conversationId, myId);
 
   const rows = await prisma.directMessage.findMany({
     where: {

@@ -79,3 +79,15 @@ GET http://localhost:3000/api/v2/conversations/1/messages?limit=2&cursor={{first
 
 ### 없는 대화방의 메시지
 GET http://localhost:3000/api/v2/conversations/999/messages
+
+### boram으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "boram",
+  "password": "boram1234"
+}
+
+### jaehoon과 seoyeon의 대화방 메시지
+GET http://localhost:3000/api/v2/conversations/1/messages

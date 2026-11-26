@@ -18,9 +18,9 @@ export async function list(req, res) {
   sendData(res, page);
 }
 
-// 그 대화방의 메시지 이력
+// 그 대화방의 메시지 이력 - 그 방에 참여한 사람만 받는다.
 export async function messages(req, res) {
-  const page = await conversationService.getMessages(req.conversationId, res.locals.query);
+  const page = await conversationService.getMessages(req.conversationId, res.locals.userId, res.locals.query);
 
   sendData(res, page);
 }

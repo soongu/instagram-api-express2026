@@ -25,6 +25,7 @@ export const MESSAGES = {
   NOT_POST_AUTHOR: '내가 쓴 게시물만 고치거나 지울 수 있어요',
   CANNOT_REMOVE_COMMENT: '내 댓글이나 내 게시물에 달린 댓글만 지울 수 있어요',
   ADMIN_ONLY: '관리자만 할 수 있어요',
+  NOT_CONVERSATION_MEMBER: '내가 참여한 대화방이 아니에요',
   POST_NOT_FOUND: '그런 게시물은 없어요',
   COMMENT_NOT_FOUND: '그런 댓글은 없어요',
   HASHTAG_NOT_FOUND: '그런 해시태그는 없어요',
