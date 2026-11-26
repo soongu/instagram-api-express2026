@@ -1384,7 +1384,7 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 대조 — 수업 백엔드(Step 1~
     if (cell(beforeAfter, 0, 2) !== '시드를 넣은 시각' || p2Before.updatedAt !== p2Before.createdAt) problem(beforeAfter.lines[0], `달기 전 updatedAt «${cell(beforeAfter, 0, 2)}»`, `updatedAt ${p2Before.updatedAt} · createdAt ${p2Before.createdAt}`);
     if (cell(beforeAfter, 1, 2) !== '방금 댓글을 단 시각' || Math.abs(Date.parse(p2After.updatedAt) - Date.parse(added2b.createdAt)) > 1000) problem(beforeAfter.lines[1], `단 뒤 updatedAt «${cell(beforeAfter, 1, 2)}»`, `updatedAt ${p2After.updatedAt} · 단 댓글 createdAt ${added2b.createdAt}`);
     // 🙋 세 판 — 축 ② 가 잰 값(2번 게시물 시작 29/29)
-    const [three] = byHeader('판');
+    const [three] = byHeader('코드');
     const rb = seen.rollback;
     const delta = (n, base) => (n === base ? '그대로' : `${n - base} ${n > base ? '올랐어요' : '내려갔어요'}`);
     if (!rb) problem(three.line, '🙋 세 판 표', '실측 없음 — 축 ② 를 함께 돌려야 한다');
@@ -1456,7 +1456,7 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 대조 — 수업 백엔드(Step 1~
       [/`commentCount`가 (\d+)예요\. 2번 게시물의 원댓글은 이제 (\d+)개/, (m) => [`${m[1]} / ${m[2]}`, `${facts.step2a.byTitle[POST2][0].body.data.commentCount} / ${rootsOf(facts.step2a, 2)}`]],
       [/원댓글 (\d+)개와는 여전히 (\d+) 차이/, (m) => [`${m[1]} · ${m[2]}`, `${rootsOf(facts.step2b, 2)} · ${rootsOf(facts.step2b, 2) - facts.step2b.counts.find((p) => p.id === 2).count}`]],
       [/응답의 `commentCount`가 (\d+)이에요\. «2번 게시물»을 다시 보내면 `commentCount`는 (\d+)이고, `updatedAt`은 바로 앞에서 본 값 그대로/, (m) => [`${m[1]} / ${m[2]} / 그대로`, `${facts.step2.byTitle[ADD][0].body.data.commentCount} / ${facts.step2.byTitle[POST2][0].body.data.commentCount} / ${facts.step2.byTitle[POST2][0].body.data.updatedAt === facts.step2b.byTitle[POST2][0].body.data.updatedAt ? '그대로' : '바뀜'}`]],
-      [/세 판 모두 응답은 (\d{3})/, (m) => [m[1], seen.rollback ? [...new Set(Object.values(seen.rollback).map((r) => r.status))].join(',') : '실측 없음']],
+      [/세 경우 모두 응답은 (\d{3})/, (m) => [m[1], seen.rollback ? [...new Set(Object.values(seen.rollback).map((r) => r.status))].join(',') : '실측 없음']],
       [/3번 댓글은 (\w+)이 1번 게시물에 단 «(.+?)»예요\. 1번 게시물은 (\w+)의 게시물/, (m) => [`${m[1]} «${m[2]}» · ${m[3]}`, `${flow.comments[3].username} «${flow.comments[3].content}» · ${flow.postAuthors[1]}`]],
       [/1번 게시물은 원댓글이 하나 줄었는데 그대로 (\d+)이고, 2번 게시물은 아무것도 안 지워졌는데 (\d+)에서 (\d+)(?:으)?로/, (m) => [`${m[1]} · ${m[2]}→${m[3]}`, `${facts.step3b.byTitle[POST1][0].body.data.commentCount} · ${countBefore3b}→${facts.step3b.byTitle[D_WRONG][0].body.data.commentCount}`]],
       [/요청이 (아홉 ?|\d+)개예요/, (m) => [`${{ '아홉 ': 9, 아홉: 9 }[m[1]] ?? Number(m[1])}`, `${blocksOf(read(version('3a')(HTTP_FILE))).blocks.length - blocksOf(read(version(2)(HTTP_FILE))).blocks.length}`]],
@@ -1466,7 +1466,7 @@ describeLecture(LECTURE_MD ? '축 ⑧ 교안 대조 — 수업 백엔드(Step 1~
       [/다섯 번 모두 둘 다 (\d{3})이었(?:어요\.|고) 1번 게시물의 숫자는 (\d+)에서 (\d+)로 두 번 내려갔(?:고,|지만) 남은 원댓글은 (\d+)개/, (m) => [`${m[1]} · ${m[2]}→${m[3]} · ${m[4]}`, seen.concurrentDelete ? `${[...new Set(seen.concurrentDelete.before.flatMap((r) => r.statuses))].join(',')} · 3→${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.count))].join(',')} · ${[...new Set(seen.concurrentDelete.before.map((r) => r.drift[0]?.roots))].join(',')}` : '실측 없음']],
       [/다섯 번 모두 (\d{3}) 하나와 (\d{3}) 하나였고 숫자도 한 번만/, (m) => [`${m[1]} · ${m[2]}`, seen.concurrentDelete ? [...new Set(seen.concurrentDelete.after.map((r) => r.statuses.join(' · ')))].join(' / ') : '실측 없음']],
       // 문서에 댓글 주소의 HTTP 메서드 셋 — 목록 주소의 get · post 와 댓글 하나 주소의 delete
-      [/댓글 주소 셋\(((?:`[A-Z]+`·?)+)\)이 보여요/, (m) => [m[1].replace(/`/g, ''), seen.docs ? [...Object.keys(seen.docs.comments), ...Object.keys(seen.docs.remove)].filter((k) => k !== 'parameters').map((k) => k.toUpperCase()).join('·') : '실측 없음']],
+      [/댓글 API 셋\(((?:`[A-Z]+`·?)+)\)이 보여요/, (m) => [m[1].replace(/`/g, ''), seen.docs ? [...Object.keys(seen.docs.comments), ...Object.keys(seen.docs.remove)].filter((k) => k !== 'parameters').map((k) => k.toUpperCase()).join('·') : '실측 없음']],
     ];
     const results = [];
     for (const [re, measure] of claims) {
