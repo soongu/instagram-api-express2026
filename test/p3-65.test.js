@@ -519,9 +519,26 @@ describe('축 ①~⑧ 이어진 흐름 - 교안 차례 그대로', () => {
       await onDb(scratch, 'UPDATE conversations SET last_message_id = 13 WHERE id = 7');
       expect((await onDb(scratch, DRIFT)).map((r) => [r.id, r.last_message_id, r.actual])).toEqual([[7, 13, 15]]);
       const migration = read(version(2)('prisma/migrations/20261126084350_add_conversation_last_message/migration.sql'));
-      const fill = migration.slice(migration.indexOf('-- 이미 있는 대화방'));
+      const fill = migration.slice(migration.indexOf('-- 이미 있는 대화방'))
+        .replace('WHERE m."conversation_id" = c."id";', 'WHERE m."conversation_id" = c."id" AND c."last_message_at" <= m."created_at";');
+      expect(fill).toContain('AND c."last_message_at" <= m."created_at"');
       await runSqlFile(scratch, fill);
       expect(await onDb(scratch, DRIFT)).toEqual([]);
+    } finally {
+      await dropDb(scratch);
+    }
+  });
+
+  it('답안 주제 3 - 마지막 메시지를 지우면 ON DELETE SET NULL 이 대화방 행의 번호를 비운다(시각은 그대로)', async () => {
+    const scratch = `${DB_PREFIX}_unsend`;
+    await dropDb(scratch);
+    await admin(async (client) => { await kick(client, GATE_DB); await client.query(`CREATE DATABASE ${scratch} TEMPLATE ${GATE_DB}`); });
+    try {
+      const [before] = await onDb(scratch, 'SELECT last_message_id AS m, last_message_at AS at FROM conversations WHERE id = 8');
+      expect(before.m).toBe(22);
+      await onDb(scratch, 'DELETE FROM direct_messages WHERE id = 22');
+      const [after] = await onDb(scratch, 'SELECT last_message_id AS m, last_message_at AS at FROM conversations WHERE id = 8');
+      expect([after.m, after.at.getTime()]).toEqual([null, before.at.getTime()]);
     } finally {
       await dropDb(scratch);
     }
@@ -567,6 +584,7 @@ describe('축 ①~⑧ 이어진 흐름 - 교안 차례 그대로', () => {
   it('Step 6 - 다시 열면 미리보기가 null · 지운 시각은 응답에 없다 · seoyeon 의 17번이 오면 1번 방이 다시 뜨고 이력은 17번만', () => {
     expect(seen.open6.status).toBe(200);
     expect(seen.open6.body.data.lastMessage).toBe(null);
+    expect(seen.open6.body.data.lastMessageAt).toBe(seen.hello.createdAt);
     expect(Object.keys(seen.open6.body.data)).toEqual(['id', 'createdAt', 'lastMessageAt', 'otherUser', 'lastMessage']);
     expect(roomIdsOf(seen.list6)).toEqual([7, 8]);
     expect(seen.weekend.id).toBe(17);
@@ -946,6 +964,9 @@ describe('축 ⑰ 과제 [응용] - 안 읽은 문의 수를 문의방에 적어
       const read = await emitAck(j, 'inquiry:read', { inquiryId: 1 });
       j.close();
       expect(read).toEqual({ data: { readCount: 2 } });
+      const j2 = await personOf(base, 'jaehoon', lab);
+      expect(await emitAck(j2, 'inquiry:read', { inquiryId: 3 })).toEqual({ error: { message: '그런 문의방은 없어요' } });
+      j2.close();
       expect(await unreadOf(jaehoon)).toEqual([[1, 0], [4, 0], [2, 2]]);
       expect(await unreadOf(sTab)).toEqual([[1, 1]]);
     });
