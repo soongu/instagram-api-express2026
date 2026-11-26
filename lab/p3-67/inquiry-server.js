@@ -136,9 +136,10 @@ app.post('/dev/drop', (req, res) => {
   const me = viewer(req);
   const seconds = Number(req.query.seconds ?? 10);
   blockedUntil.set(me.id, Date.now() + seconds * 1000);
-  const ids = io.sockets.adapter.rooms.get(`user:${me.id}`) ?? new Set();
+  // 방의 번호 목록을 먼저 배열로 옮긴다 - 끊으면 그 연결이 방에서 빠져 목록이 줄어든다.
+  const ids = [...(io.sockets.adapter.rooms.get(`user:${me.id}`) ?? [])];
   ids.forEach((id) => io.sockets.sockets.get(id)?.conn.close());
-  res.json({ closedCount: ids.size, blockedSeconds: seconds });
+  res.json({ closedCount: ids.length, blockedSeconds: seconds });
 });
 // 막아 둔 사람의 연결 요청은 403 - 화면은 네트워크 실패로 보고 간격을 늘려 가며 다시 시도한다.
 io.engine.use((req, res, next) => {
