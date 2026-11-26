@@ -192,10 +192,20 @@ export async function sendMessage(conversationId, myId, content) {
   // 이력을 줄 때와 같은 확인 - 없는 방과 남의 방이면 404 에러를 던진다.
   const conversation = await findMyConversation(conversationId, myId);
 
-  // 이벤트로 알릴 때 어느 방의 메시지인지 화면이 알아야 해서 대화방 번호를 함께 싣는다.
-  const message = await prisma.directMessage.create({
-    data: { conversationId, senderId: myId, content },
-    select: { conversationId: true, ...historyFields },
+  // 메시지를 만들고 그 방의 «마지막 메시지» 도 고친다. 둘 중 하나만 되면 목록과 이력이 어긋나서 한 트랜잭션으로 묶는다.
+  const message = await prisma.$transaction(async (tx) => {
+    // 이벤트로 알릴 때 어느 방의 메시지인지 화면이 알아야 해서 대화방 번호를 함께 싣는다.
+    const created = await tx.directMessage.create({
+      data: { conversationId, senderId: myId, content },
+      select: { conversationId: true, ...historyFields },
+    });
+
+    await tx.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageId: created.id, lastMessageAt: created.createdAt },
+    });
+
+    return created;
   });
 
   return { message, participantAId: conversation.participantAId, participantBId: conversation.participantBId };
