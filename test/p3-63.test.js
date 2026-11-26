@@ -597,6 +597,12 @@ describe('축 ⑥ Step 6 - 남의 대화방', () => {
       const warns = tail().split('\n').filter((line) => line.includes('사용자의 방이 아니라서'));
       expect(warns[0]).toBe('1번 대화방은 48번 사용자의 방이 아니라서 404 로 답했어요.');
       expect(warns).toHaveLength(4);
+      // 경고 줄 바로 다음이 그 요청의 로그 줄이다.
+      const lines = tail().split('\n');
+      const at = lines.indexOf(warns[0]);
+      expect(lines[at + 1]).toMatch(/^GET \/api\/v2\/conversations\/1\/messages 404 \d+\.\dms$/);
+      expect((await boram.get(MSG(6))).body.error.message).toBe('그런 대화방은 없어요');
+      expect((await boram.get(MSG(2))).body.error.message).toBe('그런 대화방은 없어요');
       expect((await (await loggedIn(base, 'seoyeon')).get(MSG(1))).status).toBe(200);
     } }]);
     expect(read(version(6)('errors.js'))).not.toMatch(/NOT_CONVERSATION_MEMBER/);
@@ -705,21 +711,23 @@ describe('축 ⑨ 직접 해보기 1 - 내 문의방 목록', () => {
     });
   }, 90_000);
 
-  it('틀린 판 셋 - 사려는 방만 보면 [2] · 상대를 늘 파는 사람으로 하면 4 와 1 의 상대가 jaehoon · 정렬 없이 첫 줄을 고르면 오래된 메시지', async () => {
+  it('빈칸만 틀린 판 넷 - 첫 빈칸 buyerId 면 [2] · 둘째 빈칸 buyerId 면 2번 방 상대가 jaehoon · 셋째 빈칸을 비우면 첫 메시지 · 넷째 빈칸 undefined 면 키가 없다', async () => {
     const variants = [
-      ['.filter((inquiry) => inquiry.buyerId === myId || sellerIdOf(inquiry) === myId)', '.filter((inquiry) => inquiry.buyerId === myId)'],
-      ['const otherId = inquiry.buyerId === myId ? sellerIdOf(inquiry) : inquiry.buyerId;', 'const otherId = sellerIdOf(inquiry);'],
-      ['const [last] = messages.filter((message) => message.inquiryId === inquiry.id).sort(newestFirst);', 'const [last] = messages.filter((message) => message.inquiryId === inquiry.id);'],
+      ['inquiry.buyerId === myId || sellerIdOf(inquiry) === myId)', 'inquiry.buyerId === myId || inquiry.buyerId === myId)'],
+      ['inquiry.buyerId === myId ? sellerIdOf(inquiry) : inquiry.buyerId;', 'inquiry.buyerId === myId ? inquiry.buyerId : inquiry.buyerId;'],
+      ['message.inquiryId === inquiry.id).sort(newestFirst);', 'message.inquiryId === inquiry.id).sort();'],
+      ['createdAt: last.createdAt } : null,', 'createdAt: last.createdAt } : undefined,'],
     ];
     const results = [];
     for (const [a, b] of variants) {
       await lab('practice1.js', async ({ send }) => {
-        results.push(rooms((await send('GET', '/api/inquiries')).body));
+        results.push((await send('GET', '/api/inquiries')).body);
       }, { edit: (dir, rel) => replaceIn(dir, rel, a, b) });
     }
-    expect(results[0]).toEqual([[2, '무선 이어폰', 'jisoo', '주문하시면 바로 보내 드려요']]);
-    expect(results[1].map((r) => r[2])).toEqual(['jaehoon', 'jisoo', 'jaehoon']);
-    expect(results[2].map((r) => r[3])).toEqual([null, '노이즈 캔슬링 되나요?', '텀블러 용량이 몇 ml예요?']);
+    expect(rooms(results[0])).toEqual([[2, '무선 이어폰', 'jisoo', '주문하시면 바로 보내 드려요']]);
+    expect(rooms(results[1]).map((r) => r[2])).toEqual(['taeyang', 'jaehoon', 'yuna']);
+    expect(rooms(results[2]).map((r) => r[3])).toEqual([null, '노이즈 캔슬링 되나요?', '텀블러 용량이 몇 ml예요?']);
+    expect(Object.keys(results[3].items[0])).toEqual(['id', 'productName', 'otherUser']);
   }, 180_000);
 });
 
@@ -736,12 +744,20 @@ describe('축 ⑩ 직접 해보기 2 - 문의방 메시지', () => {
     });
   }, 90_000);
 
-  it('틀린 판 - 번호로만 찾으면 남의 방 3 이 200 으로 나온다', async () => {
+  it('빈칸만 틀린 판 셋 - 첫 빈칸 true 면 남의 방 3 이 200 · 첫 빈칸 buyerId 면 1번 방 404 · 둘째 빈칸을 비우면 4 · 6 · 7', async () => {
+    const cond = '(inquiry) => inquiry.id === id && (inquiry.buyerId === myId || sellerIdOf(inquiry) === myId),';
     await lab('practice2.js', async ({ send }) => {
       const res = await send('GET', '/api/inquiries/3/messages');
       expect([res.status, res.body.items.map((m) => m.id)]).toEqual([200, [8, 5]]);
-    }, { edit: (dir, rel) => replaceIn(dir, rel, '(inquiry) => inquiry.id === id && (inquiry.buyerId === myId || sellerIdOf(inquiry) === myId),', '(inquiry) => inquiry.id === id,') });
-  }, 90_000);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, cond, '(inquiry) => inquiry.id === id && (true),') });
+    await lab('practice2.js', async ({ send }) => {
+      expect((await send('GET', '/api/inquiries/2/messages')).status).toBe(200);
+      expect((await send('GET', '/api/inquiries/1/messages')).status).toBe(404);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, cond, '(inquiry) => inquiry.id === id && (inquiry.buyerId === myId),') });
+    await lab('practice2.js', async ({ send }) => {
+      expect((await send('GET', '/api/inquiries/2/messages')).body.items.map((m) => m.id)).toEqual([4, 6, 7]);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, '.filter((message) => message.inquiryId === inquiry.id)\n    .sort(newestFirst)', '.filter((message) => message.inquiryId === inquiry.id)\n    .sort()') });
+  }, 180_000);
 });
 
 describe('축 ⑪ 과제 [기초] - 문의방 읽음', () => {
