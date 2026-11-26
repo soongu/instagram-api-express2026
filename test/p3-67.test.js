@@ -194,3 +194,80 @@ describe('Step 6 - 읽음을 알린다(dm:read)', () => {
     }
   });
 });
+
+describe('Step 8 - 개발용 «그 사람 연결 끊기»(DELETE /dev/connections/:username)', () => {
+  /** 다시 연결까지 하는 연결 - 끊기고 다시 붙는 차례를 시각과 함께 모은다. */
+  async function liveSocketOf(send) {
+    const trail = [];
+    const t0 = Date.now();
+    const socket = connectIo(ORIGIN, { extraHeaders: { cookie: send.cookie() }, transports: ['polling', 'websocket'] });
+    const events = [];
+    socket.onAny((event, value) => events.push([event, value]));
+    socket.on('disconnect', (reason) => trail.push(`disconnect ${reason} ${Date.now() - t0}`));
+    socket.io.on('reconnect', () => trail.push(`reconnect ${Date.now() - t0}`));
+    await new Promise((ok, fail) => { socket.once('connect', ok); socket.once('connect_error', fail); });
+    return { socket, events, trail, t0, close: () => socket.disconnect() };
+  }
+
+  it('jaehoon 의 두 연결만 끊고 3초 동안 받지 않는다 · 그 사이 온 메시지는 안 온다 · 3초 뒤 스스로 다시 붙는다 · seoyeon 은 그대로', async () => {
+    const jaehoon = await as('jaehoon');
+    const seoyeon = await as('seoyeon');
+    const a = await liveSocketOf(jaehoon);
+    const b = await liveSocketOf(jaehoon);
+    const s = await liveSocketOf(seoyeon);
+    try {
+      const r = await jaehoon('DELETE', '/dev/connections/jaehoon?seconds=3');
+      expect(r.status).toBe(200);
+      expect(r.body.data).toEqual({ closedCount: 2, blockedSeconds: 3 });
+      const cutAt = Date.now();
+      await sleep(500);
+      expect(a.trail[0]).toMatch(/^disconnect transport close /);
+      expect(b.trail[0]).toMatch(/^disconnect transport close /);
+      expect(s.trail).toEqual([]);
+      const ack = await s.socket.timeout(2000).emitWithAck('dm:send', { conversationId: 1, content: '방금 메시지 받았어요?' });
+      expect(ack.data.content).toBe('방금 메시지 받았어요?');
+      await sleep(300);
+      expect(a.events.filter(([e]) => e === 'dm:message')).toEqual([]);
+      // 막는 3초가 지나면 다음 시도에서 붙는다(시도 간격은 1초에서 두 배씩 · 많아야 5초)
+      for (let i = 0; i < 100 && !(a.socket.connected && b.socket.connected); i += 1) await sleep(100);
+      expect(a.socket.connected).toBe(true);
+      expect(Date.now() - cutAt).toBeGreaterThanOrEqual(3000);
+      expect(a.events.filter(([e]) => e === 'dm:message')).toEqual([]);
+    } finally { a.close(); b.close(); s.close(); }
+  }, 30_000);
+
+  it('seconds 가 0 이면 막지 않는다 - 끊긴 뒤 1초 안팎에 다시 붙는다', async () => {
+    const jaehoon = await as('jaehoon');
+    const a = await liveSocketOf(jaehoon);
+    try {
+      const r = await jaehoon('DELETE', '/dev/connections/jaehoon?seconds=0');
+      expect(r.body.data).toEqual({ closedCount: 1, blockedSeconds: 0 });
+      for (let i = 0; i < 50 && !a.trail.some((x) => x.startsWith('reconnect')); i += 1) await sleep(100);
+      expect(a.trail.some((x) => x.startsWith('reconnect'))).toBe(true);
+    } finally { a.close(); }
+  });
+
+  it('seconds 없으면 10초 · 연결이 없는 사람은 closedCount 0 · 없는 사람 404 · seconds 61 은 400 · 다른 HTTP 메서드 405', async () => {
+    const jaehoon = await as('jaehoon');
+    const none = await jaehoon('DELETE', '/dev/connections/doyun');
+    expect(none.body.data).toEqual({ closedCount: 0, blockedSeconds: 10 });
+    expect((await jaehoon('DELETE', '/dev/connections/nobody_here')).body.error.code).toBe('USER_NOT_FOUND');
+    const bad = await jaehoon('DELETE', '/dev/connections/jaehoon?seconds=61');
+    expect([bad.status, bad.body.error.code]).toEqual([400, 'VALIDATION_FAILED']);
+    const post = await jaehoon('POST', '/dev/connections/jaehoon', {});
+    expect([post.status, post.allow]).toEqual([405, 'DELETE']);
+  });
+});
+
+describe('Step 8 - NODE_ENV=production 이면 개발용 주소가 없다', () => {
+  it('DELETE /dev/connections/jaehoon 은 404', async () => {
+    const port = PORT + 1;
+    const prod = await boot(`${DIR}/app.js`, { port, env: { ...env, PORT: String(port), NODE_ENV: 'production' }, cwd: DIR, ready: '기다리고 있어요' });
+    try {
+      const login = await fetch(`http://localhost:${port}/api/v2/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'jaehoon', password: 'jaehoon1234' }) });
+      const cookie = login.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+      const r = await fetch(`http://localhost:${port}/api/v2/dev/connections/jaehoon`, { method: 'DELETE', headers: { cookie } });
+      expect(r.status).toBe(404);
+    } finally { await prod.stop(); }
+  }, 30_000);
+});
