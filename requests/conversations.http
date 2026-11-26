@@ -22,3 +22,28 @@ Content-Type: application/json
 {
   "username": "nobody"
 }
+
+### 나 자신과의 대화방 열기
+POST http://localhost:3000/api/v2/conversations
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### seoyeon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon과의 대화방 열기
+POST http://localhost:3000/api/v2/conversations
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}

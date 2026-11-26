@@ -1,6 +1,6 @@
 // ~/instagram-api/services/conversationService.js
 import { prisma } from '../db.js';
-import { NotFoundError } from '../errors.js';
+import { BadRequestError, NotFoundError } from '../errors.js';
 
 // 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
 async function findUserId(username) {
@@ -27,10 +27,21 @@ function toConversation({ participantA, participantB, ...conversation }, myId) {
   return { ...conversation, otherUser: participantA.id === myId ? participantB : participantA };
 }
 
+// 두 사람을 대화방의 두 자리에 놓는다 - 작은 번호가 언제나 a 자리다.
+// 누가 먼저 열든 같은 두 사람은 같은 짝이 되어, UNIQUE 짝 하나로 방이 하나만 선다.
+function pairOf(userId, otherId) {
+  return userId < otherId
+    ? { participantAId: userId, participantBId: otherId }
+    : { participantAId: otherId, participantBId: userId };
+}
+
 // 그 사람과의 대화방을 연다 - 없으면 만들고, 있으면 있는 방을 준다.
 export async function openConversation(username, myId) {
   const otherId = await findUserId(username);
-  const pair = { participantAId: myId, participantBId: otherId };
+
+  if (otherId === myId) throw new BadRequestError('CANNOT_MESSAGE_SELF');
+
+  const pair = pairOf(myId, otherId);
 
   // 이미 있으면 행이 안 들어간다(count 0) - 팔로우할 때와 같은 방법이다.
   const { count } = await prisma.conversation.createMany({ data: [pair], skipDuplicates: true });
