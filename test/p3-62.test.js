@@ -9,61 +9,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { boot, portIsFree } from './helpers/boot.js';
 import { launchChrome } from './helpers/chrome.js';
+import { ROOT, commitSha, commitDir, serve, note, PAGE } from './helpers/p362.js';
 
-const ROOT = new URL('../', import.meta.url).pathname;
 const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const hasRef = (ref) => { try { git('rev-parse', '--verify', '--quiet', ref); return true; } catch { return false; } };
-const LINE = process.env.P362_LINE ?? (hasRef('refs/heads/code/p3-62') ? 'code/p3-62' : 'HEAD');
+const stepSha = (n) => commitSha(`Step ${n}`);
+const stepDir = (n) => commitDir(`Step ${n}`);
 
-/** 제목이 `feat(p3-62):` 로 시작하고 `(Step N)` 이 든 커밋(없으면 null). */
-const stepSha = (n) => git('log', LINE, '--format=%H', '--fixed-strings', '--all-match', '--grep=feat(p3-62):', `--grep=(Step ${n})`).split('\n').filter(Boolean)[0] ?? null;
-
-/** 그 Step 커밋(없으면 작업트리)의 `lab/p3-62` 를 풀어 둔 폴더. */
-function stepDir(n) {
-  const sha = stepSha(n);
-  const dir = mkdtempSync(join(tmpdir(), `p362-step${n}-`));
-  if (sha) {
-    const tar = execFileSync('git', ['archive', '--format=tar', sha, 'lab/p3-62'], { cwd: ROOT, maxBuffer: 1 << 28 });
-    execFileSync('tar', ['-x', '-C', dir], { input: tar });
-  } else {
-    mkdirSync(join(dir, 'lab'), { recursive: true });
-    cpSync(join(ROOT, 'lab/p3-62'), join(dir, 'lab/p3-62'), { recursive: true });
-  }
-  symlinkSync(join(ROOT, 'node_modules'), join(dir, 'node_modules'));
-  return { dir, from: sha ? sha.slice(0, 7) : '작업트리', cleanup: () => rmSync(dir, { recursive: true, force: true }) };
-}
-
-/**
- * 실습 파일을 띄운다. 🚨 학생 파일은 포트(4001 등)를 박아 두었는데 그 포트는 다른 작업(낭독 환경 등)이 자주 쓴다.
- * 그래서 풀어 둔 사본에서만 그 숫자를 빈 포트로 바꿔 띄우고, «바뀐 것은 그 숫자뿐» 을 여기서 확인한다.
- * 돌려주는 `log` 는 숫자를 학생 포트로 되돌린 글자다(교안 인용과 대조하려고).
- */
-async function serve(step, file, studentPort, ready) {
-  const path = join(step.dir, file);
-  const original = readFileSync(path, 'utf8');
-  const port = await freePortIn(4300, 4399);
-  const changed = original.replaceAll(String(studentPort), String(port));
-  expect(changed.replaceAll(String(port), String(studentPort))).toBe(original);
-  writeFileSync(path, changed);
-  const server = await boot(file, { port, cwd: step.dir, ready });
-  return { ...server, port, log: server.log.replaceAll(String(port), String(studentPort)), tail: () => server.tail().replaceAll(String(port), String(studentPort)) };
-}
-
-async function freePortIn(lo, hi) {
-  for (let p = lo; p <= hi; p += 1) if (await portIsFree(p)) return p;
-  throw new Error(`${lo}~${hi} 에 빈 포트가 없다`);
-}
-
-/** 잰 값을 남긴다(통과한 테스트의 console 은 vitest 가 숨긴다) - `$TMPDIR/p362-measure.log`. */
-const note = (...parts) => appendFileSync(join(tmpdir(), 'p362-measure.log'), `${new Date().toISOString()} ${parts.join(' ')}\n`);
-
-const PAGE = (port, file, name) => `http://localhost:${port}/${file}?name=${name}`;
 /** 그 탭이 그 주소로 보낸 요청(Network 탭 한 줄)들. */
 const requestsTo = (tab, mark, path) => tab.since(mark, 'Network.requestWillBeSent')
   .filter((e) => new URL(e.params.request.url).pathname === path)
