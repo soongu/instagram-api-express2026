@@ -476,6 +476,7 @@ const ALL = [STAGE_1, STAGE_2, STAGE_3, STAGE_4, STAGE_5, STAGE_6A, STAGE_6, STA
 describe('축 ①~⑧ 이어진 흐름 - 교안 차례 그대로', () => {
   beforeAll(async () => {
     await flow(ALL);
+    if (process.env.P365_DUMP) writeFileSync(process.env.P365_DUMP, JSON.stringify(seen, null, 2));
     if (process.env.P365_KEEP) {
       await admin(async (client) => {
         await client.query(`DROP DATABASE IF EXISTS ${DB_PREFIX}_end`);
@@ -552,6 +553,9 @@ describe('축 ①~⑧ 이어진 흐름 - 교안 차례 그대로', () => {
     expect([roomIdsOf(seen.page7a), seen.page7a.hasNext]).toEqual([[1, 7], true]);
     expect(seen.photo.id).toBe(18);
     expect([seen.page7b.items, seen.page7b.hasNext, seen.page7b.nextCursor]).toEqual([[], false, null]);
+    expect(decoded(seen.page7a.nextCursor)).toEqual({ lastMessageAt: seen.mc.createdAt, id: 7 });
+    // 교안 표 - «몇 개를 건넜는지(OFFSET 2)» 였다면 새 차례에서 두 개를 건너뛴 [7] 이 다음 페이지다(7번 방이 두 번).
+    expect(roomIdsOf(seen.list7).slice(2)).toEqual([7]);
     expect(previewsOf(seen.list7)).toEqual([[8, 'doyun', PHOTO], [1, 'seoyeon', WEEKEND], [7, 'minji', MC]]);
   });
 
@@ -559,7 +563,7 @@ describe('축 ①~⑧ 이어진 흐름 - 교안 차례 그대로', () => {
     expect([seen.race.a.id, seen.race.b.id]).toEqual([19, 20]);
     expect(seen.race.a.createdAt < seen.race.b.createdAt).toBe(true);
     expect(seen.last8a).toEqual([[1, 17], [7, 15], [8, 19]]);
-    expect(previewsOf(seen.list8a)[0]).toEqual([8, 'doyun', SLOW_J]);
+    expect(previewsOf(seen.list8a)).toEqual([[8, 'doyun', SLOW_J], [1, 'seoyeon', WEEKEND], [7, 'minji', MC]]);
   });
 
   it('Step 8 - 늦추는 줄을 둔 채 조건을 붙이면 doyun 의 22번이 남는다 · 늦추는 줄을 지운 판도 같다', () => {
@@ -608,6 +612,8 @@ describe('축 ⑩ 커서 함수 - 시각 이름을 받게 바꿔도 다른 목�
     const c = now.encodeCursor({ lastMessageAt: new Date('2026-11-26T07:30:52.785Z'), id: 8 }, 'lastMessageAt');
     expect(now.decodeCursor(c, 'lastMessageAt')).toEqual({ lastMessageAt: '2026-11-26T07:30:52.785Z', id: 8 });
     expect(() => now.decodeCursor(c)).toThrow();
+    // 게시물 목록의 커서(createdAt)를 대화방 목록(lastMessageAt)에 보내도 400 INVALID_CURSOR
+    expect(() => now.decodeCursor(now.encodeCursor(row), 'lastMessageAt')).toThrow(expect.objectContaining({ code: 'INVALID_CURSOR' }));
   });
 });
 
@@ -634,7 +640,27 @@ describe('축 ⑪ Step 7 - 커서에 방 번호만 담으면(스냅숏)', () => 
     };
     expect(await scene(withService('step7-room-id-cursor.conversationService.js'))).toEqual([[1, 7], [1, 8]]);
     expect(await scene(null)).toEqual([[1, 7], [8]]);
-  }, 120_000);
+    // 8번 방에 메시지가 오면 - 번호만 기억해도 7번 방의 지금 시각은 그대로라 빈 목록(오늘 코드와 같다)
+    const scene8 = async (edit) => {
+      let got;
+      await flow([
+        { step: 6, run: async ({ base }) => {
+          await together(base, ['seoyeon'], async ({ seoyeon }) => { await sendOk(seoyeon, 1, WEEKEND); });
+          await together(base, ['jaehoon'], async ({ jaehoon }) => { await sendOk(jaehoon, 7, MC); });
+          await together(base, ['seoyeon'], async ({ seoyeon }) => { await sendOk(seoyeon, 1, HELLO); });
+        } },
+        { step: 6, edit, run: async ({ base }) => {
+          const tab = await loggedIn(base, 'jaehoon');
+          const first = await listOf(tab, '?limit=2');
+          await together(base, ['doyun'], async ({ doyun }) => { await sendOk(doyun, 8, PHOTO); });
+          const second = await listOf(tab, `?limit=2&cursor=${first.nextCursor}`);
+          got = [roomIdsOf(first), roomIdsOf(second)];
+        } },
+      ]);
+      return got;
+    };
+    expect(await scene8(withService('step7-room-id-cursor.conversationService.js'))).toEqual([[1, 7], []]);
+  }, 180_000);
 });
 
 // ── 오프닝 - 메시지 1만 개 · 10만 개 ───────────────────────────────────────
