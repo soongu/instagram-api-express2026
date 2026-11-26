@@ -144,9 +144,10 @@ describe('직접 해보기 2 - Socket.IO 로 물건마다 방', () => {
 });
 
 describe('과제 [기초] - 묻는 경매를 알려 주는 경매로', () => {
-  async function homework1(tag) {
+  async function homework1(tag, edits = []) {
     const step = commitDir(tag);
     try {
+      for (const e of edits) patch(step, e[0], e[1], e[2]);
       const server = await serve(step, 'lab/p3-62/homework1.js', 4006, '기다리고 있어요');
       const a = await chrome.newTab();
       const b = await chrome.newTab();
@@ -164,7 +165,7 @@ describe('과제 [기초] - 묻는 경매를 알려 주는 경매로', () => {
         await sleep(400);
         out.low = [await view(a), await view(b)];
         return out;
-      } finally { a.close(); b.close(); await server.stop(); }
+      } finally { a.close(); b.close(); await stop(server); }
     } finally { step.cleanup(); }
   }
   const H = (price, bidder, notice = '') => ({ title: '빈티지 자전거 경매', price, bidder, notice });
@@ -177,6 +178,28 @@ describe('과제 [기초] - 묻는 경매를 알려 주는 경매로', () => {
     expect(r.low).toEqual([H('55,000', 'jaehoon'), H('55,000', 'jaehoon', '지금 가격(55,000원)보다 높게 불러 주세요.')]);
   }, 30_000);
 
+  it('틀린 판 - setInterval 을 남겨 두면 ① 에서 GET /item 이 그대로 네 번', async () => {
+    const r = await homework1('과제 [기초]', [['lab/p3-62/public/homework1.html', "      socket.on('price', show);\n", "      socket.on('price', show);\n      setInterval(load, 2000);\n"]]);
+    expect(r.gets).toBe(4);
+  }, 30_000);
+
+  it('틀린 판 - io.emit 을 가격을 바꾸기 전에 두면 ② 에서 minji 창이 50,000 그대로', async () => {
+    const r = await homework1('과제 [기초]', [['lab/p3-62/homework1.js', `  item.price = price;
+  item.bidder = name;
+  res.status(201).json(item);
+
+  // 받아들인 입찰은 연결로 모두에게 알린다.
+  io.emit('price', item);
+`, `  // 받아들인 입찰은 연결로 모두에게 알린다.
+  io.emit('price', item);
+
+  item.price = price;
+  item.bidder = name;
+  res.status(201).json(item);
+`]]);
+    expect(r.seenIn).toBeNull();
+  }, 30_000);
+
   it('강의 자료 그대로 - 6.2초 동안 GET /item 네 번(2초마다) · 늦으면 2초 가까이 걸린다', async () => {
     const r = await homework1('과제 자료');
     note('[과제 기초] 자료 - 6.2초 동안 GET /item:', r.gets, '· minji 에 보이기까지(ms):', r.seenIn);
@@ -185,10 +208,23 @@ describe('과제 [기초] - 묻는 경매를 알려 주는 경매로', () => {
   }, 30_000);
 });
 
+describe('과제 [기초] 흔한 실수 - new Server(app)', () => {
+  it('Express 앱을 넘기면 서버가 뜨지 않고 Socket.IO 가 http.Server 를 달라고 말한다', async () => {
+    const step = commitDir('과제 [기초]');
+    try {
+      patch(step, 'lab/p3-62/homework1.js', 'const io = new Server(server);', 'const io = new Server(app);');
+      const err = await serve(step, 'lab/p3-62/homework1.js', 4006, '기다리고 있어요').then(async (sv) => { await sleep(500); const t = sv.tail(); await stop(sv); return t; }, (e) => e.message);
+      note('[과제 기초 흔한 실수] new Server(app):\n' + err);
+      expect(err).toContain('You are trying to attach socket.io to an express request handler function. Please pass a http.Server instance.');
+    } finally { step.cleanup(); }
+  }, 30_000);
+});
+
 describe('과제 [응용] - 다시 붙으면 놓친 입찰을 HTTP 로', () => {
-  async function homework2(tag) {
+  async function homework2(tag, edits = []) {
     const step = commitDir(tag);
     try {
+      for (const e of edits) patch(step, e[0], e[1], e[2]);
       const server = await serve(step, 'lab/p3-62/homework2.js', 4007, '기다리고 있어요');
       const a = await chrome.newTab();
       let b = await chrome.newTab();
@@ -204,33 +240,74 @@ describe('과제 [응용] - 다시 붙으면 놓친 입찰을 HTTP 로', () => {
         await b.send('Page.close');
         await sleep(300);
         await bid(a, 23000);
-        await sleep(200);
-        await bid(a, 25000);
         await sleep(300);
         b = await chrome.newTab();
         await b.open(PAGE(server.port, 'homework2.html', 'minji'));
         await sleep(800);
         out.reopened = await lines(b);
+        await b.evaluate('void socket.disconnect()');
+        await sleep(300);
+        out.offStatus = await text(b, '#status');
+        await bid(a, 25000);
+        await sleep(300);
+        await b.evaluate('void socket.connect()');
+        await sleep(800);
+        out.onStatus = await text(b, '#status');
+        out.reconnected = await lines(b);
         await bid(b, 27000);
         await sleep(400);
         out.after = await lines(b);
         out.a = await lines(a);
         return out;
-      } finally { a.close(); b.close(); await server.stop(); }
+      } finally { a.close(); b.close(); await stop(server); }
     } finally { step.cleanup(); }
   }
+  const HTML = 'lab/p3-62/public/homework2.html';
 
-  it('정답 - 다시 연 minji 탭에 놓친 둘까지 셋 · 그 뒤 입찰은 한 번씩만(겹치지 않는다)', async () => {
+  it('정답 - 다시 연 탭에 21,000 · 23,000 · Console 로 끊었다 붙이면 25,000 이 채워진다 · 겹치지 않는다', async () => {
     const r = await homework2('과제 [응용]');
     expect(r.first).toEqual(['jaehoon 21,000원']);
-    expect(r.reopened).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원', 'jaehoon 25,000원']);
-    expect(r.after).toEqual([...r.reopened, 'minji 27,000원']);
+    expect(r.reopened).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원']);
+    expect([r.offStatus, r.onStatus]).toEqual(['연결이 끊겼어요', '연결됐어요']);
+    expect(r.reconnected).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원', 'jaehoon 25,000원']);
+    expect(r.after).toEqual([...r.reconnected, 'minji 27,000원']);
     expect(r.a).toEqual(r.after);
-  }, 30_000);
+  }, 40_000);
 
-  it('강의 자료 그대로 - 다시 연 탭은 빈 목록', async () => {
+  it('강의 자료 그대로 - 다시 연 탭은 빈 목록 · 다시 붙어도 25,000 이 없다', async () => {
     const r = await homework2('과제 자료');
     expect(r.reopened).toEqual([]);
+    expect(r.reconnected).toEqual([]);
     expect(r.after).toEqual(['minji 27,000원']);
-  }, 30_000);
+  }, 40_000);
+
+  it('틀린 판 - 페이지를 열 때 한 번만 받으면(connect 밖) 다시 연 탭은 맞지만 다시 붙은 뒤 25,000 이 없다', async () => {
+    const r = await homework2('과제 [응용]', [[HTML, `      socket.on('connect', async () => {
+        status.textContent = '연결됐어요';
+        const response = await fetch(\`/bids?after=\${lastId}\`);
+        const missed = await response.json();
+        missed.forEach(show);
+      });`, `      (async () => {
+        const response = await fetch(\`/bids?after=\${lastId}\`);
+        const missed = await response.json();
+        missed.forEach(show);
+      })();
+
+      socket.on('connect', () => {
+        status.textContent = '연결됐어요';
+      });`]]);
+    expect(r.reopened).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원']);
+    expect(r.reconnected).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원']);
+  }, 40_000);
+
+  it('틀린 판 - 다시 붙을 때 after=0 으로 다 받고 건너뛰지 않으면 다시 붙은 뒤 21,000 · 23,000 이 두 번', async () => {
+    const r = await homework2('과제 [응용]', [
+      [HTML, 'const response = await fetch(`/bids?after=${lastId}`);', 'const response = await fetch(`/bids?after=0`);'],
+      [HTML, `        if (bid.id <= lastId) {
+          return;
+        }
+`, ''],
+    ]);
+    expect(r.reconnected).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원', 'jaehoon 21,000원', 'jaehoon 23,000원', 'jaehoon 25,000원']);
+  }, 40_000);
 });
