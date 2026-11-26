@@ -47,7 +47,8 @@ const hasRef = (ref) => {
     return false;
   }
 };
-const LINE = process.env.P354_LINE ?? (hasRef('refs/heads/code/p3-54') ? 'code/p3-54' : 'HEAD');
+// 2026-11-26 학생 칸이 실습을 고쳤다(제목 «— 고침:» · 같은 표식 · 북마크 code/p3-54 위의 선) — 그래서 기본은 HEAD 다.
+const LINE = process.env.P354_LINE ?? 'HEAD';
 /** 제목 끝 표식으로 커밋 하나 — 같은 표식이 여럿이면 가장 뒤 커밋. */
 const commitOf = (mark) => {
   const log = execFileSync('git', ['log', '-n', '400', '--format=%H %s', LINE], { cwd: P('.'), encoding: 'utf8' });
@@ -176,7 +177,12 @@ describe('축 ① 나눠 주는 파일', () => {
   it('🔴 shop-data.js — p3-53 판에서 사람 2번이 jaehoon · 상품에 sellerId · reviewCount · 6 의 글쓴이 sujin · 9 는 jaehoon 이 8 을 한 번 더 올려 숨긴 것 · reviewCount = 숨기지 않은 리뷰 수', async () => {
     const at = commitOf(COMMITS.practice1);
     const data = await import(join(studentCopy('practice1'), LAB, 'shop-data.js'));
-    const before = await import(join(studentCopy('practice1'), 'lab/p3-53/shop-data.js'));
+    // 대조 기준은 p3-54 가 출발한 북마크 code/p3-53 의 판이다 — 2026-11-24 p3-53 학생 칸이 lab/p3-53/shop-data.js 의 2번 리뷰 시각을
+    // 고쳤지만(선 위의 고침) p3-54 는 자기 데이터를 따로 나눠 주고 리뷰를 시각으로 늘어놓지 않아 그 고침을 따라가지 않는다.
+    const beforeDir = mkdtempSync(join(tmpdir(), 'p354-before-'));
+    dirs.push(beforeDir);
+    writeFileSync(join(beforeDir, 'shop-data.js'), showAt('code/p3-53', 'lab/p3-53/shop-data.js'));
+    const before = await import(join(beforeDir, 'shop-data.js'));
     expect(data.users).toEqual(before.users.map((u) => (u.id === 2 ? { id: 2, username: 'jaehoon' } : u)));
     expect(data.products).toEqual([
       { id: 1, name: '무선 이어폰', sellerId: 5, reviewCount: 8 },
@@ -225,19 +231,22 @@ describe('축 ① 나눠 주는 파일', () => {
 const P1_WRONG = {
   bodyAuthor: swap('createReview(Number(req.params.id), res.locals.userId, req.body.content)', 'createReview(Number(req.params.id), req.body.authorId, req.body.content)'),
   noCount: swap('  const reviewCount = changeReviewCount(product, 1);', '  const reviewCount = product.reviewCount;'),
+  // 돌려주는 숫자만 맞고 상품의 숫자는 그대로다 — 둘째 리뷰에서야 드러난다
+  plusOne: swap('  const reviewCount = changeReviewCount(product, 1);', '  const reviewCount = product.reviewCount + 1;'),
   noCountInBody: swap('  return { review: toItem(review), reviewCount };', '  return toItem(review);'),
   status200: swap('  res.status(201).json(result);', '  res.status(200).json(result);'),
 };
 describe('축 ② 직접 해보기 1 — 리뷰 달기', () => {
   let right;
-  it('🔴 정답 판 — 로그인 200 · 3번 상품에 리뷰 201 { review: 13번 · 글쓴이 jaehoon(본문의 authorId 1 은 무시) , reviewCount: 1 } · 공백만 400 · 없는 상품 404', async () => {
+  it('🔴 정답 판 — 로그인 200 · 3번 상품에 리뷰 201 { review: 13번 · 글쓴이 jaehoon(본문의 authorId 1 은 무시) , reviewCount: 1 } · 하나 더 201(14번 · reviewCount 2) · 공백만 400 · 없는 상품 404', async () => {
     right = (await runLab('practice1')).runs;
     expect(right.map((r) => [r.title, r.status])).toEqual([
-      ['jaehoon으로 로그인 — 수업 백엔드', 200], ['3번 상품에 리뷰 달기', 201], ['공백만 보낸 리뷰', 400], ['없는 상품에 리뷰 달기', 404],
+      ['jaehoon으로 로그인 — 수업 백엔드', 200], ['3번 상품에 리뷰 달기', 201], ['3번 상품에 리뷰 하나 더 달기', 201], ['공백만 보낸 리뷰', 400], ['없는 상품에 리뷰 달기', 404],
     ]);
     expect(right[1].body).toEqual({ review: { id: 13, authorId: 2, content: '높이를 바꿀 수 있어서 목이 편해요', createdAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/), username: 'jaehoon' }, reviewCount: 1 });
-    expect(right[2].body).toEqual({ message: '보낸 내용이 규칙에 안 맞아요' });
-    expect(right[3].body).toEqual({ message: '그런 상품은 없어요' });
+    expect(right[2].body).toEqual({ review: { id: 14, authorId: 2, content: '책상 위가 넓어졌어요', createdAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/), username: 'jaehoon' }, reviewCount: 2 });
+    expect(right[3].body).toEqual({ message: '보낸 내용이 규칙에 안 맞아요' });
+    expect(right[4].body).toEqual({ message: '그런 상품은 없어요' });
     seen.practice1 = { http: read(P(`${LAB}/practice1.http`)), runs: right };
   }, 40_000);
 
@@ -250,7 +259,9 @@ describe('축 ② 직접 해보기 1 — 리뷰 달기', () => {
     expect(Object.fromEntries(Object.entries(diffs).map(([k, d]) => [k, [d.title, d.wrong.status]]))).toEqual({
       bodyAuthor: ['3번 상품에 리뷰 달기', 500], noCount: ['3번 상품에 리뷰 달기', 201], noCountInBody: ['3번 상품에 리뷰 달기', 201],
       status200: ['3번 상품에 리뷰 달기', 200], blank: ['3번 상품에 리뷰 달기', 500],
+      plusOne: ['3번 상품에 리뷰 하나 더 달기', 201],
     });
+    expect(diffs.plusOne.wrong.body.reviewCount).toBe(1);
     expect(diffs.noCount.wrong.body.reviewCount).toBe(0);
     expect(Object.keys(diffs.noCountInBody.wrong.body)).toEqual(['id', 'authorId', 'content', 'createdAt', 'username']);
     expect(blank.log).toMatch(/ReferenceError: ____ is not defined/);
@@ -304,6 +315,12 @@ const HW_WRONG = {
   alwaysMove: swap('  if (review.hidden !== hidden) amount = hidden ? -1 : 1;', '  amount = hidden ? -1 : 1;'),
   noSeller: swap("  if (product.sellerId !== userId) throw fail(403, '내가 파는 상품의 리뷰만 숨기거나 다시 보일 수 있어요');\n", ''),
   idOnly: swap('reviews.find((one) => one.id === reviewId && one.productId === productId)', 'reviews.find((one) => one.id === reviewId)'),
+  // 파는 사람인지 먼저 보고 리뷰를 찾는다 — 남이 파는 상품의 없는 리뷰가 404 가 아니라 403
+  sellerFirst: (text) => {
+    const find = "  const review = reviews.find((one) => one.id === reviewId && one.productId === productId);\n  if (!review) throw fail(404, '그런 리뷰는 없어요');\n";
+    const seller = "  const product = products.find((item) => item.id === productId);\n  if (product.sellerId !== userId) throw fail(403, '내가 파는 상품의 리뷰만 숨기거나 다시 보일 수 있어요');\n";
+    return swap(`${find}\n${seller}`, `${seller}\n${find}`)(text);
+  },
 };
 describe('축 ④ 과제 [응용] — 리뷰 숨기기', () => {
   let right;
@@ -317,13 +334,14 @@ describe('축 ④ 과제 [응용] — 리뷰 숨기기', () => {
       ['보이는 리뷰를 다시 보이기', 200, 2],
       ['남이 파는 상품의 리뷰 숨기기', 403, '내가 파는 상품의 리뷰만 숨기거나 다시 보일 수 있어요'],
       ['다른 상품 주소로 리뷰 숨기기', 404, '그런 리뷰는 없어요'],
+      ['남이 파는 상품의 없는 리뷰 숨기기', 404, '그런 리뷰는 없어요'],
       ['hidden 없이 보내기', 400, '보낸 내용이 규칙에 안 맞아요'],
     ]);
     expect(right[1].body.review).toEqual({ id: 10, authorId: 1, content: '뚜껑이 조금 뻑뻑해요', createdAt: '2026-11-10T12:45:00.000Z', username: 'yuna', hidden: true });
     seen.homework2 = { http: read(P(`${LAB}/homework2.http`)), runs: right, answer: read(P(`${LAB}/homework2.js`)) };
   }, 40_000);
 
-  it('🔴 틀린 판마다 처음 달라지는 곳 — 늘 ±1 은 «한 번 더 숨기기»(0) · 파는 사람 확인 빠짐은 «남이 파는 상품»(200) · 번호로만은 «다른 상품 주소»(200 · 텀블러 숫자 1)', async () => {
+  it('🔴 틀린 판마다 처음 달라지는 곳 — 늘 ±1 은 «한 번 더 숨기기»(0) · 파는 사람 확인 빠짐은 «남이 파는 상품»(200) · 번호로만은 «다른 상품 주소»(200 · 텀블러 숫자 1) · 파는 사람을 먼저 보면 «남이 파는 상품의 없는 리뷰»(403)', async () => {
     const diffs = {};
     for (const [name, edit] of Object.entries(HW_WRONG)) diffs[name] = firstDiff(right, (await runLab('homework2', edit)).runs);
     seen.homework2Wrong = diffs;
@@ -331,8 +349,9 @@ describe('축 ④ 과제 [응용] — 리뷰 숨기기', () => {
       alwaysMove: ['같은 리뷰를 한 번 더 숨기기', 200, 0],
       noSeller: ['남이 파는 상품의 리뷰 숨기기', 200, 7],
       idOnly: ['다른 상품 주소로 리뷰 숨기기', 200, 1],
+      sellerFirst: ['남이 파는 상품의 없는 리뷰 숨기기', 403, null],
     });
-  }, 120_000);
+  }, 150_000);
 });
 
 // ── 축 ⑤ 학생 파일 차이 · 로그인 ─────────────────────────────────────────────────────
@@ -346,7 +365,9 @@ describe('축 ⑤ 학생 파일 차이 · 로그인', () => {
     };
     for (const [which, list] of Object.entries(files)) {
       const at = commitOf(COMMITS[which]);
-      expect(execFileSync('git', ['diff', '--name-only', `${at}^`, at], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n')).toEqual(list);
+      // 처음 커밋은 목록 전부를 · 학생 칸의 고침 커밋(«— 고침:»)은 그 가운데 일부만 고친다
+      const own = execFileSync('git', ['diff', '--name-only', `${at}^`, at], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n');
+      expect([which, own.length > 0 && own.every((rel) => list.includes(rel))]).toEqual([which, true]);
       for (const rel of list.filter((r) => r.endsWith('.js'))) {
         const text = showAt(at, rel);
         expect([rel, text.split('\n')[0]]).toEqual([rel, `// ~/instagram-api/${rel.replace('snapshots/p3-54/', 'lab/p3-54/').replace('-start', '')}`]);
@@ -443,7 +464,7 @@ const inOrder = (body, file) => {
 const runsCache = {};
 const runsOf = async (which, name, edit) => (runsCache[`${which}:${name}`] ??= await runLab(which, edit));
 const WRONGS = {
-  practice1: ['bodyAuthor', 'noCount', 'noCountInBody', 'status200', 'blank'],
+  practice1: ['bodyAuthor', 'noCount', 'plusOne', 'noCountInBody', 'status200', 'blank'],
   practice2: ['idOnly', 'hiddenToo', 'noChange', 'noPermission', 'sellerToo'],
 };
 const editOf = (which, name) => {
@@ -516,7 +537,7 @@ describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 
     }, 240_000);
   }
 
-  it('🔴 과제 [응용] 리뷰 숨기기 — 확인 문장 일곱(상태 · review.hidden · reviewCount · 문장)과 요구사항의 에러 문장 셋(상태 · 문장)이 정답 판 실행과 같다 · review 에 hidden 이 실린다', async () => {
+  it('🔴 과제 [응용] 리뷰 숨기기 — 확인 문장 여덟(상태 · review.hidden · reviewCount · 문장)과 요구사항의 에러 문장 셋(상태 · 문장)이 정답 판 실행과 같다 · review 에 hidden 이 실린다', async () => {
     const before = lectureProblems.length;
     const lines = lectureLines();
     const start = lines.findIndex((line) => line.startsWith('### [응용] 리뷰 숨기기'));
@@ -528,8 +549,8 @@ describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 
     const reqs = sec.slice(at('요구사항'), at('확인')).filter(([, text]) => /^\d+\. /.test(text));
     const checks = sec.slice(at('확인')).filter(([, text]) => /^\d+\. «/.test(text));
     const right = (await runsOf('homework2', 'right')).runs;
-    expect([reqs.length, checks.length, right.length - 1]).toEqual([5, 7, 7]);
-    // 확인 일곱
+    expect([reqs.length, checks.length, right.length - 1]).toEqual([5, 8, 8]);
+    // 확인 여덟
     for (const [line, text] of checks) {
       const c = parseCheck(text);
       const run = right.find((r) => r.title === c.title);
@@ -572,7 +593,7 @@ describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 
     expect(lectureProblems.slice(before)).toEqual([]);
   }, 60_000);
 
-  it('🔴 산문 — 나눠 주는 데이터 · jaehoon 의 리뷰 · 다시 띄우지 않고 한 번 더 보내면 reviewCount 2', async () => {
+  it('🔴 산문 — 나눠 주는 데이터 · jaehoon 의 리뷰 · 다시 띄우지 않고 확인 1부터 또 보내면 reviewCount 3 부터', async () => {
     const before = lectureProblems.length;
     const data = await import(join(studentCopy('practice1'), LAB, 'shop-data.js'));
     const lines = lectureLines();
@@ -584,15 +605,16 @@ describeLecture(LECTURE_MD ? '실습 축 ⑥ 교안 대조 — 직접 해보기 
       [/사람 (\d+)명 · 상품 (\d+)개 · 리뷰 (\d+)개 — 2번 사람이 (\w+)이고, \w+은 텀블러\((\d)번 상품\)를 팔아요/, (m) => [`${m[1]} · ${m[2]} · ${m[3]} · ${m[4]} · ${m[5]}`, `${data.users.length} · ${data.products.length} · ${data.reviews.length} · ${data.users.find((u) => u.id === 2).username} · ${data.products.find((p) => p.sellerId === 2).id}`]],
       // 번호 목록(«2번 · 8번» 처럼 « · » 나 «과» 로 이은 것) + 숨긴 N번
       [/jaehoon이 쓴 리뷰는 무선 이어폰\(1번 상품\)의 ((?:\d+번(?: · |, )?)+)과 숨긴 (\d+)번이고, jaehoon이 파는 상품은 텀블러\((\d)번 상품\)/, (m) => [`${[...m[1].matchAll(/(\d+)번/g)].map((n) => n[1]).join(',')} · 숨김 ${m[2]} · ${m[3]}`, `${data.reviews.filter((r) => r.authorId === 2 && !r.hidden).map((r) => r.id).join(',')} · 숨김 ${data.reviews.filter((r) => r.authorId === 2 && r.hidden).map((r) => r.id).join(',')} · ${data.products.find((p) => p.sellerId === 2).id}`]],
-      [/서버를 다시 띄우지 않고 확인 1을 한 번 더 보내면 `reviewCount`가 (\d+)가 돼요/, async (m) => {
+      // 2026-11-26 — 확인 2(«하나 더 달기»)가 생겨, 확인 1부터 또 보내면 첫 달기가 셋째 리뷰다
+      [/서버를 다시 띄우지 않고 확인 1부터 또 보내면 `reviewCount`가 (\d+)부터 올라가요/, async (m) => {
         const dir = studentCopy('practice1');
         onPort(dir, 'practice1', LAB_PORT);
         const http = read(join(dir, LAB, 'practice1.http'));
         const blocks = http.split(/^### /m).slice(1).map((b) => `### ${b.trimEnd()}\n`);
         const lab = await boot(join(dir, LAB, 'practice1.js'), { port: LAB_PORT, cwd: dir, env: ENV, ready: `${LAB_PORT}번 포트에서` });
         try {
-          const runs = await httpyac([blocks[0], blocks[1], blocks[1]].join('\n'));
-          return [m[1], `${runs[2].body.reviewCount}`];
+          const runs = await httpyac([...blocks, ...blocks.slice(1)].join('\n'));
+          return [m[1], `${runs[blocks.length].body.reviewCount}`];
         } finally {
           await Promise.race([lab.stop(), sleep(500)]);
         }
