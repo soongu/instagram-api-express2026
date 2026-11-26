@@ -18,6 +18,13 @@ export async function list(req, res) {
   sendData(res, page);
 }
 
+// 대화방 하나 - 그 방에 참여한 사람만 받는다.
+export async function get(req, res) {
+  const conversation = await conversationService.getConversation(req.conversationId, res.locals.userId);
+
+  sendData(res, conversation);
+}
+
 // 그 대화방의 메시지 이력 - 그 방에 참여한 사람만 받는다.
 export async function messages(req, res) {
   const page = await conversationService.getMessages(req.conversationId, res.locals.userId, res.locals.query);

@@ -13,12 +13,13 @@ router.param('id', parseConversationId);
 
 router.get('/', validateQuery(conversationListQuerySchema), conversationController.list);
 router.post('/', validateBody(conversationCreateSchema), conversationController.create);
+router.get('/:id', conversationController.get);
 router.delete('/:id', conversationController.remove);
 router.get('/:id/messages', validateQuery(messageListQuerySchema), conversationController.messages);
 router.patch('/:id/messages/read', conversationController.read);
 
 router.all('/', allowOnly('GET', 'POST'));
-router.all('/:id', allowOnly('DELETE'));
+router.all('/:id', allowOnly('GET', 'DELETE'));
 router.all('/:id/messages', allowOnly('GET'));
 router.all('/:id/messages/read', allowOnly('PATCH'));
 

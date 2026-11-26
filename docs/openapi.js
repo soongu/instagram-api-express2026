@@ -261,6 +261,14 @@ export const openapi = {
     },
     '/api/v2/conversations/{id}': {
       parameters: [pathParameter('id', '대화방 번호')],
+      get: {
+        summary: '대화방 하나 - 목록의 한 줄과 같은 모양, 내가 지운 방도 준다',
+        responses: {
+          200: { description: '그 대화방', content: json(data(ref('Conversation'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
       delete: {
         summary: '대화방을 내 쪽에서만 지우기 - 상대에게는 그대로 보이고, 두 사람이 모두 지운 메시지는 실제로 지운다',
         responses: {

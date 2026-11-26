@@ -67,6 +67,9 @@ GET http://localhost:3000/api/v2/conversations?limit=2
 ### 내 대화방 목록 - 다음 2개
 GET http://localhost:3000/api/v2/conversations?limit=2&cursor={{firstConversations.data.nextCursor}}
 
+### seoyeon과의 대화방 하나
+GET http://localhost:3000/api/v2/conversations/1
+
 ### seoyeon과의 대화방 메시지
 GET http://localhost:3000/api/v2/conversations/1/messages
 

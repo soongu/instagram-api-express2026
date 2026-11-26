@@ -72,6 +72,19 @@ export async function openConversation(username, myId) {
   return { created: count > 0, conversation: toConversation(conversation, myId) };
 }
 
+// 대화방 하나 - 목록의 한 줄과 같은 모양이다. 없는 방과 남의 방은 404 다.
+// 화면은 주소의 번호만으로 메시지 창의 머리(상대)를 그린다 - 받아 둔 목록에 그 방이 없어도.
+export async function getConversation(conversationId, myId) {
+  await findMyConversation(conversationId, myId);
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: conversationFields,
+  });
+
+  return toConversation(conversation, myId);
+}
+
 // 커서 다음 행은 시각이 더 이르거나, 시각이 같고 번호가 더 작은 행이다 - 게시물 목록과 같은 차례다.
 function afterCursor({ createdAt, id }) {
   return {
