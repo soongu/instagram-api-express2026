@@ -1,6 +1,7 @@
 // ~/instagram-api/services/conversationService.js
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
+import { encodeCursor, decodeCursor } from '../utils/cursor.js';
 
 // 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
 async function findUserId(username) {
@@ -14,17 +15,26 @@ async function findUserId(username) {
 // 대화방 한 줄에 실을 사람 정보
 const personFields = { id: true, username: true, name: true, profileImage: true };
 
-// 대화방 한 줄 - 두 자리의 사람을 함께 받는다.
+// 메시지 한 줄에 실을 값
+const messageFields = { id: true, senderId: true, content: true, createdAt: true };
+
+// 대화방 한 줄 - 두 자리의 사람과 가장 최근 메시지 하나를 함께 받는다.
 const conversationFields = {
   id: true,
   createdAt: true,
   participantA: { select: personFields },
   participantB: { select: personFields },
+  messages: { select: messageFields, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1 },
 };
 
 // 두 자리 가운데 내가 아닌 쪽이 상대다. 응답에는 상대만 싣는다.
-function toConversation({ participantA, participantB, ...conversation }, myId) {
-  return { ...conversation, otherUser: participantA.id === myId ? participantB : participantA };
+// 메시지가 하나도 없는 방은 lastMessage 가 null 이다.
+function toConversation({ participantA, participantB, messages, ...conversation }, myId) {
+  return {
+    ...conversation,
+    otherUser: participantA.id === myId ? participantB : participantA,
+    lastMessage: messages[0] ?? null,
+  };
 }
 
 // 두 사람을 대화방의 두 자리에 놓는다 - 작은 번호가 언제나 a 자리다.
@@ -52,4 +62,38 @@ export async function openConversation(username, myId) {
   });
 
   return { created: count > 0, conversation: toConversation(conversation, myId) };
+}
+
+// 커서 다음 행은 시각이 더 이르거나, 시각이 같고 번호가 더 작은 행이다 - 게시물 목록과 같은 차례다.
+function afterCursor({ createdAt, id }) {
+  return {
+    createdAt: { lte: createdAt },
+    OR: [{ createdAt: { lt: createdAt } }, { id: { lt: id } }],
+  };
+}
+
+// 내 대화방 목록 - 늦게 만든 방이 먼저다. 한 번에 limit 개씩 나눠 준다.
+export async function getConversations(myId, { limit = 20, cursor }) {
+  const rows = await prisma.conversation.findMany({
+    where: {
+      // 두 조건이 모두 OR 를 써서 한 객체에 펼치면 뒤의 OR 가 앞의 OR 를 덮는다 - AND 로 묶는다.
+      AND: [
+        // 내가 a 자리에 있는 방과 b 자리에 있는 방
+        { OR: [{ participantAId: myId }, { participantBId: myId }] },
+        cursor ? afterCursor(decodeCursor(cursor)) : {},
+      ],
+    },
+    select: conversationFields,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const hasNext = rows.length > limit;
+  const page = rows.slice(0, limit);
+
+  return {
+    items: page.map((row) => toConversation(row, myId)),
+    hasNext,
+    nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
+  };
 }

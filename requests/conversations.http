@@ -47,3 +47,22 @@ Content-Type: application/json
 {
   "username": "jaehoon"
 }
+
+### jaehoon으로 다시 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 내 대화방 목록
+GET http://localhost:3000/api/v2/conversations
+
+### 내 대화방 목록 - 2개씩
+# @name firstConversations
+GET http://localhost:3000/api/v2/conversations?limit=2
+
+### 내 대화방 목록 - 다음 2개
+GET http://localhost:3000/api/v2/conversations?limit=2&cursor={{firstConversations.data.nextCursor}}

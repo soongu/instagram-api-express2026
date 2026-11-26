@@ -324,3 +324,80 @@ describe('축 ② Step 2 - 대화방 만들기', () => {
     });
   }, 60_000);
 });
+
+/** 그 판의 마이그레이션을 걸고 실패면 출력을 돌려준다 - 성공이면 null. */
+const migrateFail = (from, db) => {
+  try {
+    migrate(from, db);
+    return null;
+  } catch (error) {
+    return `${error.stdout ?? ''}${error.stderr ?? ''}`;
+  }
+};
+
+describe('축 ③ Step 3 - 두 사람에 방 하나', () => {
+  it('겪기 - Step 2 판에서 seoyeon 이 jaehoon 과 열면 201 방 2 · jaehoon 이 자기 자신과 열면 201 방 3 · 행 셋', async () => {
+    await serve(2, async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      expect((await open(jaehoon, 'seoyeon')).status).toBe(201);
+      const self = await open(jaehoon, 'jaehoon');
+      expect([self.status, self.body.data.id, self.body.data.otherUser.username]).toEqual([201, 2, 'jaehoon']);
+      const seoyeon = await loggedIn(base, 'seoyeon');
+      const back = await open(seoyeon, 'jaehoon');
+      expect([back.status, back.body.data.id, back.body.data.otherUser.username]).toEqual([201, 3, 'jaehoon']);
+      const rows = await onDb(GATE_DB, 'SELECT id, participant_a_id AS a, participant_b_id AS b FROM conversations ORDER BY id');
+      expect(rows.map((r) => [r.id, r.a, r.b])).toEqual([[1, 2, 43], [2, 2, 2], [3, 43, 2]]);
+    });
+  }, 60_000);
+
+  it('겪기 행이 남은 채 Step 3 마이그레이션을 걸면 실패(23514) · 어긋난 행을 지우면 걸린다 · 방 1 만 남는다', async () => {
+    await serve(2, async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      await open(jaehoon, 'seoyeon');
+      await open(jaehoon, 'jaehoon');
+      await open(await loggedIn(base, 'seoyeon'), 'jaehoon');
+    });
+    const out = migrateFail(version(3), GATE_DB);
+    expect(out).toMatch(/23514/);
+    expect(out).toMatch(/check constraint "conversations_a_before_b" of relation "conversations" is violated by some row/);
+    // 행을 지우기만 해서는 다시 걸리지 않는다 - 실패한 마이그레이션이 기록에 남아 있다(P3009).
+    await onDb(GATE_DB, 'DELETE FROM conversations WHERE participant_a_id >= participant_b_id');
+    expect(migrateFail(version(3), GATE_DB)).toMatch(/P3009/);
+    // 실패를 «되돌린 것» 으로 적은 뒤에야 다시 건다.
+    const name = readdirSync(version(3)('prisma/migrations')).find((d) => d.endsWith('_conversations_a_before_b'));
+    execFileSync(P('node_modules/.bin/prisma'), ['migrate', 'resolve', '--rolled-back', name], {
+      cwd: studentDir(version(3)), env: { ...process.env, DATABASE_URL: dbUrl(GATE_DB) }, stdio: 'pipe',
+    });
+    expect(migrateFail(version(3), GATE_DB)).toBeNull();
+    expect(await count('SELECT count(*)::int AS n FROM conversations')).toBe(1);
+  }, 90_000);
+
+  it('교안 차례 - 어긋난 행을 먼저 지우고 Step 3 마이그레이션을 걸면 한 번에 걸린다', async () => {
+    await serve(2, async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      await open(jaehoon, 'seoyeon');
+      await open(jaehoon, 'jaehoon');
+      await open(await loggedIn(base, 'seoyeon'), 'jaehoon');
+    });
+    const deleted = await onDb(GATE_DB, 'DELETE FROM conversations WHERE participant_a_id >= participant_b_id RETURNING id');
+    expect(deleted.map((r) => r.id).sort()).toEqual([2, 3]);
+    expect(migrateFail(version(3), GATE_DB)).toBeNull();
+  }, 90_000);
+
+  it('고친 판 - seoyeon 이 jaehoon 과 열면 200 방 1 · 나 자신 400 CANNOT_MESSAGE_SELF · SQL 로 거꾸로 넣으면 23514', async () => {
+    await serve(3, async ({ base }) => {
+      const jaehoon = await loggedIn(base, 'jaehoon');
+      expect((await open(jaehoon, 'seoyeon')).status).toBe(201);
+      expect(errOf(await open(jaehoon, 'jaehoon'))).toEqual([400, 'CANNOT_MESSAGE_SELF']);
+      const seoyeon = await loggedIn(base, 'seoyeon');
+      const back = await open(seoyeon, 'jaehoon');
+      expect([back.status, back.body.data.id, back.body.data.otherUser.username]).toEqual([200, 1, 'jaehoon']);
+      expect(back.body.error).toBeUndefined();
+      const reversed = await failOf(GATE_DB, 'INSERT INTO conversations (participant_a_id, participant_b_id) VALUES (43, 2)');
+      expect([reversed.code, reversed.constraint]).toEqual(['23514', 'conversations_a_before_b']);
+      const self = await failOf(GATE_DB, 'INSERT INTO conversations (participant_a_id, participant_b_id) VALUES (2, 2)');
+      expect([self.code, self.constraint]).toEqual(['23514', 'conversations_a_before_b']);
+      expect(await count('SELECT count(*)::int AS n FROM conversations')).toBe(1);
+    });
+  }, 60_000);
+});

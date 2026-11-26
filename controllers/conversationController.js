@@ -10,3 +10,10 @@ export async function create(req, res) {
 
   sendData(res, conversation);
 }
+
+// 내 대화방 목록 - 누구의 목록인지는 로그인 정보로 정한다.
+export async function list(req, res) {
+  const page = await conversationService.getConversations(res.locals.userId, res.locals.query);
+
+  sendData(res, page);
+}
