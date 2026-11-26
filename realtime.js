@@ -32,10 +32,13 @@ export function startRealtime(server) {
     const { userId } = socket.data;
     console.log(`${userId}번 사용자의 연결이 열렸어요. 지금 연결은 ${io.engine.clientsCount}개예요.`);
 
-    // 메시지 보내기 - 저장한 메시지를 알린다.
+    // 사람마다 방 하나 - 같은 사람이 탭을 여럿 열면 그 연결들이 모두 이 방에 든다.
+    socket.join(`user:${userId}`);
+
+    // 메시지 보내기 - 저장한 메시지를 그 대화방의 두 사람에게만 알린다.
     socket.on('dm:send', async ({ conversationId, content }) => {
-      const message = await conversationService.sendMessage(conversationId, userId, content);
-      io.emit('dm:message', message);
+      const { message, participantAId, participantBId } = await conversationService.sendMessage(conversationId, userId, content);
+      io.to(`user:${participantAId}`).to(`user:${participantBId}`).emit('dm:message', message);
     });
 
     socket.on('disconnect', () => {
