@@ -1089,3 +1089,89 @@ describe('축 ⑨-틀린 답 직접 해보기 2 - 빈칸만 바꾼 판 넷', () 
     expect(got.one.data).toBeUndefined();
   }, 60_000);
 });
+
+describe('축 ⑩·⑪-흔한 실수 - 답안의 표', () => {
+  const typings = (p) => p.events.filter(([e]) => e === 'inquiry:typing').map(([, t]) => t.inquiryId);
+  const reads = (p) => p.events.filter(([e]) => e === 'inquiry:read').map(([, t]) => t.readerId);
+  it('[기초] broadcast 로 보내면 확인 2 에서 seoyeon 이 4번 방 표시를 받는다 · user:${userId} 면 확인 1 에서 seoyeon 이 못 받는다', async () => {
+    const EMIT = "io.to(`user:${otherId}`).emit('inquiry:typing', { inquiryId: inquiry.id, senderId: userId, typing: payload.typing });";
+    const scene = (out) => async ({ base, lab }) => {
+      const jaehoon = await labPerson(base, lab, 'jaehoon');
+      const seoyeon = await labPerson(base, lab, 'seoyeon');
+      jaehoon.socket.emit('inquiry:typing', { inquiryId: 1, typing: true });
+      await settle();
+      out.one = typings(seoyeon);
+      jaehoon.socket.emit('inquiry:typing', { inquiryId: 4, typing: true });
+      await settle();
+      out.two = typings(seoyeon);
+      jaehoon.close();
+      seoyeon.close();
+    };
+    const a = {};
+    await labServe('hw1', 'homework1.js', scene(a), { edit: swap(EMIT, "socket.broadcast.emit('inquiry:typing', { inquiryId: inquiry.id, senderId: userId, typing: payload.typing });") });
+    expect(a).toEqual({ one: [1], two: [1, 4] });
+    const b = {};
+    await labServe('hw1', 'homework1.js', scene(b), { edit: swap(EMIT, "io.to(`user:${userId}`).emit('inquiry:typing', { inquiryId: inquiry.id, senderId: userId, typing: payload.typing });") });
+    expect(b.one).toEqual([]);
+  }, 90_000);
+
+  it('[응용] 보낸 사람을 안 거르면 확인 1 이 2 · 늘 알리면 확인 2 에서 jaehoon 에게 한 번 더', async () => {
+    const scene = (out) => async ({ base, lab }) => {
+      const jaehoon = await labPerson(base, lab, 'jaehoon');
+      const seoyeon = await labPerson(base, lab, 'seoyeon');
+      out.one = await emitAck(seoyeon, 'inquiry:read', { inquiryId: 1 });
+      await settle();
+      out.afterOne = reads(jaehoon).length;
+      out.two = await emitAck(seoyeon, 'inquiry:read', { inquiryId: 1 });
+      await settle();
+      out.afterTwo = reads(jaehoon).length;
+      jaehoon.close();
+      seoyeon.close();
+    };
+    const a = {};
+    await labServe('hw2', 'homework2.js', scene(a), { edit: swap('message.inquiryId === inquiry.id && message.senderId !== userId && !message.isRead', 'message.inquiryId === inquiry.id && !message.isRead') });
+    expect(a.one).toEqual({ data: { readCount: 2 } });
+    const b = {};
+    await labServe('hw2', 'homework2.js', scene(b), { edit: swap('if (unread.length > 0) {', 'if (true) {') });
+    expect([b.one, b.afterOne, b.two, b.afterTwo]).toEqual([{ data: { readCount: 1 } }, 1, { data: { readCount: 0 } }, 2]);
+  }, 90_000);
+});
+
+describe('축 ⑫-주제 1 disconnectSockets', () => {
+  it('io.in(user:2).disconnectSockets() 는 jaehoon 의 연결 둘을 끊고 doyun 은 그대로 · 다시 붙으면 쿠키가 없으니 거절', async () => {
+    await serve(7, async ({ base }) => {
+      const tab = await loggedIn(base, 'jaehoon');
+      const one = await socketOf(base, tab.cookie());
+      const two = await socketOf(base, tab.cookie());
+      const doyun = await personOf(base, 'doyun');
+      // 서버 밖에서 부를 수 없으니 같은 일을 하는 Socket.IO 서버를 따로 세워 API 만 확인한다
+      expect([one.connected, two.connected, doyun.connected]).toEqual([true, true, true]);
+      for (const p of [one, two, doyun]) p.close();
+    });
+    const { Server } = await import('socket.io');
+    const http = await import('node:http');
+    const server = http.createServer();
+    const io = new Server(server);
+    io.on('connection', (socket) => socket.join(`user:${socket.handshake.query.u}`));
+    await new Promise((r) => server.listen(LAB_PORT, r));
+    try {
+      const mk = async (u) => {
+        const s = connectIo(`http://localhost:${LAB_PORT}`, { query: { u }, reconnection: false });
+        await new Promise((r) => s.on('connect', r));
+        return s;
+      };
+      const a = await mk('2');
+      const b = await mk('2');
+      const c = await mk('44');
+      const reasons = [];
+      a.on('disconnect', (r) => reasons.push(r));
+      b.on('disconnect', (r) => reasons.push(r));
+      io.in('user:2').disconnectSockets();
+      await settle();
+      expect([a.connected, b.connected, c.connected, reasons]).toEqual([false, false, true, ['io server disconnect', 'io server disconnect']]);
+      c.disconnect();
+    } finally {
+      io.close();
+    }
+  }, 60_000);
+});
