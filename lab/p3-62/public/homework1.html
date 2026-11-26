@@ -1,0 +1,47 @@
+<!-- ~/instagram-api/lab/p3-62/public/homework1.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>빈티지 자전거 경매</title>
+  </head>
+  <body>
+    <h1>빈티지 자전거 경매</h1>
+    <p>지금 가격 <strong id="price">-</strong>원 · 최고 입찰자 <span id="bidder">없음</span></p>
+    <form id="form">
+      <input id="amount" type="number" step="1000" placeholder="부를 가격" />
+      <button>입찰</button>
+    </form>
+    <p id="notice"></p>
+
+    <script>
+      const name = new URLSearchParams(location.search).get('name');
+      const notice = document.querySelector('#notice');
+
+      function show(item) {
+        document.querySelector('#price').textContent = item.price.toLocaleString();
+        document.querySelector('#bidder').textContent = item.bidder ?? '없음';
+      }
+
+      async function load() {
+        const response = await fetch('/item');
+        show(await response.json());
+      }
+
+      load();
+      setInterval(load, 2000);
+
+      document.querySelector('#form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const price = Number(document.querySelector('#amount').value);
+        const response = await fetch('/bids', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, price }),
+        });
+        const body = await response.json();
+        notice.textContent = response.ok ? '' : body.message;
+      });
+    </script>
+  </body>
+</html>
