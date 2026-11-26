@@ -15,11 +15,21 @@ const wss = new WebSocketServer({ server });
 wss.on('connection', (socket) => {
   console.log(`연결이 하나 열렸어요. 지금 연결은 ${wss.clients.size}개예요.`);
 
-  // 한 연결에서 메시지가 오면 열려 있는 모든 연결로 보낸다. 받은 값은 Buffer 라서 글자로 바꿔 보낸다.
+  // 메시지는 JSON 글자로 주고받고, type 으로 종류를 가른다.
   socket.on('message', (data) => {
-    const text = data.toString();
+    let message;
+    try {
+      message = JSON.parse(data.toString());
+    } catch {
+      return; // JSON 이 아니면 버린다
+    }
+
     for (const client of wss.clients) {
-      client.send(text);
+      // «입력 중» 은 보낸 사람에게는 돌려보내지 않는다.
+      if (message.type === 'typing' && client === socket) {
+        continue;
+      }
+      client.send(JSON.stringify(message));
     }
   });
 

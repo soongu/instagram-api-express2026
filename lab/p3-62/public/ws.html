@@ -13,11 +13,15 @@
       <button>보내기</button>
     </form>
     <ul id="list"></ul>
+    <p id="typing"></p>
 
     <script>
       const name = new URLSearchParams(location.search).get('name');
       const status = document.querySelector('#status');
       const list = document.querySelector('#list');
+      const typing = document.querySelector('#typing');
+      const input = document.querySelector('#text');
+      let typingTimer;
       const socket = new WebSocket(`ws://${location.host}`);
 
       socket.addEventListener('open', () => {
@@ -30,15 +34,31 @@
 
       // 서버가 보낸 것은 요청하지 않아도 이 이벤트로 들어온다.
       socket.addEventListener('message', (event) => {
-        const li = document.createElement('li');
-        li.textContent = event.data;
-        list.append(li);
+        const message = JSON.parse(event.data);
+
+        if (message.type === 'chat') {
+          const li = document.createElement('li');
+          li.textContent = `${message.name}: ${message.text}`;
+          list.append(li);
+          typing.textContent = '';
+        }
+
+        if (message.type === 'typing') {
+          typing.textContent = `${message.name}님이 입력 중이에요...`;
+          clearTimeout(typingTimer);
+          typingTimer = setTimeout(() => {
+            typing.textContent = '';
+          }, 3000);
+        }
+      });
+
+      input.addEventListener('input', () => {
+        socket.send(JSON.stringify({ type: 'typing', name }));
       });
 
       document.querySelector('#form').addEventListener('submit', (event) => {
         event.preventDefault();
-        const input = document.querySelector('#text');
-        socket.send(`${name}: ${input.value}`);
+        socket.send(JSON.stringify({ type: 'chat', name, text: input.value }));
         input.value = '';
       });
     </script>
