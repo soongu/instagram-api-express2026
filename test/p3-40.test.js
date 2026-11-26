@@ -36,6 +36,21 @@ import { sendAll } from './helpers/send-http.js';
 const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
 
 const ROOT = new URL('../', import.meta.url);
+// 펜스 밖 마크다운 표 — 칸마다 인라인 코드 백틱을 뗀다(구분행은 뺀다). 이름·값 표는 언어 없는 펜스가 아니라 마크다운 표로 쓴다(2026-11-26).
+const mdTables = (md) => {
+  const out = [];
+  let inFence = false;
+  let cur = null;
+  for (const line of md.split('\n')) {
+    if (line.startsWith('```')) inFence = !inFence;
+    if (inFence || !/^\|.*\|$/.test(line)) { if (cur) { out.push(cur); cur = null; } continue; }
+    if (/^\|[\s|:-]+\|$/.test(line)) continue;
+    const cells = line.slice(1, -1).split(' | ').map((c) => c.trim().replaceAll('`', ''));
+    if (cur) cur.rows.push(cells); else cur = { header: cells, rows: [] };
+  }
+  if (cur) out.push(cur);
+  return out;
+};
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
 const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
@@ -349,14 +364,14 @@ describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
     // 교안의 쿼리를 그대로 보내 결과 표(머리글 두 줄 아래)와 맞댄다
     const query = 'SELECT username, left(password_hash, 7) AS password_hash FROM users ORDER BY id;';
     expect(lecture).toContain(`\`\`\`sql\n${query}\n\`\`\``);
-    const table = lecture.split(`${query}\n\`\`\`\n\n\`\`\`\n`)[1].split('\n```')[0].split('\n');
-    expect(table.slice(0, 2)).toEqual([' username   password_hash', ' ========   =============']);
+    const table = mdTables(lecture.split(`${query}\n\`\`\`\n\n`)[1].split('\n\n')[0])[0];
+    expect(table.header).toEqual(['username', 'password_hash']);
     const db = new pg.Client({ ...ADMIN, database: SEED_CMD_DB });
     await db.connect();
     try {
       const { rows } = await db.query(query);
-      expect(table.slice(2).map((line) => line.trim().split(/\s+/))).toEqual(rows.map((row) => [row.username, row.password_hash]));
-      expect(table[2]).toBe(' dahye      $2b$12$');
+      expect(table.rows).toEqual(rows.map((row) => [row.username, row.password_hash]));
+      expect(table.rows[0]).toEqual(['dahye', '$2b$12$']);
     } finally {
       await db.end();
     }

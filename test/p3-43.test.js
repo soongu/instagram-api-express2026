@@ -890,6 +890,21 @@ describe('축 ⑭ 실습·과제 서버도 비밀키가 없으면 뜨지 않는�
 
 const DOCS = ['p3-43-role-based-authorization-lecture.md', 'p3-43-role-based-authorization-answers.md']
   .map((name) => join(new URL('../../', ROOT).pathname, `part3/7-express-auth/${name}`));
+// 펜스 밖 마크다운 표 — 칸마다 인라인 코드 백틱을 뗀다(구분행은 뺀다). 이름·값 표는 언어 없는 펜스가 아니라 마크다운 표로 쓴다(2026-11-26).
+const mdTables = (md) => {
+  const out = [];
+  let inFence = false;
+  let cur = null;
+  for (const line of md.split('\n')) {
+    if (line.startsWith('```')) inFence = !inFence;
+    if (inFence || !/^\|.*\|$/.test(line)) { if (cur) { out.push(cur); cur = null; } continue; }
+    if (/^\|[\s|:-]+\|$/.test(line)) continue;
+    const cells = line.slice(1, -1).split(' | ').map((c) => c.trim().replaceAll('`', ''));
+    if (cur) cur.rows.push(cells); else cur = { header: cells, rows: [] };
+  }
+  if (cur) out.push(cur);
+  return out;
+};
 const fences = (file, lang) => {
   const out = [];
   const lines = read(file).split('\n');
@@ -957,8 +972,9 @@ describe('축 ⑬ 교안·답안의 블록은 코드베이스와 실제 실행�
     expect(JSON.parse(payload)).toMatchObject({ role: 'ADMIN', sub: '45' });
     expect(JSON.parse(payload).exp - JSON.parse(payload).iat).toBe(3600);
     expect(lecture).toContain('지난 시간에 201자였던 jaehoon의 토큰은 이제 220자예요');
-    const table = fences(DOCS[0], '').find((b) => b.startsWith(' 보낸 사람'));
-    expect(table.split('\n').slice(2).map((l) => l.trim().split(/\s{2,}/))).toEqual([
+    const table = mdTables(lecture).find((t) => t.header[0] === '보낸 사람');
+    expect(table.header).toEqual(['보낸 사람', '요청', 'Step 6 코드', 'Step 8 코드']);
+    expect(table.rows).toEqual([
       ['jaehoon', '게시물 목록', '3', '3'],
       ['jaehoon', '나는 누구', '1', '1'],
       ['jaehoon', '사람 목록(403 에러)', '0', '0'],
@@ -982,9 +998,9 @@ describe('축 ⑬ 교안·답안의 블록은 코드베이스와 실제 실행�
     await expect(gate(sqls[1])).rejects.toMatchObject({ message: 'invalid input value for enum user_role: "OWNER"' });
     expect(lecture).toContain('```\n   invalid input value for enum user_role: "OWNER"\n```');
     expect(lecture).toContain('```sql\n' + read(stepDir(2)(`prisma/migrations/${readdirSync(stepDir(2)('prisma/migrations')).find((n) => n.endsWith('_add_user_role'))}/migration.sql`)) + '```');
-    expect(lecture).toContain(' id   username     role\n ==   ==========   ====\n 45   admin.hong   USER');
+    expect(lecture).toContain('| id | username | role |\n|---|---|---|\n| 45 | admin.hong | `USER` |');
     expect(await gate(sqls[3])).toEqual([{ id: 45, username: 'admin.hong', role: 'USER' }]);
-    expect(lecture).toContain(' username   role\n ========   ====\n boram      USER');
+    expect(lecture).toContain('| username | role |\n|---|---|\n| boram | `USER` |');
   }, 30000);
 
   it('🔴 json 블록 — 403 본문 · admin.hong 로그인 응답 · 지운 게시물은 «관리자가 고친 글»', () => {
