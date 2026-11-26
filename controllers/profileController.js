@@ -31,3 +31,10 @@ export async function unfollow(req, res) {
 
   sendData(res, status);
 }
+
+// 그 사람을 팔로우하는 사람들의 목록.
+export async function followers(req, res) {
+  const people = await followService.getFollowers(req.params.username);
+
+  sendData(res, people);
+}

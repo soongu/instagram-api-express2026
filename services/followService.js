@@ -2,14 +2,22 @@
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 
-// 팔로우받을 사람을 사용자 이름으로 찾는다 - 없으면 404, 나 자신이면 400 이다.
-async function findFollowing(username, followerId) {
+// 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
+async function findUserId(username) {
   const user = await prisma.user.findUnique({ where: { username }, select: { id: true } });
 
   if (!user) throw new NotFoundError('USER_NOT_FOUND');
-  if (user.id === followerId) throw new BadRequestError('CANNOT_FOLLOW_SELF');
 
   return user.id;
+}
+
+// 팔로우받을 사람을 찾는다 - 나 자신이면 400 이다.
+async function findFollowing(username, followerId) {
+  const followingId = await findUserId(username);
+
+  if (followingId === followerId) throw new BadRequestError('CANNOT_FOLLOW_SELF');
+
+  return followingId;
 }
 
 // 팔로워 수 컬럼을 amount 만큼 고치고 고친 값을 돌려준다.
@@ -54,4 +62,20 @@ export async function unfollow(username, followerId) {
   });
 
   return { following: false, followerCount };
+}
+
+// 목록 한 줄에 실을 사람 정보.
+const personFields = { id: true, username: true, name: true, profileImage: true };
+
+// 그 사람을 팔로우하는 사람들 - 가장 최근에 팔로우한 사람이 먼저다.
+export async function getFollowers(username) {
+  const followingId = await findUserId(username);
+
+  const rows = await prisma.follow.findMany({
+    where: { followingId },
+    select: { follower: { select: personFields } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  });
+
+  return rows.map((row) => row.follower);
 }

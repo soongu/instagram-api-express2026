@@ -30,3 +30,6 @@ GET http://localhost:3000/api/v2/profiles/minji
 
 ### 내 프로필
 GET http://localhost:3000/api/v2/profiles/jaehoon
+
+### minji의 팔로워
+GET http://localhost:3000/api/v2/profiles/minji/followers

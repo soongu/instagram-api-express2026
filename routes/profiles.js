@@ -9,6 +9,7 @@ const router = express.Router();
 
 router.get('/:username', profileController.show);
 router.get('/:username/posts', validateQuery(profilePostsQuerySchema), profileController.posts);
+router.get('/:username/followers', profileController.followers);
 
 // 「minji 의 팔로워 가운데 나」 하나를 주소로 가리킨다 - «나» 는 로그인 정보로 정한다.
 // 있게 만들기(PUT)와 없게 만들기(DELETE) - 둘 다 몇 번을 보내도 결과가 같다.
@@ -17,6 +18,7 @@ router.delete('/:username/followers/me', profileController.unfollow);
 
 router.all('/:username', allowOnly('GET'));
 router.all('/:username/posts', allowOnly('GET'));
+router.all('/:username/followers', allowOnly('GET'));
 router.all('/:username/followers/me', allowOnly('PUT', 'DELETE'));
 
 export default router;
