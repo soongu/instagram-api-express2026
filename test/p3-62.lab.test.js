@@ -63,6 +63,12 @@ describe('직접 해보기 1 - 맨 WebSocket 경매', () => {
     expect(r.serverAlive).toBe(true);
   }, 30_000);
 
+  it('틀린 판 - 첫 빈칸에 < 를 쓰면 ④ 에서 같은 값 12,000 이 받아들여져 최고 입찰자가 minji', async () => {
+    const r = await practice1('직접 해보기 1', ['    if (message.price <= price) {', '    if (message.price < price) {']);
+    expect(r.low[1].notice).toBe('지금 가격(12,000원)보다 높게 불러 주세요.');
+    expect(r.same).toEqual([V('12,000', 'minji'), V('12,000', 'minji')]);
+  }, 30_000);
+
   it("틀린 판 - 거절을 socket 대신 client 로 보내면 ③ 에서 서버가 ReferenceError 로 끝나고 거절 문장이 안 뜬다", async () => {
     const r = await practice1('직접 해보기 1', ["      socket.send(JSON.stringify({ type: 'rejected', price }));", "      client.send(JSON.stringify({ type: 'rejected', price }));"]);
     expect(r.bid1).toEqual([V('12,000', 'jaehoon'), V('12,000', 'jaehoon')]);
@@ -126,8 +132,8 @@ describe('직접 해보기 2 - Socket.IO 로 물건마다 방', () => {
     expect(r.bid1[2]).toEqual(W('필름 카메라', '12,000', 'jaehoon'));
   }, 30_000);
 
-  it('틀린 판 - socket.join(room) 을 빼먹으면(빈칸을 비우면) ② 에서 누구의 화면도 안 바뀐다', async () => {
-    const r = await practice2(['  socket.join(room);\n', '']);
+  it('틀린 판 - join 의 빈칸에 id 를 쓰면 ② 에서 세 창 모두 그대로(연결은 1 방 · 새 가격은 item:1 방)', async () => {
+    const r = await practice2(['  socket.join(room);', '  socket.join(id);']);
     expect(r.bid1.map((v) => v.price)).toEqual(['10,000', '10,000', '30,000']);
   }, 30_000);
 
