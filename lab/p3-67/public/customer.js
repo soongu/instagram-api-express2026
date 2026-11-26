@@ -8,7 +8,7 @@ document.querySelector('#who').addEventListener('submit', (event) => {
   const user = document.querySelector('#user').value;
   if (socket) socket.disconnect();
   socket = io({ query: { user } });
-  socket.on('connect', () => { document.querySelector('#status').textContent = `${user} 로 연결됐어요`; });
+  socket.on('connect', () => { document.querySelector('#status').textContent = `${user} 계정으로 연결됐어요`; });
   socket.on('inquiry:message', (message) => {
     const li = document.createElement('li');
     li.textContent = `${message.senderId === 2 ? 'jaehoon' : user}: ${message.content}`;
