@@ -40,3 +40,6 @@ GET http://localhost:3000/api/v2/profiles/minji/followers?limit=5
 
 ### minji의 팔로워 - 다음 5명
 GET http://localhost:3000/api/v2/profiles/minji/followers?limit=5&cursor={{firstFollowers.data.nextCursor}}
+
+### jaehoon이 팔로우하는 사람
+GET http://localhost:3000/api/v2/profiles/jaehoon/following

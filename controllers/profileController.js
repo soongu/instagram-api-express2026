@@ -34,8 +34,14 @@ export async function unfollow(req, res) {
 
 // 그 사람을 팔로우하는 사람들의 목록.
 export async function followers(req, res) {
-  const { limit, cursor } = res.locals.query;
-  const page = await followService.getFollowers(req.params.username, { limit, cursor });
+  const page = await followService.getFollowList(req.params.username, 'followers', res.locals.query);
+
+  sendData(res, page);
+}
+
+// 그 사람이 팔로우하는 사람들의 목록.
+export async function following(req, res) {
+  const page = await followService.getFollowList(req.params.username, 'following', res.locals.query);
 
   sendData(res, page);
 }

@@ -77,17 +77,27 @@ function afterCursor({ createdAt, id }) {
   };
 }
 
-// 그 사람을 팔로우하는 사람들 - 가장 최근에 팔로우한 사람이 먼저다. 한 번에 limit 명씩 나눠 준다.
-export async function getFollowers(username, { limit = 20, cursor }) {
-  const followingId = await findUserId(username);
+// 두 목록은 follows 를 반대 방향으로 읽는다.
+// by - 그 사람의 번호가 들어 있는 컬럼 · person - 그 행에서 꺼내 보여 줄 사람
+const LISTS = {
+  // 팔로워 - 그 사람이 팔로우받은 행에서, 팔로우한 사람을 꺼낸다.
+  followers: { by: 'followingId', person: 'follower' },
+  // 팔로잉 - 그 사람이 팔로우한 행에서, 팔로우받은 사람을 꺼낸다.
+  following: { by: 'followerId', person: 'following' },
+};
+
+// 그 사람의 팔로워 목록이나 팔로잉 목록 - 가장 최근에 팔로우한 행이 먼저다. 한 번에 limit 명씩 나눠 준다.
+export async function getFollowList(username, list, { limit = 20, cursor }) {
+  const userId = await findUserId(username);
+  const { by, person } = LISTS[list];
 
   const rows = await prisma.follow.findMany({
     where: {
-      followingId,
+      [by]: userId,
       // 커서는 사람이 아니라 «follows 의 행» 을 가리킨다 - 차례를 정하는 값이 그 행의 시각과 번호라서.
       ...(cursor ? afterCursor(decodeCursor(cursor)) : {}),
     },
-    select: { id: true, createdAt: true, follower: { select: personFields } },
+    select: { id: true, createdAt: true, [person]: { select: personFields } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
   });
@@ -96,7 +106,7 @@ export async function getFollowers(username, { limit = 20, cursor }) {
   const page = rows.slice(0, limit);
 
   return {
-    items: page.map((row) => row.follower),
+    items: page.map((row) => row[person]),
     hasNext,
     nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
   };
