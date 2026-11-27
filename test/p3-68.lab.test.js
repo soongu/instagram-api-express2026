@@ -52,7 +52,7 @@ const studentCopy = (which, edit) => {
   const dir = mkdtempSync(join(tmpdir(), 'p368-lab-'));
   dirs.push(dir);
   if (process.env.P368_LAB_WT) {
-    execFileSync('cp', ['-R', ...['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'strategies', 'docs', 'utils', 'package.json', 'prisma', 'prisma.config.js', 'lab'].map(P), dir]);
+    execFileSync('cp', ['-R', ...['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'strategies', 'docs', 'utils', 'realtime.js', 'package.json', 'prisma', 'prisma.config.js', 'lab'].map(P), dir]);
   } else {
     const tar = execFileSync('git', ['archive', '--format=tar', LINE], { cwd: P('.'), maxBuffer: 1 << 28 });
     execFileSync('tar', ['-x', '-C', dir], { input: tar });
@@ -222,4 +222,100 @@ describe('직접 해보기 1 - «도움이 돼요» 알림', () => {
       '보낸 사람으로 찾아 지운다': [12, 'jaehoon의 알림 - 취소한 뒤', 200, [{ id: 3, from: 'seoyeon', reviewId: 1 }]],
     });
   }, 120_000);
+});
+
+// ── 과제 [기초] - 알림을 모두 읽음으로(백엔드) ─────────────────────────────
+// 강의 자료는 직접 해보기 2 의 notice-server.js 를 4070 으로 옮긴 판(snapshots/p3-68/homework1.start.js) 이다.
+// 정답은 lab/p3-68/homework1.js - PATCH /api/notifications/read 가 안 읽은 알림만 바꾸고 { readCount } 로 바꾼 수를 돌려준다.
+// 🔑 라우트 겹침 실측(Express 5.2.1) - '/:id/read' 를 먼저 등록해도 '/read' 는 그 라우트에 잡히지 않는다(경로 마디 수가 다르다).
+//    그래서 이 과제의 함정은 «라우트 차례» 가 아니라 «무엇을 세나» 와 «다시 보내면» 이다.
+const HW_PORT = 4070;
+const HW_TEST_PORT = 3988;
+
+/** 과제 서버 하나 - 정답 판(또는 강의 자료 판)에 edit 을 걸어 판정 포트로 띄우고 homework1.http 를 위에서부터 보낸다. */
+const runHomework1 = async ({ start = false, edit } = {}) => {
+  const dir = studentCopy('homework1');
+  const file = join(dir, LAB, 'homework1.js');
+  let source = start ? read(P('snapshots/p3-68/homework1.start.js')) : read(file);
+  if (edit) source = edit(source);
+  expect(source.split(String(HW_PORT)).length - 1).toBe(2);
+  writeFileSync(file, source.replaceAll(String(HW_PORT), String(HW_TEST_PORT)));
+  const server = await boot(file, { port: HW_TEST_PORT, cwd: dir, env: ENV, ready: `localhost:${HW_TEST_PORT}` });
+  try {
+    const http = read(join(dir, LAB, 'homework1.http')).replaceAll(`http://localhost:${HW_PORT}`, `http://localhost:${HW_TEST_PORT}`);
+    const runs = await httpyac(http);
+    await sleep(100);
+    return { runs, log: server.tail() };
+  } finally {
+    await Promise.race([server.stop(), sleep(500)]);
+  }
+};
+const reads = (r) => (Array.isArray(r.body?.items) ? r.body.items.map((item) => [item.id, item.isRead]) : r.body);
+
+describe('과제 [기초] - 알림을 모두 읽음으로', () => {
+  it('강의 자료 판은 하나씩 읽음만 있고, 정답 판은 그 위에 라우트 하나만 더했다', () => {
+    const start = read(P('snapshots/p3-68/homework1.start.js'));
+    const answer = read(P('lab/p3-68/homework1.js'));
+    const notice = read(P('lab/p3-68/notice-server.js'));
+    // 강의 자료 판 = 직접 해보기 2 서버에서 첫 줄 경로와 포트 문장만 다르다.
+    const norm = (text) => text.split('\n').slice(1).join('\n').replaceAll('4069', 'PORT').replace('알림 실습 서버가', '알림 과제 서버가').replaceAll('4070', 'PORT');
+    expect(norm(start)).toBe(norm(notice));
+    const added = answer.split('\n').filter((line) => !start.split('\n').includes(line));
+    expect(added.join('\n')).toContain("app.patch('/api/notifications/read'");
+    expect(read(P('lab/p3-68/homework2-server.js')).split('\n').slice(1).join('\n').replaceAll('4071', 'PORT')).toBe(answer.split('\n').slice(1).join('\n').replaceAll('4070', 'PORT'));
+  });
+
+  it('homework1.http 차례대로 - 4 를 바꾸고 · 다시 받으면 첫 페이지가 모두 읽음 · 한 번 더는 0 · 하나씩 읽음은 그대로', async () => {
+    const { runs, log } = await runHomework1();
+    seen.homework1 = runs;
+    expect(runs.map((r) => [r.title, r.status, reads(r)])).toEqual([
+      ['내 알림 목록', 200, [[7, false], [6, false], [5, true], [4, false], [3, false]]],
+      ['모두 읽음', 200, { readCount: 4 }],
+      ['다시 받은 목록', 200, [[7, true], [6, true], [5, true], [4, true], [3, true]]],
+      ['한 번 더 모두 읽음', 200, { readCount: 0 }],
+      ['알림 3 하나를 읽음으로', 200, { id: 3, isRead: true }],
+    ]);
+    expect(log).toContain('PATCH /api/notifications/read');
+  }, 60_000);
+
+  // 틀린 답 - 학생이 실제로 낼 법한 것. 처음 달라지는 요청이 그 답을 가려내는 확인 번호다.
+  const HOMEWORK1_WRONG = {
+    '라우트가 없다(강의 자료 그대로)': { start: true },
+    '보는 사람의 알림을 다 센다': { edit: swap('  res.json({ readCount: unread.length });', '  res.json({ readCount: notices.length });') },
+    '바꾼 뒤에 센다': {
+      edit: swap(
+        "  unread.forEach((notice) => {\n    notice.isRead = true;\n  });\n\n  res.json({ readCount: unread.length });",
+        "  unread.forEach((notice) => {\n    notice.isRead = true;\n  });\n\n  res.json({ readCount: notices.filter((notice) => !notice.isRead).length });",
+      ),
+    },
+    '첫 알림 하나만 바꾼다(find)': {
+      edit: swap(
+        "  const unread = notices.filter((notice) => !notice.isRead);\n  unread.forEach((notice) => {\n    notice.isRead = true;\n  });\n\n  res.json({ readCount: unread.length });",
+        "  const unread = notices.find((notice) => !notice.isRead);\n  if (unread) unread.isRead = true;\n\n  res.json({ readCount: unread ? 1 : 0 });",
+      ),
+    },
+    '다 읽었으면 404': {
+      edit: swap(
+        "  res.json({ readCount: unread.length });",
+        "  if (unread.length === 0) {\n    res.status(404).json({ message: '읽을 알림이 없어요' });\n    return;\n  }\n\n  res.json({ readCount: unread.length });",
+      ),
+    },
+  };
+
+  it('틀린 답 다섯 - 각자 처음 달라지는 확인 번호가 있다', async () => {
+    const right = (await runHomework1()).runs.map((r) => ({ ...r, body: reads(r) }));
+    const diffs = {};
+    for (const [name, opts] of Object.entries(HOMEWORK1_WRONG)) {
+      const wrong = (await runHomework1(opts)).runs.map((r) => ({ ...r, body: reads(r) }));
+      diffs[name] = firstDiff(right, wrong);
+    }
+    seen.homework1Wrong = diffs;
+    expect(Object.fromEntries(Object.entries(diffs).map(([k, d]) => [k, d && [d.no, d.title, d.wrong.status, d.wrong.body]]))).toEqual({
+      '라우트가 없다(강의 자료 그대로)': [2, '모두 읽음', 404, expect.anything()],
+      '보는 사람의 알림을 다 센다': [2, '모두 읽음', 200, { readCount: 7 }],
+      '바꾼 뒤에 센다': [2, '모두 읽음', 200, { readCount: 0 }],
+      '첫 알림 하나만 바꾼다(find)': [2, '모두 읽음', 200, { readCount: 1 }],
+      '다 읽었으면 404': [4, '한 번 더 모두 읽음', 404, { message: '읽을 알림이 없어요' }],
+    });
+  }, 180_000);
 });
