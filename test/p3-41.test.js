@@ -27,7 +27,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
-import { applyMigrationsAfter, SOCIAL_ACCOUNTS_MIGRATION } from './helpers/tip-schema.js';
+import { applyMigrationsAfter, applyMigration, SOCIAL_ACCOUNTS_MIGRATION, FOLLOWER_COUNT_MIGRATION } from './helpers/tip-schema.js';
 
 // p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
 const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
@@ -184,6 +184,8 @@ beforeAll(async () => {
   // 🚨 2026-11-12 `p3-45` — `social_accounts` 가 `users` 를 가리킨다. 이 회차 시드(북마크 판)는 그 테이블을 비우는 목록에 없어
   //    `TRUNCATE … users` 가 0A000 으로 멈추니, tip 은 그 마이그레이션 «앞» 까지만 얹는다(이 회차 학생 파일은 소셜 계정을 안 쓴다).
   await applyMigrationsAfter(tpl, readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort().at(-1), SOCIAL_ACCOUNTS_MIGRATION);
+  // p3-60 뒤 - 작업트리 클라이언트가 users.follower_count 를 고른다(follows 테이블은 얹지 않는다)
+  await applyMigration(tpl, FOLLOWER_COUNT_MIGRATION);
   await tpl.end();
   execFileSync(process.execPath, [R('seed.js')], {
     cwd: ROUND.dir, encoding: 'utf8',

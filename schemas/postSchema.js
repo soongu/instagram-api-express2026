@@ -25,9 +25,3 @@ export const postListQuerySchema = z.object({
   cursor: z.string().min(1).optional().describe('앞 응답의 nextCursor 그대로'),
   username: z.string().optional().describe('이 사람이 올린 게시물만'),
 });
-
-// 커서는 우리가 만들어 준 문자열이지만 돌아올 때는 밖에서 오는 값이다 — 푼 값도 검사한다.
-export const cursorSchema = z.object({
-  createdAt: z.iso.datetime(),
-  id: z.int32(),
-});

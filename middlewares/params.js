@@ -24,3 +24,15 @@ export function parseUserId(req, res, next) {
   req.userId = userId;
   next();
 }
+
+export function parseCommentId(req, res, next) {
+  const commentId = Number(req.params.commentId);
+
+  if (!Number.isInteger(commentId)) {
+    next(new NotFoundError('COMMENT_NOT_FOUND'));
+    return;
+  }
+
+  req.commentId = commentId;
+  next();
+}

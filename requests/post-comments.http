@@ -1,0 +1,143 @@
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 1번 게시물의 댓글
+GET http://localhost:3000/api/v2/posts/1/comments
+
+### 없는 게시물의 댓글
+GET http://localhost:3000/api/v2/posts/99/comments
+
+### 댓글이 없는 게시물의 댓글
+GET http://localhost:3000/api/v2/posts/4/comments
+
+### 2번 게시물의 댓글 — 첫 페이지
+# @name first
+GET http://localhost:3000/api/v2/posts/2/comments?limit=2
+
+### 둘째 페이지 — 받은 커서를 그대로 돌려준다
+GET http://localhost:3000/api/v2/posts/2/comments?limit=2&cursor={{first.data.nextCursor}}
+
+### 2번 게시물에 댓글 달기
+POST http://localhost:3000/api/v2/posts/2/comments
+Content-Type: application/json
+
+{
+  "content": "한 입만 나눠 주세요"
+}
+
+### 2번 게시물
+GET http://localhost:3000/api/v2/posts/2
+
+### 2번 게시물 주소로 1번 게시물의 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/3
+
+### 1번 게시물
+GET http://localhost:3000/api/v2/posts/1
+
+### 2번 게시물 주소로 1번 게시물의 다른 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/2
+
+### 1번 게시물 주소로 같은 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/1/comments/2
+
+### 지울 댓글 달기
+# @name mine
+POST http://localhost:3000/api/v2/posts/2/comments
+Content-Type: application/json
+
+{
+  "content": "앗, 다른 사진에 달려던 댓글이에요"
+}
+
+### 내가 단 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/{{mine.data.comment.id}}
+
+### 같은 댓글을 한 번 더 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/{{mine.data.comment.id}}
+
+### 남의 게시물에 남이 단 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/6
+
+### 없는 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/999
+
+### 1번 게시물의 1번 댓글에 달린 답글
+GET http://localhost:3000/api/v2/posts/1/comments/1/replies
+
+### 답글 첫 페이지 — 하나만
+# @name firstReplies
+GET http://localhost:3000/api/v2/posts/1/comments/1/replies?limit=1
+
+### 답글 둘째 페이지 — 받은 커서를 그대로 돌려준다
+GET http://localhost:3000/api/v2/posts/1/comments/1/replies?limit=1&cursor={{firstReplies.data.nextCursor}}
+
+### 없는 댓글의 답글
+GET http://localhost:3000/api/v2/posts/1/comments/999/replies
+
+### 2번 게시물 주소로 1번 게시물 댓글의 답글
+GET http://localhost:3000/api/v2/posts/2/comments/1/replies
+
+### 답글의 답글
+GET http://localhost:3000/api/v2/posts/1/comments/10/replies
+
+### 2번 게시물의 댓글 — 모달이 받는 첫 페이지
+GET http://localhost:3000/api/v2/posts/2/comments?limit=20
+
+### 1번 댓글에 답글 달기
+# @name firstReply
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "@minji 저녁에 가면 노을도 보여요",
+  "parentId": 1
+}
+
+### 고치기 전 서버에서 원댓글로 달린 그 댓글 지우기
+DELETE http://localhost:3000/api/v2/posts/1/comments/{{firstReply.data.comment.id}}
+
+### 답글에 답글 달기
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "@dahye 다음엔 셋이 가요",
+  "parentId": 11
+}
+
+### 2번 게시물 주소로 1번 댓글에 답글 달기
+# @name misplaced
+POST http://localhost:3000/api/v2/posts/2/comments
+Content-Type: application/json
+
+{
+  "content": "@minji 저도 가 보고 싶어요",
+  "parentId": 1
+}
+
+### 잘못 달린 답글 지우기
+DELETE http://localhost:3000/api/v2/posts/2/comments/{{misplaced.data.comment.id}}
+
+### 없는 댓글에 답글 달기
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "이 댓글에도 답글을 달아요",
+  "parentId": 999
+}
+
+### parentId를 글자로 보낸 답글
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "번호를 글자로 보내요",
+  "parentId": "1"
+}

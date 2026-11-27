@@ -49,3 +49,11 @@ export async function applyMigration(client, name) {
  * 그 회차들의 학생 파일은 소셜 계정을 읽지도 쓰지도 않으니, 옛 시드를 쓰는 판정은 `before: SOCIAL_ACCOUNTS_MIGRATION` 으로 그 앞까지만 얹는다.
  */
 export const SOCIAL_ACCOUNTS_MIGRATION = '20261112075022_add_social_accounts';
+
+/**
+ * `p3-60` 의 `users.follower_count`(Int · 기본값 0) - 작업트리 클라이언트는 select 없이 사람을 읽을 때 이 컬럼까지 고르고,
+ * 사람을 만들 때 기본값 0 을 직접 실어 보낸다. 이 컬럼이 없는 판정 DB 에서는 시드가 `P2022 ColumnNotFound` 로 멈춘다.
+ * 같은 회차의 `follows` 테이블(`add_follows`)은 얹지 않는다 - `users` 를 가리켜서, 그 테이블을 모르는 옛 시드가 `TRUNCATE … users` 에서 0A000 으로 멈춘다.
+ * 옛 회차 학생 파일은 팔로워 수를 읽지도 쓰지도 않으니 이 컬럼 하나만 얹어도 판정이 보는 동작은 같다.
+ */
+export const FOLLOWER_COUNT_MIGRATION = '20261125090825_add_user_follower_count';

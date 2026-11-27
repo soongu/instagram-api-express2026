@@ -3,6 +3,10 @@
 import { z } from 'zod';
 import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js';
 import { signupSchema } from '../schemas/authSchema.js';
+import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
+import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
+import { profilePostsQuerySchema, followListQuerySchema } from '../schemas/profileSchema.js';
+import { memberSearchQuerySchema, profileImageSchema } from '../schemas/memberSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -65,6 +69,13 @@ function queryParameters(schema) {
 // 게시물 목록의 쿼리 — 두 버전이 같다. 보는 사람은 로그인 정보로 정해서 쿼리에 없다.
 const listParameters = queryParameters(postListQuerySchema);
 
+// 주소 안의 번호다. /posts/{id} 의 id 처럼 경로에 들어가는 값이다.
+function pathParameter(name, description) {
+  return { name, in: 'path', required: true, description, schema: { type: 'integer' } };
+}
+
+const postIdParameter = pathParameter('id', '게시물 번호');
+
 export const openapi = {
   openapi: '3.2.0',
   info: {
@@ -88,7 +99,167 @@ export const openapi = {
         requestBody: { required: true, content: json(toSchema(postCreateSchema)) },
         responses: {
           201: { description: '만든 게시물 — Location 헤더에 그 게시물의 주소', content: json(data(ref('Post'))) },
-          400: { description: '보낸 내용이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY')) },
+          400: { description: '보낸 내용이 규칙에 안 맞거나, 넣을 수 없는 사진 주소가 섞여 있음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'IMAGE_NOT_AVAILABLE')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/posts/{id}/comments': {
+      parameters: [postIdParameter],
+      get: {
+        summary: '댓글 목록 — 원댓글만, 오래된 순',
+        parameters: queryParameters(commentListQuerySchema),
+        responses: {
+          200: { description: '댓글 한 페이지', content: json(data(ref('CommentPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 게시물이 없음 — 댓글이 없는 게시물은 빈 목록', content: json(errorOf('POST_NOT_FOUND')) },
+        },
+      },
+      post: {
+        summary: '댓글 달기 — 글쓴이는 로그인한 사람 · parentId 가 있으면 그 원댓글에 다는 답글',
+        requestBody: { required: true, content: json(toSchema(commentCreateSchema)) },
+        responses: {
+          201: { description: '단 댓글과 바뀐 댓글 수 — 답글은 댓글 수에 세지 않는다 · 댓글 하나를 받는 주소가 없어 Location 헤더는 없다', content: json(data(ref('CommentChange'))) },
+          400: { description: '보낸 내용이 규칙에 안 맞거나, 답글에 답글을 달려고 함', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'CANNOT_REPLY_TO_REPLY')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 게시물이 없거나, 그 게시물에 parentId 의 댓글이 없음', content: json(errorOf('POST_NOT_FOUND', 'COMMENT_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/posts/{id}/comments/{commentId}': {
+      parameters: [postIdParameter, pathParameter('commentId', '댓글 번호')],
+      delete: {
+        summary: '댓글 지우기 — 댓글을 쓴 사람이나 그 게시물을 쓴 사람만',
+        responses: {
+          200: { description: '지운 댓글과 바뀐 댓글 수 — 원댓글을 지우면 딸린 답글도 함께 지워진다', content: json(data(ref('CommentChange'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          403: { description: '내 댓글도 아니고 내 게시물에 달린 댓글도 아님', content: json(errorOf('CANNOT_REMOVE_COMMENT')) },
+          404: { description: '그 게시물에 그런 댓글이 없음', content: json(errorOf('COMMENT_NOT_FOUND', 'POST_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/posts/{id}/comments/{commentId}/replies': {
+      parameters: [postIdParameter, pathParameter('commentId', '원댓글 번호')],
+      get: {
+        summary: '답글 목록 — 원댓글 하나에 달린 답글, 오래된 순',
+        parameters: queryParameters(replyListQuerySchema),
+        responses: {
+          200: { description: '답글 한 페이지 — 답글이 없는 원댓글은 빈 목록', content: json(data(ref('ReplyPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞거나, 답글 번호로 물음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR', 'REPLY_HAS_NO_REPLIES')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그 게시물에 그런 댓글이 없음', content: json(errorOf('COMMENT_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/hashtags/{name}/posts': {
+      parameters: [pathParameter('name', '해시태그 이름 - 앞의 # 은 있어도 없어도 되고, 대문자는 소문자로 맞춰 찾는다')],
+      get: {
+        summary: '해시태그 게시물 목록 - 그리드용, 피드와 같은 차례',
+        parameters: queryParameters(hashtagPostsQuerySchema),
+        responses: {
+          200: { description: '그리드 칸 한 페이지 - 태그는 있는데 붙은 게시물이 없으면 빈 목록', content: json(data(ref('GridPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 이름의 해시태그가 없음', content: json(errorOf('HASHTAG_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/profiles/{username}': {
+      parameters: [pathParameter('username', '사용자 이름')],
+      get: {
+        summary: '프로필 헤더 - 이름 · 사진 · 게시물 수 · 팔로워 수 · 팔로잉 수 · 내가 팔로우하고 있는지',
+        responses: {
+          200: { description: '그 사람의 프로필', content: json(data(ref('Profile'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/profiles/{username}/posts': {
+      parameters: [pathParameter('username', '사용자 이름')],
+      get: {
+        summary: '프로필 그리드 - 그 사람이 올린 게시물, 피드와 같은 차례',
+        parameters: queryParameters(profilePostsQuerySchema),
+        responses: {
+          200: { description: '그리드 칸 한 페이지 - 올린 게시물이 없으면 빈 목록', content: json(data(ref('GridPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/profiles/{username}/followers/me': {
+      parameters: [pathParameter('username', '팔로우할 사람의 사용자 이름')],
+      put: {
+        summary: '팔로우 - 이미 팔로우하고 있으면 아무것도 바꾸지 않는다',
+        responses: {
+          200: { description: '팔로우한 상태와 그 사람의 팔로워 수', content: json(data(ref('FollowStatus'))) },
+          400: { description: '나 자신은 팔로우할 수 없음', content: json(errorOf('CANNOT_FOLLOW_SELF')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+      delete: {
+        summary: '팔로우 취소 - 팔로우하고 있지 않으면 아무것도 바꾸지 않는다',
+        responses: {
+          200: { description: '팔로우하지 않은 상태와 그 사람의 팔로워 수', content: json(data(ref('FollowStatus'))) },
+          400: { description: '나 자신은 팔로우할 수 없음', content: json(errorOf('CANNOT_FOLLOW_SELF')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/profiles/{username}/followers': {
+      parameters: [pathParameter('username', '사용자 이름')],
+      get: {
+        summary: '팔로워 목록 - 그 사람을 팔로우하는 사람들, 가장 최근에 팔로우한 사람이 먼저',
+        parameters: queryParameters(followListQuerySchema),
+        responses: {
+          200: { description: '팔로워 한 페이지 - 팔로워가 없으면 빈 목록', content: json(data(ref('FollowPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/profiles/{username}/following': {
+      parameters: [pathParameter('username', '사용자 이름')],
+      get: {
+        summary: '팔로잉 목록 - 그 사람이 팔로우하는 사람들, 가장 최근에 팔로우한 사람이 먼저',
+        parameters: queryParameters(followListQuerySchema),
+        responses: {
+          200: { description: '팔로잉 한 페이지 - 팔로우하는 사람이 없으면 빈 목록', content: json(data(ref('FollowPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/members/search': {
+      get: {
+        summary: '사람 찾기 - 사용자 이름에 검색어가 든 사람을 이름 차례로 20명까지',
+        parameters: queryParameters(memberSearchQuerySchema),
+        responses: {
+          200: { description: '찾은 사람 목록 - 검색어가 없으면 빈 배열', content: json(data({ type: 'array', items: ref('Member') })) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/members/me/profile-image': {
+      put: {
+        summary: '내 프로필 사진 바꾸기 - 사진은 먼저 /api/v2/uploads 로 올리고 받은 주소를 보낸다',
+        requestBody: { required: true, content: json(toSchema(profileImageSchema)) },
+        responses: {
+          200: {
+            description: '바꾼 프로필 사진 주소',
+            content: json(data({ type: 'object', properties: { profileImage: { type: 'string' } } })),
+          },
+          400: {
+            description: '보낸 내용이 규칙에 안 맞거나, 내가 올리고 아직 아무 데도 쓰지 않은 사진이 아님',
+            content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'IMAGE_NOT_AVAILABLE')),
+          },
           401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
         },
       },
@@ -157,6 +328,112 @@ export const openapi = {
           items: { type: 'array', items: { $ref: '#/components/schemas/Post' } },
           hasNext: { type: 'boolean' },
           nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+        },
+      },
+      Comment: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          authorId: { type: 'integer' },
+          content: { type: 'string' },
+          likeCount: { type: 'integer' },
+          createdAt: { type: 'string', format: 'date-time' },
+          username: { type: 'string' },
+          profileImage: { type: ['string', 'null'] },
+        },
+      },
+      RootComment: {
+        allOf: [
+          { $ref: '#/components/schemas/Comment' },
+          { type: 'object', properties: { replyCount: { type: 'integer', description: '이 원댓글에 달린 답글 수' } } },
+        ],
+      },
+      CommentPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: { $ref: '#/components/schemas/RootComment' } },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+        },
+      },
+      Profile: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          name: { type: ['string', 'null'], description: '이름 - 적지 않은 사람은 null' },
+          profileImage: { type: ['string', 'null'], description: '프로필 사진 주소 - 없으면 null' },
+          postCount: { type: 'integer', description: '그 사람이 올린 게시물 수' },
+          followerCount: { type: 'integer', description: '그 사람을 팔로우하는 사람 수' },
+          followingCount: { type: 'integer', description: '그 사람이 팔로우하는 사람 수' },
+          isFollowing: { type: 'boolean', description: '요청한 사람이 그 사람을 팔로우하고 있는가 - 내 프로필이면 false' },
+        },
+      },
+      FollowStatus: {
+        type: 'object',
+        properties: {
+          following: { type: 'boolean', description: '요청한 사람이 이제 그 사람을 팔로우하고 있는가' },
+          followerCount: { type: 'integer', description: '그 사람의 팔로워 수' },
+        },
+      },
+      FollowPerson: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          name: { type: ['string', 'null'] },
+          profileImage: { type: ['string', 'null'] },
+          isFollowing: { type: 'boolean', description: '요청한 사람이 이 사람을 팔로우하고 있는가' },
+        },
+      },
+      FollowPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: ref('FollowPerson') },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      Member: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          name: { type: ['string', 'null'] },
+          profileImage: { type: ['string', 'null'] },
+        },
+      },
+      GridItem: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          thumbnailUrl: { type: 'string', description: '첫 사진의 주소' },
+          multipleImages: { type: 'boolean', description: '사진이 두 장 이상인가' },
+          likeCount: { type: 'integer' },
+          commentCount: { type: 'integer' },
+        },
+      },
+      GridPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: { $ref: '#/components/schemas/GridItem' } },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 — 끝이면 null' },
+        },
+      },
+      ReplyPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: { $ref: '#/components/schemas/Comment' } },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      CommentChange: {
+        type: 'object',
+        properties: {
+          comment: { $ref: '#/components/schemas/Comment', description: '원댓글을 달면 replyCount: 0 이 함께 온다' },
+          commentCount: { type: 'integer', description: '바뀐 뒤 게시물의 댓글 수 — 원댓글만 센다' },
         },
       },
       Error: {

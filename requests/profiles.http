@@ -1,24 +1,30 @@
-### 소개글만 고치기
-PATCH http://localhost:4000/api/profiles/minji
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
 Content-Type: application/json
 
 {
-  "bio": "오늘도 카페"
+  "username": "jaehoon",
+  "password": "jaehoon1234"
 }
 
-### 없는 사람 고치기
-PATCH http://localhost:4000/api/profiles/haecker
-Content-Type: application/json
+### minji의 프로필
+GET http://localhost:3000/api/v2/profiles/minji
 
-{
-  "bio": "안녕"
-}
+### 가입한 sora의 프로필
+GET http://localhost:3000/api/v2/profiles/sora
 
-### username 을 바꿔보기
-PATCH http://localhost:4000/api/profiles/minji
-Content-Type: application/json
+### 없는 사람
+GET http://localhost:3000/api/v2/profiles/nobody
 
-{
-  "username": "haecker",
-  "bio": "바뀌었을까요"
-}
+### minji의 게시물 - 첫 페이지
+# @name first
+GET http://localhost:3000/api/v2/profiles/minji/posts
+
+### 둘째 페이지 - 받은 커서를 그대로 돌려준다
+GET http://localhost:3000/api/v2/profiles/minji/posts?cursor={{first.data.nextCursor}}
+
+### 게시물이 없는 sora
+GET http://localhost:3000/api/v2/profiles/sora/posts
+
+### 사용자 이름에 mi가 든 사람
+GET http://localhost:3000/api/v2/members/search?keyword=mi

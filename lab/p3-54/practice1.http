@@ -1,0 +1,41 @@
+### jaehoon으로 로그인 — 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 3번 상품에 리뷰 달기
+POST http://localhost:4001/api/products/3/reviews
+Content-Type: application/json
+
+{
+  "content": "높이를 바꿀 수 있어서 목이 편해요",
+  "authorId": 1
+}
+
+### 3번 상품에 리뷰 하나 더 달기
+POST http://localhost:4001/api/products/3/reviews
+Content-Type: application/json
+
+{
+  "content": "책상 위가 넓어졌어요"
+}
+
+### 공백만 보낸 리뷰
+POST http://localhost:4001/api/products/3/reviews
+Content-Type: application/json
+
+{
+  "content": "   "
+}
+
+### 없는 상품에 리뷰 달기
+POST http://localhost:4001/api/products/99/reviews
+Content-Type: application/json
+
+{
+  "content": "이 상품도 써 보고 싶어요"
+}

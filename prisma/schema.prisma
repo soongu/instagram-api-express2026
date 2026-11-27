@@ -24,11 +24,19 @@ model User {
   profileImage String?   @map("profile_image")
   deactivatedAt DateTime? @map("deactivated_at")
   role         Role      @default(USER)
+  // 나를 팔로우하는 사람의 수 - 헤더를 열 때마다 세지 않으려고 따로 적어 둔다.
+  followerCount Int      @default(0) @map("follower_count")
   posts        Post[]
   comments     Comment[]
   likes        PostLike[]
   sessions     Session[]
   socialAccounts SocialAccount[]
+  uploads      Upload[]  @relation("UploadedBy")
+  profileUpload Upload?  @relation("ProfileImage")
+  // 내가 팔로우하는 사람들 - follows 에서 내가 follower 인 행이다.
+  following    Follow[]  @relation("Following")
+  // 나를 팔로우하는 사람들 - follows 에서 내가 following 인 행이다.
+  followers    Follow[]  @relation("Followers")
 
   @@map("users")
 }
@@ -46,6 +54,8 @@ model Post {
   comments     Comment[]
   images       PostImage[]
   likes        PostLike[]
+  uploads      Upload[]
+  hashtags     PostHashtag[]
 
   // 목록의 정렬과 같은 순서로 인덱스를 둔다 — 최신 글부터 정렬 없이 읽어 나갈 수 있다.
   @@index([createdAt(sort: Desc), id(sort: Desc)])
@@ -63,6 +73,49 @@ model PostLike {
 
   @@unique([postId, userId])
   @@map("post_likes")
+}
+
+// 해시태그 이름은 한 번만 적는다 — 같은 이름이 두 줄로 생기지 않게 UNIQUE.
+// 몇 개의 게시물에 붙었는지는 따로 적어 둔다 — 태그마다 매번 세지 않으려고.
+model Hashtag {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique @db.VarChar(30)
+  postCount Int           @default(0) @map("post_count")
+  posts     PostHashtag[]
+
+  @@map("hashtags")
+}
+
+// 게시물과 해시태그를 잇는 가운데 테이블 — 같은 게시물에 같은 태그가 두 번 붙지 않게 UNIQUE.
+model PostHashtag {
+  id        Int     @id @default(autoincrement())
+  postId    Int     @map("post_id")
+  post      Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  hashtagId Int     @map("hashtag_id")
+  hashtag   Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, hashtagId])
+  @@index([hashtagId])
+  @@map("post_hashtags")
+}
+
+// 팔로우 - «누가 누구를» 한 쌍이 한 행이다. 두 컬럼이 모두 users 를 가리킨다.
+// 같은 쌍은 한 번만 들어간다. 어느 쪽 사람을 지우든 그 사람의 팔로우 행도 함께 지운다(onDelete: Cascade).
+model Follow {
+  id          Int      @id @default(autoincrement())
+  // 팔로우하는 사람 - 팔로우 버튼을 누른 쪽이다.
+  followerId  Int      @map("follower_id")
+  follower    User     @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  // 팔로우받는 사람 - 그 버튼이 놓인 프로필의 주인이다.
+  followingId Int      @map("following_id")
+  following   User     @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([followerId, followingId])
+  // 목록 둘을 위한 인덱스 - 같은 사람의 행을 모아 두고, 그 안에서 시각과 번호의 차례로 둔다.
+  @@index([followingId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([followerId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("follows")
 }
 
 model PostImage {
@@ -127,4 +180,23 @@ model SocialAccount {
   @@unique([userId, provider])
   @@index([userId])
   @@map("social_accounts")
+}
+
+// 올린 사진 — 사진 파일 하나가 한 행이다. 누가 올렸는지와, 어느 게시물에 썼는지를 적어 둔다.
+// 아직 어느 게시물에도 쓰지 않은 사진은 postId 가 비어 있다.
+// 올린 사람을 지우면 그 사람이 올린 사진의 기록도, 게시물을 지우면 그 게시물에 쓴 사진의 기록도 함께 지운다(onDelete: Cascade).
+model Upload {
+  id         Int      @id @default(autoincrement())
+  fileName   String   @unique @map("file_name")
+  uploaderId Int      @map("uploader_id")
+  uploader   User     @relation("UploadedBy", fields: [uploaderId], references: [id], onDelete: Cascade)
+  postId     Int?     @map("post_id")
+  post       Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  // 이 사진을 프로필 사진으로 쓰는 사람 - 한 사람의 프로필 사진은 하나뿐이라 겹칠 수 없다.
+  profileUserId Int?  @unique @map("profile_user_id")
+  profileUser User?   @relation("ProfileImage", fields: [profileUserId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([postId])
+  @@map("uploads")
 }

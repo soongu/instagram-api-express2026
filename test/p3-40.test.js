@@ -29,13 +29,28 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
-import { applyMigration, ROLE_MIGRATION } from './helpers/tip-schema.js';
+import { applyMigration, ROLE_MIGRATION, FOLLOWER_COUNT_MIGRATION } from './helpers/tip-schema.js';
 import { sendAll } from './helpers/send-http.js';
 
 // p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
 const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
 
 const ROOT = new URL('../', import.meta.url);
+// 펜스 밖 마크다운 표 — 칸마다 인라인 코드 백틱을 뗀다(구분행은 뺀다). 이름·값 표는 언어 없는 펜스가 아니라 마크다운 표로 쓴다(2026-11-26).
+const mdTables = (md) => {
+  const out = [];
+  let inFence = false;
+  let cur = null;
+  for (const line of md.split('\n')) {
+    if (line.startsWith('```')) inFence = !inFence;
+    if (inFence || !/^\|.*\|$/.test(line)) { if (cur) { out.push(cur); cur = null; } continue; }
+    if (/^\|[\s|:-]+\|$/.test(line)) continue;
+    const cells = line.slice(1, -1).split(' | ').map((c) => c.trim().replaceAll('`', ''));
+    if (cur) cur.rows.push(cells); else cur = { header: cells, rows: [] };
+  }
+  if (cur) out.push(cur);
+  return out;
+};
 const P = (rel) => new URL(rel, ROOT).pathname;
 const read = (path) => readFileSync(path, 'utf8');
 const ADMIN = { host: 'localhost', port: 5432, database: 'postgres', user: 'postgres', password: 'postgres' };
@@ -186,6 +201,8 @@ beforeAll(async () => {
   }
   // p3-43 뒤 — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다. sessions(p3-41)는 얹지 않는다 — 이 회차 북마크의 시드가 그 테이블을 모른다
   await applyMigration(tpl, ROLE_MIGRATION);
+  // p3-60 뒤 - 작업트리 클라이언트가 users.follower_count 를 고른다(follows 테이블은 얹지 않는다)
+  await applyMigration(tpl, FOLLOWER_COUNT_MIGRATION);
   await tpl.end();
   // 학생 DB 는 앞 회차 시드로 들어간 다섯이 비밀번호가 없다 — 그 판(code/p3-39)의 seed.js 로 넣는다.
   execFileSync(process.execPath, [B('seed.js')], {
@@ -300,6 +317,7 @@ describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
         await db.query(read(S4(`prisma/migrations/${dir}/migration.sql`)));
       }
       await applyMigration(db, ROLE_MIGRATION);
+      await applyMigration(db, FOLLOWER_COUNT_MIGRATION);
       const dir = studentDir(S4);
       dirs.push(dir);
       const { code, out } = run(dir, 'seed.js', { DATABASE_URL: url });
@@ -331,6 +349,7 @@ describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
     cpSync(S4('prisma.config.js'), join(dir, 'prisma.config.js'));
     // p3-43 뒤 — 작업트리 클라이언트가 사람을 만들 때 role 을 싣는다. 교안의 두 명령은 그대로 두고 그 마이그레이션 폴더만 얹는다
     cpSync(P(`prisma/migrations/${ROLE_MIGRATION}`), join(dir, `prisma/migrations/${ROLE_MIGRATION}`), { recursive: true });
+    cpSync(P(`prisma/migrations/${FOLLOWER_COUNT_MIGRATION}`), join(dir, `prisma/migrations/${FOLLOWER_COUNT_MIGRATION}`), { recursive: true });
     // 학생의 .env 는 수업 DB 를 가리킨다 — 판정은 다른 이름을 둬서, 명령 앞의 값이 지면 그 DB 가 생겨 드러나게 한다.
     writeFileSync(join(dir, '.env'), `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/${ENVFILE_DB}"\n`);
     const cmdEnv = { HOME: process.env.HOME, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, npm_config_update_notifier: 'false' };
@@ -345,14 +364,14 @@ describe('축 ③ Step 3·4 — 비밀번호가 없는 사람', () => {
     // 교안의 쿼리를 그대로 보내 결과 표(머리글 두 줄 아래)와 맞댄다
     const query = 'SELECT username, left(password_hash, 7) AS password_hash FROM users ORDER BY id;';
     expect(lecture).toContain(`\`\`\`sql\n${query}\n\`\`\``);
-    const table = lecture.split(`${query}\n\`\`\`\n\n\`\`\`\n`)[1].split('\n```')[0].split('\n');
-    expect(table.slice(0, 2)).toEqual([' username   password_hash', ' ========   =============']);
+    const table = mdTables(lecture.split(`${query}\n\`\`\`\n\n`)[1].split('\n\n')[0])[0];
+    expect(table.header).toEqual(['username', 'password_hash']);
     const db = new pg.Client({ ...ADMIN, database: SEED_CMD_DB });
     await db.connect();
     try {
       const { rows } = await db.query(query);
-      expect(table.slice(2).map((line) => line.trim().split(/\s+/))).toEqual(rows.map((row) => [row.username, row.password_hash]));
-      expect(table[2]).toBe(' dahye      $2b$12$');
+      expect(table.rows).toEqual(rows.map((row) => [row.username, row.password_hash]));
+      expect(table.rows[0]).toEqual(['dahye', '$2b$12$']);
     } finally {
       await db.end();
     }

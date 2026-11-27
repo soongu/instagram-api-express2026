@@ -20,6 +20,7 @@ import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { applyMigrationsAfter } from './helpers/tip-schema.js';
+import { NEW_DECODE, CURSOR_MESSAGE, retrofitRoundDir } from './helpers/decode-cursor-retrofit.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -30,6 +31,9 @@ const GATE_URL = `postgresql://postgres:postgres@localhost:5432/${GATE_DB}`;
 const PORT = 3791;
 
 const ROUND = roundDir('code/p3-33');
+// 🔀 2026-11-16 소급 정정 — 이 회차 끝의 학생 상태는 «북마크 + decodeCursor 정정» 이다(test/helpers/decode-cursor-retrofit.js).
+const OLD_POST = ROUND.fromBookmark ? readFileSync(join(ROUND.dir, 'services/postService.js'), 'utf8') : null;
+retrofitRoundDir(ROUND);
 const R = (rel) => join(ROUND.dir, rel);
 const BEFORE = roundDir('code/p3-32');
 const B = (rel) => join(BEFORE.dir, rel);
@@ -244,6 +248,50 @@ describe('축 ⑦ — Step 7: 잘못된 입력', () => {
       }
       expect((await send(now.base, 'GET', '/api/posts?limit=2&cursor=')).status).toBe(400);
     });
+  });
+
+  // 🔀 2026-11-16 소급 정정 — 빈 catch 가 우리 코드의 실수(빠뜨린 import)까지 400 으로 바꿔 숨겼다.
+  //    교안이 «try 를 좁게 두는 이유» 로 드는 장면을 두 판으로 실제로 띄워 잰다.
+  it('🔴 정정 — import 를 빠뜨리면 옛 판(넓은 try)은 정상 커서까지 400 · 창 1 은 요청 줄만 · 정정한 판은 500 + ReferenceError', async () => {
+    expect(OLD_POST, '북마크 code/p3-33 이 있어야 옛 판을 띄울 수 있어요').not.toBeNull();
+    reseed();
+    const IMPORT = "import { cursorSchema } from '../schemas/postSchema.js';\n";
+    const nextOf = async (base) => (await send(base, 'GET', '/api/posts?limit=2')).body.nextCursor;
+    await withServer(PORT, { 'services/postService.js': rep(OLD_POST, IMPORT, '') }, async (srv) => {
+      const cursor = await nextOf(srv.base);
+      const res = await send(srv.base, 'GET', `/api/posts?limit=2&cursor=${cursor}`);
+      expect({ status: res.status, body: res.body }).toEqual({ status: 400, body: BAD_CURSOR });
+      await sleep(100);
+      expect(srv.tail()).not.toContain('ReferenceError');
+      expect(srv.tail()).toContain(`GET /api/posts?limit=2&cursor=${cursor} 400`);
+    });
+    await withServer(PORT, { 'services/postService.js': rep(read(R('services/postService.js')), IMPORT, '') }, async (srv) => {
+      const cursor = await nextOf(srv.base);
+      expect((await send(srv.base, 'GET', `/api/posts?limit=2&cursor=${cursor}`)).status).toBe(500);
+      // JSON 이 아닌 커서는 그대로 400 — JSON.parse 에서 막혀 import 와 상관없다.
+      const bad = await send(srv.base, 'GET', '/api/posts?limit=2&cursor=abc');
+      expect({ status: bad.status, body: bad.body }).toEqual({ status: 400, body: BAD_CURSOR });
+      await sleep(100);
+      expect(srv.tail()).toContain('ReferenceError: cursorSchema is not defined');
+    });
+    expect(LECTURE()).toContain('`ReferenceError: cursorSchema is not defined`');
+  });
+
+  it('🔴 정정 — 교안은 import 줄과 정정한 decodeCursor 를 블록으로 주고, 통과해야 할 두 요청도 다시 보내게 한다', () => {
+    const md = LECTURE();
+    expect(md).toContain("```javascript\n// ~/instagram-api/services/postService.js\nimport { cursorSchema } from '../schemas/postSchema.js';\n```");
+    expect(md).toContain(`\`\`\`javascript\n// ~/instagram-api/services/postService.js\n${NEW_DECODE(CURSOR_MESSAGE)}\n\`\`\``);
+    expect(md).not.toContain('cursorSchema.parse(');
+    expect(md).toContain('`### 첫 페이지`와 `### 둘째 페이지`');
+    expect(ANSWERS()).not.toContain('cursorSchema.parse(');
+  });
+
+  it('🔴 정정 — main 의 수업 파일(INVALID_CURSOR) · 직접 해보기 3 · 과제 [응용] 이 같은 decodeCursor', () => {
+    // p3-53 Step 3 이 커서 함수를 utils/cursor.js 로 옮겼다(게시물 목록과 댓글 목록이 함께 쓴다) — 그 뒤로는 그 파일에 같은 글자가 있다.
+    const owner = existsSync(P('utils/cursor.js')) ? 'utils/cursor.js' : 'services/postService.js';
+    expect(read(P(owner))).toContain(NEW_DECODE('INVALID_CURSOR'));
+    expect(LAB_FILE('practice3.js')).toContain(NEW_DECODE(CURSOR_MESSAGE));
+    expect(LAB_FILE('homework2.js')).toContain(NEW_DECODE(CURSOR_MESSAGE));
   });
 
   it('🔴 끝 판 — limit 은 1 이상 50 이하의 정수(그 밖은 400) · 없으면 기본 5', async () => {

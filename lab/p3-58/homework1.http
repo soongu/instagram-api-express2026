@@ -1,0 +1,20 @@
+### j가 든 사람
+GET http://localhost:4001/api/users/search?keyword=j
+
+### 대문자로 물어도 같다
+GET http://localhost:4001/api/users/search?keyword=J
+
+### u가 든 사람
+GET http://localhost:4001/api/users/search?keyword=u
+
+### n이 든 사람 - 넷이 맞지만 셋까지
+GET http://localhost:4001/api/users/search?keyword=n
+
+### 아무도 없는 검색어
+GET http://localhost:4001/api/users/search?keyword=minho
+
+### 검색어 없이
+GET http://localhost:4001/api/users/search
+
+### 글쓴이 한 사람은 그대로
+GET http://localhost:4001/api/users/yuna

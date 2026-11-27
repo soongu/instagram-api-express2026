@@ -1,0 +1,42 @@
+# 내 게시물을 상세 화면으로 열었을 때 주소창에 보이는 번호를 적는다
+@postId = 14
+
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 나는 누구
+GET http://localhost:3000/api/v2/auth/me
+
+### 9번 게시물 받기
+GET http://localhost:3000/api/v2/posts/9
+
+### 9번 게시물의 글 고치기
+PATCH http://localhost:3000/api/v2/posts/9
+Content-Type: application/json
+
+{
+  "content": "jaehoon이 고친 글"
+}
+
+### 9번 게시물 지우기
+DELETE http://localhost:3000/api/v2/posts/9
+
+### 내 게시물 받기
+GET http://localhost:3000/api/v2/posts/{{postId}}
+
+### 내 게시물 좋아요 누르기
+PUT http://localhost:3000/api/v2/posts/{{postId}}/likes/me
+
+### 내 게시물의 글 고치기
+PATCH http://localhost:3000/api/v2/posts/{{postId}}
+Content-Type: application/json
+
+{
+  "content": "주말에 바다에 다녀왔어요"
+}

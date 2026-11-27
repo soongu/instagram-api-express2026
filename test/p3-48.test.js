@@ -31,10 +31,14 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { boot } from './helpers/boot.js';
+import { FOLLOWER_COUNT_MIGRATION } from './helpers/tip-schema.js';
 import { roundDir } from './helpers/round.js';
 import { startFakeGoogle, DEFAULT_PROFILE as GOOGLE_PROFILE } from './helpers/fake-google.js';
 import { startFakeKakao, KAKAO_EMAIL_VALID } from './helpers/fake-kakao.js';
 import { startFakeNaver, DEFAULT_NAVER_PROFILE } from './helpers/fake-naver.js';
+
+// p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
+const v2Error = (code, message) => ({ error: { code, message, path: expect.stringMatching(/^\/api\/v2\/[^?]*$/), timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/) } });
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -59,6 +63,9 @@ const NAVER_ENV = { NAVER_CLIENT_ID: 'test-naver', NAVER_CLIENT_SECRET: 'test-na
 const env = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:3001', JWT_SECRET: SECRET, ...GOOGLE_ENV, ...KAKAO_ENV, ...NAVER_ENV };
 const STUDENT_FILES = ['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'strategies', 'docs', 'package.json', 'requests', 'seed.js', 'data', 'prisma', 'prisma.config.js', '.env.example'];
 const PROVIDERS = ['google', 'kakao', 'naver'];
+// 연결하러 떠날 때 인가 주소에 싣는 OpenID Connect 의 prompt — 어느 계정을 이을지 사람이 고르게 하는 값이 제공자마다 다르다.
+// 구글은 계정 선택 화면(select_account) · 카카오와 네이버는 로그인 화면을 다시(login — 카카오의 select_account 는 «간편로그인 정보 저장» 을 한 브라우저에서만 고르는 화면이 나온다).
+const ACCOUNT_PROMPT = { google: 'select_account', kakao: 'login', naver: 'login' };
 
 // 학생 파일 속 진짜 제공자 주소(셋씩) — 판정은 이 글자만 가짜 제공자 주소로 바꾼다.
 const REAL = {
@@ -317,6 +324,8 @@ beforeAll(async () => {
     BASE_MIGRATIONS.add(dir);
     await onDb(TPL_DB, read(base(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // p3-60 뒤 - 작업트리 클라이언트가 users.follower_count 를 고른다(follows 테이블은 얹지 않는다)
+  await onDb(TPL_DB, read(P(`prisma/migrations/${FOLLOWER_COUNT_MIGRATION}/migration.sql`)));
   const seedDir = studentDir(base);
   execFileSync(process.execPath, [join(seedDir, 'seed.js')], {
     cwd: seedDir, encoding: 'utf8',
@@ -667,8 +676,11 @@ const trySql = async (sql, params) => {
 describe('축 ④ Step 4 — 다른 사람에게 이어진 계정 · 같은 제공자의 둘째 계정은 잇지 않는다', () => {
   const src = (rel) => read(stepDir(4)(rel));
 
-  it('🔴 바뀐 학생 파일 — errors.js · prisma(스키마 + 마이그레이션 하나) · services 둘', () => {
-    expect(changedStudentFiles(stepRef(3), stepRef(4)).filter((name) => !name.startsWith('prisma/migrations/'))).toEqual(['errors.js', 'prisma/schema.prisma', 'services/authService.js', 'services/userService.js']);
+  it('🔴 바뀐 학생 파일 — errors.js · prisma(스키마 + 마이그레이션 하나) · services 둘 · 연결할 계정 고르기(routes/auth.js · strategies 넷)', () => {
+    expect(changedStudentFiles(stepRef(3), stepRef(4)).filter((name) => !name.startsWith('prisma/migrations/'))).toEqual([
+      'errors.js', 'prisma/schema.prisma', 'routes/auth.js', 'services/authService.js', 'services/userService.js',
+      'strategies/createSocialStrategy.js', 'strategies/google.js', 'strategies/kakao.js', 'strategies/naver.js',
+    ]);
     expect(newMigrations(stepDir(4))).toHaveLength(1);
     const [name] = newMigrations(stepDir(4));
     expect(name).toMatch(/^\d{14}_one_account_per_provider$/);
@@ -677,6 +689,51 @@ describe('축 ④ Step 4 — 다른 사람에게 이어진 계정 · 같은 제�
     expect(src('errors.js')).toContain("  SOCIAL_ACCOUNT_TAKEN: '이미 다른 계정에 연결된 소셜 계정이에요',\n  PROVIDER_ALREADY_LINKED: '같은 제공자의 계정이 이미 연결돼 있어요',\n");
     seen.step4Migration = { name, sql: src(`prisma/migrations/${name}/migration.sql`) };
   });
+
+  it('🔎 Step 3 판 — 연결 시작 주소에도 prompt 가 없다(제공자에 로그인해 있는 브라우저는 계정을 고르는 화면 없이 돌아온다)', async () => {
+    await freshGate(stepDir(3));
+    await withServer(stepDir(3), async ({ base }) => {
+      const tab = await asGoogleUser(base);
+      for (const provider of PROVIDERS) {
+        const link = new URL((await begin(tab, provider, { next: '/', link: true })).location);
+        expect([provider, link.searchParams.has('prompt')]).toEqual([provider, false]);
+      }
+    });
+  }, 30_000);
+
+  it('🔴 연결 시작 주소만 인가 주소에 prompt 를 싣는다 — google select_account · kakao login · naver login · 로그인 시작 주소에는 없다 · 나머지 쿼리 이름은 로그인과 같다', async () => {
+    await freshGate(stepDir(4));
+    await withServer(stepDir(4), async ({ base }) => {
+      const tab = await asGoogleUser(base);
+      const names = (url) => [...url.searchParams.keys()].filter((key) => key !== 'prompt').sort();
+      seen.step4PromptLocation = {};
+      for (const provider of PROVIDERS) {
+        const link = new URL((await begin(tab, provider, { next: '/', link: true })).location);
+        const login = new URL((await begin(browser(base), provider)).location);
+        expect([provider, link.searchParams.get('prompt')]).toEqual([provider, ACCOUNT_PROMPT[provider]]);
+        expect([provider, login.searchParams.has('prompt')]).toEqual([provider, false]);
+        expect([provider, names(link)]).toEqual([provider, names(login)]);
+        seen.step4PromptLocation[provider] = [...link.searchParams.keys()];
+      }
+      expect(src('strategies/createSocialStrategy.js')).toContain('  strategy.authorizationParams = (options) => (options.chooseAccount ? { prompt: accountPrompt } : {});\n');
+      for (const provider of PROVIDERS) {
+        expect(src(`strategies/${provider}.js`)).toContain(`  accountPrompt: '${ACCOUNT_PROMPT[provider]}',\n`);
+        expect(src('routes/auth.js')).toContain(`  passport.authenticate('${provider}', { session: false, chooseAccount: true }),\n`);
+      }
+    });
+  }, 30_000);
+
+  it('🔴 prompt 를 실어도 연결은 그대로 — 카카오를 지운 DB 에서 구글 사람이 카카오를 이으면 /?linked=kakao · 가짜 카카오가 받은 prompt 는 login', async () => {
+    await freshGate(stepDir(4));
+    await gate('DELETE FROM users WHERE id = $1', [await userIdOf(K.username)]);
+    await withServer(stepDir(4), async ({ base }) => {
+      const tab = await asGoogleUser(base);
+      const { callback } = await social(tab, 'kakao', { next: '/', link: true });
+      expect([callback.status, callback.location]).toEqual([302, '/?linked=kakao']);
+      expect(fakes.kakao.state.log.authorize.at(-1).prompt).toBe('login');
+      expect(await socialOf(await userIdOf(G.username))).toEqual([`google:${G.providerUserId}`, `kakao:${K.providerUserId}`]);
+    });
+  }, 30_000);
 
   it('🔴 구글 사람이 네이버로 가입한 사람의 네이버를 이으면 302 /?error=SOCIAL_ACCOUNT_TAKEN · 행 그대로 · 터미널 조용', async () => {
     await freshGate(stepDir(4));
@@ -814,7 +871,7 @@ describe('축 ⑤ Step 5 — 내 로그인 방법 목록과 연결 끊기', () =
       expect(providersOf((await tab.get(LIST)).body)).toEqual(['google']);
       // 네이버는 네이버로 가입한 사람의 것이다 — 구글 사람의 행이 아니라 404 이고 그 행은 그대로
       const other = await tab.del(`${LIST}/naver`);
-      expect([other.status, other.body]).toEqual([404, { error: { code: 'SOCIAL_ACCOUNT_NOT_FOUND', message: '연결된 소셜 계정이 없어요' } }]);
+      expect([other.status, other.body]).toEqual([404, v2Error('SOCIAL_ACCOUNT_NOT_FOUND', '연결된 소셜 계정이 없어요')]);
       expect(await socialOf(nId)).toEqual([`naver:${N.providerUserId}`]);
       const noToken = await browser(base).del(`${LIST}/kakao`);
       expect([noToken.status, noToken.body.error.code]).toEqual([401, 'LOGIN_REQUIRED']);
@@ -895,7 +952,7 @@ describe('축 ⑥ Step 6 — 비밀번호가 없는 사람의 마지막 소셜 �
       const tab = browser(base);
       await social(tab, 'naver');
       const res = await tab.del(`${LIST}/naver`);
-      expect([res.status, res.body]).toEqual([409, { error: { code: 'LAST_LOGIN_METHOD', message: '마지막 로그인 방법은 끊을 수 없어요' } }]);
+      expect([res.status, res.body]).toEqual([409, v2Error('LAST_LOGIN_METHOD', '마지막 로그인 방법은 끊을 수 없어요')]);
       expect(providersOf((await tab.get(LIST)).body)).toEqual(['naver']);
       expect((await tab.del(`${LIST}/kakao`)).body.error.code).toBe('SOCIAL_ACCOUNT_NOT_FOUND');
       seen.step6Last = res.body;
@@ -919,6 +976,32 @@ describe('축 ⑥ Step 6 — 비밀번호가 없는 사람의 마지막 소셜 �
       expect((await tab.del(`${LIST}/google`)).status).toBe(409);
       expect(providersOf((await tab.get(LIST)).body)).toEqual(['google']);
     });
+  }, 30_000);
+
+  // 🔀 2026-11-15 학생 검수 — 교안 Step 6 에 «54번에게 jaehoon 의 비밀번호 해시를 잠깐 복사하고 네이버 끊기» 장면을 더했다
+  //    (그전에는 «비밀번호가 있는 사람은 마지막 소셜 계정도 끊을 수 있어요» 를 보는 장면이 없어, 비밀번호를 안 보는 판도 통과했다).
+  const passwordScene = async (edit) => {
+    await freshGate(stepDir(6));
+    return withServer(stepDir(6), async ({ base }) => {
+      const tab = browser(base);
+      await social(tab, 'naver');
+      const [{ user_id: id }] = await gate("SELECT user_id FROM social_accounts WHERE provider = 'naver'");
+      const before = await tab.del(`${LIST}/naver`);
+      await gate("UPDATE users SET password_hash = (SELECT password_hash FROM users WHERE username = 'jaehoon') WHERE id = $1", [id]);
+      const res = await tab.del(`${LIST}/naver`);
+      const list = (await tab.get(LIST)).body;
+      return { before: before.status, after: res.status, list };
+    }, { edit });
+  };
+
+  it('🔴 교안 장면 — 비밀번호가 없을 때 409 · jaehoon 의 비밀번호 해시를 복사하면 같은 토큰으로 200 · «내 로그인 방법» 은 hasPassword true · 빈 목록', async () => {
+    expect(await passwordScene()).toEqual({ before: 409, after: 200, list: { data: { hasPassword: true, socialAccounts: [] } } });
+  }, 30_000);
+
+  it('🔴 틀린 판 — 비밀번호를 안 보고 «하나뿐이면 409» 로만 막으면 비밀번호 해시를 복사한 장면에서도 409(이 장면이 가린다)', async () => {
+    const got = await passwordScene((dir) => replaceIn(dir, 'services/userService.js', '  if (user.passwordHash === null && providers.length === 1)', '  if (providers.length === 1)'));
+    expect([got.before, got.after]).toEqual([409, 409]);
+    expect(got.list.data.hasPassword).toBe(true);
   }, 30_000);
 });
 
@@ -1048,6 +1131,7 @@ describe('축 ⑧ 학생 파일 차이 — code/p3-47 에서 Step 마다', () =>
     expect(changed[7]).toEqual([
       'controllers/authController.js', 'errors.js', 'middlewares/auth.js', `prisma/migrations/${newMigrations(stepDir(7))[0]}/migration.sql`, 'prisma/schema.prisma',
       'requests/social-accounts.http', 'routes/auth.js', 'services/authService.js', 'services/userService.js', 'strategies/createSocialStrategy.js',
+      'strategies/google.js', 'strategies/kakao.js', 'strategies/naver.js',
     ]);
     for (const n of [2, 3, 4, 5, 6, 7]) {
       expect(showAt(stepRef(n), 'package.json')).toBe(showAt('code/p3-47', 'package.json'));
@@ -1211,7 +1295,10 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       const got = {};
       got.labLogin = await labGo(tab, '/login', 'dahye');
       got.meBefore = await meOf(tab);
+      const sessionBeforeLink = tab.cookie('labSession');
       got.link = await labGo(tab, '/talk/link', 'dahye');
+      // 🔀 2026-11-15 학생 검수 — 확인에 «연결 전후 labSession 값이 같아요» 를 더했다(요구사항 5 «로그인 기록은 새로 만들지 않은 채»)
+      got.sameSessionAfterLink = tab.cookie('labSession') === sessionBeforeLink;
       got.members = await membersOf(base);
       got.talkLogin = await labGo(tab, '/talk', 'dahye');
       got.meAfter = await meOf(tab);
@@ -1238,6 +1325,7 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       labLogin: [302, '/me'],
       meBefore: { id: 1, nickname: 'dahye', email: 'dahye@example.com' },
       link: [302, '/members'],
+      sameSessionAfterLink: true,
       members: { 1: ['lab', 'talk'], 2: ['talk'] },
       talkLogin: [302, '/me'],
       meAfter: { id: 1, nickname: 'dahye', email: 'dahye@example.com' },
@@ -1308,6 +1396,12 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       expect(wrongKeys(got)).toContain('link');
     }, 60_000);
 
+    it('🔴 틀린 판 (바) — 연결하면서 새 labSession 을 주고 /members 로 보내면 다른 줄은 모두 정답과 같고, «연결 전후 labSession 값» 줄만 가린다', async () => {
+      const wrong = edit1(LAB('practice1.js'), "  if (!linked) socialAccounts.push({ provider, providerUserId: id, memberId });\n\n  res.redirect('/members');", "  if (!linked) socialAccounts.push({ provider, providerUserId: id, memberId });\n\n  const sessionId = randomUUID();\n  sessions.set(sessionId, memberId);\n  res.cookie('labSession', sessionId, { httpOnly: true, sameSite: 'lax' });\n  res.redirect('/members');");
+      const got = await observe(wrong);
+      expect(wrongKeys(got)).toEqual(['sameSessionAfterLink']);
+    }, 60_000);
+
     it('🔴 틀린 판 (다) — 연결하면서 새 로그인 기록을 만들면(startSession) /members 가 아니라 /me 로 간다', async () => {
       const wrong = edit1(LAB('practice1.js'), "  if (!linked) socialAccounts.push({ provider, providerUserId: id, memberId });\n\n  res.redirect('/members');", "  if (!linked) socialAccounts.push({ provider, providerUserId: id, memberId });\n\n  startSession(req, res);");
       const got = await observe(wrong);
@@ -1339,6 +1433,9 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       const kakao = await tab.del('/me/social-accounts/kakao');
       got.kakao = [kakao.status, kakao.body];
       got.noLogin = (await browser(base).del('/me/social-accounts/talk')).status;
+      // 🔀 2026-11-15 학생 검수 — 확인에 «@session 값을 abc로 바꾼 «내 로그인 방법»» 을 더했다(요구사항 1 «로그인하지 않았으면 401»)
+      const list = await fetch(`${base}/me/login-methods`, { headers: { Cookie: 'labSession=abc' } });
+      got.noLoginList = [list.status, await list.json()];
       got.members = await membersOf(base);
       return got;
     });
@@ -1349,6 +1446,7 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       sora: [409, { message: '마지막 로그인 방법은 끊을 수 없어요' }],
       kakao: [404, { message: '연결된 소셜 계정이 없어요' }],
       noLogin: 401,
+      noLoginList: [401, { message: '로그인이 필요해요' }],
       members: { 1: ['lab'], 2: ['talk'] },
     };
     const wrongKeys = (got) => Object.keys(RIGHT).filter((key) => JSON.stringify(got[key]) !== JSON.stringify(RIGHT[key]));
@@ -1364,6 +1462,19 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       labSeen.practice2Http = got.http;
       expect(got).toEqual(RIGHT);
       labSeen.practice2 = got;
+    }, 60_000);
+
+    it('🔴 틀린 판 — 연결한 차례를 거꾸로 돌려주면 상태 코드는 정답과 같고, 첫 응답 본문 {"providers":["talk","lab"]} 가 가린다', async () => {
+      const got = await observe(edit1(LAB('practice2.js'), '.map((account) => account.provider);\n}', '.map((account) => account.provider).reverse();\n}'));
+      expect(got.http).toEqual(RIGHT.http);
+      expect(wrongKeys(got)).toEqual(['bodies']);
+      expect(got.bodies[0]).toBe('{"providers":["talk","lab"]}');
+    }, 60_000);
+
+    it('🔴 틀린 판 — 로그인하지 않은 «내 로그인 방법» 에 200 빈 목록을 주면 .http 다섯은 정답과 같고, abc 줄(401)이 가린다', async () => {
+      const got = await observe(edit1(LAB('practice2.js'), "  if (memberId === undefined) {\n    res.status(401).json({ message: '로그인이 필요해요' });\n    return;\n  }\n\n  res.json({ providers: providersOf(memberId) });", '  res.json({ providers: memberId === undefined ? [] : providersOf(memberId) });'));
+      expect(wrongKeys(got)).toEqual(['noLoginList']);
+      expect(got.noLoginList).toEqual([200, { providers: [] }]);
     }, 60_000);
 
     it('🔴 틀린 판 — 하나 남았을 때가 아니라 둘 남았을 때부터 막으면(<= 2) dahye 의 톡 끊기가 409', async () => {
@@ -1423,6 +1534,30 @@ describe('축 ⑨ 실습·과제 — 톡 서버와 실습용 인가 서버를 �
       expect(removed).toContain('  const admins = await prisma.user.count({ where: { role: \'ADMIN\', username: { startsWith: PREFIX } } });');
       expect(added).toContain('    const admins = await tx.$queryRaw`SELECT id FROM users WHERE role = \'ADMIN\' AND username LIKE ${`${PREFIX}%`} FOR UPDATE`;');
     });
+
+    // 🔀 2026-11-15 학생 검수 — 확인 끝에 «FOR UPDATE 만 지우고 한 번 실행하면 0명» 을 더했다(요구사항 3 — 정말 동시에 도는지).
+    const ZERO = '내리기: 내렸어요 / 내리기: 내렸어요 → 남은 시험용 관리자: 0명';
+    const ONE = '내리기: 내렸어요 / 내리기: 마지막 관리자라 내리지 않았어요 → 남은 시험용 관리자: 1명';
+    const dropLock = (source) => edit1(source, '${`${PREFIX}%`} FOR UPDATE`;', '${`${PREFIX}%`}`;');
+    const seqCreate = (source) => edit1(source, "const bosses = await Promise.all(['1', '2'].map((name) => prisma.user.create({\n  data: { username: `${PREFIX}${name}`, role: 'ADMIN' },\n  select: { id: true },\n})));", "const bosses = [];\nfor (const name of ['1', '2']) {\n  bosses.push(await prisma.user.create({ data: { username: `${PREFIX}${name}`, role: 'ADMIN' }, select: { id: true } }));\n}");
+    const seqDemote = (source) => edit1(source, '  const results = await Promise.all(bosses.map((boss) => demote(boss.id)));', '  const results = [];\n  for (const boss of bosses) results.push(await demote(boss.id));');
+
+    it('🔴 확인 — 정답에서 FOR UPDATE 만 지우면 5번 모두 0명(두 demote 가 정말 동시에 돈다) · 요구사항 3 을 어긴 판(만들기 차례로 · demote 차례로)은 지워도 1명이라 이 줄이 가린다', async () => {
+      const noLock = await guard(() => runs(dropLock(LAB('practice3.js')), 5));
+      expect(noLock).toEqual({ [ZERO]: 5 });
+      const seqC = await guard(() => runs(seqCreate(LAB('practice3.js')), 5));
+      expect(seqC).toEqual({ [ONE]: 5 });
+      const seqCNoLock = await guard(() => runs(dropLock(seqCreate(LAB('practice3.js'))), 5));
+      expect(seqCNoLock[ONE]).toBeGreaterThan(0);
+      const seqDNoLock = await guard(() => runs(dropLock(seqDemote(LAB('practice3.js'))), 5));
+      expect(seqDNoLock).toEqual({ [ONE]: 5 });
+      labSeen.practice3DropLock = { noLock, seqC, seqCNoLock, seqDNoLock };
+    }, 180_000);
+
+    it('🔎 맞는 판 — 잠근 다음 count 로 세도 5번 모두 1명(잠금을 기다린 뒤의 세기라서)', async () => {
+      const lockThenCount = edit1(LAB('practice3.js'), "    const admins = await tx.$queryRaw`SELECT id FROM users WHERE role = 'ADMIN' AND username LIKE ${`${PREFIX}%`} FOR UPDATE`;\n\n    if (admins.length <= 1)", "    await tx.$queryRaw`SELECT id FROM users WHERE role = 'ADMIN' AND username LIKE ${`${PREFIX}%`} FOR UPDATE`;\n    const admins = await tx.user.count({ where: { role: 'ADMIN', username: { startsWith: PREFIX } } });\n\n    if (admins <= 1)");
+      expect(await guard(() => runs(lockThenCount, 5))).toEqual({ [ONE]: 5 });
+    }, 120_000);
 
     it('🔴 틀린 판 둘 — 트랜잭션만(FOR UPDATE 없이 세기) · 내릴 사람 행 하나만 잠그기 — 둘 다 0명이 나온다', async () => {
       const txOnly = edit1(LAB('practice3.js'), "    const admins = await tx.$queryRaw`SELECT id FROM users WHERE role = 'ADMIN' AND username LIKE ${`${PREFIX}%`} FOR UPDATE`;\n\n    if (admins.length <= 1)", "    const admins = await tx.user.count({ where: { role: 'ADMIN', username: { startsWith: PREFIX } } });\n\n    if (admins <= 1)");

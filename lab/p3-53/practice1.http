@@ -1,0 +1,8 @@
+### 1번 상품의 리뷰
+GET http://localhost:4001/api/products/1/reviews
+
+### 리뷰가 없는 상품
+GET http://localhost:4001/api/products/3/reviews
+
+### 없는 상품
+GET http://localhost:4001/api/products/99/reviews

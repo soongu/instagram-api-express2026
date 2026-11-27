@@ -18,7 +18,8 @@ export async function list(req, res) {
 }
 
 export async function detail(req, res) {
-  const post = await postService.getPost(req.postId);
+  // 상세도 목록과 같다 — 보는 사람은 로그인 정보로 정하고, 그 사람이 누른 좋아요가 liked 로 간다.
+  const post = await postService.getPost(req.postId, res.locals.userId);
 
   sendData(res, post);
 }

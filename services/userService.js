@@ -1,8 +1,10 @@
 // ~/instagram-api/services/userService.js
 import { randomInt, randomUUID } from 'node:crypto';
+import path from 'node:path';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db.js';
-import { ConflictError, NotFoundError } from '../errors.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../errors.js';
+import * as uploadService from './uploadService.js';
 
 // 응답에 실어 보낼 컬럼만 고른다.
 const userFields = { id: true, username: true, profileImage: true, role: true };
@@ -35,6 +37,58 @@ const DUMMY_HASH = await bcrypt.hash(randomUUID(), PASSWORD_COST);
 
 export function findUserById(id) {
   return prisma.user.findUnique({ where: { id }, select: userFields });
+}
+
+// 프로필 헤더에 실을 것 - 팔로워 수는 컬럼에 적혀 있고, 게시물 수와 팔로잉 수는 요청마다 센다.
+// 보는 사람이 이 사람을 팔로우하는 행도 센다 - 하나면 팔로우하고 있는 것이다.
+function profileFieldsFor(viewerId) {
+  return {
+    id: true,
+    username: true,
+    name: true,
+    profileImage: true,
+    followerCount: true,
+    _count: {
+      select: {
+        posts: true,
+        following: true,
+        followers: { where: { followerId: viewerId } },
+      },
+    },
+  };
+}
+
+// 사용자 이름으로 프로필 헤더를 돌려준다. 그런 사람이 없으면 404 다.
+// 팔로우하고 있는지는 보는 사람(viewerId)에 따라 다르다.
+export async function getProfile(username, viewerId) {
+  const user = await prisma.user.findUnique({ where: { username }, select: profileFieldsFor(viewerId) });
+
+  if (!user) throw new NotFoundError('USER_NOT_FOUND');
+
+  const { _count, followerCount, ...profile } = user;
+  return {
+    ...profile,
+    postCount: _count.posts,
+    followerCount,
+    followingCount: _count.following,
+    isFollowing: _count.followers > 0,
+  };
+}
+
+// 사람 찾기에 실을 것.
+const memberFields = { id: true, username: true, name: true, profileImage: true };
+
+// 사용자 이름에 검색어가 든 사람을 사용자 이름 차례로 20명까지 돌려준다 - 대소문자는 가리지 않는다.
+// 검색어가 비어 있으면 아무도 돌려주지 않는다.
+export function searchMembers(keyword) {
+  if (!keyword) return [];
+
+  return prisma.user.findMany({
+    where: { username: { contains: keyword, mode: 'insensitive' } },
+    select: memberFields,
+    orderBy: { username: 'asc' },
+    take: 20,
+  });
 }
 
 // 로그인 — 사용자 이름과 비밀번호가 맞으면 그 사람을, 아니면 null 을 돌려준다.
@@ -221,4 +275,37 @@ export async function unlinkSocialAccount(userId, provider) {
 
     await tx.socialAccount.deleteMany({ where: { userId, provider } });
   });
+}
+
+// 프로필 사진 주소를 바꾼다.
+// 앞 사진의 기록을 지우는 일, 새 사진의 기록에 «이 사람의 프로필 사진» 이라고 적는 일,
+// 주소를 바꾸는 일을 한 트랜잭션으로 묶는다.
+export async function updateProfileImage(userId, imageUrl) {
+  const fileName = path.basename(imageUrl);
+
+  const [profile, previous] = await prisma.$transaction(async (tx) => {
+    // 앞 프로필 사진의 기록을 먼저 지운다 - 한 사람의 프로필 사진 기록은 하나뿐이라 남아 있으면 새 사진을 못 적는다.
+    const previous = await tx.upload.findUnique({ where: { profileUserId: userId }, select: { fileName: true } });
+    if (previous) await tx.upload.delete({ where: { profileUserId: userId } });
+
+    // 내가 올렸고 아직 게시물에도 프로필에도 쓰지 않은 사진의 기록에만 적는다.
+    // 적은 기록이 하나가 아니면 남의 사진이거나 이미 쓴 사진이거나 없는 사진이다.
+    const { count } = await tx.upload.updateMany({
+      where: { fileName, uploaderId: userId, postId: null, profileUserId: null },
+      data: { profileUserId: userId },
+    });
+    if (count !== 1) throw new BadRequestError('IMAGE_NOT_AVAILABLE');
+
+    const profile = await tx.user.update({
+      where: { id: userId },
+      data: { profileImage: imageUrl },
+      select: { profileImage: true },
+    });
+    return [profile, previous];
+  });
+
+  // 앞 사진 파일은 트랜잭션이 끝난 뒤에 지운다 - 바꾸기가 실패해 없던 일이 되면 앞 사진이 그대로 남아야 한다.
+  if (previous) await uploadService.removeFiles([previous.fileName]);
+
+  return profile;
 }

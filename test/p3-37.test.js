@@ -25,6 +25,7 @@ import pg from 'pg';
 import { boot } from './helpers/boot.js';
 import { roundDir } from './helpers/round.js';
 import { applyMigrationsAfter } from './helpers/tip-schema.js';
+import { retrofitRoundDir } from './helpers/decode-cursor-retrofit.js';
 
 const ROOT = new URL('../', import.meta.url);
 const P = (rel) => new URL(rel, ROOT).pathname;
@@ -40,6 +41,10 @@ const ROUND = roundDir('code/p3-37');
 const R = (rel) => join(ROUND.dir, rel);
 const BEFORE = roundDir('code/p3-36');
 const B = (rel) => join(BEFORE.dir, rel);
+// 🔀 2026-11-16 소급 정정 — p3-33 이 decodeCursor 의 try 를 좁혔다. 학생 상태는 «북마크 + 정정» 이라
+//    Step 6 의 grep 출력(줄 번호 · 문장을 넘기는 줄 수)도 그 상태로 잰다(test/helpers/decode-cursor-retrofit.js).
+retrofitRoundDir(BEFORE);
+retrofitRoundDir(ROUND, 'services/postService.js', 'INVALID_CURSOR');
 
 const env = { DATABASE_URL: GATE_URL, CORS_ORIGIN: 'http://localhost:3001' };
 const STUDENT_FILES = ['app.js', 'db.js', 'errors.js', 'responses.js', 'routes', 'controllers', 'services', 'middlewares', 'schemas', 'docs', 'package.json', 'requests', 'lab/p3-37'];
@@ -859,6 +864,21 @@ const fences = (md) => {
   });
   return out;
 };
+// 펜스 밖 마크다운 표 — 칸마다 인라인 코드 백틱을 뗀다(구분행은 뺀다). 이름·값 표는 언어 없는 펜스가 아니라 마크다운 표로 쓴다(2026-11-26).
+const mdTables = (md) => {
+  const out = [];
+  let inFence = false;
+  let cur = null;
+  for (const line of md.split('\n')) {
+    if (line.startsWith('```')) inFence = !inFence;
+    if (inFence || !/^\|.*\|$/.test(line)) { if (cur) { out.push(cur); cur = null; } continue; }
+    if (/^\|[\s|:-]+\|$/.test(line)) continue;
+    const cells = line.slice(1, -1).split(' | ').map((c) => c.trim().replaceAll('`', ''));
+    if (cur) cur.rows.push(cells); else cur = { header: cells, rows: [] };
+  }
+  if (cur) out.push(cur);
+  return out;
+};
 const NEXT = (rel) => execFileSync('git', ['show', `code/p3-33:${rel}`], { cwd: P('../instagram-next'), encoding: 'utf8' });
 // Step 4·5 의 app.js — 앞 판에서 라우터를 두 주소에 붙인 판(에러 미들웨어는 아직 앞 판 그대로).
 const STEP4_APP = () => {
@@ -1018,7 +1038,7 @@ describe('축 ⑪ 학생 낭독 집중 검수 — 지시를 글자 그대로 따
     expect(appLines).toEqual(out);
   });
 
-  it('Step 6 — 고치기 전에 문장을 넘기는 줄을 먼저 찾는다(19줄) · 고친 뒤 같은 명령은 0줄', () => {
+  it('Step 6 — 고치기 전에 문장을 넘기는 줄을 먼저 찾는다(20줄 — 2026-11-16 decodeCursor 정정으로 하나 늘었다) · 고친 뒤 같은 명령은 0줄', () => {
     const all = fences(LECTURE());
     const CMD = 'grep -rnE "Error\\(\'[^A-Z]" services middlewares controllers';
     const first = fenceAfter(all, CMD, 0);
@@ -1031,12 +1051,12 @@ describe('축 ⑪ 학생 낭독 집중 검수 — 지시를 글자 그대로 따
       const up = join(dir, 'controllers/uploadController.js');
       writeFileSync(up, read(up).replace("'NO_IMAGES'", "'올릴 사진을 골라 주세요'"));
       const got = grepLines(dir, ['-rnE', "Error\\('[^A-Z]", 'services', 'middlewares', 'controllers']);
-      expect(got).toHaveLength(19);
+      expect(got).toHaveLength(20);
       expect(got).toEqual(first.body.split('\n').sort());
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-    expect(LECTURE()).toContain('19줄이 찍혀요');
+    expect(LECTURE()).toContain('20줄이 찍혀요');
     expect(grepLines(ROUND.dir, ['-rnE', "Error\\('[^A-Z]", 'services', 'middlewares', 'controllers'])).toEqual([]);
   });
 
@@ -1205,10 +1225,10 @@ describe('축 ⑫ Step 8 — 실패 응답의 path · timestamp', () => {
     expect(posts.status).toBe(400);
     expect(signup.status).toBe(400);
     expect(signup.body).toEqual(posts.body);
-    const table = step8Blocks().find((f) => f.lang === '' && f.body.includes('깨진 JSON으로 가입') && f.body.includes('응답 본문'));
-    const rows = table.body.split('\n').slice(2);
-    expect(rows).toHaveLength(2);
-    for (const row of rows) expect(row).toContain(`400    ${JSON.stringify(posts.body)}`);
+    const table = mdTables(lecture()).find((t) => t.header.includes('응답 본문') && t.rows.some((r) => r[0] === '깨진 JSON으로 가입'));
+    expect(table.header).toEqual(['요청', '상태', '응답 본문']);
+    expect(table.rows).toHaveLength(2);
+    for (const row of table.rows) expect(row.slice(1)).toEqual(['400', JSON.stringify(posts.body)]);
   }, 60000);
 
   it('이 판 — 두 요청이 path 로 갈린다 · 쿼리는 빠진다 · timestamp 는 UTC · status 는 없다 · 옛 주소는 그대로', async () => {
@@ -1246,10 +1266,11 @@ describe('축 ⑫ Step 8 — 실패 응답의 path · timestamp', () => {
   }, 60000);
 
   it('교안의 표 둘 — path 는 실제 응답과 같고, 예로 든 시각은 JSON 블록 · 첫 요청보다 늦은 둘째 요청', () => {
-    const tables = step8Blocks().filter((f) => f.lang === '');
-    const fieldTable = tables.find((f) => f.body.includes('담는 것'));
-    const pathTable = tables.find((f) => f.body.includes('timestamp') && f.body.includes('깨진 JSON으로 가입') && !f.body.includes('응답 본문'));
-    const rows = pathTable.body.split('\n').slice(2).map((l) => l.trim().split(/ {3,}/));
+    const tables = mdTables(lecture());
+    const fieldTable = tables.find((t) => t.header.includes('담는 것'));
+    const pathTable = tables.find((t) => t.header.includes('timestamp') && !t.header.includes('응답 본문'));
+    expect(pathTable.header).toEqual(['요청', 'path', 'timestamp']);
+    const { rows } = pathTable;
     expect(rows).toEqual([
       ['깨진 JSON으로 게시물 올리기', '/api/v2/posts', expect.stringMatching(ISO_UTC)],
       ['깨진 JSON으로 가입', '/api/v2/auth/signup', expect.stringMatching(ISO_UTC)],
@@ -1257,7 +1278,7 @@ describe('축 ⑫ Step 8 — 실패 응답의 path · timestamp', () => {
     expect(rows[0][2] < rows[1][2]).toBe(true);
     const shown = JSON.parse(step8Blocks().find((f) => f.lang === 'json').body);
     expect(rows[1][2]).toBe(shown.error.timestamp);
-    expect(fieldTable.body).toContain(`/api/v2/auth/signup`);
-    expect(fieldTable.body).toContain(shown.error.timestamp);
+    expect(fieldTable.rows.flat()).toContain(`/api/v2/auth/signup`);
+    expect(fieldTable.rows.flat()).toContain(shown.error.timestamp);
   });
 });

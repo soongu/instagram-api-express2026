@@ -1,0 +1,50 @@
+### jaehoon으로 로그인 — 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 인기 태그 — 처음
+GET http://localhost:4001/api/tags/popular
+
+### 3번 상품에 태그를 단 리뷰 달기
+POST http://localhost:4001/api/products/3/reviews
+Content-Type: application/json
+
+{
+  "content": "높이를 바꿀 수 있어서 목이 편해요 #가성비 #운동 #거치대 이 가격이면 정말 #가성비"
+}
+
+### 인기 태그 — 리뷰를 단 뒤
+GET http://localhost:4001/api/tags/popular
+
+### 내가 쓴 2번 리뷰 지우기
+DELETE http://localhost:4001/api/reviews/2
+
+### 인기 태그 — 지운 뒤
+GET http://localhost:4001/api/tags/popular
+
+### 남이 쓴 1번 리뷰 지우기
+DELETE http://localhost:4001/api/reviews/1
+
+### 없는 리뷰 지우기
+DELETE http://localhost:4001/api/reviews/99
+
+### 태그를 여섯 개 쓴 리뷰 달기
+POST http://localhost:4001/api/products/3/reviews
+Content-Type: application/json
+
+{
+  "content": "높이를 바꿀 수 있어요 #하나 #둘 #셋 #넷 #다섯 #여섯"
+}
+
+### 없는 상품에 리뷰 달기
+POST http://localhost:4001/api/products/99/reviews
+Content-Type: application/json
+
+{
+  "content": "없는 상품이에요 #없음"
+}

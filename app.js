@@ -6,9 +6,13 @@ import helmet from 'helmet';
 import passport from 'passport';
 import postsRouter from './routes/posts.js';
 import likesRouter from './routes/likes.js';
+import commentsRouter from './routes/comments.js';
 import authRouter from './routes/auth.js';
 import uploadsRouter from './routes/uploads.js';
 import adminRouter from './routes/admin.js';
+import hashtagsRouter from './routes/hashtags.js';
+import profilesRouter from './routes/profiles.js';
+import membersRouter from './routes/members.js';
 import { HttpError, NotFoundError } from './errors.js';
 import { sendError } from './responses.js';
 import { logger } from './middlewares/logger.js';
@@ -19,6 +23,7 @@ import { requireLogin } from './middlewares/auth.js';
 import { googleStrategy } from './strategies/google.js';
 import { kakaoStrategy } from './strategies/kakao.js';
 import { naverStrategy } from './strategies/naver.js';
+import * as uploadService from './services/uploadService.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 
@@ -68,6 +73,10 @@ api.use('/auth', authRouter);
 api.use(requireLogin);
 api.use('/posts', postsRouter);
 api.use('/posts/:id/likes', likesRouter);
+api.use('/posts/:id/comments', commentsRouter);
+api.use('/hashtags', hashtagsRouter);
+api.use('/profiles', profilesRouter);
+api.use('/members', membersRouter);
 api.use('/uploads', uploadsRouter);
 api.use('/admin', adminRouter);
 
@@ -101,6 +110,24 @@ app.use((err, req, res, next) => {
   console.error(err);
   sendError(req, res, new HttpError(500, 'INTERNAL_ERROR'));
 });
+
+// 아무 데도 쓰이지 않은 사진을 치운다 - 서버가 뜰 때 한 번, 그 뒤로는 10분마다.
+const CLEANUP_INTERVAL = 10 * 60 * 1000;
+
+async function cleanUpUploads() {
+  try {
+    const removed = await uploadService.removeUnusedUploads();
+    if (removed.length > 0) {
+      console.log(`아무 데도 쓰이지 않은 사진 ${removed.length}장을 지웠어요.`);
+    }
+  } catch (error) {
+    // 치우다가 실패해도(데이터베이스가 잠깐 꺼지는 등) 서버는 꺼지지 않는다 — 다음 차례에 다시 해 본다.
+    console.error(error);
+  }
+}
+
+cleanUpUploads();
+setInterval(cleanUpUploads, CLEANUP_INTERVAL);
 
 const PORT = process.env.PORT ?? 3000;
 

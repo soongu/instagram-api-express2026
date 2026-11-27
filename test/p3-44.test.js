@@ -16,6 +16,7 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { boot } from './helpers/boot.js';
+import { applyMigration, FOLLOWER_COUNT_MIGRATION } from './helpers/tip-schema.js';
 import { roundDir } from './helpers/round.js';
 
 // p3-37 Step 8(2026-11-15) — 새 주소의 실패 응답에는 path(쿼리를 뺀 주소)와 timestamp(ISO UTC)도 실린다.
@@ -234,6 +235,8 @@ beforeAll(async () => {
   for (const dir of readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
     await tpl.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // p3-60 뒤 - 작업트리 클라이언트가 users.follower_count 를 고른다(follows 테이블은 얹지 않는다)
+  await applyMigration(tpl, FOLLOWER_COUNT_MIGRATION);
   await tpl.end();
   execFileSync(process.execPath, [R('seed.js')], {
     cwd: ROUND.dir, encoding: 'utf8',

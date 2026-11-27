@@ -1,0 +1,51 @@
+### yuna가 올린 cat.jpg를 글쓴이 사진으로
+PUT http://localhost:4001/api/users/yuna/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/cat.jpg"
+}
+
+### yuna의 사진 지우기
+DELETE http://localhost:4001/api/users/yuna/photo
+
+### yuna - 사진이 없다
+GET http://localhost:4001/api/users/yuna
+
+### cat.jpg 파일
+GET http://localhost:4001/uploads/cat.jpg
+
+### yuna의 사진을 한 번 더 지우기
+DELETE http://localhost:4001/api/users/yuna/photo
+
+### cake.jpg 파일 - 리뷰에 붙인 사진은 그대로
+GET http://localhost:4001/uploads/cake.jpg
+
+### 기록 보기 - cat.jpg 줄이 없다
+GET http://localhost:4001/api/uploads
+
+### sujin의 사진 지우기 - 바깥 주소
+DELETE http://localhost:4001/api/users/sujin/photo
+
+### sujin - 사진이 없다
+GET http://localhost:4001/api/users/sujin
+
+### dog.jpg 파일 - 다른 사람의 파일은 그대로
+GET http://localhost:4001/uploads/dog.jpg
+
+### 없는 사람
+DELETE http://localhost:4001/api/users/minho/photo
+
+### yuna가 올린 sea.jpg를 글쓴이 사진으로
+PUT http://localhost:4001/api/users/yuna/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/sea.jpg"
+}
+
+### yuna의 사진을 다시 지우기
+DELETE http://localhost:4001/api/users/yuna/photo
+
+### sea.jpg 파일
+GET http://localhost:4001/uploads/sea.jpg

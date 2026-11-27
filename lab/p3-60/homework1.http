@@ -1,0 +1,35 @@
+### jaehoon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 구독한 글쓴이의 리뷰 - yuna와 sujin
+GET http://localhost:4001/api/reviews/subscribed
+
+### taeyang 구독
+PUT http://localhost:4001/api/users/taeyang/subscribers/me
+
+### taeyang의 리뷰도 들어온다
+GET http://localhost:4001/api/reviews/subscribed
+
+### sujin 구독 취소
+DELETE http://localhost:4001/api/users/sujin/subscribers/me
+
+### yuna 구독 취소
+DELETE http://localhost:4001/api/users/yuna/subscribers/me
+
+### taeyang 구독 취소
+DELETE http://localhost:4001/api/users/taeyang/subscribers/me
+
+### 구독한 사람이 없다
+GET http://localhost:4001/api/reviews/subscribed
+
+### jisoo 구독 - 리뷰에 단 답변만 있는 사람
+PUT http://localhost:4001/api/users/jisoo/subscribers/me
+
+### 답변은 리뷰가 아니다
+GET http://localhost:4001/api/reviews/subscribed

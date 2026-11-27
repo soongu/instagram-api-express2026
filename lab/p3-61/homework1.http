@@ -1,0 +1,27 @@
+### jaehoon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### sujin이 구독한 글쓴이 - 첫 페이지
+# @name first
+GET http://localhost:4001/api/users/sujin/subscriptions
+
+### sujin이 구독한 글쓴이 - 둘째 페이지
+GET http://localhost:4001/api/users/sujin/subscriptions?cursor={{first.nextCursor}}
+
+### 내가 구독한 글쓴이
+GET http://localhost:4001/api/users/jaehoon/subscriptions
+
+### 아무도 구독하지 않은 yuna
+GET http://localhost:4001/api/users/yuna/subscriptions
+
+### 없는 사람
+GET http://localhost:4001/api/users/nobody/subscriptions
+
+### 잘못된 커서
+GET http://localhost:4001/api/users/sujin/subscriptions?cursor=abc

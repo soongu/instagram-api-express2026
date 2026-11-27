@@ -1,0 +1,26 @@
+### jaehoon으로 로그인 — 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 숨긴 내 리뷰 지우기
+DELETE http://localhost:4001/api/products/1/reviews/9
+
+### 다른 상품 주소로 내 리뷰 지우기
+DELETE http://localhost:4001/api/products/2/reviews/8
+
+### 내 리뷰 지우기
+DELETE http://localhost:4001/api/products/1/reviews/8
+
+### 내가 파는 상품에 남이 쓴 리뷰 지우기
+DELETE http://localhost:4001/api/products/2/reviews/10
+
+### 남이 쓴 리뷰 지우기
+DELETE http://localhost:4001/api/products/1/reviews/1
+
+### 없는 리뷰 지우기
+DELETE http://localhost:4001/api/products/1/reviews/99

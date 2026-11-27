@@ -28,6 +28,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
 import bcrypt from 'bcrypt';
 import { boot } from './helpers/boot.js';
+import { applyMigration, FOLLOWER_COUNT_MIGRATION } from './helpers/tip-schema.js';
 import { roundDir } from './helpers/round.js';
 import { startFakeGoogle } from './helpers/fake-google.js';
 import { startFakeKakao, DEFAULT_KAKAO_PROFILE, KAKAO_NO_NICKNAME } from './helpers/fake-kakao.js';
@@ -297,6 +298,8 @@ beforeAll(async () => {
   for (const dir of readdirSync(R('prisma/migrations')).filter((name) => name !== 'migration_lock.toml').sort()) {
     await tpl.query(read(R(`prisma/migrations/${dir}/migration.sql`)));
   }
+  // p3-60 뒤 - 작업트리 클라이언트가 users.follower_count 를 고른다(follows 테이블은 얹지 않는다)
+  await applyMigration(tpl, FOLLOWER_COUNT_MIGRATION);
   await tpl.end();
   execFileSync(process.execPath, [R('seed.js')], {
     cwd: ROUND.dir, encoding: 'utf8',

@@ -1,0 +1,45 @@
+### yuna - 지금은 사진이 없다
+GET http://localhost:4001/api/users/yuna
+
+### yuna가 올린 cat.jpg를 글쓴이 사진으로
+PUT http://localhost:4001/api/users/yuna/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/cat.jpg"
+}
+
+### yuna가 리뷰에 쓴 cake.jpg
+PUT http://localhost:4001/api/users/yuna/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/cake.jpg"
+}
+
+### jaehoon이 올린 dog.jpg를 yuna의 사진으로
+PUT http://localhost:4001/api/users/yuna/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/dog.jpg"
+}
+
+### 이미 yuna의 사진인 cat.jpg를 한 번 더
+PUT http://localhost:4001/api/users/yuna/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/cat.jpg"
+}
+
+### 없는 파일
+PUT http://localhost:4001/api/users/yuna/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/nothing.jpg"
+}
+
+### yuna - 사진이 바뀌었다
+GET http://localhost:4001/api/users/yuna
