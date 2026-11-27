@@ -130,12 +130,12 @@ afterAll(async () => {
 });
 
 /** 실습 서버 하나를 띄워 그 실습의 .http 를 위에서부터 보낸다. 메모리 데이터라 띄울 때마다 처음 상태다. */
-const runLab = async (which, edit) => {
+const runLab = async (which, edit, httpEdit = (src) => src) => {
   const dir = studentCopy(which, edit);
   onPort(dir, which, LAB_PORT);
   const lab = await boot(join(dir, LAB, `${which}.js`), { port: LAB_PORT, cwd: dir, env: ENV, ready: `${LAB_PORT}번 포트에서` });
   try {
-    const runs = await httpyac(read(join(dir, LAB, `${which}.http`)));
+    const runs = await httpyac(httpEdit(read(join(dir, LAB, `${which}.http`))));
     await sleep(100);
     return { runs, log: lab.tail() };
   } finally {
@@ -156,6 +156,9 @@ const ids = (r) => r.body.map((item) => item.id);
 
 
 const row = (id, username, isSubscribed) => ({ id, username, isSubscribed });
+// 교안 확인 7(직접 해보기 1) · 확인 6(과제 [기초]) - 맨 위 로그인 요청을 seoyeon 으로 바꿔 보낸다. seoyeon(43)은 리뷰 서버 데이터에 없는 사람이다.
+const asSeoyeon = swap('"username": "jaehoon",\n  "password": "jaehoon1234"', '"username": "seoyeon",\n  "password": "instagram1234"');
+const subscribed = (runs, title) => runs.find((r) => r.title === title).body.items.map((i) => `${i.username}${i.isSubscribed ? '*' : ''}`);
 
 describe('축 ⑥ 직접 해보기 1 - 글쓴이의 구독자 목록', () => {
   it('practice1.http 차례대로 - 다섯 · 다섯 · 하나 · 한 번에 열하나 · 빈 목록 · 404 · 잘못된 커서 400', async () => {
@@ -190,7 +193,8 @@ describe('축 ⑥ 직접 해보기 1 - 글쓴이의 구독자 목록', () => {
   }, 30_000);
 
   const PRACTICE_WRONG = {
-    '시각이 같을 때 번호로 가르지 않는다(isAfter)': swap(' || (item.createdAt === cursor.createdAt && item.id < cursor.id)', ''),
+    // 빈칸에 true - 교안 해설 표 «isAfter 의 빈칸에 true 를 써요»(확인 2 의 첫 줄이 woojin).
+    '시각이 같을 때 번호로 가르지 않는다(isAfter)': swap('(item.createdAt === cursor.createdAt && item.id < cursor.id)', '(item.createdAt === cursor.createdAt && true)'),
     '정렬에서 번호를 안 본다(newestFirst)': swap('  return b.id - a.id;', '  return 0;'),
     '다음 커서를 페이지 첫 줄로': swap('encodeCursor(page[page.length - 1])', 'encodeCursor(page[0])'),
     '빈칸에 subscriber.id': swap('(row) => row.subscriberId === res.locals.userId && row.authorId === subscriber.id', '(row) => row.subscriberId === subscriber.id && row.authorId === subscriber.id'),
@@ -211,7 +215,18 @@ describe('축 ⑥ 직접 해보기 1 - 글쓴이의 구독자 목록', () => {
       '빈칸에 author.id': [2, 'yuna의 구독자 - 첫 페이지'],
       'hasNext 를 limit 과 같을 때도 true': null,
     });
+    // 교안 해설 표 - 빈칸에 true 면 확인 2 의 첫 줄이 커서의 woojin 이다(같은 시각의 줄을 다시 받는다).
+    expect(diffs['시각이 같을 때 번호로 가르지 않는다(isAfter)'].wrong.body.items[0].username).toBe('woojin');
   }, 180_000);
+
+  it('확인 7 - seoyeon 으로 보면 모두 false · 빈칸에 번호 2 를 쓴 답은 확인 1~6 을 지나고 확인 7 에서 hyunwoo 가 true', async () => {
+    const literal2 = swap('(row) => row.subscriberId === res.locals.userId && row.authorId === subscriber.id', '(row) => row.subscriberId === 2 && row.authorId === subscriber.id');
+    const right = (await runLab('practice1', undefined, asSeoyeon)).runs;
+    expect(right[0]).toMatchObject({ title: 'jaehoon으로 로그인 - 수업 백엔드', status: 200 });
+    expect(subscribed(right, 'yuna의 구독자 - 첫 페이지')).toEqual(['junho', 'jaehoon', 'hyunwoo', 'dabin', 'woojin']);
+    expect(firstDiff((await runLab('practice1')).runs, (await runLab('practice1', literal2)).runs)).toBeNull();
+    expect(subscribed((await runLab('practice1', literal2, asSeoyeon)).runs, 'yuna의 구독자 - 첫 페이지')).toEqual(['junho', 'jaehoon', 'hyunwoo*', 'dabin', 'woojin']);
+  }, 120_000);
 });
 
 describe('축 ⑦ 과제 [기초] - 그 사람이 구독한 글쓴이 목록', () => {
@@ -248,5 +263,13 @@ describe('축 ⑦ 과제 [기초] - 그 사람이 구독한 글쓴이 목록', (
       '정렬에서 번호를 안 본다': [2, 'sujin이 구독한 글쓴이 - 첫 페이지'],
       '줄마다 sujin 기준으로 셌다': [2, 'sujin이 구독한 글쓴이 - 첫 페이지'],
     });
+  }, 120_000);
+
+  it('확인 6 - seoyeon 으로 보면 모두 false · 번호 2 를 쓴 답은 확인 1~5 를 지나고 확인 6 에서 yuna·eunji 가 true', async () => {
+    const literal2 = swap('(row) => row.subscriberId === res.locals.userId && row.authorId === author.id', '(row) => row.subscriberId === 2 && row.authorId === author.id');
+    const right = (await runLab('homework1', undefined, asSeoyeon)).runs;
+    expect(subscribed(right, 'sujin이 구독한 글쓴이 - 첫 페이지')).toEqual(['yuna', 'eunji', 'minho', 'taeyang', 'jaehoon']);
+    expect(firstDiff((await runLab('homework1')).runs, (await runLab('homework1', literal2)).runs)).toBeNull();
+    expect(subscribed((await runLab('homework1', literal2, asSeoyeon)).runs, 'sujin이 구독한 글쓴이 - 첫 페이지')).toEqual(['yuna*', 'eunji*', 'minho', 'taeyang', 'jaehoon']);
   }, 120_000);
 });
