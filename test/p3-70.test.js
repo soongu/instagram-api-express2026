@@ -54,7 +54,7 @@ const markCommits = (mark) => {
   const log = git(['log', '-n', '200', '--format=%H %s', LINE]);
   return log.split('\n').filter((l) => / feat\(p3-70\): /.test(l) && l.endsWith(`(${mark})`)).map((l) => l.split(' ')[0]);
 };
-const MARKS = { 2: 'Step 2', 3: 'Step 3', 4: 'Step 4' };
+const MARKS = { 2: 'Step 2', 3: 'Step 3', 4: 'Step 4', 8: 'Step 8' };
 const dirs = [];
 const refDirs = new Map();
 const refDir = (ref) => {
@@ -392,5 +392,25 @@ describe('축 ② Step 4 - .env 의 ACCESS_TOKEN_SECONDS', () => {
       expect(third.error).toBe(null);
       for (const s of [first, second, third]) s.socket.close();
     }, { env: { ACCESS_TOKEN_SECONDS: '2' } });
+  });
+});
+
+describe('축 ③ Step 8 - API 문서의 로그인 쿠키', () => {
+  it('Step 4 판 문서에는 로그인 주소와 쿠키 인증이 없다 · Step 8 판은 맨 위 security 와 login · signup 의 빈 목록', async () => {
+    await serve(4, async ({ base }) => {
+      const doc = await (await fetch(`${base}/api/openapi.json`)).json();
+      expect([doc.security, doc.components.securitySchemes, doc.paths['/api/v2/auth/login']]).toEqual([undefined, undefined, undefined]);
+    });
+    await serve(8, async ({ base }) => {
+      const doc = await (await fetch(`${base}/api/openapi.json`)).json();
+      expect(doc.security).toEqual([{ accessTokenCookie: [] }]);
+      expect(doc.components.securitySchemes.accessTokenCookie).toMatchObject({ type: 'apiKey', in: 'cookie', name: 'accessToken' });
+      expect(doc.paths['/api/v2/auth/login'].post.security).toEqual([]);
+      expect(doc.paths['/api/v2/auth/signup'].post.security).toEqual([]);
+      expect(doc.paths['/api/v2/auth/login'].post.requestBody.content['application/json'].schema.required).toEqual(['username', 'password']);
+      expect(Object.keys(doc.paths['/api/v2/auth/login'].post.responses)).toEqual(['200', '400', '401']);
+      const docs = await fetch(`${base}/api/docs/`);
+      expect(docs.status).toBe(200);
+    });
   });
 });
