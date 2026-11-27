@@ -44,3 +44,12 @@ Content-Type: application/json
   "username": "  minho ",
   "password": "minho1234"
 }
+
+### 앞뒤에 공백이 붙은 이메일로 로그인
+POST http://localhost:4080/api/login
+Content-Type: application/json
+
+{
+  "username": " sujin@example.com ",
+  "password": "sujin1234"
+}

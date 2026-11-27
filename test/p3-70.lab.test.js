@@ -96,6 +96,7 @@ describe('과제 [기초] - 가입 규칙 · 이메일 대소문자 · 앞뒤 �
       ['소문자 이메일로 로그인', 401],
       ['대문자 이메일로 로그인', 401],
       ['앞뒤에 공백이 붙은 사용자 이름으로 로그인', 401],
+      ['앞뒤에 공백이 붙은 이메일로 로그인', 401],
     ]);
   });
 
@@ -107,6 +108,7 @@ describe('과제 [기초] - 가입 규칙 · 이메일 대소문자 · 앞뒤 �
       ['소문자 이메일로 로그인', 200, { username: 'hana' }],
       ['대문자 이메일로 로그인', 200, { username: 'sujin' }],
       ['앞뒤에 공백이 붙은 사용자 이름으로 로그인', 200, { username: 'minho' }],
+      ['앞뒤에 공백이 붙은 이메일로 로그인', 200, { username: 'sujin' }],
     ]);
   });
 
@@ -116,5 +118,11 @@ describe('과제 [기초] - 가입 규칙 · 이메일 대소문자 · 앞뒤 �
     expect(firstDiff((await go(noFindLower)).out, right)).toBe('대문자 이메일로 로그인');
     const noStoreLower = answer.replace('{ email: emailOrPhone.toLowerCase(), phone: null }', '{ email: emailOrPhone, phone: null }');
     expect(firstDiff((await go(noStoreLower)).out, right)).toBe('소문자 이메일로 로그인');
+    // 사용자 이름 분기에서만 공백을 떼는 답 - 학생 낭독이 지은 틀린 답이 확인 1~5 를 다 통과했다. 여섯째 요청이 가른다.
+    const trimOnlyUsername = answer
+      .replace('  const value = loginId.trim();\n', '  const value = loginId;\n')
+      .replace('return members.find((member) => member.username === value);', 'return members.find((member) => member.username === value.trim());');
+    expect(trimOnlyUsername).not.toBe(answer);
+    expect(firstDiff((await go(trimOnlyUsername)).out, right)).toBe('앞뒤에 공백이 붙은 이메일로 로그인');
   });
 });
