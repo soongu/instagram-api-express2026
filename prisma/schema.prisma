@@ -122,6 +122,9 @@ model Follow {
   following   User     @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now()) @map("created_at")
 
+  // 이 팔로우가 남긴 알림 - 팔로우를 취소하면 알림도 함께 지워진다.
+  notifications Notification[]
+
   @@unique([followerId, followingId])
   // 목록 둘을 위한 인덱스 - 같은 사람의 행을 모아 두고, 그 안에서 시각과 번호의 차례로 둔다.
   @@index([followingId, createdAt(sort: Desc), id(sort: Desc)])
@@ -155,6 +158,8 @@ model Comment {
   parentId Int?      @map("parent_id")
   parent   Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
   replies  Comment[] @relation("Replies")
+  // 이 댓글이 남긴 알림 - 댓글을 지우면 알림도 함께 지워진다.
+  notifications Notification[]
 
   @@map("comments")
 }
@@ -282,6 +287,12 @@ model Notification {
   // 이 알림을 남긴 좋아요 - 그 좋아요가 지워지면(취소하면) 알림도 함께 지운다.
   postLikeId Int?             @map("post_like_id")
   postLike   PostLike?        @relation(fields: [postLikeId], references: [id], onDelete: Cascade)
+  // 이 알림을 남긴 댓글 - 댓글 알림과 멘션 알림이 채운다.
+  commentId  Int?             @map("comment_id")
+  comment    Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  // 이 알림을 남긴 팔로우
+  followId   Int?             @map("follow_id")
+  follow     Follow?          @relation(fields: [followId], references: [id], onDelete: Cascade)
   isRead     Boolean          @default(false) @map("is_read")
   createdAt  DateTime         @default(now()) @map("created_at")
 

@@ -2,6 +2,7 @@
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
+import { notify } from './notificationService.js';
 
 // 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
 async function findUserId(username) {
@@ -44,6 +45,15 @@ export async function follow(username, followerId) {
       data: [{ followerId, followingId }],
       skipDuplicates: true,
     });
+
+    // 행이 새로 들어갔을 때만 팔로우받은 사람에게 알림을 남긴다 - 좋아요와 같다.
+    if (count === 1) {
+      const row = await tx.follow.findUnique({
+        where: { followerId_followingId: { followerId, followingId } },
+        select: { id: true },
+      });
+      await notify(tx, { type: 'FOLLOW', receiverId: followingId, senderId: followerId, followId: row.id });
+    }
 
     return changeFollowerCount(tx, followingId, count);
   });

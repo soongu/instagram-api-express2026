@@ -2,6 +2,7 @@
 import { prisma } from '../db.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
+import { notify } from './notificationService.js';
 
 // 댓글 목록에 쓸 필드만 골라서 받는다 — 글쓴이는 번호와 함께 이름과 프로필 사진도 받는다.
 const commentFields = {
@@ -98,7 +99,8 @@ export async function getReplies(postId, commentId, { limit = 3, cursor }) {
 // 댓글을 단다. parentId 가 있으면 그 원댓글에 다는 답글이다.
 export async function createComment(postId, userId, content, parentId) {
   // 게시물이 없으면 404 로 답한다. 목록과 같은 확인이다.
-  const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
+  // 게시물을 쓴 사람은 댓글 알림을 받을 사람이라 함께 받는다.
+  const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true, authorId: true } });
   if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
   if (parentId !== undefined) {
@@ -116,6 +118,9 @@ export async function createComment(postId, userId, content, parentId) {
       data: { postId, authorId: userId, content, parentId },
       select: commentFields,
     });
+
+    // 게시물을 쓴 사람에게 «댓글을 남겼다» 는 알림을 남긴다. 답글도 그 게시물에 달린 글이라 같다.
+    await notify(tx, { type: 'COMMENT', receiverId: post.authorId, senderId: userId, postId, commentId: comment.id });
 
     // 답글은 게시물의 댓글 수에 세지 않는다. 답글이면 0 만큼 고쳐서 지금 숫자만 읽는다.
     const commentCount = await changeCommentCount(tx, postId, parentId === undefined ? 1 : 0);
