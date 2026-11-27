@@ -53,13 +53,16 @@ app.get('/api/notifications', (req, res) => {
 });
 
 // 알림을 모두 읽음으로 - 안 읽은 알림만 바꾸고, 바꾼 수를 돌려준다. 이미 다 읽었으면 0 이다.
+// 느린 서버라 이 답도 1초 늦게 보낸다 - 바꾸는 일은 받자마자 끝낸다.
 app.patch('/api/notifications/read', (req, res) => {
   const unread = notices.filter((notice) => !notice.isRead);
   unread.forEach((notice) => {
     notice.isRead = true;
   });
 
-  res.json({ readCount: unread.length });
+  setTimeout(() => {
+    res.json({ readCount: unread.length });
+  }, 1000);
 });
 
 // 알림 하나를 읽음으로 - 몇 번을 보내도 결과는 «읽은 상태» 하나다.
