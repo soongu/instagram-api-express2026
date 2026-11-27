@@ -164,6 +164,18 @@ describe('과제 [기초] - 묻는 경매를 알려 주는 경매로', () => {
         await bid(b, 52000);
         await sleep(400);
         out.low = [await view(a), await view(b)];
+        // 확인 4 - 강의 자료(2초마다 묻는 판)에는 연결이 없다.
+        if (await b.evaluate("typeof socket !== 'undefined'")) {
+          await b.evaluate('void socket.disconnect()');
+          await sleep(300);
+          await bid(a, 60000);
+          await sleep(300);
+          const markR = b.mark();
+          await b.evaluate('void socket.connect()');
+          await sleep(800);
+          out.reconnected = await view(b);
+          out.reconnectGets = b.since(markR, 'Network.requestWillBeSent').filter((e) => new URL(e.params.request.url).pathname === '/item').length;
+        }
         return out;
       } finally { a.close(); b.close(); await stop(server); }
     } finally { step.cleanup(); }
@@ -176,6 +188,21 @@ describe('과제 [기초] - 묻는 경매를 알려 주는 경매로', () => {
     expect(r.gets).toBe(1);
     expect(r.seenIn).toBeLessThan(300);
     expect(r.low).toEqual([H('55,000', 'jaehoon'), H('55,000', 'jaehoon', '지금 가격(55,000원)보다 높게 불러 주세요.')]);
+    expect([r.reconnected.price, r.reconnected.bidder]).toEqual(['60,000', 'jaehoon']);
+    expect(r.reconnectGets).toBe(1);
+  }, 30_000);
+
+  it('틀린 판 - 맨 위 load() 를 남기고 connect 에 걸지 않으면 ①~③ 은 맞지만 ④ 에서 다시 붙어도 55,000 그대로', async () => {
+    const r = await homework1('과제 [기초]', [['lab/p3-62/public/homework1.html', `      // 붙을 때 지금 가격을 한 번 받고, 그 뒤로는 서버가 알려 줄 때만 바꾼다.
+      const socket = io();
+      socket.on('connect', load);
+`, `      load();
+      const socket = io();
+`]]);
+    expect(r.gets).toBe(1);
+    expect(r.seenIn).toBeLessThan(300);
+    expect(r.low).toEqual([H('55,000', 'jaehoon'), H('55,000', 'jaehoon', '지금 가격(55,000원)보다 높게 불러 주세요.')]);
+    expect([r.reconnected.price, r.reconnected.bidder]).toEqual(['55,000', 'jaehoon']);
   }, 30_000);
 
   it('틀린 판 - setInterval 을 남겨 두면 ① 에서 GET /item 이 그대로 네 번', async () => {
@@ -258,6 +285,13 @@ describe('과제 [응용] - 다시 붙으면 놓친 입찰을 HTTP 로', () => {
         await sleep(400);
         out.after = await lines(b);
         out.a = await lines(a);
+        await b.evaluate('void socket.disconnect()');
+        await sleep(300);
+        const markA = b.mark();
+        await b.evaluate('void socket.connect()');
+        await sleep(800);
+        out.again = await lines(b);
+        out.againAsk = b.since(markA, 'Network.requestWillBeSent').map((e) => new URL(e.params.request.url)).filter((u) => u.pathname === '/bids').map((u) => u.search);
         return out;
       } finally { a.close(); b.close(); await stop(server); }
     } finally { step.cleanup(); }
@@ -272,6 +306,8 @@ describe('과제 [응용] - 다시 붙으면 놓친 입찰을 HTTP 로', () => {
     expect(r.reconnected).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원', 'jaehoon 25,000원']);
     expect(r.after).toEqual([...r.reconnected, 'minji 27,000원']);
     expect(r.a).toEqual(r.after);
+    expect(r.again).toEqual(r.after);
+    expect(r.againAsk).toEqual(['?after=4']);
   }, 40_000);
 
   it('강의 자료 그대로 - 다시 연 탭은 빈 목록 · 다시 붙어도 25,000 이 없다', async () => {
@@ -309,5 +345,21 @@ describe('과제 [응용] - 다시 붙으면 놓친 입찰을 HTTP 로', () => {
 `, ''],
     ]);
     expect(r.reconnected).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원', 'jaehoon 21,000원', 'jaehoon 23,000원', 'jaehoon 25,000원']);
+  }, 40_000);
+
+  it('틀린 판 - lastId 를 HTTP 로 받은 기록으로만 올리면 ①~④ 는 맞지만 ⑤ 에서 다시 붙으면 27,000 이 두 번', async () => {
+    const r = await homework2('과제 [응용]', [
+      [HTML, `        if (bid.id <= lastId) {
+          return;
+        }
+        lastId = bid.id;
+`, ''],
+      [HTML, '        missed.forEach(show);\n', '        missed.forEach(show);\n        if (missed.length > 0) lastId = missed.at(-1).id;\n'],
+    ]);
+    expect(r.reopened).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원']);
+    expect(r.reconnected).toEqual(['jaehoon 21,000원', 'jaehoon 23,000원', 'jaehoon 25,000원']);
+    expect(r.after).toEqual([...r.reconnected, 'minji 27,000원']);
+    expect(r.again).toEqual([...r.after, 'minji 27,000원']);
+    expect(r.againAsk).toEqual(['?after=3']);
   }, 40_000);
 });

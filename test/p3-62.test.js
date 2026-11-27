@@ -650,6 +650,32 @@ describe('Step 8 - 지난 이야기는 HTTP 로 채운다', () => {
     expect(order.indexOf('/messages?after=0')).toBeGreaterThan(order.indexOf('/socket.io/?transport=polling'));
     expect(await t.lines()).toEqual(['jaehoon: 안녕', 'jaehoon: minji 어디 갔어요?', 'jaehoon: 다들 잘 자요', 'jaehoon: 다시 왔네요']);
   }, 30_000);
+
+  it('탭을 닫지 않고 Console 로 끊으면 저절로 다시 붙지 않는다 · connect() 하면 GET /messages?after=4 한 줄로 놓친 것만 채운다', async () => {
+    const a = await chrome.newTab();
+    const b = await chrome.newTab();
+    await a.open(PAGE(server.port, 'io.html', 'jaehoon'));
+    await b.open(PAGE(server.port, 'io.html', 'minji'));
+    await b.waitUntil(statusIs('연결됐어요'), 5000);
+    await sleep(500);
+    const before = await b.lines();
+    await b.evaluate('void socket.disconnect()');
+    await sleep(300);
+    const off = await b.evaluate("document.querySelector('#status').textContent");
+    await a.say('잠깐 어디 갔어요?');
+    await sleep(1500);
+    const stillOff = [await b.evaluate("document.querySelector('#status').textContent"), await b.lines()];
+    const mark = b.mark();
+    await b.evaluate('void socket.connect()');
+    await b.waitUntil(statusIs('연결됐어요'), 5000);
+    await sleep(800);
+    const gets = b.since(mark, 'Network.requestWillBeSent').map((e) => new URL(e.params.request.url)).filter((u) => u.pathname === '/messages').map((u) => u.search);
+    expect(before).toEqual(['jaehoon: 안녕', 'jaehoon: minji 어디 갔어요?', 'jaehoon: 다들 잘 자요', 'jaehoon: 다시 왔네요']);
+    expect(off).toBe('연결이 끊겼어요');
+    expect(stillOff).toEqual(['연결이 끊겼어요', before]);
+    expect(gets).toEqual(['?after=4']);
+    expect(await b.lines()).toEqual([...before, 'jaehoon: 잠깐 어디 갔어요?']);
+  }, 30_000);
 });
 
 describe('Step 8 🙋 - Offline 으로 끊으면 45초쯤 «연결됐어요» 그대로 · 끊긴 걸 안 뒤 온 메시지는 다시 붙을 때 HTTP 로 채운다', () => {
