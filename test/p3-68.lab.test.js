@@ -262,7 +262,11 @@ describe('과제 [기초] - 알림을 모두 읽음으로', () => {
     expect(norm(start)).toBe(norm(notice));
     const added = answer.split('\n').filter((line) => !start.split('\n').includes(line));
     expect(added.join('\n')).toContain("app.patch('/api/notifications/read'");
-    expect(read(P('lab/p3-68/homework2-server.js')).split('\n').slice(1).join('\n').replaceAll('4071', 'PORT')).toBe(answer.split('\n').slice(1).join('\n').replaceAll('4070', 'PORT'));
+    // [응용] 강의 자료 서버 = 정답 판에서 포트와 «모두 읽음» 의 답을 1초 늦게 보내는 것만 다르다.
+    const slow = answer
+      .replace("app.patch('/api/notifications/read', (req, res) => {", "// 느린 서버라 이 답도 1초 늦게 보낸다 - 바꾸는 일은 받자마자 끝낸다.\napp.patch('/api/notifications/read', (req, res) => {")
+      .replace('  res.json({ readCount: unread.length });', '  setTimeout(() => {\n    res.json({ readCount: unread.length });\n  }, 1000);');
+    expect(read(P('lab/p3-68/homework2-server.js')).split('\n').slice(1).join('\n').replaceAll('4071', 'PORT')).toBe(slow.split('\n').slice(1).join('\n').replaceAll('4070', 'PORT'));
   });
 
   it('homework1.http 차례대로 - 4 를 바꾸고 · 다시 받으면 첫 페이지가 모두 읽음 · 한 번 더는 0 · 하나씩 읽음은 그대로', async () => {
