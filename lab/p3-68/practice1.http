@@ -1,0 +1,59 @@
+### seoyeon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon의 리뷰 1에 «도움이 돼요»
+PUT http://localhost:4068/api/reviews/1/helpful/me
+
+### 한 번 더
+PUT http://localhost:4068/api/reviews/1/helpful/me
+
+### 내 리뷰 2에 «도움이 돼요»
+PUT http://localhost:4068/api/reviews/2/helpful/me
+
+### seoyeon의 알림
+GET http://localhost:4068/api/notifications
+
+### jaehoon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### jaehoon의 알림
+GET http://localhost:4068/api/notifications
+
+### sujin의 리뷰 3에 누른 «도움이 돼요» 취소
+DELETE http://localhost:4068/api/reviews/3/helpful/me
+
+### seoyeon으로 다시 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon의 리뷰 1에 누른 «도움이 돼요» 취소
+DELETE http://localhost:4068/api/reviews/1/helpful/me
+
+### jaehoon으로 다시 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### jaehoon의 알림 - 취소한 뒤
+GET http://localhost:4068/api/notifications

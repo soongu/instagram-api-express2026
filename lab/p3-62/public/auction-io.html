@@ -1,0 +1,40 @@
+<!-- ~/instagram-api/lab/p3-62/public/auction-io.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>경매</title>
+  </head>
+  <body>
+    <h1 id="title">경매</h1>
+    <p>지금 가격 <strong id="price">-</strong>원 · 최고 입찰자 <span id="bidder">없음</span></p>
+    <form id="form">
+      <input id="amount" type="number" step="1000" placeholder="부를 가격" />
+      <button>입찰</button>
+    </form>
+    <p id="notice"></p>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const notice = document.querySelector('#notice');
+      const socket = io({ query: { item: params.get('item'), name: params.get('name') } });
+
+      socket.on('price', (item) => {
+        document.querySelector('#title').textContent = `${item.name} 경매`;
+        document.querySelector('#price').textContent = item.price.toLocaleString();
+        document.querySelector('#bidder').textContent = item.bidder ?? '없음';
+        notice.textContent = '';
+      });
+
+      socket.on('rejected', (price) => {
+        notice.textContent = `지금 가격(${price.toLocaleString()}원)보다 높게 불러 주세요.`;
+      });
+
+      document.querySelector('#form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        socket.emit('bid', Number(document.querySelector('#amount').value));
+      });
+    </script>
+  </body>
+</html>

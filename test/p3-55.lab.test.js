@@ -75,13 +75,15 @@ const dropDb = () => admin(async (client) => {
 });
 
 /** 학생 폴더 모양의 사본 — 그 실습 커밋을 풀고 node_modules 를 잇는다. `edit` 는 실습 파일 글자를 바꾼다. */
-const studentCopy = (which, edit) => {
+const studentCopy = (which, edit, dataEdit) => {
   const dir = mkdtempSync(join(tmpdir(), 'p355-lab-'));
   dirs.push(dir);
   const tar = execFileSync('git', ['archive', '--format=tar', commitOf(COMMITS[which])], { cwd: P('.'), maxBuffer: 1 << 28 });
   execFileSync('tar', ['-x', '-C', dir], { input: tar });
   // 나눠 주는 데이터는 직접 해보기 1 에서 한 번 받는다
   writeFileSync(join(dir, LAB, 'shop-data.js'), showAt(commitOf(COMMITS.practice1), `${LAB}/shop-data.js`));
+  // 확인이 학생에게 shop-data.js 를 잠깐 고쳐 보게 하는 장면(과제 [응용] 확인 5)
+  if (dataEdit) writeFileSync(join(dir, LAB, 'shop-data.js'), dataEdit(read(join(dir, LAB, 'shop-data.js'))));
   symlinkSync(P('node_modules'), join(dir, 'node_modules'));
   if (edit) {
     const file = join(dir, LAB, `${which}.js`);
@@ -146,8 +148,8 @@ afterAll(async () => {
 });
 
 /** 실습 서버 하나를 띄워 그 실습의 .http 를 위에서부터 보낸다. */
-const runLab = async (which, edit) => {
-  const dir = studentCopy(which, edit);
+const runLab = async (which, edit, dataEdit) => {
+  const dir = studentCopy(which, edit, dataEdit);
   onPort(dir, which, LAB_PORT);
   const lab = await boot(join(dir, LAB, `${which}.js`), { port: LAB_PORT, cwd: dir, env: ENV, ready: `${LAB_PORT}번 포트에서` });
   try {
@@ -357,6 +359,18 @@ describe('축 ④ 과제 [응용] — 리뷰 목록의 replyCount', () => {
     expect(diffs.productAnswers.wrong.body.map((r) => r.replyCount)).toEqual(Array(8).fill(5));
     expect(diffs.hiddenToo.wrong.body.map((r) => r.id)).toContain(3);
     expect(diffs.noReplyCount.wrong.body[0].replyCount).toBeUndefined();
+  }, 120_000);
+
+  it('🔴 확인 5 — 11번의 createdAt 을 11월 11일로 바꾸면 11번이 맨 끝(… 8 · 12 · 11) · 번호로만 정렬한 판은 확인 1~4 를 모두 지나고 여기서만 11 · 12 그대로', async () => {
+    const later = swap("createdAt: '2026-11-09T20:00:00.000Z'", "createdAt: '2026-11-11T09:00:00.000Z'");
+    const idOnly = swap('    .sort(byOldest)\n', '    .sort((a, b) => a.id - b.id)\n');
+    const moved = (await runLab('homework2', null, later)).runs;
+    expect(moved[0].body.map((r) => r.id)).toEqual([1, 2, 4, 5, 7, 8, 12, 11]);
+    const wrongPlain = (await runLab('homework2', idOnly)).runs;
+    expect(firstDiff(right, wrongPlain)).toBeNull();
+    const wrongMoved = (await runLab('homework2', idOnly, later)).runs;
+    expect(wrongMoved[0].body.map((r) => r.id)).toEqual([1, 2, 4, 5, 7, 8, 11, 12]);
+    seen.homework2Check5 = { moved: moved[0].body.map((r) => r.id), idOnlyMoved: wrongMoved[0].body.map((r) => r.id) };
   }, 120_000);
 });
 

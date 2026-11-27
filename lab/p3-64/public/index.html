@@ -1,0 +1,22 @@
+<!-- ~/instagram-api/lab/p3-64/public/index.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>문의 실습 연결</title>
+  </head>
+  <body>
+    <h1>문의 실습 연결</h1>
+    <p>개발자 도구 Console에서 socket.emit(...)으로 이벤트를 보내요. 받은 이벤트는 Console에 찍혀요.</p>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+
+      socket.on('connect', () => console.log('연결됐어요'));
+      socket.on('connect_error', (error) => console.log('연결하지 못했어요 -', error.message));
+      // 서버가 보낸 이벤트는 이름과 값을 그대로 찍는다.
+      socket.onAny((event, value) => console.log(event, value));
+    </script>
+  </body>
+</html>

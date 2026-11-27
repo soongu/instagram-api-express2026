@@ -1,0 +1,43 @@
+<!-- ~/instagram-api/lab/p3-62/public/auction-ws.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>필름 카메라 경매</title>
+  </head>
+  <body>
+    <h1>필름 카메라 경매</h1>
+    <p>지금 가격 <strong id="price">-</strong>원 · 최고 입찰자 <span id="bidder">없음</span></p>
+    <form id="form">
+      <input id="amount" type="number" step="1000" placeholder="부를 가격" />
+      <button>입찰</button>
+    </form>
+    <p id="notice"></p>
+
+    <script>
+      const name = new URLSearchParams(location.search).get('name');
+      const notice = document.querySelector('#notice');
+      const socket = new WebSocket(`ws://${location.host}`);
+
+      socket.addEventListener('message', (event) => {
+        const message = JSON.parse(event.data);
+
+        if (message.type === 'price') {
+          document.querySelector('#price').textContent = message.price.toLocaleString();
+          document.querySelector('#bidder').textContent = message.bidder ?? '없음';
+          notice.textContent = '';
+        }
+
+        if (message.type === 'rejected') {
+          notice.textContent = `지금 가격(${message.price.toLocaleString()}원)보다 높게 불러 주세요.`;
+        }
+      });
+
+      document.querySelector('#form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const amount = Number(document.querySelector('#amount').value);
+        socket.send(JSON.stringify({ type: 'bid', name, price: amount }));
+      });
+    </script>
+  </body>
+</html>

@@ -2,6 +2,8 @@
 import { prisma } from '../db.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
+import { notify, notifyMany, pushNew, findCaused, pushRemoved } from './notificationService.js';
+import { extractMentions } from '../utils/mentions.js';
 
 // 댓글 목록에 쓸 필드만 골라서 받는다 — 글쓴이는 번호와 함께 이름과 프로필 사진도 받는다.
 const commentFields = {
@@ -98,7 +100,8 @@ export async function getReplies(postId, commentId, { limit = 3, cursor }) {
 // 댓글을 단다. parentId 가 있으면 그 원댓글에 다는 답글이다.
 export async function createComment(postId, userId, content, parentId) {
   // 게시물이 없으면 404 로 답한다. 목록과 같은 확인이다.
-  const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
+  // 게시물을 쓴 사람은 댓글 알림을 받을 사람이라 함께 받는다.
+  const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true, authorId: true } });
   if (!post) throw new NotFoundError('POST_NOT_FOUND');
 
   if (parentId !== undefined) {
@@ -111,21 +114,35 @@ export async function createComment(postId, userId, content, parentId) {
   }
 
   // 댓글을 넣는 일과 게시물의 댓글 수를 고치는 일은 함께 끝나야 한다.
-  return prisma.$transaction(async (tx) => {
+  const { result, notificationIds } = await prisma.$transaction(async (tx) => {
     const comment = await tx.comment.create({
       data: { postId, authorId: userId, content, parentId },
       select: commentFields,
     });
+
+    // 게시물을 쓴 사람에게 «댓글을 남겼다» 는 알림을 남긴다. 답글도 그 게시물에 달린 글이라 같다.
+    const commentNotificationIds = await notify(tx, { type: 'COMMENT', receiverId: post.authorId, senderId: userId, postId, commentId: comment.id });
+
+    // 글에서 «@이름» 으로 부른 사람 가운데 가입한 사람에게 멘션 알림을 남긴다. 없는 이름은 건너뛴다.
+    // 게시물을 쓴 사람은 방금 댓글 알림을 받았으니 멘션 알림은 남기지 않는다 - 같은 댓글로 두 줄이 생긴다.
+    const people = await tx.user.findMany({ where: { username: { in: extractMentions(content) } }, select: { id: true } });
+    const receiverIds = people.map((person) => person.id).filter((id) => id !== post.authorId);
+    const mentionNotificationIds = await notifyMany(tx, { type: 'MENTION', receiverIds, senderId: userId, postId, commentId: comment.id });
+    const notificationIds = [...commentNotificationIds, ...mentionNotificationIds];
 
     // 답글은 게시물의 댓글 수에 세지 않는다. 답글이면 0 만큼 고쳐서 지금 숫자만 읽는다.
     const commentCount = await changeCommentCount(tx, postId, parentId === undefined ? 1 : 0);
 
     // 화면이 카드의 «댓글 N개» 를 다시 받지 않고 고칠 수 있게 바뀐 숫자도 함께 보낸다.
     // 원댓글에는 목록처럼 답글 수를 함께 싣는다. 방금 단 원댓글이라 답글은 아직 없다.
-    if (parentId === undefined) return { comment: { ...flatten(comment), replyCount: 0 }, commentCount };
+    if (parentId === undefined) return { result: { comment: { ...flatten(comment), replyCount: 0 }, commentCount }, notificationIds };
 
-    return { comment: flatten(comment), commentCount };
+    return { result: { comment: flatten(comment), commentCount }, notificationIds };
   });
+
+  // 커밋된 뒤에 댓글 알림과 멘션 알림을 보낸다.
+  await pushNew(notificationIds);
+  return result;
 }
 
 // 게시물의 댓글 수는 따로 적어둔 컬럼이라서 원댓글이 늘고 준 만큼 우리가 맞춰준다.
@@ -157,7 +174,11 @@ export async function removeComment(postId, commentId, userId) {
   }
 
   // 지우는 일과 숫자를 내리는 일도 한 묶음이다.
-  return prisma.$transaction(async (tx) => {
+  const { result, removed } = await prisma.$transaction(async (tx) => {
+    // 이 댓글이 남긴 알림(댓글 알림 · 멘션 알림)을 지우기 전에 찾아 둔다.
+    // 원댓글을 지우면 그 답글도 함께 지워지니(Cascade) 답글이 남긴 알림도 함께 찾는다.
+    const removed = await findCaused(tx, { OR: [{ commentId }, { comment: { parentId: commentId } }] });
+
     // 찾은 뒤 지우기 전에 같은 댓글을 지우는 요청이 한 번 더 와서 먼저 끝났을 수 있다(버튼을 두 번 누른 경우).
     // 지운 행 수로 확인해서 하나도 못 지웠으면 숫자도 고치지 않고 404 로 답한다.
     const { count } = await tx.comment.deleteMany({ where: { id: commentId } });
@@ -168,6 +189,9 @@ export async function removeComment(postId, commentId, userId) {
 
     // 응답에는 목록과 같은 필드만 보낸다. 원댓글인지와 게시물 주인은 확인에만 썼다.
     const { parentId, post, ...deleted } = comment;
-    return { comment: flatten(deleted), commentCount };
+    return { result: { comment: flatten(deleted), commentCount }, removed };
   });
+
+  pushRemoved(removed);
+  return result;
 }

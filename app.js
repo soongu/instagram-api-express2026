@@ -13,6 +13,9 @@ import adminRouter from './routes/admin.js';
 import hashtagsRouter from './routes/hashtags.js';
 import profilesRouter from './routes/profiles.js';
 import membersRouter from './routes/members.js';
+import conversationsRouter from './routes/conversations.js';
+import notificationsRouter from './routes/notifications.js';
+import devRouter from './routes/dev.js';
 import { HttpError, NotFoundError } from './errors.js';
 import { sendError } from './responses.js';
 import { logger } from './middlewares/logger.js';
@@ -24,6 +27,7 @@ import { googleStrategy } from './strategies/google.js';
 import { kakaoStrategy } from './strategies/kakao.js';
 import { naverStrategy } from './strategies/naver.js';
 import * as uploadService from './services/uploadService.js';
+import { startRealtime } from './realtime.js';
 import swaggerUi from 'swagger-ui-express';
 import { openapi } from './docs/openapi.js';
 
@@ -61,6 +65,9 @@ app.use(cookieParser());
 // 파일 이름이 UUID 라 같은 주소의 내용이 바뀌지 않는다 — 1년 동안 서버에 확인하지 않고 쓰게 한다.
 app.use('/uploads', express.static('uploads', { maxAge: '1y', immutable: true }));
 
+// 실시간 기능을 시험하는 화면 - public 폴더의 파일을 그 이름의 주소로 내보낸다.
+app.use(express.static('public'));
+
 app.get('/', (req, res) => {
   res.send('인스타그램 서버가 살아 있어요');
 });
@@ -77,8 +84,14 @@ api.use('/posts/:id/comments', commentsRouter);
 api.use('/hashtags', hashtagsRouter);
 api.use('/profiles', profilesRouter);
 api.use('/members', membersRouter);
+api.use('/conversations', conversationsRouter);
+api.use('/notifications', notificationsRouter);
 api.use('/uploads', uploadsRouter);
 api.use('/admin', adminRouter);
+// 개발할 때만 쓰는 주소 - 배포한 서버(NODE_ENV=production)에는 붙이지 않아 404 다.
+if (process.env.NODE_ENV !== 'production') {
+  api.use('/dev', devRouter);
+}
 
 // 새 주소 — 버전은 위에서 적어 두었다.
 app.use('/api/v2', api);
@@ -131,6 +144,9 @@ setInterval(cleanUpUploads, CLEANUP_INTERVAL);
 
 const PORT = process.env.PORT ?? 3000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`서버가 ${PORT}번 포트에서 기다리고 있어요.`);
 });
+
+// 같은 서버에 Socket.IO 를 붙인다.
+startRealtime(server);

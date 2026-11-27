@@ -26,6 +26,8 @@ model User {
   role         Role      @default(USER)
   // 나를 팔로우하는 사람의 수 - 헤더를 열 때마다 세지 않으려고 따로 적어 둔다.
   followerCount Int      @default(0) @map("follower_count")
+  // 알림 패널을 마지막으로 연 시각 - 이 뒤에 온 알림이 «아직 안 본» 알림이다. 한 번도 안 열었으면 비어 있다.
+  notificationsSeenAt DateTime? @map("notifications_seen_at")
   posts        Post[]
   comments     Comment[]
   likes        PostLike[]
@@ -37,6 +39,14 @@ model User {
   following    Follow[]  @relation("Following")
   // 나를 팔로우하는 사람들 - follows 에서 내가 following 인 행이다.
   followers    Follow[]  @relation("Followers")
+  // 내가 참여한 대화방 - 대화방의 두 자리 가운데 어느 쪽에 들어 있는지에 따라 둘로 나뉜다.
+  conversationsAsA Conversation[] @relation("ParticipantA")
+  conversationsAsB Conversation[] @relation("ParticipantB")
+  // 내가 보낸 메시지
+  sentMessages DirectMessage[]
+  // 내가 받은 알림 · 내 행동으로 남의 화면에 남은 알림
+  notifications     Notification[] @relation("NotificationReceiver")
+  sentNotifications Notification[] @relation("NotificationSender")
 
   @@map("users")
 }
@@ -56,6 +66,7 @@ model Post {
   likes        PostLike[]
   uploads      Upload[]
   hashtags     PostHashtag[]
+  notifications Notification[]
 
   // 목록의 정렬과 같은 순서로 인덱스를 둔다 — 최신 글부터 정렬 없이 읽어 나갈 수 있다.
   @@index([createdAt(sort: Desc), id(sort: Desc)])
@@ -70,6 +81,8 @@ model PostLike {
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   userId Int  @map("user_id")
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 이 좋아요가 남긴 알림 - 좋아요를 취소해 이 행이 지워지면 알림도 함께 지워진다.
+  notifications Notification[]
 
   @@unique([postId, userId])
   @@map("post_likes")
@@ -111,6 +124,9 @@ model Follow {
   following   User     @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now()) @map("created_at")
 
+  // 이 팔로우가 남긴 알림 - 팔로우를 취소하면 알림도 함께 지워진다.
+  notifications Notification[]
+
   @@unique([followerId, followingId])
   // 목록 둘을 위한 인덱스 - 같은 사람의 행을 모아 두고, 그 안에서 시각과 번호의 차례로 둔다.
   @@index([followingId, createdAt(sort: Desc), id(sort: Desc)])
@@ -144,6 +160,8 @@ model Comment {
   parentId Int?      @map("parent_id")
   parent   Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
   replies  Comment[] @relation("Replies")
+  // 이 댓글이 남긴 알림 - 댓글을 지우면 알림도 함께 지워진다.
+  notifications Notification[]
 
   @@map("comments")
 }
@@ -199,4 +217,88 @@ model Upload {
 
   @@index([postId])
   @@map("uploads")
+}
+
+// 두 사람의 1:1 대화방 - 같은 두 사람의 방은 하나만 있어야 한다.
+model Conversation {
+  id             Int             @id @default(autoincrement())
+  participantAId Int             @map("participant_a_id")
+  participantA   User            @relation("ParticipantA", fields: [participantAId], references: [id], onDelete: Cascade)
+  participantBId Int             @map("participant_b_id")
+  participantB   User            @relation("ParticipantB", fields: [participantBId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  // 그 자리의 사람이 이 방을 지운 시각 - 그때까지의 메시지는 그 사람에게 안 보인다. 지운 적이 없으면 비어 있다.
+  aClearedAt     DateTime?       @map("a_cleared_at")
+  bClearedAt     DateTime?       @map("b_cleared_at")
+  messages       DirectMessage[] @relation("Messages")
+  // 이 방의 가장 최근 메시지 - 목록의 미리보기는 이 번호로 메시지 한 행만 읽는다. 그 메시지가 지워지면 비워진다.
+  lastMessageId  Int?            @map("last_message_id")
+  lastMessage    DirectMessage?  @relation("LastMessage", fields: [lastMessageId], references: [id], onDelete: SetNull)
+  // 가장 최근 메시지를 보낸 시각 - 목록은 이 시각이 늦은 방부터 준다. 메시지가 아직 없는 방은 만든 시각이다.
+  lastMessageAt  DateTime        @default(now()) @map("last_message_at")
+
+  @@unique([participantAId, participantBId])
+  // UNIQUE 짝의 인덱스는 participant_a_id 가 앞이라 «b 자리에 내가 있는 방» 을 찾을 때는 못 쓴다.
+  @@index([participantBId])
+  @@map("conversations")
+}
+
+// 대화방 안의 메시지 한 줄
+model DirectMessage {
+  id             Int          @id @default(autoincrement())
+  conversationId Int          @map("conversation_id")
+  conversation   Conversation @relation("Messages", fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       Int          @map("sender_id")
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String       @db.VarChar(1000)
+  // 받는 사람이 읽었나 - 보낸 사람이 아니라 받는 사람이 대화방을 열면 true 가 된다.
+  isRead         Boolean      @default(false) @map("is_read")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  // 이 메시지를 «마지막 메시지» 로 적어 둔 대화방 - 많아야 하나지만 UNIQUE 를 걸지 않아 배열이다.
+  lastOf         Conversation[] @relation("LastMessage")
+
+  // 한 대화방의 메시지를 최신순으로 읽는다 - 같은 값으로 찾는 컬럼을 앞에, 차례를 정하는 컬럼을 뒤에.
+  @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("direct_messages")
+}
+
+// 알림의 종류 - 이 컬럼에는 네 값 가운데 하나만 들어갈 수 있다.
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  MENTION
+
+  @@map("notification_type")
+}
+
+// 알림 - «누가 누구에게 무엇을 했다» 한 건이 한 행이다.
+// 받는 사람과 보낸 사람이 모두 users 를 가리킨다. 어느 쪽 사람을 지우든 그 알림도 함께 지운다.
+model Notification {
+  id         Int              @id @default(autoincrement())
+  type       NotificationType
+  // 알림을 받는 사람 - 알림 패널을 여는 사람이다.
+  receiverId Int              @map("receiver_id")
+  receiver   User             @relation("NotificationReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  // 알림을 남긴 사람 - 좋아요를 누르거나 댓글을 달거나 팔로우한 사람이다.
+  senderId   Int              @map("sender_id")
+  sender     User             @relation("NotificationSender", fields: [senderId], references: [id], onDelete: Cascade)
+  // 어느 게시물의 일인가 - 팔로우 알림은 게시물이 없어서 비어 있다.
+  postId     Int?             @map("post_id")
+  post       Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  // 이 알림을 남긴 좋아요 - 그 좋아요가 지워지면(취소하면) 알림도 함께 지운다.
+  postLikeId Int?             @map("post_like_id")
+  postLike   PostLike?        @relation(fields: [postLikeId], references: [id], onDelete: Cascade)
+  // 이 알림을 남긴 댓글 - 댓글 알림과 멘션 알림이 채운다.
+  commentId  Int?             @map("comment_id")
+  comment    Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  // 이 알림을 남긴 팔로우
+  followId   Int?             @map("follow_id")
+  follow     Follow?          @relation(fields: [followId], references: [id], onDelete: Cascade)
+  isRead     Boolean          @default(false) @map("is_read")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  // 한 사람의 알림을 최신순으로 읽는다 - 같은 값으로 찾는 컬럼을 앞에, 차례를 정하는 컬럼을 뒤에.
+  @@index([receiverId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("notifications")
 }

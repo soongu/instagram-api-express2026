@@ -1,0 +1,150 @@
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### seoyeon과의 대화방 열기
+POST http://localhost:3000/api/v2/conversations
+Content-Type: application/json
+
+{
+  "username": "seoyeon"
+}
+
+### 없는 사람과의 대화방 열기
+POST http://localhost:3000/api/v2/conversations
+Content-Type: application/json
+
+{
+  "username": "nobody"
+}
+
+### 나 자신과의 대화방 열기
+POST http://localhost:3000/api/v2/conversations
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### seoyeon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon과의 대화방 열기
+POST http://localhost:3000/api/v2/conversations
+Content-Type: application/json
+
+{
+  "username": "jaehoon"
+}
+
+### jaehoon으로 다시 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 내 대화방 목록
+GET http://localhost:3000/api/v2/conversations
+
+### 내 대화방 목록 - 2개씩
+# @name firstConversations
+GET http://localhost:3000/api/v2/conversations?limit=2
+
+### 내 대화방 목록 - 다음 2개
+GET http://localhost:3000/api/v2/conversations?limit=2&cursor={{firstConversations.data.nextCursor}}
+
+### seoyeon과의 대화방 하나
+GET http://localhost:3000/api/v2/conversations/1
+
+### 안 읽은 메시지가 있는 대화방 수
+GET http://localhost:3000/api/v2/conversations/unread
+
+### seoyeon과의 대화방 메시지
+GET http://localhost:3000/api/v2/conversations/1/messages
+
+### seoyeon과의 대화방 메시지 - 2개씩
+# @name firstMessages
+GET http://localhost:3000/api/v2/conversations/1/messages?limit=2
+
+### seoyeon과의 대화방 메시지 - 그 앞 2개
+GET http://localhost:3000/api/v2/conversations/1/messages?limit=2&cursor={{firstMessages.data.nextCursor}}
+
+### seoyeon과의 대화방 메시지 - 84번 뒤
+GET http://localhost:3000/api/v2/conversations/1/messages?after=84
+
+### jaehoon 연결 끊기 - 10초 동안 다시 붙지 못한다(개발용)
+DELETE http://localhost:3000/api/v2/dev/connections/jaehoon
+
+### 없는 대화방의 메시지
+GET http://localhost:3000/api/v2/conversations/999/messages
+
+### boram으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "boram",
+  "password": "boram1234"
+}
+
+### jaehoon과 seoyeon의 대화방 메시지
+GET http://localhost:3000/api/v2/conversations/1/messages
+
+### seoyeon으로 다시 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon과의 대화방 읽음
+PATCH http://localhost:3000/api/v2/conversations/1/messages/read
+
+### jaehoon으로 로그인 - 지우기
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### seoyeon과의 대화방 지우기
+DELETE http://localhost:3000/api/v2/conversations/1
+
+### 지운 뒤 내 대화방 목록
+GET http://localhost:3000/api/v2/conversations
+
+### 지운 뒤 seoyeon과의 대화방 메시지
+GET http://localhost:3000/api/v2/conversations/1/messages
+
+### seoyeon으로 로그인 - 지우기
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon과의 대화방 메시지 - seoyeon 쪽
+GET http://localhost:3000/api/v2/conversations/1/messages
+
+### jaehoon과의 대화방 지우기 - seoyeon 쪽
+DELETE http://localhost:3000/api/v2/conversations/1

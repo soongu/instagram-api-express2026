@@ -1,0 +1,41 @@
+### jaehoon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 1번 문의방 지우기
+DELETE http://localhost:4001/api/inquiries/1
+
+### 지운 뒤 내 문의방 목록
+GET http://localhost:4001/api/inquiries
+
+### 지운 뒤 1번 문의방의 메시지
+GET http://localhost:4001/api/inquiries/1/messages
+
+### 2번 문의방 지우기 - 내가 사려는 사람인 방
+DELETE http://localhost:4001/api/inquiries/2
+
+### 3번 문의방 지우기 - 남의 방
+DELETE http://localhost:4001/api/inquiries/3
+
+### 내 문의방 목록
+GET http://localhost:4001/api/inquiries
+
+### seoyeon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### seoyeon의 문의방 목록
+GET http://localhost:4001/api/inquiries
+
+### 1번 문의방의 메시지 - seoyeon 쪽
+GET http://localhost:4001/api/inquiries/1/messages

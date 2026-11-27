@@ -52,14 +52,18 @@ const hasRef = (ref) => {
     return false;
   }
 };
-const LINE = process.env.P356_LINE ?? (hasRef('refs/heads/code/p3-56') ? 'code/p3-56' : 'HEAD');
+// 🔑 실습 커밋은 북마크가 아니라 선의 끝(main)에서 찾는다 — 학생 낭독 뒤 고침 커밋(직접 해보기 1 · 과제 [응용])이 북마크 뒤에 있다. lab/p3-56 은 이 회차만 건드린다.
+const LINE = process.env.P356_LINE ?? (hasRef('refs/heads/main') ? 'main' : 'HEAD');
 /** 제목 끝 표식으로 커밋 하나 — 같은 표식이 여럿이면 가장 뒤 커밋. */
 const commitOf = (mark) => {
-  const log = execFileSync('git', ['log', '-n', '400', '--format=%H %s', LINE], { cwd: P('.'), encoding: 'utf8' });
+  const log = execFileSync('git', ['log', '--format=%H %s', LINE, '--', LAB], { cwd: P('.'), encoding: 'utf8' });
   const hit = log.split('\n').find((l) => / feat\(p3-56\): /.test(l) && l.endsWith(`(${mark})`));
   if (!hit) throw new Error(`(${mark}) 커밋이 없다`);
   return hit.split(' ')[0];
 };
+/** 같은 표식의 커밋 전부 — 앞이 가장 뒤 커밋. */
+const commitsOf = (mark) => execFileSync('git', ['log', '--format=%H %s', LINE, '--', LAB], { cwd: P('.'), encoding: 'utf8' })
+  .split('\n').filter((l) => / feat\(p3-56\): /.test(l) && l.endsWith(`(${mark})`)).map((l) => l.split(' ')[0]);
 // practice1 은 «고침» 커밋(정확히 10자인 예문을 더한 것)이 끝 판이다. 첫 커밋은 FIRST1 로 따로 본다.
 const FIRST1 = '직접 해보기 1';
 const COMMITS = { practice1: '직접 해보기 1 고침', practice2: '직접 해보기 2', homework2: '과제 [응용]' };
@@ -214,7 +218,7 @@ const SAMPLES = [
   '#가성비 최고예요 또 사고 싶어요 #가성비',
   '케이스는 #Black 이 예뻐요 #BLACK',
   '운동할 때 좋아요, #운동, #러닝!',
-  '태그가 없는 리뷰예요',
+  '태그가 없는 리뷰예요 # 띄어 쓰면 태그가 아니에요',
   '딱 열 글자인 #가나다라마바사아자차 태그',
   '이름이 너무 긴 #가나다라마바사아자차카 태그',
   '#하나 #둘 #셋 #넷 #다섯 #여섯 다 쓰면',
@@ -257,6 +261,7 @@ const P1_WRONG = {
   noSet: swap('[...new Set(lowered)]', 'lowered'),
   noNullGuard: swap(' ?? []', ''),
   wideRegex: swap('/#[0-9A-Za-z가-힣_]+/g', '/#\\S+/g'),
+  starRegex: swap('/#[0-9A-Za-z가-힣_]+/g', '/#[0-9A-Za-z가-힣_]*/g'),
   lengthGte: swap('name.length > MAX_LENGTH', 'name.length >= MAX_LENGTH'),
   noLengthCheck: swap("  if (names.some((name) => name.length > MAX_LENGTH)) throw new Error('태그는 10자까지 쓸 수 있어요');\n", ''),
   noCountCheck: swap("  if (names.length > MAX_COUNT) throw new Error('태그는 리뷰 하나에 5개까지 쓸 수 있어요');\n", ''),
@@ -286,7 +291,7 @@ describe('축 ② 직접 해보기 1 — 해시태그 뽑기', () => {
     seen.practice1Blanks = differ;
   });
 
-  it('🔴 틀린 판마다 처음 달라지는 문장 — g 빠짐 · # 안 뗌은 첫 문장 · 소문자 빠짐은 «Black» · Set 빠짐은 «#가성비 두 번» · null 처리 빠짐은 «태그 없음»(TypeError 문장이 찍힌다) · 넓은 정규식은 «쉼표»(첫 문장도) · 길이를 >= 로 하면 «딱 열 글자»(여섯째) · 길이 검사 빠짐은 «열한 글자»(일곱째) · 개수 검사 빠짐은 여덟째', () => {
+  it('🔴 틀린 판마다 처음 달라지는 문장 — g 빠짐 · # 안 뗌은 첫 문장 · 소문자 빠짐은 «Black» · Set 빠짐은 «#가성비 두 번» · null 처리 빠짐은 «태그 없음»(TypeError 문장이 찍힌다) · 넓은 정규식은 «쉼표»(첫 문장도) · + 대신 * 는 «# 띄어 쓰면»(다섯째) · 길이를 >= 로 하면 «딱 열 글자»(여섯째) · 길이 검사 빠짐은 «열한 글자»(일곱째) · 개수 검사 빠짐은 여덟째', () => {
     const right = runPractice1().lines;
     const diffs = {};
     for (const [name, edit] of Object.entries(P1_WRONG)) {
@@ -295,7 +300,7 @@ describe('축 ② 직접 해보기 1 — 해시태그 뽑기', () => {
     }
     seen.practice1Wrong = diffs;
     expect(Object.fromEntries(Object.entries(diffs).map(([k, d]) => [k, d.sample]))).toEqual({
-      noGlobal: 1, noSlice: 1, noLower: 3, noSet: 2, noNullGuard: 5, wideRegex: 4, lengthGte: 6, noLengthCheck: 7, noCountCheck: 8,
+      noGlobal: 1, noSlice: 1, noLower: 3, noSet: 2, noNullGuard: 5, wideRegex: 4, starRegex: 5, lengthGte: 6, noLengthCheck: 7, noCountCheck: 8,
     });
     expect(diffs.noGlobal.wrong).toBe("  태그 [ '음질' ]");
     expect(diffs.noSlice.wrong).toBe("  태그 [ '#음질', '#가성비' ]");
@@ -303,6 +308,7 @@ describe('축 ② 직접 해보기 1 — 해시태그 뽑기', () => {
     expect(diffs.noSet.wrong).toBe("  태그 [ '가성비', '가성비' ]");
     expect(diffs.noNullGuard.wrong).toBe("  안 돼요: Cannot read properties of null (reading 'map')");
     expect(diffs.wideRegex.wrong).toBe("  태그 [ '운동,', '러닝!' ]");
+    expect(diffs.starRegex.wrong).toBe("  태그 [ '' ]");
     expect(diffs.lengthGte.wrong).toBe('  안 돼요: 태그는 10자까지 쓸 수 있어요');
     expect(diffs.noLengthCheck.wrong).toBe("  태그 [ '가나다라마바사아자차카' ]");
     expect(diffs.noCountCheck.wrong).toBe("  태그 [ '하나', '둘', '셋', '넷', '다섯', '여섯' ]");
@@ -431,7 +437,7 @@ describe('축 ③-2 직접 해보기 2 — 나눠 주는 판(두 함수의 몸�
 // ── 축 ④ 과제 [응용] ─────────────────────────────────────────────────────────────
 const HW_TITLES = [
   'jaehoon으로 로그인 — 수업 백엔드', '인기 태그 — 처음', '3번 상품에 태그를 단 리뷰 달기', '인기 태그 — 리뷰를 단 뒤', '내가 쓴 2번 리뷰 지우기', '인기 태그 — 지운 뒤',
-  '남이 쓴 1번 리뷰 지우기', '없는 리뷰 지우기', '태그를 여섯 개 쓴 리뷰 달기', '없는 상품에 리뷰 달기',
+  '남이 쓴 1번 리뷰 지우기', '없는 리뷰 지우기', '태그를 여섯 개 쓴 리뷰 달기', '없는 상품에 리뷰 달기', '인기 태그 — 실패한 요청 뒤에도 그대로',
 ];
 const HW_WRONG = {
   noIncrement: swap('    tag.reviewCount += 1;\n', ''),
@@ -441,13 +447,15 @@ const HW_WRONG = {
   ascending: swap('return b.reviewCount - a.reviewCount;', 'return a.reviewCount - b.reviewCount;'),
   topFive: swap('.slice(0, 3)', '.slice(0, 5)'),
   noAuthor: swap("  if (review.authorId !== userId) throw fail(403, '내가 쓴 리뷰만 지울 수 있어요');\n", ''),
+  // 남이 쓴 리뷰인지 보기 전에 태그를 뗀다 — 403 은 그대로 나가지만 그 사이 태그 수가 내려간다.
+  authorAfterUnlink: swap("  if (review.authorId !== userId) throw fail(403, '내가 쓴 리뷰만 지울 수 있어요');\n\n  // 리뷰에 달린 태그를 모두 떼어 내고 태그마다 reviewCount 를 1 내린다.\n  removeTags(review.id, tagNamesOf(review.id));\n", "  // 리뷰에 달린 태그를 모두 떼어 내고 태그마다 reviewCount 를 1 내린다.\n  removeTags(review.id, tagNamesOf(review.id));\n  if (review.authorId !== userId) throw fail(403, '내가 쓴 리뷰만 지울 수 있어요');\n"),
   noSet: swap('[...new Set(found.map((tag) => tag.slice(1).toLowerCase()))]', 'found.map((tag) => tag.slice(1).toLowerCase())'),
 };
 describe('축 ④ 과제 [응용] — 달기 · 지우기 · 인기 태그', () => {
   let right;
   it('🔴 정답 판 — 인기 [가성비 4 · 음질 3 · 배송 1(동점은 번호가 작은 태그)] → 달기 201(태그 셋 · 가성비 두 번 써도 한 번) → [가성비 5 · 음질 3 · 운동 2] → 지우기 204 → [가성비 4 · 음질 3 · 운동 2] → 남의 리뷰 403 · 없는 리뷰 404 · 6개 400 · 없는 상품 404', async () => {
     right = (await runLab('homework2')).runs;
-    expect(right.map((r) => [r.title, r.status])).toEqual(HW_TITLES.map((t, i) => [t, [200, 200, 201, 200, 204, 200, 403, 404, 400, 404][i]]));
+    expect(right.map((r) => [r.title, r.status])).toEqual(HW_TITLES.map((t, i) => [t, [200, 200, 201, 200, 204, 200, 403, 404, 400, 404, 200][i]]));
     expect(right[1].body).toEqual([tag(2, '가성비', 4), tag(1, '음질', 3), tag(3, '배송', 1)]);
     expect(right[2].body).toEqual({ review: { id: 19, authorId: 2, content: '높이를 바꿀 수 있어서 목이 편해요 #가성비 #운동 #거치대 이 가격이면 정말 #가성비', createdAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/), username: 'jaehoon', tags: ['가성비', '운동', '거치대'] } });
     expect(right[3].body).toEqual([tag(2, '가성비', 5), tag(1, '음질', 3), tag(4, '운동', 2)]);
@@ -456,10 +464,11 @@ describe('축 ④ 과제 [응용] — 달기 · 지우기 · 인기 태그', () 
     expect([right[6].body, right[7].body, right[8].body, right[9].body]).toEqual([
       { message: '내가 쓴 리뷰만 지울 수 있어요' }, { message: '그런 리뷰는 없어요' }, { message: '태그는 리뷰 하나에 5개까지 쓸 수 있어요' }, { message: '그런 상품은 없어요' },
     ]);
+    expect(right[10].body).toEqual(right[5].body);
     seen.homework2 = { http: read(P(`${LAB}/homework2.http`)), runs: right, answer: labText('homework2', 'homework2.js') };
   }, 40_000);
 
-  it('🔴 틀린 판마다 처음 달라지는 곳 — 올릴 때 숫자 빠짐은 «인기 태그 — 리뷰를 단 뒤» · 내릴 때 빠짐(숫자 · 연결 지우기 둘 다)은 «인기 태그 — 지운 뒤» · 동점 · 오름차순 · 다섯은 «처음» · 쓴 사람 확인 빠짐은 «남이 쓴 1번»(204) · Set 빠짐은 «태그를 단 리뷰 달기»(가성비 두 번)', async () => {
+  it('🔴 틀린 판마다 처음 달라지는 곳 — 올릴 때 숫자 빠짐은 «인기 태그 — 리뷰를 단 뒤» · 내릴 때 빠짐(숫자 · 연결 지우기 둘 다)은 «인기 태그 — 지운 뒤» · 동점 · 오름차순 · 다섯은 «처음» · 쓴 사람 확인 빠짐은 «남이 쓴 1번»(204) · 쓴 사람 확인을 태그 떼기 뒤에 두면 «실패한 요청 뒤에도 그대로» · Set 빠짐은 «태그를 단 리뷰 달기»(가성비 두 번)', async () => {
     const diffs = {};
     for (const [name, edit] of Object.entries(HW_WRONG)) diffs[name] = firstDiff(right, (await runLab('homework2', edit)).runs);
     seen.homework2Wrong = diffs;
@@ -471,6 +480,7 @@ describe('축 ④ 과제 [응용] — 달기 · 지우기 · 인기 태그', () 
       ascending: ['인기 태그 — 처음', 200],
       topFive: ['인기 태그 — 처음', 200],
       noAuthor: ['남이 쓴 1번 리뷰 지우기', 204],
+      authorAfterUnlink: ['인기 태그 — 실패한 요청 뒤에도 그대로', 200],
       noSet: ['3번 상품에 태그를 단 리뷰 달기', 201],
     });
     expect(diffs.noIncrement.wrong.body.map((t) => t.reviewCount)).toEqual([4, 3, 1]);
@@ -511,7 +521,10 @@ describe('축 ⑤ 학생 파일 차이', () => {
       const changed = (ref) => execFileSync('git', ['diff', '--name-only', `${ref}^`, ref], { cwd: P('.'), encoding: 'utf8' }).trim().split('\n');
       if (!WT && which === 'practice1') {
         expect(changed(commitOf(FIRST1))).toEqual(list);
-        expect(changed(at)).toEqual(['lab/p3-56/practice1.js']);
+        expect(commitsOf(COMMITS.practice1).map(changed)).toEqual([['lab/p3-56/practice1.js'], ['lab/p3-56/practice1.js']]);
+      } else if (!WT && which === 'homework2') {
+        // 첫 커밋이 두 파일을 만들고, 학생 낭독 뒤 고침 커밋이 .http 끝에 요청 하나를 더했다.
+        expect(commitsOf(COMMITS.homework2).map(changed)).toEqual([['lab/p3-56/homework2.http'], list]);
       } else if (!WT) {
         expect(changed(at)).toEqual(list);
       }

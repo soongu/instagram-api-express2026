@@ -1,0 +1,62 @@
+<!-- ~/instagram-api/lab/p3-62/public/homework2.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>레코드판 경매</title>
+  </head>
+  <body>
+    <h1>레코드판 경매</h1>
+    <p id="status">연결하는 중...</p>
+    <form id="form">
+      <input id="amount" type="number" step="1000" placeholder="부를 가격" />
+      <button>입찰</button>
+    </form>
+    <p id="notice"></p>
+    <h2>입찰 기록</h2>
+    <ul id="list"></ul>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const name = new URLSearchParams(location.search).get('name');
+      const status = document.querySelector('#status');
+      const notice = document.querySelector('#notice');
+      const list = document.querySelector('#list');
+      const socket = io({ query: { name } });
+      let lastId = 0;
+
+      function show(bid) {
+        if (bid.id <= lastId) {
+          return;
+        }
+        lastId = bid.id;
+        const li = document.createElement('li');
+        li.textContent = `${bid.name} ${bid.price.toLocaleString()}원`;
+        list.append(li);
+        notice.textContent = '';
+      }
+
+      socket.on('connect', async () => {
+        status.textContent = '연결됐어요';
+        const response = await fetch(`/bids?after=${lastId}`);
+        const missed = await response.json();
+        missed.forEach(show);
+      });
+
+      socket.on('disconnect', () => {
+        status.textContent = '연결이 끊겼어요';
+      });
+
+      socket.on('bid', show);
+
+      socket.on('rejected', (price) => {
+        notice.textContent = `지금 가격(${price.toLocaleString()}원)보다 높게 불러 주세요.`;
+      });
+
+      document.querySelector('#form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        socket.emit('bid', Number(document.querySelector('#amount').value));
+      });
+    </script>
+  </body>
+</html>

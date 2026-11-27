@@ -3,10 +3,13 @@
 import { z } from 'zod';
 import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js';
 import { signupSchema } from '../schemas/authSchema.js';
+import { connectionDropQuerySchema } from '../schemas/devSchema.js';
 import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
 import { profilePostsQuerySchema, followListQuerySchema } from '../schemas/profileSchema.js';
 import { memberSearchQuerySchema, profileImageSchema } from '../schemas/memberSchema.js';
+import { conversationCreateSchema, conversationListQuerySchema, messageListQuerySchema } from '../schemas/conversationSchema.js';
+import { notificationListQuerySchema } from '../schemas/notificationSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -236,6 +239,133 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/conversations': {
+      get: {
+        summary: '내 대화방 목록 - 마지막 메시지가 늦은 방이 먼저, 내가 지운 방은 빠진다',
+        parameters: queryParameters(conversationListQuerySchema),
+        responses: {
+          200: { description: '대화방 한 페이지 - 방이 없으면 빈 목록', content: json(data(ref('ConversationPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+      post: {
+        summary: '대화방 열기 - 그 사람과의 방이 없으면 만들고, 있으면 있는 방을 준다',
+        requestBody: { required: true, content: json(toSchema(conversationCreateSchema)) },
+        responses: {
+          200: { description: '이미 있던 대화방', content: json(data(ref('Conversation'))) },
+          201: { description: '새로 만든 대화방 - Location 헤더에 그 방의 주소', content: json(data(ref('Conversation'))) },
+          400: { description: '보낸 내용이 규칙에 안 맞거나 나 자신과의 방', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY', 'CANNOT_MESSAGE_SELF')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/conversations/unread': {
+      get: {
+        summary: '안 읽은 메시지가 있는 내 대화방 수 - 사이드바의 «메시지» 점',
+        responses: {
+          200: { description: '방 수 - 없으면 0', content: json(data(ref('UnreadConversations'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/conversations/{id}': {
+      parameters: [pathParameter('id', '대화방 번호')],
+      get: {
+        summary: '대화방 하나 - 목록의 한 줄과 같은 모양, 내가 지운 방도 준다',
+        responses: {
+          200: { description: '그 대화방', content: json(data(ref('Conversation'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
+      delete: {
+        summary: '대화방을 내 쪽에서만 지우기 - 상대에게는 그대로 보이고, 두 사람이 모두 지운 메시지는 실제로 지운다',
+        responses: {
+          204: { description: '지웠다 - 본문 없음' },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/conversations/{id}/messages': {
+      parameters: [pathParameter('id', '대화방 번호')],
+      get: {
+        summary: '메시지 이력 - 가장 최근 메시지가 먼저, 내가 지운 시각 뒤의 메시지만',
+        parameters: queryParameters(messageListQuerySchema),
+        responses: {
+          200: { description: '메시지 한 페이지 - after 를 주면 그 번호 뒤의 메시지를 오래된 것부터(nextCursor 는 null)', content: json(data(ref('MessagePage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/conversations/{id}/messages/read': {
+      parameters: [pathParameter('id', '대화방 번호')],
+      patch: {
+        summary: '읽음 처리 - 상대가 보낸, 아직 안 읽은 메시지를 모두 읽음으로',
+        responses: {
+          200: { description: '읽음으로 바뀐 메시지 수 - 바꿀 것이 없으면 0 · 1 이상이면 상대와 나의 연결에 dm:read { conversationId, readerId }', content: json(data(ref('ReadResult'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 대화방이 없거나 내가 참여한 대화방이 아님 - 둘을 가르지 않는다', content: json(errorOf('CONVERSATION_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/notifications': {
+      get: {
+        summary: '내 알림 목록 - 가장 최근 알림이 먼저',
+        parameters: queryParameters(notificationListQuerySchema),
+        responses: {
+          200: { description: '알림 한 페이지 - 알림이 없으면 빈 목록', content: json(data(ref('NotificationPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/notifications/unseen': {
+      get: {
+        summary: '아직 안 본 알림 수 - 알림 패널을 마지막으로 연 뒤에 온 알림 · 사이드바의 «알림» 점',
+        responses: {
+          200: { description: '알림 수 - 없으면 0', content: json(data(ref('UnseenNotifications'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/notifications/seen': {
+      patch: {
+        summary: '알림 패널을 열었다 - 지금까지 온 알림을 모두 본 것으로(알림의 읽음은 그대로)',
+        responses: {
+          200: { description: '아직 안 본 알림 수 - 언제나 0', content: json(data(ref('UnseenNotifications'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/notifications/{id}/read': {
+      parameters: [pathParameter('id', '알림 번호')],
+      patch: {
+        summary: '알림 하나를 읽음으로 - 이미 읽은 알림이어도 같은 응답',
+        responses: {
+          200: { description: '읽음으로 바뀐 알림', content: json(data(ref('NotificationRead'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 알림이 없거나 내가 받은 알림이 아님 - 둘을 가르지 않는다', content: json(errorOf('NOTIFICATION_NOT_FOUND')) },
+        },
+      },
+    },
+    '/api/v2/dev/connections/{username}': {
+      parameters: [{ name: 'username', in: 'path', required: true, description: '연결을 끊을 사람의 사용자 이름', schema: { type: 'string' } }],
+      delete: {
+        summary: '개발용 - 그 사람의 실시간 연결을 끊고 잠깐 다시 붙지 못하게 한다(NODE_ENV=production 이면 없는 주소)',
+        parameters: queryParameters(connectionDropQuerySchema),
+        responses: {
+          200: { description: '끊은 연결 수와 막은 초', content: json(data({ type: 'object', properties: { closedCount: { type: 'integer' }, blockedSeconds: { type: 'integer' } } })) },
+          400: { description: 'seconds 가 0~60 의 정수가 아님', content: json(errorOf('VALIDATION_FAILED')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 사용자 이름이 없음', content: json(errorOf('USER_NOT_FOUND')) },
+        },
+      },
+    },
     '/api/v2/members/search': {
       get: {
         summary: '사람 찾기 - 사용자 이름에 검색어가 든 사람을 이름 차례로 20명까지',
@@ -392,6 +522,108 @@ export const openapi = {
           items: { type: 'array', items: ref('FollowPerson') },
           hasNext: { type: 'boolean' },
           nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      ConversationPerson: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          name: { type: ['string', 'null'] },
+          profileImage: { type: ['string', 'null'] },
+        },
+      },
+      Conversation: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          createdAt: { type: 'string', format: 'date-time' },
+          lastMessageAt: { type: 'string', format: 'date-time', description: '가장 최근 메시지를 보낸 시각 - 목록은 이 시각이 늦은 방부터 준다. 메시지가 없으면 만든 시각' },
+          otherUser: ref('ConversationPerson'),
+          lastMessage: { oneOf: [ref('LastMessage'), { type: 'null' }], description: '가장 최근 메시지 - 메시지가 없으면 null' },
+          unreadCount: { type: 'integer', description: '내가 안 읽은 메시지 수 - 상대가 보냈고 아직 안 읽었고 내가 지운 시각 뒤에 온 것' },
+        },
+      },
+      UnreadConversations: {
+        type: 'object',
+        properties: {
+          conversationCount: { type: 'integer', description: '안 읽은 메시지가 있는 내 대화방 수' },
+        },
+      },
+      LastMessage: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          senderId: { type: 'integer' },
+          content: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      ConversationPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: ref('Conversation') },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 요청에 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      Message: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          senderId: { type: 'integer' },
+          content: { type: 'string', maxLength: 1000 },
+          createdAt: { type: 'string', format: 'date-time' },
+          isRead: { type: 'boolean', description: '받는 사람이 읽었는가' },
+        },
+      },
+      MessagePage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: ref('Message') },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '더 오래된 메시지를 받을 때 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      Notification: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          type: { type: 'string', enum: ['LIKE', 'COMMENT', 'FOLLOW', 'MENTION'] },
+          isRead: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+          postId: { type: ['integer', 'null'], description: '어느 게시물의 일인가 - 팔로우 알림은 null' },
+          sender: {
+            type: 'object',
+            description: '알림을 남긴 사람',
+            properties: { id: { type: 'integer' }, username: { type: 'string' }, profileImage: { type: ['string', 'null'] } },
+          },
+          thumbnailUrl: { type: ['string', 'null'], description: '그 게시물의 첫 사진 - 팔로우 알림은 null' },
+          message: { type: 'string', description: '패널에 보일 문장 - 예 «seoyeon님이 회원님의 게시물을 좋아해요»' },
+        },
+      },
+      UnseenNotifications: {
+        type: 'object',
+        properties: {
+          unseenCount: { type: 'integer', description: '알림 패널을 마지막으로 연 뒤에 온 알림 수' },
+        },
+      },
+      NotificationRead: {
+        type: 'object',
+        properties: { id: { type: 'integer' }, isRead: { type: 'boolean', description: '언제나 true' } },
+      },
+      NotificationPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: ref('Notification') },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 페이지를 받을 때 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      ReadResult: {
+        type: 'object',
+        properties: {
+          readCount: { type: 'integer', description: '이번에 읽음으로 바뀐 메시지 수' },
         },
       },
       Member: {

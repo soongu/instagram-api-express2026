@@ -48,3 +48,6 @@ Content-Type: application/json
 {
   "content": "없는 상품이에요 #없음"
 }
+
+### 인기 태그 — 실패한 요청 뒤에도 그대로
+GET http://localhost:4001/api/tags/popular

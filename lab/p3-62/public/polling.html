@@ -1,0 +1,49 @@
+<!-- ~/instagram-api/lab/p3-62/public/polling.html -->
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>폴링 채팅</title>
+  </head>
+  <body>
+    <h1>폴링 채팅</h1>
+    <form id="form">
+      <input id="text" placeholder="메시지" autocomplete="off" />
+      <button>보내기</button>
+    </form>
+    <ul id="list"></ul>
+
+    <script>
+      const name = new URLSearchParams(location.search).get('name');
+      const list = document.querySelector('#list');
+      let lastId = 0;
+
+      function show(message) {
+        const li = document.createElement('li');
+        li.textContent = `${message.name}: ${message.text}`;
+        list.append(li);
+        lastId = message.id;
+      }
+
+      async function poll() {
+        const response = await fetch(`/messages?after=${lastId}`);
+        const messages = await response.json();
+        messages.forEach(show);
+      }
+
+      poll();
+      setInterval(poll, 2000);
+
+      document.querySelector('#form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const input = document.querySelector('#text');
+        await fetch('/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, text: input.value }),
+        });
+        input.value = '';
+      });
+    </script>
+  </body>
+</html>
