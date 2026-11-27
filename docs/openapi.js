@@ -2,7 +2,7 @@
 // 우리 API 의 계약을 OpenAPI 형식으로 적은 문서다.
 import { z } from 'zod';
 import { postCreateSchema, postListQuerySchema } from '../schemas/postSchema.js';
-import { signupSchema } from '../schemas/authSchema.js';
+import { loginSchema, signupSchema } from '../schemas/authSchema.js';
 import { connectionDropQuerySchema } from '../schemas/devSchema.js';
 import { commentCreateSchema, commentListQuerySchema, replyListQuerySchema } from '../schemas/commentSchema.js';
 import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
@@ -86,6 +86,8 @@ export const openapi = {
     version: '2.0.0',
     description: `새 주소 /api/v2 는 성공을 { data }, 실패를 { error: { code, message, details } } 로 보내요. 버전 없는 옛 주소 /api 는 ${SUNSET_AT.toISOString().slice(0, 10)}에 끝나요.`,
   },
+  // 따로 적지 않은 주소는 모두 로그인이 필요하다 - 아래 components.securitySchemes 의 그 쿠키가 실려 와야 한다.
+  security: [{ accessTokenCookie: [] }],
   paths: {
     '/api/v2/posts': {
       get: {
@@ -394,9 +396,24 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/auth/login': {
+      post: {
+        summary: '로그인',
+        description: 'username 에는 사용자 이름 · 이메일 · 휴대폰 번호 가운데 하나를 적어요. 성공하면 accessToken · refreshToken 쿠키를 함께 받아요.',
+        // 로그인하기 전에 보내는 요청이라 쿠키가 없어도 된다 - 빈 목록이 맨 위의 security 를 덮는다.
+        security: [],
+        requestBody: { required: true, content: json(toSchema(loginSchema)) },
+        responses: {
+          200: { description: '로그인한 사람', content: json(data({ type: 'object', properties: { id: { type: 'integer' }, username: { type: 'string' }, profileImage: { type: ['string', 'null'] }, role: { type: 'string' } } })) },
+          400: { description: '보낸 내용이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_BODY')) },
+          401: { description: '계정이나 비밀번호가 맞지 않음', content: json(errorOf('LOGIN_FAILED')) },
+        },
+      },
+    },
     '/api/v2/auth/signup': {
       post: {
         summary: '가입',
+        security: [],
         requestBody: { required: true, content: json(toSchema(signupSchema)) },
         responses: {
           201: {
@@ -434,6 +451,15 @@ export const openapi = {
     },
   },
   components: {
+    // 로그인 확인은 헤더가 아니라 쿠키로 한다 - 문서를 보는 사람이 «어떤 이름의 쿠키» 인지 알게 적는다.
+    securitySchemes: {
+      accessTokenCookie: {
+        type: 'apiKey',
+        in: 'cookie',
+        name: 'accessToken',
+        description: '로그인하면 서버가 HttpOnly 쿠키로 굽는 Access 토큰이에요. 기한이 지나면 401 TOKEN_EXPIRED 가 오고, POST /api/v2/auth/reissue 로 새 토큰을 받아요.',
+      },
+    },
     schemas: {
       Post: {
         type: 'object',
