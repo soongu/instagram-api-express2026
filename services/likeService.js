@@ -1,6 +1,7 @@
 // ~/instagram-api/services/likeService.js
 import { prisma } from '../db.js';
 import { NotFoundError } from '../errors.js';
+import { notify } from './notificationService.js';
 
 // 몇 번을 불러도 결과는 「눌린 상태」 하나다.
 // 이미 눌렀으면 행이 안 들어가고(count 0), 숫자도 오르지 않는다.
@@ -13,6 +14,10 @@ export async function likePost(postId, userId) {
         data: [{ postId, userId }],
         skipDuplicates: true,
       });
+
+      // 게시물을 쓴 사람에게 «좋아요를 눌렀다» 는 알림을 남긴다.
+      const post = await tx.post.findUnique({ where: { id: postId }, select: { authorId: true } });
+      await notify(tx, { type: 'LIKE', receiverId: post.authorId, senderId: userId, postId });
 
       return changeLikeCount(tx, postId, count, true);
     });
