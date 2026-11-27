@@ -1,0 +1,46 @@
+### 휴대폰 번호 모양의 사용자 이름으로 가입
+POST http://localhost:4080/api/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "hana01@example.com",
+  "username": "01012345678",
+  "password": "hana1234"
+}
+
+### 대문자가 섞인 이메일로 가입
+POST http://localhost:4080/api/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "Hana@Example.com",
+  "username": "hana",
+  "password": "hana1234"
+}
+
+### 소문자 이메일로 로그인
+POST http://localhost:4080/api/login
+Content-Type: application/json
+
+{
+  "username": "hana@example.com",
+  "password": "hana1234"
+}
+
+### 대문자 이메일로 로그인
+POST http://localhost:4080/api/login
+Content-Type: application/json
+
+{
+  "username": "SUJIN@example.com",
+  "password": "sujin1234"
+}
+
+### 앞뒤에 공백이 붙은 사용자 이름으로 로그인
+POST http://localhost:4080/api/login
+Content-Type: application/json
+
+{
+  "username": "  minho ",
+  "password": "minho1234"
+}

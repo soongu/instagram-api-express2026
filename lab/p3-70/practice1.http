@@ -1,0 +1,44 @@
+### 사용자 이름으로 로그인
+POST http://localhost:4078/api/login
+Content-Type: application/json
+
+{
+  "username": "sujin",
+  "password": "sujin1234"
+}
+
+### 이메일로 로그인
+POST http://localhost:4078/api/login
+Content-Type: application/json
+
+{
+  "username": "yuna@example.com",
+  "password": "yuna1234"
+}
+
+### 하이픈 있는 휴대폰 번호로 로그인
+POST http://localhost:4078/api/login
+Content-Type: application/json
+
+{
+  "username": "010-2345-6789",
+  "password": "minho1234"
+}
+
+### 하이픈 없는 휴대폰 번호로 로그인
+POST http://localhost:4078/api/login
+Content-Type: application/json
+
+{
+  "username": "01098765432",
+  "password": "taeyang1234"
+}
+
+### 다른 사람의 비밀번호로 로그인
+POST http://localhost:4078/api/login
+Content-Type: application/json
+
+{
+  "username": "sujin@example.com",
+  "password": "yuna1234"
+}
