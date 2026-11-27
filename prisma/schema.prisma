@@ -26,6 +26,8 @@ model User {
   role         Role      @default(USER)
   // 나를 팔로우하는 사람의 수 - 헤더를 열 때마다 세지 않으려고 따로 적어 둔다.
   followerCount Int      @default(0) @map("follower_count")
+  // 알림 패널을 마지막으로 연 시각 - 이 뒤에 온 알림이 «아직 안 본» 알림이다. 한 번도 안 열었으면 비어 있다.
+  notificationsSeenAt DateTime? @map("notifications_seen_at")
   posts        Post[]
   comments     Comment[]
   likes        PostLike[]

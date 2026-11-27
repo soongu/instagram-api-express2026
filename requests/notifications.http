@@ -16,6 +16,12 @@ GET http://localhost:3000/api/v2/notifications?limit=2
 ### 알림 하나를 읽음으로
 PATCH http://localhost:3000/api/v2/notifications/1/read
 
+### 아직 안 본 알림 수
+GET http://localhost:3000/api/v2/notifications/unseen
+
+### 알림 패널을 열었다
+PATCH http://localhost:3000/api/v2/notifications/seen
+
 ### seoyeon으로 로그인
 POST http://localhost:3000/api/v2/auth/login
 Content-Type: application/json

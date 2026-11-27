@@ -324,6 +324,24 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/notifications/unseen': {
+      get: {
+        summary: '아직 안 본 알림 수 - 알림 패널을 마지막으로 연 뒤에 온 알림 · 사이드바의 «알림» 점',
+        responses: {
+          200: { description: '알림 수 - 없으면 0', content: json(data(ref('UnseenNotifications'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
+    '/api/v2/notifications/seen': {
+      patch: {
+        summary: '알림 패널을 열었다 - 지금까지 온 알림을 모두 본 것으로(알림의 읽음은 그대로)',
+        responses: {
+          200: { description: '아직 안 본 알림 수 - 언제나 0', content: json(data(ref('UnseenNotifications'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
     '/api/v2/notifications/{id}/read': {
       parameters: [pathParameter('id', '알림 번호')],
       patch: {
@@ -582,6 +600,12 @@ export const openapi = {
           },
           thumbnailUrl: { type: ['string', 'null'], description: '그 게시물의 첫 사진 - 팔로우 알림은 null' },
           message: { type: 'string', description: '패널에 보일 문장 - 예 «seoyeon님이 회원님의 게시물을 좋아해요»' },
+        },
+      },
+      UnseenNotifications: {
+        type: 'object',
+        properties: {
+          unseenCount: { type: 'integer', description: '알림 패널을 마지막으로 연 뒤에 온 알림 수' },
         },
       },
       NotificationRead: {

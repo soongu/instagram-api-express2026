@@ -118,6 +118,28 @@ export async function getNotifications(myId, { limit = 20, cursor }) {
   };
 }
 
+// 아직 안 본 알림의 수 - 알림 패널을 마지막으로 연 뒤에 온 알림이다. 한 번도 안 열었으면 받은 알림 전부다.
+// 읽음(isRead)과는 따로 센다. 패널을 열어 봤어도 누르지 않은 알림은 여전히 안 읽은 알림이다.
+export async function countUnseen(myId) {
+  const { notificationsSeenAt } = await prisma.user.findUnique({
+    where: { id: myId },
+    select: { notificationsSeenAt: true },
+  });
+
+  const unseenCount = await prisma.notification.count({
+    where: { receiverId: myId, ...(notificationsSeenAt ? { createdAt: { gt: notificationsSeenAt } } : {}) },
+  });
+
+  return { unseenCount };
+}
+
+// 알림 패널을 열었다 - 지금까지 온 알림을 모두 «본» 것으로 친다. 알림 하나하나의 읽음은 바꾸지 않는다.
+export async function markSeen(myId) {
+  await prisma.user.update({ where: { id: myId }, data: { notificationsSeenAt: new Date() } });
+
+  return { unseenCount: 0 };
+}
+
 // 알림 하나를 읽음으로 - 몇 번을 불러도 결과는 «읽은 상태» 하나다.
 // 내가 받은 알림만 찾는다. 없는 알림과 남의 알림은 같은 404 로 답한다 - 남의 알림이 있는지 알려 주지 않는다.
 export async function markAsRead(notificationId, myId) {

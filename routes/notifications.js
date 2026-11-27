@@ -12,9 +12,13 @@ const router = express.Router();
 router.param('id', parseNotificationId);
 
 router.get('/', validateQuery(notificationListQuerySchema), notificationController.list);
+router.get('/unseen', notificationController.unseen);
+router.patch('/seen', notificationController.seen);
 router.patch('/:id/read', notificationController.read);
 
 router.all('/', allowOnly('GET'));
+router.all('/unseen', allowOnly('GET'));
+router.all('/seen', allowOnly('PATCH'));
 router.all('/:id/read', allowOnly('PATCH'));
 
 export default router;
