@@ -4,6 +4,7 @@ import path from 'node:path';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../errors.js';
+import { PHONE } from '../schemas/authSchema.js';
 import * as uploadService from './uploadService.js';
 
 // 응답에 실어 보낼 컬럼만 고른다.
@@ -100,11 +101,20 @@ export function searchMembers(keyword) {
   });
 }
 
-// 로그인 — 사용자 이름과 비밀번호가 맞으면 그 사람을, 아니면 null 을 돌려준다.
+// 로그인 칸에 적은 값으로 찾을 조건 - 값의 모양을 보고 어느 컬럼에서 찾을지 고른다.
+// @ 가 있으면 이메일, 휴대폰 번호 모양이면 휴대폰 번호(가입할 때처럼 숫자만), 나머지는 사용자 이름이다.
+// 셋 다 UNIQUE 컬럼이라 어느 쪽이든 findUnique 로 한 사람만 나온다.
+function loginWhere(loginId) {
+  if (loginId.includes('@')) return { email: loginId };
+  if (PHONE.test(loginId)) return { phone: digitsOnly(loginId) };
+  return { username: loginId };
+}
+
+// 로그인 - 로그인 칸의 값(사용자 이름 · 이메일 · 휴대폰 번호)과 비밀번호가 맞으면 그 사람을, 아니면 null 을 돌려준다.
 // 해시는 이 함수 안에서만 꺼내 쓰고, 돌려줄 때는 응답에 실을 컬럼만 남긴다.
-export async function checkPassword(username, password) {
+export async function checkPassword(loginId, password) {
   const user = await prisma.user.findUnique({
-    where: { username },
+    where: loginWhere(loginId),
     select: { ...userFields, passwordHash: true },
   });
 
@@ -118,8 +128,9 @@ export async function checkPassword(username, password) {
   const { passwordHash, ...found } = user;
 
   // 지금보다 낮은 cost 로 만든 해시면, 맞는 비밀번호를 받은 김에 지금 cost 로 다시 만들어 둔다.
+  // 이메일로 로그인했어도 다시 만들 사람은 찾은 사람이다 - 로그인 칸의 값이 아니라 그 사람의 사용자 이름으로 부른다.
   if (bcrypt.getRounds(passwordHash) < PASSWORD_COST) {
-    await setPassword(username, password);
+    await setPassword(user.username, password);
   }
 
   return found;

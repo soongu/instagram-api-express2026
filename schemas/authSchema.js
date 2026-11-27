@@ -1,7 +1,8 @@
 // ~/instagram-api/schemas/authSchema.js
 import { z } from 'zod';
 
-// 로그인은 사용자 이름과 비밀번호를 함께 받는다.
+// 로그인은 로그인 칸의 값과 비밀번호를 함께 받는다 - 값은 사용자 이름 · 이메일 · 휴대폰 번호 가운데 하나다.
+// 필드 이름은 처음부터 쓰던 username 그대로 둔다 - 화면의 입력칸 이름도 username 이다.
 export const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
