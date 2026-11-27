@@ -1,5 +1,6 @@
 // ~/instagram-api/lab/p3-70/notice-server.js
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
 
@@ -8,7 +9,7 @@ const TOKEN_SECONDS = 20;
 
 const app = express();
 app.use(express.json());
-app.use(express.static(new URL('./public', import.meta.url).pathname));
+app.use(express.static(fileURLToPath(new URL('./public', import.meta.url))));
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.originalUrl}`);

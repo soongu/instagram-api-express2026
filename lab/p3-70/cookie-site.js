@@ -1,4 +1,5 @@
 // ~/instagram-api/lab/p3-70/cookie-site.js
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 
 // 서버 둘을 한 파일에서 띄운다 - 배포하면 화면(Vercel)과 서버(Render)가 서로 다른 주소에 있는 것을 흉내 낸다.
@@ -38,7 +39,7 @@ api.listen(4077, '127.0.0.1', () => console.log('API 서버가 http://127.0.0.1:
 // ── 화면 서버(localhost:4076) ──
 const screen = express();
 
-screen.use(express.static(new URL('./public', import.meta.url).pathname));
+screen.use(express.static(fileURLToPath(new URL('./public', import.meta.url))));
 
 // rewrite 흉내 - /api 로 시작하는 요청은 화면 서버가 받아서 API 서버에 그대로 넘기고, 받은 답을 그대로 돌려준다.
 // 브라우저는 화면 서버하고만 주고받으니 쿠키도 화면 주소(localhost:4076)의 쿠키가 된다.
