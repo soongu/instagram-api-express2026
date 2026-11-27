@@ -42,6 +42,9 @@ model User {
   conversationsAsB Conversation[] @relation("ParticipantB")
   // 내가 보낸 메시지
   sentMessages DirectMessage[]
+  // 내가 받은 알림 · 내 행동으로 남의 화면에 남은 알림
+  notifications     Notification[] @relation("NotificationReceiver")
+  sentNotifications Notification[] @relation("NotificationSender")
 
   @@map("users")
 }
@@ -61,6 +64,7 @@ model Post {
   likes        PostLike[]
   uploads      Upload[]
   hashtags     PostHashtag[]
+  notifications Notification[]
 
   // 목록의 정렬과 같은 순서로 인덱스를 둔다 — 최신 글부터 정렬 없이 읽어 나갈 수 있다.
   @@index([createdAt(sort: Desc), id(sort: Desc)])
@@ -247,4 +251,36 @@ model DirectMessage {
   // 한 대화방의 메시지를 최신순으로 읽는다 - 같은 값으로 찾는 컬럼을 앞에, 차례를 정하는 컬럼을 뒤에.
   @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("direct_messages")
+}
+
+// 알림의 종류 - 이 컬럼에는 네 값 가운데 하나만 들어갈 수 있다.
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  MENTION
+
+  @@map("notification_type")
+}
+
+// 알림 - «누가 누구에게 무엇을 했다» 한 건이 한 행이다.
+// 받는 사람과 보낸 사람이 모두 users 를 가리킨다. 어느 쪽 사람을 지우든 그 알림도 함께 지운다.
+model Notification {
+  id         Int              @id @default(autoincrement())
+  type       NotificationType
+  // 알림을 받는 사람 - 알림 패널을 여는 사람이다.
+  receiverId Int              @map("receiver_id")
+  receiver   User             @relation("NotificationReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  // 알림을 남긴 사람 - 좋아요를 누르거나 댓글을 달거나 팔로우한 사람이다.
+  senderId   Int              @map("sender_id")
+  sender     User             @relation("NotificationSender", fields: [senderId], references: [id], onDelete: Cascade)
+  // 어느 게시물의 일인가 - 팔로우 알림은 게시물이 없어서 비어 있다.
+  postId     Int?             @map("post_id")
+  post       Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  isRead     Boolean          @default(false) @map("is_read")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  // 한 사람의 알림을 최신순으로 읽는다 - 같은 값으로 찾는 컬럼을 앞에, 차례를 정하는 컬럼을 뒤에.
+  @@index([receiverId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("notifications")
 }
