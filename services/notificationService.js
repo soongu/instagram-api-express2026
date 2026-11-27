@@ -8,3 +8,15 @@ export async function notify(tx, { type, receiverId, senderId, postId, postLikeI
 
   await tx.notification.create({ data: { type, receiverId, senderId, postId, postLikeId, commentId, followId } });
 }
+
+// 같은 알림을 여러 사람에게 한 번에 남긴다 - 댓글 하나에 여러 사람을 멘션했을 때 쓴다.
+// 보낸 사람 자신은 이번에도 뺀다.
+export async function notifyMany(tx, { type, receiverIds, senderId, postId, commentId }) {
+  // 받는 사람의 번호 차례로 남긴다 - 몇 번을 돌려도 같은 차례로 행이 들어간다.
+  const data = [...receiverIds]
+    .sort((a, b) => a - b)
+    .filter((receiverId) => receiverId !== senderId)
+    .map((receiverId) => ({ type, receiverId, senderId, postId, commentId }));
+
+  await tx.notification.createMany({ data });
+}

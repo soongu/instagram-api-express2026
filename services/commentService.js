@@ -2,7 +2,8 @@
 import { prisma } from '../db.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
-import { notify } from './notificationService.js';
+import { notify, notifyMany } from './notificationService.js';
+import { extractMentions } from '../utils/mentions.js';
 
 // 댓글 목록에 쓸 필드만 골라서 받는다 — 글쓴이는 번호와 함께 이름과 프로필 사진도 받는다.
 const commentFields = {
@@ -121,6 +122,11 @@ export async function createComment(postId, userId, content, parentId) {
 
     // 게시물을 쓴 사람에게 «댓글을 남겼다» 는 알림을 남긴다. 답글도 그 게시물에 달린 글이라 같다.
     await notify(tx, { type: 'COMMENT', receiverId: post.authorId, senderId: userId, postId, commentId: comment.id });
+
+    // 글에서 «@이름» 으로 부른 사람 가운데 가입한 사람에게 멘션 알림을 남긴다. 없는 이름은 건너뛴다.
+    const people = await tx.user.findMany({ where: { username: { in: extractMentions(content) } }, select: { id: true } });
+    const receiverIds = people.map((person) => person.id);
+    await notifyMany(tx, { type: 'MENTION', receiverIds, senderId: userId, postId, commentId: comment.id });
 
     // 답글은 게시물의 댓글 수에 세지 않는다. 답글이면 0 만큼 고쳐서 지금 숫자만 읽는다.
     const commentCount = await changeCommentCount(tx, postId, parentId === undefined ? 1 : 0);
