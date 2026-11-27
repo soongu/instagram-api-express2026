@@ -124,8 +124,9 @@ export async function createComment(postId, userId, content, parentId) {
     await notify(tx, { type: 'COMMENT', receiverId: post.authorId, senderId: userId, postId, commentId: comment.id });
 
     // 글에서 «@이름» 으로 부른 사람 가운데 가입한 사람에게 멘션 알림을 남긴다. 없는 이름은 건너뛴다.
+    // 게시물을 쓴 사람은 방금 댓글 알림을 받았으니 멘션 알림은 남기지 않는다 - 같은 댓글로 두 줄이 생긴다.
     const people = await tx.user.findMany({ where: { username: { in: extractMentions(content) } }, select: { id: true } });
-    const receiverIds = people.map((person) => person.id);
+    const receiverIds = people.map((person) => person.id).filter((id) => id !== post.authorId);
     await notifyMany(tx, { type: 'MENTION', receiverIds, senderId: userId, postId, commentId: comment.id });
 
     // 답글은 게시물의 댓글 수에 세지 않는다. 답글이면 0 만큼 고쳐서 지금 숫자만 읽는다.
