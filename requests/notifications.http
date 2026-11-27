@@ -16,12 +16,6 @@ GET http://localhost:3000/api/v2/notifications?limit=2
 ### 알림 하나를 읽음으로
 PATCH http://localhost:3000/api/v2/notifications/1/read
 
-### 아직 안 본 알림 수
-GET http://localhost:3000/api/v2/notifications/unseen
-
-### 알림 패널을 열었다
-PATCH http://localhost:3000/api/v2/notifications/seen
-
 ### seoyeon으로 로그인
 POST http://localhost:3000/api/v2/auth/login
 Content-Type: application/json
@@ -67,3 +61,32 @@ PUT http://localhost:3000/api/v2/profiles/jaehoon/followers/me
 
 ### doyun이 팔로우 취소
 DELETE http://localhost:3000/api/v2/profiles/jaehoon/followers/me
+
+### seoyeon이 jaehoon의 게시물 14에 좋아요
+PUT http://localhost:3000/api/v2/posts/14/likes/me
+
+### seoyeon이 jaehoon의 게시물 26에 좋아요
+PUT http://localhost:3000/api/v2/posts/26/likes/me
+
+### seoyeon이 게시물 26의 좋아요를 취소
+DELETE http://localhost:3000/api/v2/posts/26/likes/me
+
+### seoyeon이 게시물 14에 jaehoon과 doyun을 멘션
+POST http://localhost:3000/api/v2/posts/14/comments
+Content-Type: application/json
+
+{
+  "content": "@jaehoon @doyun 여기 좋다"
+}
+
+### jaehoon이 알림 16을 읽음으로
+PATCH http://localhost:3000/api/v2/notifications/16/read
+
+### 아직 안 본 알림 수
+GET http://localhost:3000/api/v2/notifications/unseen
+
+### 알림 패널을 열었다
+PATCH http://localhost:3000/api/v2/notifications/seen
+
+### seoyeon이 게시물 14의 좋아요를 취소
+DELETE http://localhost:3000/api/v2/posts/14/likes/me
