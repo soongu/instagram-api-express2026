@@ -1,0 +1,60 @@
+### jaehoon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "jaehoon",
+  "password": "jaehoon1234"
+}
+
+### 내 알림 목록
+GET http://localhost:3000/api/v2/notifications
+
+### 내 알림 목록 - 두 개씩
+GET http://localhost:3000/api/v2/notifications?limit=2
+
+### seoyeon으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### seoyeon이 jaehoon의 게시물 1에 좋아요
+PUT http://localhost:3000/api/v2/posts/1/likes/me
+
+### seoyeon이 좋아요 취소
+DELETE http://localhost:3000/api/v2/posts/1/likes/me
+
+### seoyeon이 jaehoon의 게시물 1에 댓글
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "여기 어디예요?"
+}
+
+### seoyeon이 jaehoon과 doyun을 멘션
+POST http://localhost:3000/api/v2/posts/1/comments
+Content-Type: application/json
+
+{
+  "content": "@jaehoon @doyun 다음 주에 같이 가요"
+}
+
+### doyun으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "doyun",
+  "password": "instagram1234"
+}
+
+### doyun이 jaehoon을 팔로우
+PUT http://localhost:3000/api/v2/profiles/jaehoon/followers/me
+
+### doyun이 팔로우 취소
+DELETE http://localhost:3000/api/v2/profiles/jaehoon/followers/me

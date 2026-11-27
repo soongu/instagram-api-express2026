@@ -9,6 +9,7 @@ import { hashtagPostsQuerySchema } from '../schemas/hashtagSchema.js';
 import { profilePostsQuerySchema, followListQuerySchema } from '../schemas/profileSchema.js';
 import { memberSearchQuerySchema, profileImageSchema } from '../schemas/memberSchema.js';
 import { conversationCreateSchema, conversationListQuerySchema, messageListQuerySchema } from '../schemas/conversationSchema.js';
+import { notificationListQuerySchema } from '../schemas/notificationSchema.js';
 import { MESSAGES } from '../errors.js';
 import { SUNSET_AT } from '../middlewares/deprecation.js';
 
@@ -312,6 +313,17 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/notifications': {
+      get: {
+        summary: '내 알림 목록 - 가장 최근 알림이 먼저',
+        parameters: queryParameters(notificationListQuerySchema),
+        responses: {
+          200: { description: '알림 한 페이지 - 알림이 없으면 빈 목록', content: json(data(ref('NotificationPage'))) },
+          400: { description: '쿼리 값이 규칙에 안 맞음', content: json(errorOf('VALIDATION_FAILED', 'INVALID_CURSOR')) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+        },
+      },
+    },
     '/api/v2/dev/connections/{username}': {
       parameters: [{ name: 'username', in: 'path', required: true, description: '연결을 끊을 사람의 사용자 이름', schema: { type: 'string' } }],
       delete: {
@@ -542,6 +554,31 @@ export const openapi = {
           items: { type: 'array', items: ref('Message') },
           hasNext: { type: 'boolean' },
           nextCursor: { type: ['string', 'null'], description: '더 오래된 메시지를 받을 때 cursor 로 그대로 보낼 값 - 끝이면 null' },
+        },
+      },
+      Notification: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          type: { type: 'string', enum: ['LIKE', 'COMMENT', 'FOLLOW', 'MENTION'] },
+          isRead: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+          postId: { type: ['integer', 'null'], description: '어느 게시물의 일인가 - 팔로우 알림은 null' },
+          sender: {
+            type: 'object',
+            description: '알림을 남긴 사람',
+            properties: { id: { type: 'integer' }, username: { type: 'string' }, profileImage: { type: ['string', 'null'] } },
+          },
+          thumbnailUrl: { type: ['string', 'null'], description: '그 게시물의 첫 사진 - 팔로우 알림은 null' },
+          message: { type: 'string', description: '패널에 보일 문장 - 예 «seoyeon님이 회원님의 게시물을 좋아해요»' },
+        },
+      },
+      NotificationPage: {
+        type: 'object',
+        properties: {
+          items: { type: 'array', items: ref('Notification') },
+          hasNext: { type: 'boolean' },
+          nextCursor: { type: ['string', 'null'], description: '다음 페이지를 받을 때 cursor 로 그대로 보낼 값 - 끝이면 null' },
         },
       },
       ReadResult: {
