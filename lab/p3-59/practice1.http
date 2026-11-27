@@ -43,3 +43,11 @@ Content-Type: application/json
 
 ### yuna - 사진이 바뀌었다
 GET http://localhost:4001/api/users/yuna
+
+### jaehoon이 올린 dog.jpg를 jaehoon의 사진으로
+PUT http://localhost:4001/api/users/jaehoon/photo
+Content-Type: application/json
+
+{
+  "imageUrl": "/uploads/dog.jpg"
+}

@@ -501,7 +501,7 @@ const labServer = async (which, fn, patch = null) => {
 };
 const putPhoto = (tab, name, file) => tab.send('PUT', `/api/users/${name}/photo`, { imageUrl: `/uploads/${file}` });
 const BAD = { status: 400, body: { message: '내가 올리고 아직 아무 데도 쓰지 않은 사진만 쓸 수 있어요' } };
-/** practice1.http 를 차례로 보낸다 - 상태 코드 여섯. */
+/** practice1.http 를 차례로 보낸다 - 처음 사진 · 상태 코드 다섯 · 바뀐 사진 · 끝의 jaehoon 상태 코드. */
 const practiceRun = async (tab) => [
   (await tab.get('/api/users/yuna')).body.profileImage,
   (await putPhoto(tab, 'yuna', 'cat.jpg')).status,
@@ -510,6 +510,7 @@ const practiceRun = async (tab) => [
   (await putPhoto(tab, 'yuna', 'cat.jpg')).status,
   (await putPhoto(tab, 'yuna', 'nothing.jpg')).status,
   (await tab.get('/api/users/yuna')).body.profileImage,
+  (await putPhoto(tab, 'jaehoon', 'dog.jpg')).status,
 ];
 const CONDITION = (name) => ` && item.${name} === `;
 
@@ -523,6 +524,8 @@ describe('축 ⑤ 직접 해보기 1 - 글쓴이 사진 적기', () => {
       expect(await putPhoto(tab, 'yuna', 'cat.jpg')).toEqual(BAD);
       expect(await putPhoto(tab, 'yuna', 'nothing.jpg')).toEqual(BAD);
       expect(await tab.get('/api/users/yuna')).toEqual({ status: 200, body: { id: 1, username: 'yuna', profileImage: '/uploads/cat.jpg' } });
+      // 다른 사람이 자기 사진을 적는 성공 요청 - 올린 사람을 yuna 의 번호(1)로 박아 둔 판을 가린다.
+      expect(await putPhoto(tab, 'jaehoon', 'dog.jpg')).toEqual({ status: 200, body: { profileImage: '/uploads/dog.jpg' } });
       expect(await tab.send('PUT', '/api/users/yuna/photo', { imageUrl: 'https://picsum.photos/seed/yuna/150/150' }))
         .toEqual({ status: 400, body: { message: '보낸 내용이 규칙에 안 맞아요' } });
       expect(await putPhoto(tab, 'minho', 'cat.jpg')).toEqual({ status: 404, body: { message: '그런 사용자는 없어요' } });
@@ -531,18 +534,21 @@ describe('축 ⑤ 직접 해보기 1 - 글쓴이 사진 적기', () => {
   });
 
   it('빈칸 넷 - 하나를 빼면 400 이어야 할 요청 하나가 200 이 된다 · 빈칸 그대로면 500', async () => {
-    const ok = [null, 200, 400, 400, 400, 400, '/uploads/cat.jpg'];
+    const ok = [null, 200, 400, 400, 400, 400, '/uploads/cat.jpg', 200];
     await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual(ok));
     const drop = (cond) => (source) => source.replace(cond, '');
     // 파일 이름을 안 보면 cake.jpg 를 보냈는데 yuna 의 다른 사진(sea.jpg) 기록이 적히고 주소는 cake 가 된다.
-    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 200, 400, 400, 400, '/uploads/cake.jpg']),
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 200, 400, 400, 400, '/uploads/cake.jpg', 200]),
       drop('item.fileName === fileName && '));
-    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 400, 200, 400, 400, '/uploads/dog.jpg']),
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 400, 200, 400, 400, '/uploads/dog.jpg', 400]),
       drop(`${CONDITION('uploaderId')}user.id`));
-    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 200, 400, 400, 400, '/uploads/cake.jpg']),
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 200, 400, 400, 400, '/uploads/cake.jpg', 200]),
       drop(`${CONDITION('reviewId')}null`));
-    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 400, 400, 200, 400, '/uploads/cat.jpg']),
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 400, 400, 200, 400, '/uploads/cat.jpg', 200]),
       drop(`${CONDITION('profileUserId')}null`));
+    // 올린 사람을 user.id 대신 yuna 의 번호로 박으면 yuna 의 요청은 다 맞고 끝의 jaehoon 만 400 이다.
+    await labServer('practice1', async (tab) => expect(await practiceRun(tab)).toEqual([null, 200, 400, 400, 400, 400, '/uploads/cat.jpg', 400]),
+      (source) => source.replace(`${CONDITION('uploaderId')}user.id`, `${CONDITION('uploaderId')}1`));
     const blanks = (source) => source.replace('item.fileName === fileName', 'item.fileName === ____')
       .replace(`${CONDITION('uploaderId')}user.id`, `${CONDITION('uploaderId')}____`)
       .replace(`${CONDITION('reviewId')}null`, `${CONDITION('reviewId')}____`)
