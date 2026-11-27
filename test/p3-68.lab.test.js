@@ -153,22 +153,22 @@ const view = (runs) => runs.map((r) => [r.title, r.status, r.body]);
 const ids = (r) => r.body.map((item) => item.id);
 
 describe('직접 해보기 1 - «도움이 돼요» 알림', () => {
-  it('practice1.http 차례대로 - 한 번 더 눌러도 1 · 내 리뷰는 알림 없음 · jaehoon 에게 seoyeon 의 알림 하나 · 취소하면 사라진다', async () => {
+  it('practice1.http 차례대로 - 한 번 더 눌러도 2 · 내 리뷰는 알림 없음 · jaehoon 에게 seoyeon 과 doyun 의 알림 · 취소하면 seoyeon 것만 사라진다', async () => {
     const { runs } = await runLab('practice1');
     seen.practice1 = runs;
     expect(view(runs)).toEqual([
       ['seoyeon으로 로그인 - 수업 백엔드', 200, expect.anything()],
-      ['jaehoon의 리뷰 1에 «도움이 돼요»', 200, { helpful: true, helpfulCount: 1 }],
-      ['한 번 더', 200, { helpful: true, helpfulCount: 1 }],
+      ['jaehoon의 리뷰 1에 «도움이 돼요»', 200, { helpful: true, helpfulCount: 2 }],
+      ['한 번 더', 200, { helpful: true, helpfulCount: 2 }],
       ['내 리뷰 2에 «도움이 돼요»', 200, { helpful: true, helpfulCount: 1 }],
       ['seoyeon의 알림', 200, []],
       ['jaehoon으로 로그인 - 수업 백엔드', 200, expect.anything()],
-      ['jaehoon의 알림', 200, [{ id: 3, from: 'seoyeon', reviewId: 1 }]],
+      ['jaehoon의 알림', 200, [{ id: 4, from: 'seoyeon', reviewId: 1 }, { id: 3, from: 'doyun', reviewId: 1 }]],
       ['sujin의 리뷰 3에 누른 «도움이 돼요» 취소', 200, { helpful: false, helpfulCount: 1 }],
       ['seoyeon으로 다시 로그인', 200, expect.anything()],
-      ['jaehoon의 리뷰 1에 누른 «도움이 돼요» 취소', 200, { helpful: false, helpfulCount: 0 }],
+      ['jaehoon의 리뷰 1에 누른 «도움이 돼요» 취소', 200, { helpful: false, helpfulCount: 1 }],
       ['jaehoon으로 다시 로그인', 200, expect.anything()],
-      ['jaehoon의 알림 - 취소한 뒤', 200, []],
+      ['jaehoon의 알림 - 취소한 뒤', 200, [{ id: 3, from: 'doyun', reviewId: 1 }]],
     ]);
   }, 60_000);
 
@@ -207,19 +207,22 @@ describe('직접 해보기 1 - «도움이 돼요» 알림', () => {
     '알림에 리뷰 번호를 적는다': swap('        helpfulId: helpful.id,', '        helpfulId: review.id,'),
     '취소해도 알림을 안 지운다': swap('    const at = notifications.findIndex((item) => item.helpfulId === helpful.id);\n    if (at !== -1) notifications.splice(at, 1);\n', ''),
     '보낸 사람으로 찾아 지운다': swap('(item) => item.helpfulId === helpful.id', '(item) => item.senderId === userId'),
+    // 같은 리뷰의 알림 가운데 먼저 찾아지는 것 - doyun 이 먼저 남긴 알림 3 을 지우고 seoyeon 의 알림 4 가 남는다.
+    '같은 리뷰로 찾아 지운다': swap('(item) => item.helpfulId === helpful.id', '(item) => item.reviewId === review.id'),
   };
 
-  it('틀린 답 다섯 - 각자 처음 달라지는 확인 번호가 있다', async () => {
+  it('틀린 답 여섯 - 각자 처음 달라지는 확인 번호가 있다', async () => {
     const right = (await runLab('practice1')).runs;
     const diffs = {};
     for (const [name, edit] of Object.entries(PRACTICE_WRONG)) diffs[name] = firstDiff(right, (await runLab('practice1', edit)).runs);
     seen.practice1Wrong = diffs;
     expect(Object.fromEntries(Object.entries(diffs).map(([k, d]) => [k, d && [d.no, d.title, d.wrong.status, d.wrong.body]]))).toEqual({
-      '이미 눌렀는지 안 본다': [3, '한 번 더', 200, { helpful: true, helpfulCount: 2 }],
-      '내 리뷰도 알린다': [5, 'seoyeon의 알림', 200, [{ id: 4, from: 'seoyeon', reviewId: 2 }]],
-      '알림에 리뷰 번호를 적는다': [12, 'jaehoon의 알림 - 취소한 뒤', 200, [{ id: 3, from: 'seoyeon', reviewId: 1 }]],
-      '취소해도 알림을 안 지운다': [12, 'jaehoon의 알림 - 취소한 뒤', 200, [{ id: 3, from: 'seoyeon', reviewId: 1 }]],
-      '보낸 사람으로 찾아 지운다': [12, 'jaehoon의 알림 - 취소한 뒤', 200, [{ id: 3, from: 'seoyeon', reviewId: 1 }]],
+      '이미 눌렀는지 안 본다': [3, '한 번 더', 200, { helpful: true, helpfulCount: 3 }],
+      '내 리뷰도 알린다': [5, 'seoyeon의 알림', 200, [{ id: 5, from: 'seoyeon', reviewId: 2 }]],
+      '알림에 리뷰 번호를 적는다': [12, 'jaehoon의 알림 - 취소한 뒤', 200, [{ id: 4, from: 'seoyeon', reviewId: 1 }, { id: 3, from: 'doyun', reviewId: 1 }]],
+      '취소해도 알림을 안 지운다': [12, 'jaehoon의 알림 - 취소한 뒤', 200, [{ id: 4, from: 'seoyeon', reviewId: 1 }, { id: 3, from: 'doyun', reviewId: 1 }]],
+      '보낸 사람으로 찾아 지운다': [12, 'jaehoon의 알림 - 취소한 뒤', 200, [{ id: 4, from: 'seoyeon', reviewId: 1 }, { id: 3, from: 'doyun', reviewId: 1 }]],
+      '같은 리뷰로 찾아 지운다': [12, 'jaehoon의 알림 - 취소한 뒤', 200, [{ id: 4, from: 'seoyeon', reviewId: 1 }]],
     });
   }, 120_000);
 });
@@ -265,7 +268,9 @@ describe('과제 [기초] - 알림을 모두 읽음으로', () => {
     // [응용] 강의 자료 서버 = 정답 판에서 포트와 «모두 읽음» 의 답을 1초 늦게 보내는 것만 다르다.
     const slow = answer
       .replace("app.patch('/api/notifications/read', (req, res) => {", "// 느린 서버라 이 답도 1초 늦게 보낸다 - 바꾸는 일은 받자마자 끝낸다.\napp.patch('/api/notifications/read', (req, res) => {")
-      .replace('  res.json({ readCount: unread.length });', '  setTimeout(() => {\n    res.json({ readCount: unread.length });\n  }, 1000);');
+      .replace('  res.json({ readCount: unread.length });', '  setTimeout(() => {\n    res.json({ readCount: unread.length });\n  }, 1000);')
+      // 둘째 페이지에도 안 읽은 알림을 둔다 - 첫 페이지만 고치는 [응용] 답을 가려낸다.
+      .replace("const notices = [\n  { id: 1, from: 'jaehoon', reviewId: 3, isRead: true, createdAt: seoul(20, 9, 5) },\n  { id: 2, from: 'seoyeon', reviewId: 3, isRead: true,", "// 과제 [응용] 서버는 둘째 페이지에도 안 읽은 알림(2)이 있다 - 받아 둔 페이지를 모두 고쳐야 일곱 줄이 다 읽은 줄이 된다.\nconst notices = [\n  { id: 1, from: 'jaehoon', reviewId: 3, isRead: true, createdAt: seoul(20, 9, 5) },\n  { id: 2, from: 'seoyeon', reviewId: 3, isRead: false,");
     expect(read(P('lab/p3-68/homework2-server.js')).split('\n').slice(1).join('\n').replaceAll('4071', 'PORT')).toBe(slow.split('\n').slice(1).join('\n').replaceAll('4070', 'PORT'));
   });
 

@@ -17,9 +17,10 @@ app.use((req, res, next) => {
 // ── 데이터 - 실습 서버라 데이터베이스 대신 메모리에 둔다. 서버를 다시 켜면 처음으로 돌아간다. ──
 // 이 화면을 보는 사람은 sujin 이다. sujin 이 쓴 리뷰에 다른 사람들이 «도움이 돼요» 를 눌렀다.
 const seoul = (day, hour, minute) => new Date(Date.UTC(2026, 10, day, hour - 9, minute)).toISOString();
+// 과제 [응용] 서버는 둘째 페이지에도 안 읽은 알림(2)이 있다 - 받아 둔 페이지를 모두 고쳐야 일곱 줄이 다 읽은 줄이 된다.
 const notices = [
   { id: 1, from: 'jaehoon', reviewId: 3, isRead: true, createdAt: seoul(20, 9, 5) },
-  { id: 2, from: 'seoyeon', reviewId: 3, isRead: true, createdAt: seoul(21, 13, 40) },
+  { id: 2, from: 'seoyeon', reviewId: 3, isRead: false, createdAt: seoul(21, 13, 40) },
   { id: 3, from: 'taeyang', reviewId: 5, isRead: false, createdAt: seoul(22, 18, 12) },
   { id: 4, from: 'minji', reviewId: 3, isRead: false, createdAt: seoul(24, 8, 30) },
   { id: 5, from: 'doyun', reviewId: 5, isRead: true, createdAt: seoul(25, 21, 3) },
