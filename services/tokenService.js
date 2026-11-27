@@ -10,7 +10,9 @@ if (!SECRET) {
 }
 
 // 토큰을 쓸 수 있는 시간 — 15분(밀리초). 토큰을 담는 쿠키는 이보다 오래, 로그인 기한 동안 둔다.
-export const TOKEN_LIFETIME = 1000 * 60 * 15;
+// .env 에 ACCESS_TOKEN_SECONDS 가 있으면 그 초만큼으로 바꾼다 - 기한이 지난 뒤의 일을 15분 기다리지 않고 겪어 보려고 둔 값이다.
+// 비워 두거나 숫자가 아니면 15분 그대로다.
+export const TOKEN_LIFETIME = 1000 * (Number(process.env.ACCESS_TOKEN_SECONDS) || 60 * 15);
 
 // 로그인한 사람에게 줄 토큰 — 누구인지(sub), 어느 로그인인지(sid), 무엇을 할 수 있는 사람인지(role)를 담아 서명한다.
 export function createAccessToken(user, sessionId) {
