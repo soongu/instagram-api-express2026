@@ -21,3 +21,6 @@ PATCH http://localhost:4001/api/inquiries/3/messages/read
 
 ### 2번 문의방의 메시지
 GET http://localhost:4001/api/inquiries/2/messages
+
+### 1번 문의방의 메시지
+GET http://localhost:4001/api/inquiries/1/messages

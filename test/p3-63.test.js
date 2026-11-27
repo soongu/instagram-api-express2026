@@ -786,6 +786,17 @@ describe('축 ⑪ 과제 [기초] - 문의방 읽음', () => {
       expect((await send('PATCH', '/api/inquiries/1/messages/read')).body).toEqual({ readCount: 2 });
     }, { edit: (dir, rel) => replaceIn(dir, rel, '(message) => message.inquiryId === inquiry.id && message.senderId !== myId && !message.isRead,', '(message) => message.inquiryId === inquiry.id && !message.isRead,') });
   }, 90_000);
+
+  it('흔한 실수 - 상대를 «사려는 사람이 아닌 쪽» 으로 고르면 확인 1~5 는 그대로이고 확인 6 에서 9 가 읽음 · 3 이 안 읽음이다(학생 낭독 2026-11-27)', async () => {
+    await lab('homework1.js', async ({ send }) => {
+      expect((await send('PATCH', '/api/inquiries/2/messages/read')).body).toEqual({ readCount: 2 });
+      expect((await send('PATCH', '/api/inquiries/2/messages/read')).body).toEqual({ readCount: 0 });
+      expect((await send('PATCH', '/api/inquiries/1/messages/read')).body).toEqual({ readCount: 1 });
+      expect((await send('PATCH', '/api/inquiries/3/messages/read')).status).toBe(404);
+      expect((await send('GET', '/api/inquiries/2/messages')).body.items.every((m) => m.isRead)).toBe(true);
+      expect((await send('GET', '/api/inquiries/1/messages')).body.items.map((m) => [m.id, m.isRead])).toEqual([[9, true], [3, false], [2, true], [1, true]]);
+    }, { edit: (dir, rel) => replaceIn(dir, rel, 'message.senderId !== myId && !message.isRead,', 'message.senderId !== inquiry.buyerId && !message.isRead,') });
+  }, 90_000);
 });
 
 describe('축 ⑫ 과제 [응용] - 내 쪽에서만 지우기', () => {
