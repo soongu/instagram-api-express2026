@@ -1,0 +1,23 @@
+### seoyeon으로 로그인 - 수업 백엔드
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon",
+  "password": "instagram1234"
+}
+
+### jaehoon의 리뷰 1에 «도움이 돼요»
+PUT http://localhost:4072/api/reviews/1/helpful/me
+
+### 한 번 더
+PUT http://localhost:4072/api/reviews/1/helpful/me
+
+### 내 리뷰 2에 «도움이 돼요»
+PUT http://localhost:4072/api/reviews/2/helpful/me
+
+### jaehoon의 리뷰 1에 누른 «도움이 돼요» 취소
+DELETE http://localhost:4072/api/reviews/1/helpful/me
+
+### 한 번 더 취소
+DELETE http://localhost:4072/api/reviews/1/helpful/me
