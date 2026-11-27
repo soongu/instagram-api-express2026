@@ -133,3 +133,41 @@ Content-Type: application/json
 
 ### 모든 기기에서 로그아웃
 POST http://localhost:3000/api/v2/auth/logout-all
+
+### 이메일로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "seoyeon@example.com",
+  "password": "instagram1234"
+}
+
+### 휴대폰 번호로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "010-7777-1234",
+  "password": "admin1234!"
+}
+
+### 휴대폰 번호 모양의 사용자 이름으로 가입
+POST http://localhost:3000/api/v2/auth/signup
+Content-Type: application/json
+
+{
+  "emailOrPhone": "hana@example.com",
+  "name": "한하나",
+  "username": "01012345678",
+  "password": "hana1234"
+}
+
+### 그 사용자 이름으로 로그인
+POST http://localhost:3000/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "username": "01012345678",
+  "password": "hana1234"
+}

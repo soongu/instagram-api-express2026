@@ -22,9 +22,9 @@ export async function startSession(user) {
   return { user, accessToken, refreshToken };
 }
 
-// 로그인 — 사용자 이름과 비밀번호를 확인한 뒤, 로그인 기록과 토큰 둘을 돌려준다.
-export async function login(username, password) {
-  const user = await userService.checkPassword(username, password);
+// 로그인 - 로그인 칸의 값(사용자 이름 · 이메일 · 휴대폰 번호)과 비밀번호를 확인한 뒤, 로그인 기록과 토큰 둘을 돌려준다.
+export async function login(loginId, password) {
+  const user = await userService.checkPassword(loginId, password);
 
   if (!user) throw new UnauthorizedError('LOGIN_FAILED');
 

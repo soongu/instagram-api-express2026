@@ -45,6 +45,7 @@ export async function checkDuplicate(req, res) {
 }
 
 export async function login(req, res) {
+  // username 에는 사용자 이름 말고 이메일이나 휴대폰 번호가 올 수도 있다 - 무엇인지는 authService 가 가른다.
   const { username, password } = req.body;
   const { user, accessToken, refreshToken } = await authService.login(username, password);
 

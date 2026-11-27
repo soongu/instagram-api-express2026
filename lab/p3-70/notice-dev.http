@@ -1,0 +1,8 @@
+### 새 알림 보내기 - 개발용
+POST http://localhost:4079/api/dev/notices
+
+### 연결 끊기 - 개발용
+POST http://localhost:4079/api/dev/drop
+
+### 로그인 기록 지우기 - 개발용
+POST http://localhost:4079/api/dev/end-sessions
