@@ -236,6 +236,8 @@ describe('직접 해보기 1 - 남긴 알림과 사라진 알림을 연결로 �
       ['내 리뷰 2에 «도움이 돼요»', 200, { helpful: true, helpfulCount: 1 }, []],
       ['jaehoon의 리뷰 1에 누른 «도움이 돼요» 취소', 200, { helpful: false, helpfulCount: 1 }, [['notification:removed', { id: 4 }]]],
       ['한 번 더 취소', 200, { helpful: false, helpfulCount: 1 }, []],
+      ['doyun으로 로그인 - 수업 백엔드', 200, '…', []],
+      ['doyun이 seoyeon의 리뷰 2에 «도움이 돼요»', 200, { helpful: true, helpfulCount: 2 }, []],
     ]);
   }, 60_000);
 
@@ -281,6 +283,7 @@ describe('직접 해보기 1 - 남긴 알림과 사라진 알림을 연결로 �
     '누른 사람의 방으로 보낸다': swap(PUT_LINE, "io.to(`user:${userId}`).emit('notification:new', toItem(notification));"),
     '방 이름을 따옴표로만 쓴다': swap(PUT_LINE, "io.to('user:review.authorId').emit('notification:new', toItem(notification));"),
     '저장한 줄을 그대로 보낸다': swap(PUT_LINE, "io.to(`user:${review.authorId}`).emit('notification:new', notification);"),
+    '방 이름을 jaehoon 으로 박아 넣는다': swap(PUT_LINE, "io.to('user:2').emit('notification:new', toItem(notification));"),
     '사라진 알림을 새 알림 이름으로': swap(DEL_LINE, "io.to(`user:${removed.receiverId}`).emit('notification:new', { id: removed.id });"),
     '사라진 알림에 «도움이 돼요» 번호': swap(DEL_LINE, "io.to(`user:${removed.receiverId}`).emit('notification:removed', { id: helpful.id });"),
     '사라진 알림에 리뷰 번호': swap(DEL_LINE, "io.to(`user:${removed.receiverId}`).emit('notification:removed', { id: review.id });"),
@@ -295,6 +298,7 @@ describe('직접 해보기 1 - 남긴 알림과 사라진 알림을 연결로 �
       '누른 사람의 방으로 보낸다': [2, 'jaehoon의 리뷰 1에 «도움이 돼요»', []],
       '방 이름을 따옴표로만 쓴다': [2, 'jaehoon의 리뷰 1에 «도움이 돼요»', []],
       '저장한 줄을 그대로 보낸다': [2, 'jaehoon의 리뷰 1에 «도움이 돼요»', [['notification:new', { id: 4, receiverId: 2, senderId: 43, reviewId: 1, helpfulId: 5 }]]],
+      '방 이름을 jaehoon 으로 박아 넣는다': [8, 'doyun이 seoyeon의 리뷰 2에 «도움이 돼요»', [['notification:new', { id: 4, from: 'doyun', reviewId: 2 }]]],
       '사라진 알림을 새 알림 이름으로': [5, 'jaehoon의 리뷰 1에 누른 «도움이 돼요» 취소', [['notification:new', { id: 4 }]]],
       '사라진 알림에 «도움이 돼요» 번호': [5, 'jaehoon의 리뷰 1에 누른 «도움이 돼요» 취소', [['notification:removed', { id: 5 }]]],
       '사라진 알림에 리뷰 번호': [5, 'jaehoon의 리뷰 1에 누른 «도움이 돼요» 취소', [['notification:removed', { id: 1 }]]],

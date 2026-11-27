@@ -83,6 +83,21 @@ app.post('/api/dev/notices', (req, res) => {
   res.status(201).json(toItem(notice));
 });
 
+// 이미 보낸 알림을 한 번 더 보낸다 - 화면이 받아 둔 알림이 다시 와도 줄이 늘지 않는지 볼 때 쓴다.
+// 패널을 여는 요청과 이벤트가 같은 알림을 함께 가져오는 일을 손으로 만든다.
+app.post('/api/dev/notices/:id/again', (req, res) => {
+  const notice = notices.find((item) => item.id === Number(req.params.id));
+
+  if (!notice) {
+    res.status(404).json({ message: '그런 알림은 없어요' });
+    return;
+  }
+
+  io.to('user:sujin').emit('notification:new', toItem(notice));
+
+  res.json(toItem(notice));
+});
+
 // 누군가 «도움이 돼요» 를 취소했다 - 그 알림을 지우고 sujin 의 연결로 «사라졌다» 를 보낸다.
 app.delete('/api/dev/notices/:id', (req, res) => {
   const at = notices.findIndex((item) => item.id === Number(req.params.id));

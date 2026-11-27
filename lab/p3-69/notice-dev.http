@@ -22,5 +22,8 @@ Content-Type: application/json
   "from": "minho"
 }
 
+### 알림 10을 한 번 더 보낸다 - 화면이 이미 받은 알림이 또 온다
+POST http://localhost:4073/api/dev/notices/10/again
+
 ### hana가 «도움이 돼요» 를 취소했다 - 알림 9를 지운다
 DELETE http://localhost:4073/api/dev/notices/9
