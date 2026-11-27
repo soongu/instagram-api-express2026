@@ -226,7 +226,6 @@ npm run dev
 | 테이블 만들기·갱신 | `npm run build` |
 | 예시 데이터 넣기(전부 초기화) | `npm run seed` |
 | 개발 서버 켜기 | `npm run dev` |
-| 테스트 돌리기 | `npm test` |
 
 ## 스택
 
