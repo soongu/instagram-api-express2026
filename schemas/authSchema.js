@@ -30,7 +30,9 @@ export const signupSchema = z.object({
     .max(30, { error: '사용자 이름은 30자까지 쓸 수 있어요' })
     .regex(/^[a-zA-Z0-9._]+$/, {
       error: '사용자 이름은 영문, 숫자, 밑줄(_), 마침표(.)만 쓸 수 있어요',
-    }),
+    })
+    // 로그인 칸은 휴대폰 번호 모양의 값을 휴대폰 번호로 찾는다 - 그런 사용자 이름은 그 이름으로 로그인할 수 없어서 가입 때 막는다.
+    .refine((value) => !PHONE.test(value), { error: '휴대폰 번호 모양은 사용자 이름으로 쓸 수 없어요' }),
   password: z
     .string()
     .min(8, { error: '비밀번호는 8자 이상이어야 해요' })

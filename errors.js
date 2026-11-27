@@ -18,7 +18,7 @@ export const MESSAGES = {
   TOO_MANY_HASHTAGS: '해시태그는 게시물 하나에 30개까지 쓸 수 있어요',
   REPLY_HAS_NO_REPLIES: '답글에는 답글이 없어요',
   CANNOT_REPLY_TO_REPLY: '답글에는 답글을 달 수 없어요',
-  LOGIN_FAILED: '사용자 이름이나 비밀번호가 맞지 않아요',
+  LOGIN_FAILED: '계정이나 비밀번호가 맞지 않아요',
   SOCIAL_LOGIN_FAILED: '소셜 로그인을 마치지 못했어요',
   LOGIN_REQUIRED: '로그인이 필요해요',
   TOKEN_EXPIRED: '토큰의 기한이 지났어요',
