@@ -1,6 +1,6 @@
 # instagram-api
 
-인스타그램 클론의 백엔드 서버예요. Express 5 + PostgreSQL + Prisma로 만들어져 있고, 게시물·댓글·좋아요·사진 올리기·해시태그·프로필·팔로우와 로그인(비밀번호·소셜 로그인)을 하는 API가 들어 있어요.
+인스타그램 클론의 백엔드 서버예요. Express 5 + PostgreSQL + Prisma로 만들어져 있고, 게시물·댓글·좋아요·사진 올리기·해시태그·프로필·팔로우·DM(메시지)·알림과 로그인(비밀번호·소셜 로그인)을 하는 API가 들어 있어요. DM과 알림은 Socket.IO로 실시간으로도 보내요.
 
 짝이 되는 화면(프론트엔드)은 [codeit-fs-16-next](https://github.com/soongu/codeit-fs-16-next)예요. 화면까지 같이 띄우려면 이 서버를 먼저 켜고, 그 저장소의 README를 이어서 따라 하세요.
 
@@ -26,7 +26,7 @@ cd instagram-api-express2026
 npm install
 ```
 
-`main` 브랜치에는 **마지막으로 정리된 코드(p3-61 시점)** 가 들어 있어요. 이 README 대로 하면 바로 돌아가요.
+`main` 브랜치에는 **마지막으로 정리된 코드(p3-69 시점)** 가 들어 있어요. 이 README 대로 하면 바로 돌아가요.
 
 수업 회차별 코드를 보고 싶으면 아래 「회차별 브랜치 보기」를 읽으세요.
 
@@ -171,7 +171,8 @@ curl.exe -b cookies.txt http://localhost:3000/api/v2/posts
 | 주소 | 보이는 것 |
 |---|---|
 | `http://localhost:3000/api/docs` | API 문서 화면(Swagger). 브라우저에서 바로 열려요. |
-| `requests/` 폴더의 `.http` 파일들 | 로그인·게시물·댓글·사진 올리기 같은 요청 예시예요. VS Code에서 httpYac 확장을 설치하면 파일 안의 `Send Request`를 눌러 바로 보내 볼 수 있어요. |
+| `http://localhost:3000/dm-test.html` | 화면 없이 DM을 시험해 보는 페이지예요. 로그인한 뒤 대화방 번호를 넣고 메시지를 보내요. 대화방이 아직 없으면 화면 저장소에서 프로필의 «메시지 보내기»로 먼저 만들어요. |
+| `requests/` 폴더의 `.http` 파일들 | 로그인·게시물·댓글·사진 올리기·대화방·알림 같은 요청 예시예요. VS Code에서 httpYac 확장을 설치하면 파일 안의 `Send Request`를 눌러 바로 보내 볼 수 있어요. |
 
 ## 회차별 브랜치 보기
 
@@ -235,11 +236,13 @@ npm run dev
 | 프레임워크 | Express 5 |
 | DB | PostgreSQL 18 (Docker) + Prisma 7 |
 | 로그인 | 쿠키에 담긴 JWT(Access·Refresh) + 구글·카카오·네이버(OAuth) |
+| 실시간 | Socket.IO 4 (DM·입력 중·읽음·알림) |
 
 ## 폴더
 
 ```
  app.js            서버의 시작 파일
+ realtime.js       DM과 알림을 실시간으로 보내는 곳(Socket.IO)
  routes/           주소별 처리 연결
  controllers/      요청을 받아 응답을 만드는 코드
  services/         DB를 다루는 코드
@@ -249,6 +252,7 @@ npm run dev
  prisma/           테이블 정의(schema.prisma)와 마이그레이션 기록
  seed.js           예시 데이터 넣기
  requests/         .http 요청 예시
+ public/           DM 시험 화면(dm-test.html)
  compose.yaml      PostgreSQL 컨테이너 설정
  lab/              실습·과제 파일
 ```
