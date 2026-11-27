@@ -271,7 +271,7 @@ describe('축 ⓪ 판정 DB - p3-67 을 마친 학생 DB', () => {
 
 // 학생이 교안 차례대로 한 DB 에서 따라간 흐름 - Step 판마다 그 판의 마이그레이션만 더 걸고 다시 띄운다.
 describe('축 ① 이어진 흐름 - 교안 차례대로 한 DB 에서', () => {
-  it('Step 1 → 2 겪기 → 2 → 3 → 4 → 5 겪기 → 5 → 6 · 8', async () => {
+  it('Step 1 → 2 겪기 → 2 → 3 → 4 → 5 겪기 → 5 → 6 · 8(.http 읽음 · 쿼리 창 되돌리기 · 화면이 보내는 13 · 9)', async () => {
     await freshDb();
     const flow = {};
     const step = (s, fn) => serve(s, ({ base }) => fn(base), { fresh: false });
@@ -368,14 +368,21 @@ describe('축 ① 이어진 흐름 - 교안 차례대로 한 DB 에서', () => {
       flow.step6Page2 = brief(await jaehoon.get(`/api/v2/notifications?limit=2&cursor=${first.body.data.nextCursor}`));
       const doyun = await loggedIn(base, 'doyun');
       flow.step6Doyun = brief(await doyun.get('/api/v2/notifications'));
-      // 다음 회차의 판정 DB(잠정) - 화면 Step 7 · 8 이 알림을 누르기 전의 상태. `P368_DUMP` 에 파일 경로를 주면 뜬다.
-      if (process.env.P368_DUMP) {
-        writeFileSync(process.env.P368_DUMP, execFileSync('docker', ['exec', process.env.P368_PG_CONTAINER ?? 'p368-db', 'pg_dump', '--inserts', '-U', 'postgres', GATE_DB], { encoding: 'utf8', maxBuffer: 1 << 28 }));
-      }
+      const dump = (file) => writeFileSync(file, execFileSync('docker', ['exec', process.env.P368_PG_CONTAINER ?? 'p368-db', 'pg_dump', '--inserts', '-U', 'postgres', GATE_DB], { encoding: 'utf8', maxBuffer: 1 << 28 }));
+      // Step 8 - .http 로 13 을 두 번 읽음으로 · doyun 의 14 는 404 · 화면에서 다시 겪으려고 쿼리 창에서 13 을 안 읽음으로 되돌린다
       flow.step8Read = brief(await jaehoon.send('PATCH', `/api/v2/notifications/${flow.step6List.body.data.items[0].id}/read`));
       flow.step8ReadAgain = brief(await jaehoon.send('PATCH', `/api/v2/notifications/${flow.step6List.body.data.items[0].id}/read`));
       flow.step8Others = brief(await jaehoon.send('PATCH', `/api/v2/notifications/${flow.step6Doyun.body.data.items[0].id}/read`));
+      await onDb(GATE_DB, 'UPDATE notifications SET is_read = false WHERE id = 13');
+      flow.step8Reset = (await notifRows()).map((r) => [r.id, r.is_read]);
+      // 화면 판정(⑩)의 출발 DB - 화면 Step 7 · 8 앞과 값이 같다(13 을 읽었다가 되돌렸다). `P368_DUMP_MID` 에 파일 경로를 주면 뜬다.
+      if (process.env.P368_DUMP_MID) dump(process.env.P368_DUMP_MID);
+      // 수업 화면이 보내는 요청 - 고친 판에서 13 을 누르고(PATCH 13) · 13 을 한 번 더 누르면 보내지 않고 · 9 를 누른다(PATCH 9)
+      flow.screen13 = brief(await jaehoon.send('PATCH', '/api/v2/notifications/13/read'));
+      flow.screen9 = brief(await jaehoon.send('PATCH', '/api/v2/notifications/9/read'));
       flow.endRows = await notifRows();
+      // 다음 회차의 판정 DB - 이 회차를 교안 차례대로 마친 학생 DB. `P368_DUMP` 에 파일 경로를 주면 뜬다.
+      if (process.env.P368_DUMP) dump(process.env.P368_DUMP);
       flow.nextIds = await onDb(GATE_DB, `SELECT (SELECT last_value FROM notifications_id_seq) AS notifications, (SELECT last_value FROM comments_id_seq) AS comments, (SELECT last_value FROM post_likes_id_seq) AS post_likes, (SELECT last_value FROM follows_id_seq) AS follows`);
     });
     seen.flow = flow;
@@ -437,7 +444,10 @@ describe('축 ① 이어진 흐름 - 교안 차례대로 한 DB 에서', () => {
     // Step 8 - 읽음 두 번 모두 200 · doyun 의 알림 14 는 jaehoon 에게 404
     expect([flow.step8Read, flow.step8ReadAgain]).toEqual([{ status: 200, body: { data: { id: 13, isRead: true } } }, { status: 200, body: { data: { id: 13, isRead: true } } }]);
     expect([flow.step8Others.status, flow.step8Others.body.error.code, flow.step8Others.body.error.message]).toEqual([404, 'NOTIFICATION_NOT_FOUND', '그런 알림은 없어요']);
-    expect(flow.endRows.map((r) => [r.id, r.is_read])).toEqual([[5, false], [6, false], [9, false], [13, true], [14, false]]);
+    expect(flow.step8Reset).toEqual([[5, false], [6, false], [9, false], [13, false], [14, false]]);
+    // 화면에서 13 과 9 를 누른 끝 - 13 · 9 만 읽음
+    expect([flow.screen13, flow.screen9]).toEqual([{ status: 200, body: { data: { id: 13, isRead: true } } }, { status: 200, body: { data: { id: 9, isRead: true } } }]);
+    expect(flow.endRows.map((r) => [r.id, r.is_read])).toEqual([[5, false], [6, false], [9, true], [13, true], [14, false]]);
     expect(flow.nextIds).toEqual([{ notifications: '14', comments: '365', post_likes: '18', follows: '42' }]);
   }, 240_000);
 });
