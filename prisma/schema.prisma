@@ -79,6 +79,8 @@ model PostLike {
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   userId Int  @map("user_id")
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 이 좋아요가 남긴 알림 - 좋아요를 취소해 이 행이 지워지면 알림도 함께 지워진다.
+  notifications Notification[]
 
   @@unique([postId, userId])
   @@map("post_likes")
@@ -277,6 +279,9 @@ model Notification {
   // 어느 게시물의 일인가 - 팔로우 알림은 게시물이 없어서 비어 있다.
   postId     Int?             @map("post_id")
   post       Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  // 이 알림을 남긴 좋아요 - 그 좋아요가 지워지면(취소하면) 알림도 함께 지운다.
+  postLikeId Int?             @map("post_like_id")
+  postLike   PostLike?        @relation(fields: [postLikeId], references: [id], onDelete: Cascade)
   isRead     Boolean          @default(false) @map("is_read")
   createdAt  DateTime         @default(now()) @map("created_at")
 

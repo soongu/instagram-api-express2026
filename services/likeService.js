@@ -17,9 +17,13 @@ export async function likePost(postId, userId) {
 
       // 행이 새로 들어갔을 때만 게시물을 쓴 사람에게 «좋아요를 눌렀다» 는 알림을 남긴다.
       // 이미 눌렀던 PUT 이 다시 오면 행이 안 들어가니(count 0) 알림도 남기지 않는다.
+      // createMany 는 넣은 행을 돌려주지 않아서, 방금 넣은 행을 그 짝으로 다시 찾는다(게시물을 쓴 사람도 함께).
       if (count === 1) {
-        const post = await tx.post.findUnique({ where: { id: postId }, select: { authorId: true } });
-        await notify(tx, { type: 'LIKE', receiverId: post.authorId, senderId: userId, postId });
+        const like = await tx.postLike.findUnique({
+          where: { postId_userId: { postId, userId } },
+          select: { id: true, post: { select: { authorId: true } } },
+        });
+        await notify(tx, { type: 'LIKE', receiverId: like.post.authorId, senderId: userId, postId, postLikeId: like.id });
       }
 
       return changeLikeCount(tx, postId, count, true);
