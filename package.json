@@ -7,8 +7,7 @@
     "start": "node app.js",
     "build": "prisma generate && prisma migrate deploy",
     "dev": "node --watch --env-file=.env app.js",
-    "seed": "node --env-file=.env seed.js",
-    "test": "vitest run"
+    "seed": "node --env-file=.env seed.js"
   },
   "type": "module",
   "private": true,
@@ -32,11 +31,6 @@
     "zod": "^4.6.2"
   },
   "devDependencies": {
-    "httpyac": "^6.16.7",
-    "mongoose": "^9.9.5",
-    "pg": "^8.23.0",
-    "supertest": "^7.2.2",
-    "vite": "^8.2.2",
-    "vitest": "^5.0.0"
+    "mongoose": "^9.9.5"
   }
 }
