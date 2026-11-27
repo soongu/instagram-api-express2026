@@ -7,15 +7,15 @@ import { emitToUsers } from '../realtime.js';
 // 알림 하나를 남긴다 - 좋아요·댓글·팔로우를 넣는 그 트랜잭션 안에서 부르는 함수라 넘겨받은 tx 로 쓴다.
 // 내 게시물에 내가 누른 좋아요처럼 받는 사람이 곧 보낸 사람이면 남기지 않는다.
 // 알림을 남긴 행(좋아요 · 댓글 · 팔로우 가운데 하나)의 번호도 함께 적는다 - 그 행이 지워지면 데이터베이스가 알림도 지운다.
-// 남긴 알림은 목록의 한 줄과 같은 모양으로 받는 사람의 연결에 바로 보낸다.
+// 보내지는 않고 남긴 알림의 번호만 돌려준다 - 트랜잭션이 끝난(커밋된) 뒤에 pushNew 로 보낸다.
 export async function notify(tx, { type, receiverId, senderId, postId, postLikeId, commentId, followId }) {
-  if (receiverId === senderId) return;
+  if (receiverId === senderId) return [];
 
-  const notification = await tx.notification.create({
+  const { id } = await tx.notification.create({
     data: { type, receiverId, senderId, postId, postLikeId, commentId, followId },
-    select: notificationFields,
+    select: { id: true },
   });
-  emitToUsers([receiverId], 'notification:new', toNotification(notification));
+  return [id];
 }
 
 // 같은 알림을 여러 사람에게 한 번에 남긴다 - 댓글 하나에 여러 사람을 멘션했을 때 쓴다.
@@ -27,11 +27,9 @@ export async function notifyMany(tx, { type, receiverIds, senderId, postId, comm
     .filter((receiverId) => receiverId !== senderId)
     .map((receiverId) => ({ type, receiverId, senderId, postId, commentId }));
 
-  // createManyAndReturn 은 넣은 행들을 돌려준다 - 받는 사람마다 자기 알림 한 줄을 보낸다.
-  const notifications = await tx.notification.createManyAndReturn({ data, select: { receiverId: true, ...notificationFields } });
-  notifications.forEach(({ receiverId, ...notification }) => {
-    emitToUsers([receiverId], 'notification:new', toNotification(notification));
-  });
+  // createManyAndReturn 은 넣은 행들을 돌려준다 - notify 처럼 번호만 돌려준다.
+  const notifications = await tx.notification.createManyAndReturn({ data, select: { id: true } });
+  return notifications.map((notification) => notification.id);
 }
 
 // 알림 한 줄의 문장 - 저장하지 않고 응답할 때 종류와 보낸 사람의 이름으로 만든다.
@@ -60,6 +58,25 @@ function toNotification({ post, ...notification }) {
     thumbnailUrl: post?.images[0]?.imageUrl ?? null,
     message: MESSAGE_OF[notification.type](notification.sender.username),
   };
+}
+
+// 트랜잭션이 끝난 뒤에 부른다 - 남긴 알림을 데이터베이스에서 다시 읽어 받는 사람의 연결에 보낸다.
+// 커밋된 알림만 읽히니 되돌려진 알림은 보낼 일이 없다.
+export async function pushNew(ids) {
+  if (ids.length === 0) return;
+
+  // 좋아요·댓글은 이미 저장됐다. 알림을 못 보냈다고 그 요청을 실패로 돌려주지 않는다.
+  try {
+    const notifications = await prisma.notification.findMany({
+      where: { id: { in: ids } },
+      select: { receiverId: true, ...notificationFields },
+    });
+    notifications.forEach(({ receiverId, ...notification }) => {
+      emitToUsers([receiverId], 'notification:new', toNotification(notification));
+    });
+  } catch (error) {
+    console.warn(`알림을 보내지 못했어요 - ${error.message}`);
+  }
 }
 
 // 목록은 «남긴 시각이 늦은 순, 같으면 번호가 큰 순» 이다 - 게시물 목록과 같은 차례라 조건도 같다.

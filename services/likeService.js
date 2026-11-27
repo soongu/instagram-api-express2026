@@ -1,7 +1,7 @@
 // ~/instagram-api/services/likeService.js
 import { prisma } from '../db.js';
 import { NotFoundError } from '../errors.js';
-import { notify } from './notificationService.js';
+import { notify, pushNew } from './notificationService.js';
 
 // 몇 번을 불러도 결과는 「눌린 상태」 하나다.
 // 이미 눌렀으면 행이 안 들어가고(count 0), 숫자도 오르지 않는다.
@@ -9,7 +9,8 @@ export async function likePost(postId, userId) {
   try {
     // 행을 넣는 일과 숫자를 고치는 일은 «함께» 끝나야 한다.
     // 하나라도 실패하면 둘 다 없던 일이 된다.
-    return await prisma.$transaction(async (tx) => {
+    // 트랜잭션은 좋아요 결과와 함께 «남긴 알림의 번호» 를 돌려준다.
+    const { status, notificationIds } = await prisma.$transaction(async (tx) => {
       const { count } = await tx.postLike.createMany({
         data: [{ postId, userId }],
         skipDuplicates: true,
@@ -18,16 +19,21 @@ export async function likePost(postId, userId) {
       // 행이 새로 들어갔을 때만 게시물을 쓴 사람에게 «좋아요를 눌렀다» 는 알림을 남긴다.
       // 이미 눌렀던 PUT 이 다시 오면 행이 안 들어가니(count 0) 알림도 남기지 않는다.
       // createMany 는 넣은 행을 돌려주지 않아서, 방금 넣은 행을 그 짝으로 다시 찾는다(게시물을 쓴 사람도 함께).
+      let notificationIds = [];
       if (count === 1) {
         const like = await tx.postLike.findUnique({
           where: { postId_userId: { postId, userId } },
           select: { id: true, post: { select: { authorId: true } } },
         });
-        await notify(tx, { type: 'LIKE', receiverId: like.post.authorId, senderId: userId, postId, postLikeId: like.id });
+        notificationIds = await notify(tx, { type: 'LIKE', receiverId: like.post.authorId, senderId: userId, postId, postLikeId: like.id });
       }
 
-      return changeLikeCount(tx, postId, count, true);
+      return { status: await changeLikeCount(tx, postId, count, true), notificationIds };
     });
+
+    // 여기까지 왔으면 트랜잭션이 끝났다(커밋됐다). 이제 보낸다.
+    await pushNew(notificationIds);
+    return status;
   } catch (error) {
     if (error.code === 'P2003') throw new NotFoundError('POST_OR_USER_NOT_FOUND');
     throw error;

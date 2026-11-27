@@ -2,7 +2,7 @@
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
-import { notify } from './notificationService.js';
+import { notify, pushNew } from './notificationService.js';
 
 // 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
 async function findUserId(username) {
@@ -40,24 +40,26 @@ export async function follow(username, followerId) {
   const followingId = await findFollowing(username, followerId);
 
   // 행을 넣는 일과 숫자를 고치는 일은 «함께» 끝나야 한다.
-  const followerCount = await prisma.$transaction(async (tx) => {
+  const { followerCount, notificationIds } = await prisma.$transaction(async (tx) => {
     const { count } = await tx.follow.createMany({
       data: [{ followerId, followingId }],
       skipDuplicates: true,
     });
 
     // 행이 새로 들어갔을 때만 팔로우받은 사람에게 알림을 남긴다 - 좋아요와 같다.
+    let notificationIds = [];
     if (count === 1) {
       const row = await tx.follow.findUnique({
         where: { followerId_followingId: { followerId, followingId } },
         select: { id: true },
       });
-      await notify(tx, { type: 'FOLLOW', receiverId: followingId, senderId: followerId, followId: row.id });
+      notificationIds = await notify(tx, { type: 'FOLLOW', receiverId: followingId, senderId: followerId, followId: row.id });
     }
 
-    return changeFollowerCount(tx, followingId, count);
+    return { followerCount: await changeFollowerCount(tx, followingId, count), notificationIds };
   });
 
+  await pushNew(notificationIds);
   return { following: true, followerCount };
 }
 
