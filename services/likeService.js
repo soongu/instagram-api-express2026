@@ -1,7 +1,7 @@
 // ~/instagram-api/services/likeService.js
 import { prisma } from '../db.js';
 import { NotFoundError } from '../errors.js';
-import { notify, pushNew } from './notificationService.js';
+import { notify, pushNew, findCaused, pushRemoved } from './notificationService.js';
 
 // 몇 번을 불러도 결과는 「눌린 상태」 하나다.
 // 이미 눌렀으면 행이 안 들어가고(count 0), 숫자도 오르지 않는다.
@@ -43,13 +43,20 @@ export async function likePost(postId, userId) {
 // 몇 번을 불러도 결과는 「안 눌린 상태」 하나다.
 export async function unlikePost(postId, userId) {
   // 행을 지우는 일과 숫자를 고치는 일도 한 묶음이다.
-  return prisma.$transaction(async (tx) => {
+  const { status, removed } = await prisma.$transaction(async (tx) => {
+    // 지우면 그 좋아요가 남긴 알림도 함께 사라진다. 지우기 전에 어떤 알림인지 찾아 둔다.
+    const removed = await findCaused(tx, { postLike: { postId, userId } });
+
     const { count } = await tx.postLike.deleteMany({
       where: { postId, userId },
     });
 
-    return changeLikeCount(tx, postId, -count, false);
+    return { status: await changeLikeCount(tx, postId, -count, false), removed };
   });
+
+  // 커밋된 뒤에 «그 알림이 사라졌다» 를 받은 사람에게 알린다.
+  pushRemoved(removed);
+  return status;
 }
 
 // 화면이 읽는 숫자는 따로 적어둔 컬럼이라, 행이 늘고 준 만큼 우리가 맞춰준다.

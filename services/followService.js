@@ -2,7 +2,7 @@
 import { prisma } from '../db.js';
 import { BadRequestError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
-import { notify, pushNew } from './notificationService.js';
+import { notify, pushNew, findCaused, pushRemoved } from './notificationService.js';
 
 // 사용자 이름으로 사람의 번호를 찾는다 - 없으면 404 다.
 async function findUserId(username) {
@@ -68,12 +68,16 @@ export async function follow(username, followerId) {
 export async function unfollow(username, followerId) {
   const followingId = await findFollowing(username, followerId);
 
-  const followerCount = await prisma.$transaction(async (tx) => {
+  const { followerCount, removed } = await prisma.$transaction(async (tx) => {
+    // 팔로우가 남긴 알림 - 좋아요 취소와 같이 지우기 전에 찾아 둔다.
+    const removed = await findCaused(tx, { follow: { followerId, followingId } });
+
     const { count } = await tx.follow.deleteMany({ where: { followerId, followingId } });
 
-    return changeFollowerCount(tx, followingId, -count);
+    return { followerCount: await changeFollowerCount(tx, followingId, -count), removed };
   });
 
+  pushRemoved(removed);
   return { following: false, followerCount };
 }
 

@@ -79,6 +79,18 @@ export async function pushNew(ids) {
   }
 }
 
+// 좋아요·팔로우·댓글을 지우기 «전에» 부른다 - 그 행이 남긴 알림은 행과 함께 지워져서(Cascade) 지운 뒤에는 찾을 수 없다.
+export function findCaused(tx, where) {
+  return tx.notification.findMany({ where, select: { id: true, receiverId: true } });
+}
+
+// 트랜잭션이 끝난 뒤에 부른다 - 사라진 알림의 번호를 받는 사람의 연결에 보낸다.
+export function pushRemoved(notifications) {
+  notifications.forEach(({ id, receiverId }) => {
+    emitToUsers([receiverId], 'notification:removed', { id });
+  });
+}
+
 // 목록은 «남긴 시각이 늦은 순, 같으면 번호가 큰 순» 이다 - 게시물 목록과 같은 차례라 조건도 같다.
 function afterCursor({ createdAt, id }) {
   return {

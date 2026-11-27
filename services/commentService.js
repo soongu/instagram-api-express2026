@@ -2,7 +2,7 @@
 import { prisma } from '../db.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
-import { notify, notifyMany, pushNew } from './notificationService.js';
+import { notify, notifyMany, pushNew, findCaused, pushRemoved } from './notificationService.js';
 import { extractMentions } from '../utils/mentions.js';
 
 // 댓글 목록에 쓸 필드만 골라서 받는다 — 글쓴이는 번호와 함께 이름과 프로필 사진도 받는다.
@@ -174,7 +174,11 @@ export async function removeComment(postId, commentId, userId) {
   }
 
   // 지우는 일과 숫자를 내리는 일도 한 묶음이다.
-  return prisma.$transaction(async (tx) => {
+  const { result, removed } = await prisma.$transaction(async (tx) => {
+    // 이 댓글이 남긴 알림(댓글 알림 · 멘션 알림)을 지우기 전에 찾아 둔다.
+    // 원댓글을 지우면 그 답글도 함께 지워지니(Cascade) 답글이 남긴 알림도 함께 찾는다.
+    const removed = await findCaused(tx, { OR: [{ commentId }, { comment: { parentId: commentId } }] });
+
     // 찾은 뒤 지우기 전에 같은 댓글을 지우는 요청이 한 번 더 와서 먼저 끝났을 수 있다(버튼을 두 번 누른 경우).
     // 지운 행 수로 확인해서 하나도 못 지웠으면 숫자도 고치지 않고 404 로 답한다.
     const { count } = await tx.comment.deleteMany({ where: { id: commentId } });
@@ -185,6 +189,9 @@ export async function removeComment(postId, commentId, userId) {
 
     // 응답에는 목록과 같은 필드만 보낸다. 원댓글인지와 게시물 주인은 확인에만 썼다.
     const { parentId, post, ...deleted } = comment;
-    return { comment: flatten(deleted), commentCount };
+    return { result: { comment: flatten(deleted), commentCount }, removed };
   });
+
+  pushRemoved(removed);
+  return result;
 }
