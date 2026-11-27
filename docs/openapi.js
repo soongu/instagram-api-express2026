@@ -324,6 +324,17 @@ export const openapi = {
         },
       },
     },
+    '/api/v2/notifications/{id}/read': {
+      parameters: [pathParameter('id', '알림 번호')],
+      patch: {
+        summary: '알림 하나를 읽음으로 - 이미 읽은 알림이어도 같은 응답',
+        responses: {
+          200: { description: '읽음으로 바뀐 알림', content: json(data(ref('NotificationRead'))) },
+          401: { description: '로그인하지 않았거나 토큰의 기한이 지남', content: json(errorOf('LOGIN_REQUIRED', 'TOKEN_EXPIRED')) },
+          404: { description: '그런 알림이 없거나 내가 받은 알림이 아님 - 둘을 가르지 않는다', content: json(errorOf('NOTIFICATION_NOT_FOUND')) },
+        },
+      },
+    },
     '/api/v2/dev/connections/{username}': {
       parameters: [{ name: 'username', in: 'path', required: true, description: '연결을 끊을 사람의 사용자 이름', schema: { type: 'string' } }],
       delete: {
@@ -572,6 +583,10 @@ export const openapi = {
           thumbnailUrl: { type: ['string', 'null'], description: '그 게시물의 첫 사진 - 팔로우 알림은 null' },
           message: { type: 'string', description: '패널에 보일 문장 - 예 «seoyeon님이 회원님의 게시물을 좋아해요»' },
         },
+      },
+      NotificationRead: {
+        type: 'object',
+        properties: { id: { type: 'integer' }, isRead: { type: 'boolean', description: '언제나 true' } },
       },
       NotificationPage: {
         type: 'object',

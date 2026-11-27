@@ -30,6 +30,7 @@ export const MESSAGES = {
   HASHTAG_NOT_FOUND: '그런 해시태그는 없어요',
   USER_NOT_FOUND: '그런 사용자는 없어요',
   CONVERSATION_NOT_FOUND: '그런 대화방은 없어요',
+  NOTIFICATION_NOT_FOUND: '그런 알림은 없어요',
   POST_OR_USER_NOT_FOUND: '그런 게시물이나 사용자는 없어요',
   SOCIAL_ACCOUNT_NOT_FOUND: '연결된 소셜 계정이 없어요',
   ROUTE_NOT_FOUND: '그런 주소는 없어요',

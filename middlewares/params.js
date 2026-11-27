@@ -48,3 +48,15 @@ export function parseConversationId(req, res, next) {
   req.conversationId = conversationId;
   next();
 }
+
+export function parseNotificationId(req, res, next) {
+  const notificationId = Number(req.params.id);
+
+  if (!Number.isInteger(notificationId)) {
+    next(new NotFoundError('NOTIFICATION_NOT_FOUND'));
+    return;
+  }
+
+  req.notificationId = notificationId;
+  next();
+}

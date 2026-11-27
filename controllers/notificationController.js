@@ -8,3 +8,10 @@ export async function list(req, res) {
 
   sendData(res, page);
 }
+
+// 알림 하나를 읽음으로 - 화면은 알림 패널에서 그 알림을 누를 때 부른다.
+export async function read(req, res) {
+  const result = await notificationService.markAsRead(req.notificationId, res.locals.userId);
+
+  sendData(res, result);
+}

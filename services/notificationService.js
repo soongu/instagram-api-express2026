@@ -1,6 +1,7 @@
 // ~/instagram-api/services/notificationService.js
 import { prisma } from '../db.js';
 import { encodeCursor, decodeCursor } from '../utils/cursor.js';
+import { NotFoundError } from '../errors.js';
 
 // 알림 하나를 남긴다 - 좋아요·댓글·팔로우를 넣는 그 트랜잭션 안에서 부르는 함수라 넘겨받은 tx 로 쓴다.
 // 내 게시물에 내가 누른 좋아요처럼 받는 사람이 곧 보낸 사람이면 남기지 않는다.
@@ -76,4 +77,17 @@ export async function getNotifications(myId, { limit = 20, cursor }) {
     hasNext,
     nextCursor: hasNext ? encodeCursor(page[page.length - 1]) : null,
   };
+}
+
+// 알림 하나를 읽음으로 - 몇 번을 불러도 결과는 «읽은 상태» 하나다.
+// 내가 받은 알림만 찾는다. 없는 알림과 남의 알림은 같은 404 로 답한다 - 남의 알림이 있는지 알려 주지 않는다.
+export async function markAsRead(notificationId, myId) {
+  const { count } = await prisma.notification.updateMany({
+    where: { id: notificationId, receiverId: myId },
+    data: { isRead: true },
+  });
+
+  if (count === 0) throw new NotFoundError('NOTIFICATION_NOT_FOUND');
+
+  return { id: notificationId, isRead: true };
 }

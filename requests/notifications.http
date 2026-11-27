@@ -13,6 +13,9 @@ GET http://localhost:3000/api/v2/notifications
 ### 내 알림 목록 - 두 개씩
 GET http://localhost:3000/api/v2/notifications?limit=2
 
+### 알림 하나를 읽음으로
+PATCH http://localhost:3000/api/v2/notifications/1/read
+
 ### seoyeon으로 로그인
 POST http://localhost:3000/api/v2/auth/login
 Content-Type: application/json
